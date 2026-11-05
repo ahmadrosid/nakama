@@ -1,0 +1,46 @@
+name: CodeQL
+
+# Static security analysis of the TypeScript source. CodeQL builds its own
+# database from the checkout and runs no project code, so this job gives a fork
+# PR nothing to reach a secret through.
+on:
+  pull_request:
+    branches: ["main"]
+    # Markdown-only PRs change no code.
+    paths-ignore: ['**.md', '.agents/**', 'docs/**', 'scripts/**', 'assets/**']
+  push:
+    branches: ["main"]
+  schedule:
+    # A new query pack can flag code that was clean last week, so scan main
+    # weekly as well.
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed to upload the SARIF results to code scanning.
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9418214df1f2c4b8128c770156c409013b07d6b9 # v3.39.3
+        with:
+          # JavaScript/TypeScript is the only language in this tree: the Bun
+          # workspaces, plus the Electron main and preload scripts.
+          languages: javascript-typescript
+
+      # No build step: CodeQL reads the source for interpreted languages.
+      - name: Analyze
+        uses: github/codeql-action/analyze@9418214df1f2c4b8128c770156c409013b07d6b9 # v3.39.3
