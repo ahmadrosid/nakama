@@ -227,22 +227,25 @@ export function ChatPageContent({
 
   const content = isEmptyState ? (
     <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
-      <ChatPageColumn centered cognito={cognitoSurface}>
-        {cognitoControl()}
-        <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
-          <EmptyChatBody onboarding={onboarding}>
-            <ChatWelcome
-              cognito={cognito}
-              onProfileSwitch={handleProfileSwitch}
-              profile={activeProfile}
-              profileId={profileId}
-              profileSwitchDisabled={busy}
-              profiles={profiles}
-            />
-            {composer}
-          </EmptyChatBody>
-        </div>
-      </ChatPageColumn>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {cognitoSurface ? null : <NewChatTopBar toggle={cognitoToggle} />}
+        <ChatPageColumn centered cognito={cognitoSurface}>
+          {cognitoControl(emptyStateControlClass(cognitoSurface))}
+          <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
+            <EmptyChatBody onboarding={onboarding}>
+              <ChatWelcome
+                cognito={cognito}
+                onProfileSwitch={handleProfileSwitch}
+                profile={activeProfile}
+                profileId={profileId}
+                profileSwitchDisabled={busy}
+                profiles={profiles}
+              />
+              {composer}
+            </EmptyChatBody>
+          </div>
+        </ChatPageColumn>
+      </div>
     </ChatAttachmentPanelProvider>
   ) : (
     <ChatConversation
@@ -497,5 +500,21 @@ function ChatConversation({
         </ChatPageColumn>
       </ChatAttachmentPanelProvider>
     </ChatStatusProvider>
+  );
+}
+
+/** Off the cognito surface, the desktop top bar holds the toggle. */
+function emptyStateControlClass(cognitoSurface: boolean) {
+  return cognitoSurface ? undefined : "sm:hidden";
+}
+
+function NewChatTopBar({ toggle }: { toggle: ReactNode }) {
+  return (
+    <div className="flex h-12 shrink-0 items-center border-border border-b bg-background px-4 max-sm:hidden">
+      <h1 className="truncate px-2 font-semibold text-[15px] tracking-tight">
+        New chat
+      </h1>
+      {toggle ? <div className="ml-auto">{toggle}</div> : null}
+    </div>
   );
 }

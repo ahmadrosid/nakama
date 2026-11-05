@@ -164,6 +164,7 @@
 
   html.dark {
     color-scheme: dark;
+    scrollbar-color: oklch(0.38 0 0) transparent;
   }
 
   code,
@@ -594,7 +595,7 @@
   }
 
   .type-label {
-    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
+    @apply text-sm font-medium text-muted-foreground;
   }
 
   .type-code {
@@ -691,6 +692,12 @@
 
   .sidebar-chat-title-clip {
     container-type: inline-size;
+    mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  }
+
+  .group:hover .sidebar-chat-title-clip,
+  .group:focus-within .sidebar-chat-title-clip {
+    mask-image: none;
   }
 
   .sidebar-chat-title {
@@ -777,11 +784,11 @@
       max-height 320ms cubic-bezier(0.4, 0, 0.2, 1),
       margin 320ms cubic-bezier(0.4, 0, 0.2, 1),
       color 150ms ease-out;
-    @apply mb-1.5 flex w-full cursor-pointer items-center gap-1 overflow-hidden rounded-md px-2 py-1 text-left text-xs text-muted-foreground/55 motion-reduce:transition-none;
+    @apply mb-1.5 flex w-full cursor-pointer items-center gap-1 overflow-hidden rounded-md px-2 py-1 text-left text-xs text-muted-foreground motion-reduce:transition-none;
   }
 
   .sidebar-nav-group-label:hover {
-    @apply text-muted-foreground;
+    @apply text-foreground;
   }
 
   .sidebar-shell:not([data-collapsed]) .sidebar-nav-group-label {
@@ -882,11 +889,11 @@
   }
 
   .scope-badge-active {
-    @apply bg-emerald-500/10 text-emerald-700 dark:text-emerald-300;
+    @apply bg-emerald-500/10 text-emerald-800 dark:text-emerald-300;
   }
 
   .scope-badge-custom {
-    @apply bg-amber-500/10 text-amber-800 dark:text-amber-200;
+    @apply bg-muted text-muted-foreground;
   }
 
   .chat-markdown {
@@ -1322,7 +1329,7 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.54 0 0);
+  --muted-foreground: oklch(0.5 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -1348,7 +1355,7 @@
 .dark {
   --background: #0a0a0b;
   --foreground: #fafafa;
-  --card: #18181b;
+  --card: #202026;
   --card-foreground: #fafafa;
   --popover: #18181b;
   --popover-foreground: #fafafa;
@@ -1361,7 +1368,7 @@
   --accent: #27272a;
   --accent-foreground: #fafafa;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: #27272a;
+  --border: #38383f;
   --input: #27272a;
   --ring: #f59e0b;
   --chart-1: oklch(0.87 0 0);

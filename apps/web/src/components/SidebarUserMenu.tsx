@@ -97,10 +97,10 @@ export function SidebarUserMenu() {
   const trigger = (
     <button
       aria-label="Account menu"
-      className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/55 hover:text-foreground"
+      className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-sidebar-accent/55 hover:text-foreground"
       type="button"
     >
-      <span className="flex size-7 items-center justify-center rounded-md bg-muted font-semibold text-2xs text-foreground">
+      <span className="flex size-7 items-center justify-center rounded-full bg-muted font-semibold text-2xs text-foreground">
         {initial}
       </span>
     </button>

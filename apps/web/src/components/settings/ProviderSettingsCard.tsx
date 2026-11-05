@@ -66,8 +66,8 @@ export function ProviderSettingsCard({
       <Card className="w-full shadow-none">
         <CardHeader className="border-border border-b px-4 py-3">
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="min-w-0 font-medium text-sm leading-snug tracking-normal">
-              AI Providers
+            <CardTitle className="min-w-0 font-semibold text-sm leading-snug tracking-normal">
+              Providers
             </CardTitle>
             {isConfigured ? (
               <Button
@@ -88,10 +88,10 @@ export function ProviderSettingsCard({
               <table className="w-full min-w-[36rem] text-left text-sm">
                 <thead className="border-border border-b bg-muted/30 text-muted-foreground text-xs">
                   <tr>
-                    <th className="px-3 py-2 font-medium">Provider</th>
-                    <th className="px-3 py-2 font-medium">Endpoint</th>
-                    <th className="px-3 py-2 font-medium">Models</th>
-                    <th className="px-3 py-2 font-medium">
+                    <th className="px-4 py-2 font-medium">Provider</th>
+                    <th className="px-4 py-2 font-medium">Endpoint</th>
+                    <th className="px-4 py-2 font-medium">Models</th>
+                    <th className="px-4 py-2 font-medium">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>

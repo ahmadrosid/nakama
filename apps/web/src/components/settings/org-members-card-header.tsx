@@ -101,6 +101,7 @@ export function OrgMembersActions({
       <Button
         aria-label="Add member"
         onClick={onAddMember}
+        size="sm"
         type="button"
         variant="outline"
       >

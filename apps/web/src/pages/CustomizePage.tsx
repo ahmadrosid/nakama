@@ -119,7 +119,7 @@ export function CustomizePage() {
                 className="space-y-3"
                 key={section.title}
               >
-                <h2 className="type-section-title font-normal text-muted-foreground/55">
+                <h2 className="type-section-title font-medium text-muted-foreground">
                   {section.title}
                 </h2>
                 <Card className="w-full overflow-hidden shadow-none">
