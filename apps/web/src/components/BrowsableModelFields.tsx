@@ -97,7 +97,7 @@ export function BrowsableModelFields<T>({
     <FormField
       density={density}
       footer={
-        modelsError ? (
+        modelsError && !showBrowse ? (
           <p className="text-destructive text-sm" role="alert">
             {modelsError}
           </p>
@@ -126,7 +126,7 @@ export function BrowsableModelFields<T>({
               variant="outline"
             >
               <Add01Icon className="mr-1 size-4" />
-              Type a model ID
+              Add model by ID
             </Button>
             {customModels.length > 0 ? (
               <Button

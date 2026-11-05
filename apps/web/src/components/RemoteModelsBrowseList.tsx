@@ -31,20 +31,26 @@ interface RemoteModelsBrowseListProps {
 }
 
 function browseStatus(
-  canFetch: boolean,
-  error: Error | null,
+  state: { canFetch: boolean; error: Error | null; loading: boolean },
   count: number,
-  label: string
+  label: string,
+  addedCount: number
 ): string {
-  if (!canFetch) {
+  if (!state.canFetch) {
     return `Browse models from ${label}`;
   }
 
-  if (error) {
+  if (state.loading) {
+    return `Loading models from ${label}…`;
+  }
+
+  if (state.error) {
     return "Could not load models";
   }
 
-  return `${count} model${count === 1 ? "" : "s"} from ${label}`;
+  const found = `${count} model${count === 1 ? "" : "s"} from ${label}`;
+
+  return addedCount > 0 ? `${found} · ${addedCount} in your list` : found;
 }
 
 export function RemoteModelsBrowseList({
@@ -164,7 +170,12 @@ export function RemoteModelsBrowseList({
       }}
       rows={data ?? EMPTY_ROWS}
       status={({ filteredCount }) =>
-        browseStatus(canFetch, browseError, filteredCount, browseLabel)
+        browseStatus(
+          { canFetch, error: browseError, loading: isLoading || isFetching },
+          filteredCount,
+          browseLabel,
+          addedIds?.size ?? 0
+        )
       }
     />
   );

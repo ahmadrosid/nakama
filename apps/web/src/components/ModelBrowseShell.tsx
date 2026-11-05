@@ -99,7 +99,7 @@ export function ModelBrowseShell({
           </div>
         ) : error ? (
           <div className="px-3 py-8 text-center text-destructive text-sm">
-            Failed to load: {formatError(error)}
+            {formatError(error)}
           </div>
         ) : isEmpty ? (
           <div className="px-3 py-8 text-center text-muted-foreground text-sm">

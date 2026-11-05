@@ -255,7 +255,7 @@ export function ModelListEditor({
           variant="outline"
         >
           <Add01Icon className="mr-1 size-4" />
-          Add model
+          Add model by ID
         </Button>
 
         {onBrowse ? (

@@ -512,14 +512,21 @@ function ProviderSetupExtraFields({
 function ProviderSetupActions({
   busy,
   onCancel,
+  primary,
   submitLabel,
 }: {
   busy: boolean;
   onCancel?: () => void;
+  /** False while another step (a sign-in) must come first. */
+  primary: boolean;
   submitLabel: string;
 }) {
   const submit = (
-    <Button disabled={busy} type="submit">
+    <Button
+      disabled={busy}
+      type="submit"
+      variant={primary ? "default" : "outline"}
+    >
       {busy ? (
         <>
           <Spinner className="mr-2" />
@@ -616,6 +623,13 @@ function ProviderSetupDetails({
       <ProviderSetupActions
         busy={form.busy}
         onCancel={onCancel}
+        primary={
+          canConnect ||
+          !(
+            form.selectedProvider === "chatgpt" ||
+            form.selectedProvider === "xai_oauth"
+          )
+        }
         submitLabel={submitLabel}
       />
     </>

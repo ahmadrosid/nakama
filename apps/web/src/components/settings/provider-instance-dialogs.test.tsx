@@ -21,7 +21,7 @@ const instance: ProviderInstanceSummary = {
   type: "deepseek",
 };
 
-test("clearing a saved key takes a second click", async () => {
+test("clearing a saved key asks to confirm first", async () => {
   const actions: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -46,14 +46,14 @@ test("clearing a saved key takes a second click", async () => {
     )
   );
 
-  const clearButton = () =>
-    [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
-      /clear/i.test(button.textContent ?? "")
+  const button = (label: RegExp) =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (candidate) => label.test(candidate.textContent ?? "")
     );
 
-  await act(async () => clearButton()!.click());
+  await act(async () => button(/^Clear saved key$/)!.click());
   expect(actions).toEqual([]);
 
-  await act(async () => clearButton()!.click());
+  await act(async () => button(/^Clear key$/)!.click());
   expect(actions).toEqual(["clear"]);
 });

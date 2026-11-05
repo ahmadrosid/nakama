@@ -1,4 +1,3 @@
-import { Button } from "@nakama/ui/button";
 import {
   Select,
   SelectContent,
@@ -23,6 +22,8 @@ import {
 } from "@/lib/models";
 
 const CLEAR_TRANSCRIPTION_MODEL_VALUE = "__transcription_unset__";
+
+const ADD_OPENAI_VALUE = "__add_openai__";
 
 export function TranscriptionSettingsCard({
   onAddProvider,
@@ -110,81 +111,82 @@ export function TranscriptionSettingsCard({
       }
       title="Audio transcription model"
     >
-      {transcriptionUnavailable && onAddProvider ? (
-        <Button
-          className="h-9 w-full"
-          onClick={onAddProvider}
-          type="button"
-          variant="outline"
-        >
-          Add OpenAI provider
-        </Button>
-      ) : (
-        <Select
-          disabled={
-            saveTranscriptionMutation.isPending || transcriptionUnavailable
+      <Select
+        disabled={
+          saveTranscriptionMutation.isPending ||
+          (transcriptionUnavailable && !onAddProvider)
+        }
+        onValueChange={(value) => {
+          if (!value) {
+            return;
           }
-          onValueChange={(value) => {
-            if (!value) {
-              return;
-            }
 
-            const model =
-              value === CLEAR_TRANSCRIPTION_MODEL_VALUE ? null : String(value);
+          if (value === ADD_OPENAI_VALUE) {
+            onAddProvider?.();
 
-            setFormError(null);
-            setSelection(model ?? "");
-            setSavedHint(null);
+            return;
+          }
 
-            saveTranscriptionMutation.mutate(model, {
-              onError: (error) => {
-                setSelection(transcriptionSettings?.model ?? "");
-                setFormError(formatError(error));
-              },
-              onSuccess: (saved) => {
-                setSelection(saved.model ?? "");
-                setSavedHint(
-                  saved.model
-                    ? `Saved · ${profileModelLabel(saved.model, transcriptionModelGroups)}`
-                    : "Cleared"
-                );
-              },
-            });
-          }}
-          value={selectionValue}
+          const model =
+            value === CLEAR_TRANSCRIPTION_MODEL_VALUE ? null : String(value);
+
+          setFormError(null);
+          setSelection(model ?? "");
+          setSavedHint(null);
+
+          saveTranscriptionMutation.mutate(model, {
+            onError: (error) => {
+              setSelection(transcriptionSettings?.model ?? "");
+              setFormError(formatError(error));
+            },
+            onSuccess: (saved) => {
+              setSelection(saved.model ?? "");
+              setSavedHint(
+                saved.model
+                  ? `Saved · ${profileModelLabel(saved.model, transcriptionModelGroups)}`
+                  : "Cleared"
+              );
+            },
+          });
+        }}
+        value={selectionValue}
+      >
+        <SelectTrigger
+          aria-label="Audio transcription model"
+          className="h-9 w-full"
         >
-          <SelectTrigger
-            aria-label="Audio transcription model"
-            className="h-9 w-full"
-          >
-            <SelectValue placeholder="Select transcription model">
-              {selection
-                ? profileModelLabel(selection, transcriptionModelGroups)
-                : transcriptionUnavailable
-                  ? "No OpenAI provider"
-                  : "Not configured"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent
-            alignItemWithTrigger={false}
-            className="w-max min-w-72 max-w-[min(24rem,92vw)]"
-          >
-            <SelectItem value={CLEAR_TRANSCRIPTION_MODEL_VALUE}>
-              Not configured
+          <SelectValue placeholder="Select transcription model">
+            {selection
+              ? profileModelLabel(selection, transcriptionModelGroups)
+              : transcriptionUnavailable
+                ? "No OpenAI provider"
+                : "Not configured"}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent
+          alignItemWithTrigger={false}
+          className="w-max min-w-72 max-w-[min(24rem,92vw)]"
+        >
+          <SelectItem value={CLEAR_TRANSCRIPTION_MODEL_VALUE}>
+            Not configured
+          </SelectItem>
+          {transcriptionUnavailable && onAddProvider ? (
+            <SelectItem value={ADD_OPENAI_VALUE}>
+              Add OpenAI provider…
             </SelectItem>
-            {transcriptionModelGroups.flatMap((group) =>
-              group.models.map((model) => (
-                <SelectItem
-                  key={`${group.providerId}:${model.id}`}
-                  value={encodeModelSelection(group.providerId, model.id)}
-                >
-                  {group.providerLabel}: {model.name}
-                </SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
-      )}
+          ) : null}
+          {transcriptionModelGroups.flatMap((group) =>
+            group.models.map((model) => (
+              <SelectItem
+                key={`${group.providerId}:${model.id}`}
+                value={encodeModelSelection(group.providerId, model.id)}
+              >
+                {group.providerLabel}: {model.name}
+              </SelectItem>
+            ))
+          )}
+        </SelectContent>
+      </Select>
     </SettingsModelTile>
   );
 }

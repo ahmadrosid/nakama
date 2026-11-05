@@ -1,6 +1,7 @@
 import type { ProviderInstanceSummary, WireApi } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
+  ConfirmDialog,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -16,7 +17,7 @@ import {
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
 import { LinkSquare02Icon, ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
   DeviceSignInCode,
   useDeviceSignIn,
@@ -35,32 +36,31 @@ function SavedKeyActions({
   instance: ProviderInstanceSummary;
   onManage?: (action: "clear" | "use-stored") => void;
 }) {
-  // Clearing a key stops chat for this provider, so it takes two clicks.
+  // Clearing a key stops chat for this provider: confirm it, as Remove does.
   const [confirmClear, setConfirmClear] = useState(false);
-
-  useEffect(() => {
-    if (!confirmClear) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => setConfirmClear(false), 5000);
-
-    return () => window.clearTimeout(timeout);
-  }, [confirmClear]);
 
   if (instance.secretSource === "settings") {
     return (
-      <Button
-        className="text-destructive hover:text-destructive sm:mr-auto"
-        disabled={busy}
-        onClick={() =>
-          confirmClear ? onManage?.("clear") : setConfirmClear(true)
-        }
-        type="button"
-        variant={confirmClear ? "destructive" : "ghost"}
-      >
-        {confirmClear ? "Click again to clear" : "Clear saved key"}
-      </Button>
+      <>
+        <Button
+          className="text-destructive hover:text-destructive sm:mr-auto"
+          disabled={busy}
+          onClick={() => setConfirmClear(true)}
+          type="button"
+          variant="ghost"
+        >
+          Clear saved key
+        </Button>
+        {confirmClear ? (
+          <ConfirmDialog
+            confirmLabel="Clear key"
+            description={`Chat with ${instance.label} stops until you add a key again.`}
+            onClose={() => setConfirmClear(false)}
+            onConfirm={async () => onManage?.("clear")}
+            title="Clear saved key?"
+          />
+        ) : null}
+      </>
     );
   }
 
