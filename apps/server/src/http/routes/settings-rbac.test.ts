@@ -868,7 +868,7 @@ describe("profile detail and history reads follow the chat list visibility", () 
     expect(response.status).toBe(403);
   });
 
-  test("a member sees MCP status on a shared agent, the owner sees the error", async () => {
+  test("raw MCP errors go only to admins, the prompt only to owners and admins", async () => {
     const { app, db, member } = await seedProfilesFixture();
     const now = new Date().toISOString();
 
@@ -894,35 +894,64 @@ describe("profile detail and history reads follow the chat list visibility", () 
       PROFILES_ORG_ID
     );
 
+    const admin = await loginUserSession(
+      app,
+      "owner@profile.test",
+      PASSWORD,
+      PROFILES_ORG_ID
+    );
+
     type DetailBody = {
       profile: {
         mcpServers: Array<{ lastError: string | null; status: string }>;
+        systemPrompt: string;
       };
     };
 
-    const memberResponse = await callRoute(app, member, {
-      method: "GET",
-      path: "/v1/profiles/shared_agent",
-    });
+    const read = async (session: typeof member) => {
+      const response = await callRoute(app, session, {
+        method: "GET",
+        path: "/v1/profiles/shared_agent",
+      });
 
-    // SAFETY: This test controls the fixture shape at this boundary.
-    const memberBody = (await memberResponse.json()) as DetailBody;
+      expect(response.status).toBe(200);
 
-    expect(memberBody.profile.mcpServers).toEqual([
+      // SAFETY: This test controls the fixture shape at this boundary.
+      return ((await response.json()) as DetailBody).profile;
+    };
+
+    const memberView = await read(member);
+
+    expect(memberView.mcpServers).toEqual([
       expect.objectContaining({ lastError: null, status: "error" }),
     ]);
+    expect(memberView.systemPrompt).toBe("");
 
-    const ownerResponse = await callRoute(app, owner, {
-      method: "GET",
+    const ownerView = await read(owner);
+
+    expect(ownerView.mcpServers).toEqual([
+      expect.objectContaining({ lastError: null, status: "error" }),
+    ]);
+    expect(ownerView.systemPrompt).toBe("You are helpful.");
+
+    const adminView = await read(admin);
+
+    expect(adminView.mcpServers[0]?.lastError).toContain("fetch failed");
+    expect(adminView.systemPrompt).toBe("You are helpful.");
+
+    // Routes that answer with the updated detail use the same rule.
+    const update = await callRoute(app, owner, {
+      body: { name: "Shared Agent 2" },
+      method: "PUT",
       path: "/v1/profiles/shared_agent",
     });
 
-    // SAFETY: This test controls the fixture shape at this boundary.
-    const ownerBody = (await ownerResponse.json()) as DetailBody;
+    expect(update.status).toBe(200);
 
-    expect(ownerBody.profile.mcpServers[0]?.lastError).toContain(
-      "fetch failed"
-    );
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const updated = (await update.json()) as DetailBody;
+
+    expect(updated.profile.mcpServers[0]?.lastError).toBeNull();
   });
 
   test("a member cannot read the change history of a shared agent", async () => {

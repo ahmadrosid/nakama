@@ -63,12 +63,10 @@ const sectionTabClass =
 
 function ProfilePromptPanel({
   state,
-  canPack,
   canCreateProfile,
   profileId,
 }: {
   state: ProfilesPageState;
-  canPack: boolean;
   canCreateProfile: boolean;
   profileId: string;
 }) {
@@ -80,32 +78,30 @@ function ProfilePromptPanel({
   return (
     <>
       <ProfileSystemPromptCard state={state} />
-      {canPack || isOwner ? (
-        <section className="space-y-3" id="profile-prompt">
-          <div className="flex items-center justify-between gap-3">
-            {showFiles ? (
-              <h2 className="font-medium text-foreground/80 text-sm">
-                Agent prompt
-              </h2>
-            ) : null}
-            <button
-              aria-haspopup="dialog"
-              className="ml-auto flex h-8 items-center gap-1 rounded-md font-medium text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => setHistoryOpen(true)}
-              type="button"
-            >
-              Change history
-              <ArrowRight01Icon aria-hidden="true" className="size-3.5" />
-            </button>
-          </div>
-          {showFiles ? <SoulTab profileId={profileId} /> : null}
-          <ProfileHistorySheet
-            onOpenChange={setHistoryOpen}
-            open={historyOpen}
-            profileId={profileId}
-          />
-        </section>
-      ) : null}
+      <section className="space-y-3" id="profile-prompt">
+        <div className="flex items-center justify-between gap-3">
+          {showFiles ? (
+            <h2 className="font-medium text-foreground/80 text-sm">
+              Agent prompt
+            </h2>
+          ) : null}
+          <button
+            aria-haspopup="dialog"
+            className="ml-auto flex h-8 items-center gap-1 rounded-md font-medium text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setHistoryOpen(true)}
+            type="button"
+          >
+            Change history
+            <ArrowRight01Icon aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
+        {showFiles ? <SoulTab profileId={profileId} /> : null}
+        <ProfileHistorySheet
+          onOpenChange={setHistoryOpen}
+          open={historyOpen}
+          profileId={profileId}
+        />
+      </section>
     </>
   );
 }
@@ -154,18 +150,20 @@ function buildProfileSections({
   detail,
   showBehavior,
   showChannels,
+  showPrompt,
 }: {
   channels: { connected: boolean }[] | null;
   detail: NonNullable<ProfilesPageState["detail"]>;
   showBehavior: boolean;
   showChannels: boolean;
+  showPrompt: boolean;
 }) {
   const channelHint = channels
     ? `${channels.filter((channel) => channel.connected).length}/${channels.length}`
     : "";
 
   return [
-    { hint: "", label: "Prompt", value: "prompt" },
+    ...(showPrompt ? [{ hint: "", label: "Prompt", value: "prompt" }] : []),
     ...(showChannels
       ? [{ hint: channelHint, label: "Channels", value: "channels" }]
       : []),
@@ -203,9 +201,9 @@ function profileTabAccess(
   return {
     canCreateProfile,
     canManage: canCreateProfile || isOwner,
-    canPack,
     showBehavior: isOrgAdmin || isOwner,
     showChannels: (canPack || isOwner) && !detail.isSuper,
+    showPrompt: canPack || isOwner,
   };
 }
 
@@ -227,8 +225,13 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
   const { busy, detail, selectedId } = state;
 
-  const { canCreateProfile, canManage, canPack, showBehavior, showChannels } =
-    profileTabAccess(detail, user, activeOrg?.role);
+  const {
+    canCreateProfile,
+    canManage,
+    showBehavior,
+    showChannels,
+    showPrompt,
+  } = profileTabAccess(detail, user, activeOrg?.role);
 
   const channelsReady = !(isPending || channelsError);
 
@@ -237,6 +240,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
     detail,
     showBehavior,
     showChannels,
+    showPrompt,
   });
 
   return (
@@ -250,7 +254,9 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         key={detail.id}
         onValueChange={(value) => setSection(String(value))}
         value={
-          sections.some((item) => item.value === section) ? section : "prompt"
+          sections.some((item) => item.value === section)
+            ? section
+            : (sections[0]?.value ?? "tools")
         }
       >
         <Tabs.List
@@ -261,24 +267,25 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             <ProfileSectionTab key={item.value} {...item} />
           ))}
         </Tabs.List>
-        <Tabs.Panel className="w-0 min-w-full space-y-6" value="prompt">
-          <ProfilePromptPanel
-            canCreateProfile={canCreateProfile}
-            canPack={canPack}
-            profileId={detail.id}
-            state={state}
-          />
-          {(showChannels || canManage) && selectedId ? (
-            <ProfileFooterActions
-              onExport={() => setExportOpen(true)}
-              onMove={() => setMoveOpen(true)}
-              showAdmin={canManage}
-              showMove={canCreateProfile}
-              showPack={showChannels}
+        {showPrompt ? (
+          <Tabs.Panel className="w-0 min-w-full space-y-6" value="prompt">
+            <ProfilePromptPanel
+              canCreateProfile={canCreateProfile}
+              profileId={detail.id}
               state={state}
             />
-          ) : null}
-        </Tabs.Panel>
+            {(showChannels || canManage) && selectedId ? (
+              <ProfileFooterActions
+                onExport={() => setExportOpen(true)}
+                onMove={() => setMoveOpen(true)}
+                showAdmin={canManage}
+                showMove={canCreateProfile}
+                showPack={showChannels}
+                state={state}
+              />
+            ) : null}
+          </Tabs.Panel>
+        ) : null}
         {showChannels ? (
           <Tabs.Panel className="w-0 min-w-full" value="channels">
             <ChannelProfileContext.Provider

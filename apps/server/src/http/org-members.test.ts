@@ -281,6 +281,26 @@ test("shared agent selection returns stable team profiles and enforces invocatio
     expect(response.status).toBe(expected);
   }
 
+  await db.upsertMcpServer({
+    cachedTools: [],
+    config: { url: "https://mcp.example.test" },
+    createdAt: now,
+    enabled: true,
+    id: "mcp_team",
+    lastError: "fetch failed: https://mcp.example.test/v1?key=team",
+    name: "Team MCP",
+    orgId: "org_team_a",
+    status: "error",
+    transport: "http",
+    updatedAt: now,
+  });
+  await db.assignMcpServerToProfile(profileId, "mcp_team");
+  const withMcp = await post();
+  expect(withMcp.status).toBe(200);
+  const withMcpResult: ProfileResponse = await withMcp.json();
+  expect(withMcpResult.profile.mcpServers).toEqual([
+    expect.objectContaining({ lastError: null, status: "error" }),
+  ]);
   await db.upsertProfile({
     ...source,
     acpAgent: { args: ["--token", "parent-secret"], command: "agent" },

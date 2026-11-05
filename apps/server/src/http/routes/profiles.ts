@@ -41,6 +41,7 @@ import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
 import {
   artifactCreatorScopeFromContext,
+  profileResponseFor,
   requireActiveOrgIdFromContext,
   requireOrgAdmin,
   requireOrgAdminOrPlatformAdminFromContext,
@@ -85,7 +86,7 @@ export function registerProfileRoutes(
   /**
    * Admins read every agent. A member reads the agents their chat list shows
    * (shared, the org default, their own). `owner` is true for admins and the
-   * agent's owner, who also see change history and raw MCP errors. Unknown
+   * agent's owner, who also see change history and the system prompt. Unknown
    * ids and hidden agents answer the same 403 after the same row lookup, so
    * members cannot probe which ids exist.
    */
@@ -2035,7 +2036,10 @@ export function registerProfileRoutes(
     const body = await readJson(c.req.raw, imageAttachmentSchema);
 
     return json<ProfileResponse>(
-      await agent.uploadProfileAvatar(orgId, profileId, body)
+      profileResponseFor(
+        c,
+        await agent.uploadProfileAvatar(orgId, profileId, body)
+      )
     );
   });
 
@@ -2052,27 +2056,17 @@ export function registerProfileRoutes(
     const { owner } = await requireProfileRead(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
-    const response = await agent.getProfile(orgId, profileId);
 
-    if (owner) {
-      return json<ProfileResponse>(response);
-    }
-
-    // MCP errors are raw provider text; members only see the status.
-    return json<ProfileResponse>({
-      profile: {
-        ...response.profile,
-        mcpServers: response.profile.mcpServers.map((server) => ({
-          ...server,
-          lastError: null,
-        })),
-      },
-    });
+    return json<ProfileResponse>(
+      profileResponseFor(c, await agent.getProfile(orgId, profileId), {
+        ownsProfile: owner,
+      })
+    );
   });
 
   app.get("/v1/profiles/:profileId/history", async (c) => {
-    // History holds full soul file snapshots (MEMORY.md too), which the soul
-    // routes keep from members who do not own the agent.
+    // History holds full soul file snapshots (MEMORY.md too). Only the owner
+    // and admins get them, the same as the soul routes and pack export.
     const { owner } = await requireProfileRead(c);
 
     if (!owner) {
@@ -2176,10 +2170,13 @@ export function registerProfileRoutes(
     }
 
     return json<ProfileResponse>(
-      await agent.updateProfile(orgId, profileId, body, {
-        actorUserId: auth.user.id,
-        source: "dashboard",
-      })
+      profileResponseFor(
+        c,
+        await agent.updateProfile(orgId, profileId, body, {
+          actorUserId: auth.user.id,
+          source: "dashboard",
+        })
+      )
     );
   });
 
@@ -2224,7 +2221,7 @@ export function registerProfileRoutes(
     const body = await readOptionalJson<CloneProfileRequest>(c.req.raw, {});
 
     return json<ProfileResponse>(
-      await agent.cloneProfile(orgId, profileId, body),
+      profileResponseFor(c, await agent.cloneProfile(orgId, profileId, body)),
       201
     );
   });

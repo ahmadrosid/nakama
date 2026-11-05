@@ -1,4 +1,4 @@
-import { NakamaApiError } from "@nakama/core";
+import { NakamaApiError, type ProfileResponse } from "@nakama/core";
 import type { Context } from "hono";
 import { getRequestAuth, type RequestAuthContext } from "./shared";
 import type { AppEnv } from "./types";
@@ -56,6 +56,34 @@ export function requireOrgMemberFromContext(
   requireOrgMember(auth);
 
   return auth;
+}
+
+/**
+ * The profile detail a caller may see. MCP servers are admin resources, so
+ * their raw provider errors go only to admins. A member who does not own the
+ * agent also gets no system prompt, the same rule the soul routes use.
+ */
+export function profileResponseFor(
+  c: Context<AppEnv>,
+  response: ProfileResponse,
+  options: { ownsProfile: boolean } = { ownsProfile: true }
+): ProfileResponse {
+  const auth = getRequestAuth(c);
+
+  if (auth.isPlatformAdmin || auth.orgRole === "admin") {
+    return response;
+  }
+
+  return {
+    profile: {
+      ...response.profile,
+      mcpServers: response.profile.mcpServers.map((server) => ({
+        ...server,
+        lastError: null,
+      })),
+      systemPrompt: options.ownsProfile ? response.profile.systemPrompt : "",
+    },
+  };
 }
 
 interface ProfileOwnerLookup {
