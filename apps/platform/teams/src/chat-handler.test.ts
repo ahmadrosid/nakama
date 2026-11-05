@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { asTestFetch, withTempHome } from "@nakama/core/channel-test-helpers";
 import {
+  getTeamsConfigDir,
   loadTeamsConfigFile,
   regenerateTeamsHandshake,
   saveTeamsConfig,
@@ -164,6 +167,29 @@ describe("teams chat handler", () => {
       expect(config?.pairedUserIds).toEqual([ALLOWED]);
     });
   });
+
+  test("a code that cannot be spent still reaches no agent", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, code, replies, turns } = await pairingHarness(
+        homeDir,
+        ALLOWED
+      );
+
+      // Another writer holds the pairing lock, so the spend gives up.
+      await writeFile(
+        join(getTeamsConfigDir(OWNER), "pairing.lock"),
+        `${process.pid}\n`
+      );
+
+      await handle(channelPost(`my code is ${code}`));
+
+      expect(turns).toEqual([]);
+      expect(replies.map((entry) => entry.conversationId)).toEqual([
+        CODE_THREAD,
+      ]);
+      expect((await loadTeamsConfigFile(OWNER))?.handshakeCode).toBe(code);
+    });
+  }, 15_000);
 
   test("an authorized sender's code-shaped message reaches the agent", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {

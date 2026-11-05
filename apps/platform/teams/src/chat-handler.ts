@@ -81,8 +81,9 @@ const CHANNEL_MESSAGE_PREFIX =
 const LINK_IN_PERSONAL_CHAT_REPLY =
   "I can't answer you yet. Link your account first: open a personal chat with me and send the pairing code from Connections → Teams there.";
 
-const CODE_SPENT_REPLY =
-  "Everyone in this channel can read that pairing code, so it no longer works. Make a new one in Connections → Teams and send it to me in a personal chat.";
+// True also when the spend failed: making a new code replaces the posted one.
+const CODE_EXPOSED_REPLY =
+  "Everyone in this channel can read that pairing code. Make a new one in Connections → Teams and send it to me in a personal chat.";
 
 const THREAD_SESSION_PREFIX = "teams-thread:";
 
@@ -409,8 +410,9 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
   }
 
   /**
-   * True when the message carried the live code and it is now spent. A busy
-   * pairing lock leaves the code live, so that is logged, not hidden.
+   * True when the message carried the live code, also when the spend failed:
+   * the message is still turned away, so the code never reaches the agent.
+   * A failed spend leaves the code live, so that is logged, not hidden.
    */
   async function spendExposedCode(
     text: string,
@@ -428,15 +430,16 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     }
 
     try {
-      return await spendExposedTeamsHandshake(text, owner);
+      // False when the code was spent or replaced since the config was read.
+      await spendExposedTeamsHandshake(text, owner);
     } catch (error) {
       console.error(
         "[teams] could not spend a pairing code posted in a channel:",
         error instanceof Error ? error.message : String(error)
       );
-
-      return false;
     }
+
+    return true;
   }
 
   return async function handle(activity: TeamsActivity): Promise<void> {
@@ -493,7 +496,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       await send(
         activity.conversationId,
         allows(config, activity)
-          ? CODE_SPENT_REPLY
+          ? CODE_EXPOSED_REPLY
           : LINK_IN_PERSONAL_CHAT_REPLY
       );
 
