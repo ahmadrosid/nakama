@@ -301,7 +301,7 @@ function SettingsSection({
   return (
     <section aria-labelledby={headingId} className="space-y-3">
       <h2
-        className="px-4 font-medium text-muted-foreground text-xs uppercase tracking-wide"
+        className="type-section-title px-4 font-medium text-muted-foreground"
         id={headingId}
       >
         {title}

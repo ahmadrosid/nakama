@@ -226,7 +226,6 @@ function Settings({
             <span className="meet-enable-copy">Enable Google Meet</span>
             <Switch
               checked={enabled}
-              className={enabled ? "bg-blue-600" : undefined}
               disabled={busy}
               id="meet-enabled"
               onCheckedChange={setEnabled}

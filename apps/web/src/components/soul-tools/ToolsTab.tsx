@@ -283,9 +283,7 @@ function ToolListSection({
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
-        <h3 className="font-normal text-muted-foreground/55 text-sm">
-          {title}
-        </h3>
+        <h3 className="font-medium text-muted-foreground text-sm">{title}</h3>
         {tools.length > 0 ? (
           <span className="text-muted-foreground text-xs tabular-nums">
             {trimmedQuery
@@ -464,7 +462,9 @@ function ToolListItem({
         ) : deletable ? (
           <span className="scope-badge scope-badge-custom">custom</span>
         ) : (
-          <span className="scope-badge scope-badge-active">built-in</span>
+          <span className="scope-badge bg-muted text-muted-foreground">
+            built-in
+          </span>
         )}
         {tool.pluginId ? (
           <Button
