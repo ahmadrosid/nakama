@@ -116,7 +116,7 @@ function CatalogBrowseToolbar({
   return (
     <>
       <Input
-        className="min-w-35 flex-1"
+        className="min-w-35 flex-1 basis-full sm:basis-0"
         disabled={toolbarDisabled}
         onChange={(event) => onSearchChange(event.target.value)}
         placeholder="Search model name or ID..."

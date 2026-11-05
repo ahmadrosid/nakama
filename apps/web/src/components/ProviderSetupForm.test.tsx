@@ -64,7 +64,7 @@ async function renderForm(
 // one model name against another. Settings still lets an admin choose.
 test("setup hides the model picker and Settings keeps it", async () => {
   // OpenAI shows its model list as one line until the user opens it.
-  const modelsField = 'label[for="catalog-models-summary"]';
+  const modelsField = 'label[for="catalog-models-edit"]';
 
   await renderForm();
   expect(container.querySelector(modelsField)).not.toBeNull();

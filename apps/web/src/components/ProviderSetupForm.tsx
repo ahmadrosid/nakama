@@ -39,6 +39,7 @@ import { ProviderSelect } from "@/components/ProviderSelect";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import { DiscardChangesConfirm } from "@/components/settings/provider-instance-dialogs";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
+import { focusModelsField } from "@/hooks/focus-models-field";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import { apiKeyPlaceholder, isLocalBaseUrl } from "@/lib/models";
 
@@ -383,15 +384,21 @@ function CatalogModelsStep({
 
   if (!(open || form.modelsError)) {
     return (
-      <FormField density={density} id="catalog-models-summary" label="Models">
+      <FormField density={density} id="catalog-models-edit" label="Models">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm">
-          <span id="catalog-models-summary">
+          <span>
             {rows.length} model{rows.length === 1 ? "" : "s"}
             {defaultRow ? ` · default ${defaultRow.name || defaultRow.id}` : ""}
           </span>
           <Button
+            aria-label="Edit models"
             disabled={form.busy}
-            onClick={() => setOpen(true)}
+            id="catalog-models-edit"
+            onClick={() => {
+              setOpen(true);
+              // The button goes away; focus moves into the list it opens.
+              setTimeout(focusModelsField, 0);
+            }}
             size="sm"
             type="button"
             variant="outline"
