@@ -41,7 +41,10 @@ describe("API key check on save", () => {
 
   async function withDeepSeekProvider(
     respond: () => Promise<Response>,
-    run: (service: AgentService, providerId: string) => Promise<void>
+    run: (service: AgentService, providerId: string) => Promise<void>,
+    request: Parameters<AgentService["createProvider"]>[0] = {
+      type: "deepseek",
+    }
   ) {
     const configDir = await mkdtemp(path.join(tmpdir(), "nakama-key-check-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -61,7 +64,7 @@ describe("API key check on save", () => {
         new ManagedSecrets(db, Buffer.alloc(32, 1).toString("base64"))
       );
 
-      const created = await service.createProvider({ type: "deepseek" });
+      const created = await service.createProvider(request);
       await run(service, created.provider.id);
     } finally {
       delete process.env.NAKAMA_CONFIG_DIR;
@@ -122,6 +125,23 @@ describe("API key check on save", () => {
           status: "unchecked",
         });
         expect(calls).toBe(0);
+      }
+    );
+  });
+
+  test("a check finds a local endpoint without a key that is down", async () => {
+    await withDeepSeekProvider(
+      () => Promise.reject(new Error("connect ECONNREFUSED")),
+      async (service, providerId) => {
+        expect(await service.checkProvider(providerId)).toEqual({
+          status: "unreachable",
+        });
+      },
+      {
+        baseUrl: "http://127.0.0.1:9/v1",
+        customModels: [{ id: "local-model" }],
+        label: "verify-bs local",
+        type: "openai_compatible",
       }
     );
   });

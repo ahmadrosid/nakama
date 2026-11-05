@@ -488,7 +488,15 @@ const API_KEY_CHECK_TIMEOUT_MS = 8000;
 async function checkApiKey(
   instance: ProviderInstance
 ): Promise<CheckProviderResponse["status"]> {
-  const check = instance.apiKey ? apiKeyCheckRequest(instance) : null;
+  const localBaseUrl = instance.baseUrl?.trim().replace(/\/+$/, "");
+
+  // A local or custom endpoint without a key still answers /models when up.
+  const check = instance.apiKey
+    ? apiKeyCheckRequest(instance)
+    : localBaseUrl &&
+        (instance.type === "ollama" || instance.type === "openai_compatible")
+      ? { headers: {}, url: `${localBaseUrl}/models` }
+      : null;
 
   if (!check) {
     return "unchecked";

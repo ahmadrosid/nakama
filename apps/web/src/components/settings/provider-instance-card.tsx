@@ -110,6 +110,52 @@ function providerKeyActionLabel(
   return hasApiKey ? "Update key" : "Add key";
 }
 
+function ProviderCheckStatus({
+  enabled,
+  instance,
+}: {
+  enabled: boolean;
+  instance: ProviderInstanceSummary;
+}) {
+  // A live check, so a key the provider stopped taking shows here and not
+  // first in a chat. Once per provider every 10 minutes.
+  const {
+    data: check,
+    isFetching: checking,
+    refetch: checkAgain,
+  } = useQuery({
+    // Local and custom endpoints can be checked without a key.
+    enabled,
+    queryFn: () => client.checkProvider(instance.id),
+    queryKey: queryKeys.providerCheck(instance.id),
+    staleTime: 10 * 60_000,
+  });
+
+  if (!(check?.status === "rejected" || check?.status === "unreachable")) {
+    return null;
+  }
+
+  return (
+    <>
+      {check.status === "rejected" ? (
+        <span className="text-destructive">Key rejected</span>
+      ) : (
+        <span className="text-amber-700 dark:text-amber-300">
+          Cannot reach {instance.label}
+        </span>
+      )}
+      <button
+        className="text-foreground underline underline-offset-2 disabled:opacity-50"
+        disabled={checking}
+        onClick={() => void checkAgain()}
+        type="button"
+      >
+        {checking ? "Checking…" : "Check again"}
+      </button>
+    </>
+  );
+}
+
 function ProviderInstanceRow({
   instance,
   card,
@@ -125,15 +171,6 @@ function ProviderInstanceRow({
 
   const connected =
     instance.hasApiKey || instance.secretSource === "environment";
-
-  // A live check, so a key the provider stopped taking shows here and not
-  // first in a chat. Once per provider every 10 minutes.
-  const { data: check } = useQuery({
-    enabled: connected,
-    queryFn: () => client.checkProvider(instance.id),
-    queryKey: queryKeys.providerCheck(instance.id),
-    staleTime: 10 * 60_000,
-  });
 
   // Compatible providers edit name, URL and models in one dialog.
   const opensEdit = card.isCompatibleLike;
@@ -159,12 +196,10 @@ function ProviderInstanceRow({
           {connected ? null : (
             <span className="text-destructive">Not connected</span>
           )}
-          {check?.status === "rejected" ? (
-            <span className="text-destructive">Key rejected</span>
-          ) : null}
-          {check?.status === "unreachable" ? (
-            <span>Cannot reach {instance.label}</span>
-          ) : null}
+          <ProviderCheckStatus
+            enabled={connected || card.isCompatibleLike}
+            instance={instance}
+          />
         </p>
       </div>
       <div className="-ml-2 flex flex-wrap items-center gap-0.5 sm:ml-0">
