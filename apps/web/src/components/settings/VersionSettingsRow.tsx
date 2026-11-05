@@ -225,7 +225,7 @@ export function VersionSettingsRow({
               }}
               size="sm"
               type="button"
-              variant="ghost"
+              variant="outline"
             >
               {query.isFetching ? <Spinner className="mr-2" /> : null}
               Check for updates

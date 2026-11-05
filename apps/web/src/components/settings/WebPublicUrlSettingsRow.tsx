@@ -29,7 +29,6 @@ function WebPublicUrlActions({
         <Button
           disabled={pending}
           onClick={onUseCurrent}
-          size="sm"
           type="button"
           variant="outline"
         >

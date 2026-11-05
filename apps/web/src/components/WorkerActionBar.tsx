@@ -133,12 +133,11 @@ function RunningActions({
     <>
       <Button
         aria-busy={stopping}
-        className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
         disabled={disabled}
         onClick={onStop}
         size="sm"
         type="button"
-        variant="outline"
+        variant="destructive"
       >
         <ActionGlyph busy={stopping} icon={StopIcon} />
         Stop
@@ -194,11 +193,11 @@ function StartAction({
 function ViewLogsButton({ onClick }: { onClick: () => void }) {
   return (
     <Button
-      className="ml-auto text-muted-foreground"
+      className="ml-auto"
       onClick={onClick}
       size="sm"
       type="button"
-      variant="ghost"
+      variant="outline"
     >
       <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
       View logs

@@ -66,18 +66,16 @@ function OrgMemoryTabButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      className={cn(
-        "-mb-px border-b-2 px-0 py-2.5 text-sm transition-colors",
-        active
-          ? "border-foreground font-semibold text-foreground"
-          : "border-transparent font-normal text-muted-foreground hover:text-foreground"
-      )}
+    <Button
+      aria-selected={active}
       onClick={onClick}
+      role="tab"
+      size="sm"
       type="button"
+      variant={active ? "secondary" : "ghost"}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -255,8 +253,8 @@ function OrgMemoryCardTabs({
   onTabChange: (tab: OrgMemoryTab) => void;
 }) {
   return (
-    <div className="border-border border-b px-4">
-      <div className="flex gap-5">
+    <div className="border-border border-b px-4 py-2">
+      <div className="flex gap-1">
         <OrgMemoryTabButton
           active={activeTab === "live"}
           onClick={() => onTabChange("live")}
@@ -403,7 +401,7 @@ function OrgMemoryCardForOrg({ org }: { org: AuthContextValue["activeOrg"] }) {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-0.5">
               <p className="font-semibold text-foreground text-sm">
-                Org Memory
+                Org memory
               </p>
               <p className="max-w-prose text-muted-foreground text-xs leading-relaxed">
                 Shared facts for every agent. Review proposals before they go

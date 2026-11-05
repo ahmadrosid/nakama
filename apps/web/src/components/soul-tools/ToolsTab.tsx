@@ -113,7 +113,9 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
     <div className={cn("min-w-0 space-y-8", embedded && "p-4 sm:p-5")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-semibold text-sm">All tools</h2>
+          <h2 className="font-medium text-muted-foreground text-sm">
+            All tools
+          </h2>
           <p className="type-body mt-1 text-pretty text-xs tabular-nums">
             {tools.length === 0
               ? "No tools registered yet"
@@ -430,7 +432,7 @@ function ToolListItem({
 
   const summary = (
     <div className="min-w-0">
-      <p className="font-normal text-foreground text-sm">{tool.name}</p>
+      <p className="font-medium text-foreground text-sm">{tool.name}</p>
       <p className="mt-0.5 line-clamp-2 text-pretty text-muted-foreground text-xs leading-relaxed">
         {tool.description}
       </p>

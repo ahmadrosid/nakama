@@ -130,7 +130,7 @@ function ProviderInstanceTableRow({
 
   return (
     <tr>
-      <td className="px-3 py-2.5 align-middle">
+      <td className="px-4 py-2.5 align-middle">
         <p className="truncate font-medium text-foreground text-sm">
           {instance.label}
         </p>
@@ -139,7 +139,7 @@ function ProviderInstanceTableRow({
           <p className="text-destructive text-xs">Not connected</p>
         )}
       </td>
-      <td className="px-3 py-2.5 align-middle">
+      <td className="px-4 py-2.5 align-middle">
         {endpoint ? (
           <p
             className="max-w-[18rem] truncate font-mono text-2xs text-foreground/80"
@@ -156,7 +156,7 @@ function ProviderInstanceTableRow({
           {providerModelCountLabel(instance.modelCount)}
         </span>
       </td>
-      <td className="px-3 py-2.5 align-middle">
+      <td className="px-4 py-2.5 align-middle">
         <div className="flex items-center justify-end gap-0.5">
           {card.isCompatibleLike ? (
             <ProviderActionButton label="Edit" onClick={card.openEdit}>

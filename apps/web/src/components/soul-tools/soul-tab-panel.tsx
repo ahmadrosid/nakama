@@ -257,7 +257,9 @@ function FileStatusListItem({
         type="button"
       >
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-foreground text-sm">{label}</p>
+          <p className="truncate font-medium text-foreground text-sm">
+            {label}
+          </p>
           <p className="mt-0.5 truncate text-muted-foreground text-xs">
             {description}
           </p>

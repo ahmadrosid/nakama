@@ -88,10 +88,10 @@ export function ProviderSettingsCard({
               <table className="w-full min-w-[36rem] text-left text-sm">
                 <thead className="border-border border-b bg-muted/30 text-muted-foreground text-xs">
                   <tr>
-                    <th className="px-3 py-2 font-medium">Provider</th>
-                    <th className="px-3 py-2 font-medium">Endpoint</th>
-                    <th className="px-3 py-2 font-medium">Models</th>
-                    <th className="px-3 py-2 font-medium">
+                    <th className="px-4 py-2 font-medium">Provider</th>
+                    <th className="px-4 py-2 font-medium">Endpoint</th>
+                    <th className="px-4 py-2 font-medium">Models</th>
+                    <th className="px-4 py-2 font-medium">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>

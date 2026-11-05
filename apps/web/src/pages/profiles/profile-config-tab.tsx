@@ -59,7 +59,7 @@ import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 const sectionTabClass =
-  "whitespace-nowrap rounded-lg px-2 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
+  "flex-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-center sm:flex-none font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
 
 function ProfilePromptPanel({
   state,
@@ -90,7 +90,7 @@ function ProfilePromptPanel({
             ) : null}
             <button
               aria-haspopup="dialog"
-              className="ml-auto flex h-8 items-center gap-1 rounded-md font-medium text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="ml-auto flex h-8 items-center gap-1 rounded-md text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => setHistoryOpen(true)}
               type="button"
             >
@@ -255,7 +255,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       >
         <Tabs.List
           aria-label="Agent sections"
-          className="mx-auto grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-xl bg-muted p-1 sm:w-fit"
+          className="mx-auto flex w-full max-w-full gap-1 overflow-x-auto rounded-xl bg-muted p-1 sm:w-fit"
         >
           {sections.map((item) => (
             <ProfileSectionTab key={item.value} {...item} />
@@ -551,7 +551,7 @@ function ProfileFooterActions({
 
         return (
           <button
-            className={`flex h-10 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "border border-destructive/20 text-destructive hover:bg-destructive/10" : "border border-border text-foreground/80 hover:bg-muted hover:text-foreground"}`}
+            className={`flex h-8 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "bg-destructive/10 text-red-700 hover:bg-destructive/15 dark:text-destructive" : "border border-border text-foreground/80 hover:bg-muted hover:text-foreground"}`}
             disabled={disabled}
             key={label}
             onClick={onClick}

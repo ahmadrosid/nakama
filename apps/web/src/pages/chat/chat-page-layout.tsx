@@ -337,7 +337,7 @@ function greeting(): string {
 function CognitoWelcome() {
   return (
     <>
-      <h2 className="type-section-title text-xl tracking-tight">
+      <h2 className="type-section-title text-2xl tracking-tight">
         Cognito chat
       </h2>
       <p className="type-body text-muted-foreground text-sm">
@@ -377,7 +377,7 @@ export function ChatWelcome({
         {cognito ? (
           <CognitoWelcome />
         ) : (
-          <h2 className="type-section-title text-xl tracking-tight">
+          <h2 className="type-section-title text-2xl tracking-tight">
             {greeting()}
           </h2>
         )}

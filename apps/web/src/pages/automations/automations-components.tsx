@@ -834,13 +834,13 @@ export function AutomationExample({
       }}
     >
       <label
-        className="text-center font-semibold text-3xl text-foreground"
+        className="text-center font-semibold text-2xl text-foreground"
         htmlFor="automation-idea"
       >
         What do you need help with?
       </label>
       <Textarea
-        className="min-h-28 text-base"
+        className="min-h-28 px-4 py-3 text-base"
         id="automation-idea"
         onChange={(event) => setText(event.target.value)}
         placeholder="For example: Every morning, tell me which emails I need to answer."

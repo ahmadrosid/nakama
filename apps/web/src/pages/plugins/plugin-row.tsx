@@ -228,7 +228,7 @@ function PluginIdentity({
             </span>
           ) : null}
           {updateVersion ? (
-            <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 font-medium text-2xs text-amber-800 dark:text-primary">
+            <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 font-medium text-2xs text-amber-800 dark:text-primary">
               Update {updateVersion}
             </span>
           ) : null}
@@ -567,7 +567,7 @@ function PluginIcon({ icon, pluginId }: { icon?: string; pluginId: string }) {
   const Icon = pluginIcon(pluginId);
 
   return (
-    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted text-foreground">
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted text-foreground">
       {icon && icon !== failedIcon ? (
         <img
           alt=""

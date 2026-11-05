@@ -75,10 +75,10 @@ export function OrgMembersTable({
       className="w-full table-fixed text-sm"
     >
       <thead>
-        <tr className="bg-muted/40 text-left text-muted-foreground">
-          <th className="px-4 py-2.5 font-normal">Name</th>
-          <th className="w-20 px-2 py-2.5 font-normal sm:w-28">Role</th>
-          <th className="w-28 px-2 py-2.5 font-normal sm:w-36">Joined</th>
+        <tr className="border-border border-b bg-muted/30 text-left text-muted-foreground text-xs">
+          <th className="px-4 py-2 font-medium">Name</th>
+          <th className="w-20 px-2 py-2 font-medium sm:w-28">Role</th>
+          <th className="w-28 px-2 py-2 font-medium sm:w-36">Joined</th>
           {editable ? (
             <th className="w-12 px-2 py-2.5">
               <span className="sr-only">Actions</span>
