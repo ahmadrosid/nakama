@@ -106,7 +106,7 @@ function Pm2Unavailable({
   return (
     <span
       className={cn(
-        "max-w-xs truncate text-muted-foreground text-xs",
+        "max-w-xs truncate text-amber-800 text-xs dark:text-amber-300",
         className
       )}
       title={error}
@@ -133,12 +133,11 @@ function RunningActions({
     <>
       <Button
         aria-busy={stopping}
-        className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
         disabled={disabled}
         onClick={onStop}
         size="sm"
         type="button"
-        variant="outline"
+        variant="destructive"
       >
         <ActionGlyph busy={stopping} icon={StopIcon} />
         Stop
@@ -193,13 +192,7 @@ function StartAction({
 
 function ViewLogsButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button
-      className="ml-auto text-muted-foreground"
-      onClick={onClick}
-      size="sm"
-      type="button"
-      variant="ghost"
-    >
+    <Button onClick={onClick} size="sm" type="button" variant="outline">
       <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
       View logs
     </Button>
@@ -359,11 +352,11 @@ export function WorkerViewLogsButton({
   return (
     <>
       <Button
-        className={cn("text-muted-foreground", className)}
+        className={className}
         onClick={() => setLogDrawerOpen(true)}
         size="sm"
         type="button"
-        variant="ghost"
+        variant="outline"
       >
         <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
         View logs

@@ -209,12 +209,12 @@ export function VersionSettingsRow({
     <div className="space-y-3 px-4 py-3" id="version">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
-          <p className="font-medium text-foreground text-sm">Version</p>
+          <p className="text-foreground text-sm">Version</p>
           <VersionStatus query={query} />
           <UpgradeMessage status={status} />
         </div>
         <div className="flex items-center gap-2">
-          <p className="font-mono text-muted-foreground text-sm tabular-nums">
+          <p className="font-mono text-foreground/70 text-sm tabular-nums">
             {version}
           </p>
           {canCheck ? (
@@ -223,9 +223,8 @@ export function VersionSettingsRow({
               onClick={() => {
                 void query.refetch();
               }}
-              size="sm"
               type="button"
-              variant="ghost"
+              variant="outline"
             >
               {query.isFetching ? <Spinner className="mr-2" /> : null}
               Check for updates

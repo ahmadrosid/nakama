@@ -235,7 +235,7 @@ export function ImageGenerationSettingsCard() {
         }}
         value={selection || CLEAR_IMAGE_GENERATION_MODEL_VALUE}
       >
-        <SelectTrigger aria-label="Image generation" className="h-9 w-full">
+        <SelectTrigger aria-label="Image generation" className="h-8 w-full">
           <SelectValue placeholder="Select image generation model">
             {labelOf(selection)}
           </SelectValue>

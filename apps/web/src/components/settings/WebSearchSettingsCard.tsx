@@ -256,7 +256,7 @@ export function WebSearchSettingsCard() {
     <div className="space-y-3 px-4 py-3" id="web-search-settings">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
-          <p className="font-medium text-foreground text-sm">Web search</p>
+          <p className="text-foreground text-sm">Web search</p>
           {form.savedHint ? (
             <p
               className="text-emerald-700 text-xs dark:text-emerald-300"
@@ -274,7 +274,7 @@ export function WebSearchSettingsCard() {
           >
             <SelectTrigger
               aria-label="Web search provider"
-              className="h-9 w-full"
+              className="h-8 w-full"
               id="web-search-provider"
             >
               <SelectValue>

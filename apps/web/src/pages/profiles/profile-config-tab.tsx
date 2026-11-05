@@ -59,7 +59,7 @@ import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 const sectionTabClass =
-  "whitespace-nowrap rounded-full px-2 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
+  "-mb-px shrink-0 whitespace-nowrap border-transparent border-b-2 py-3 text-center text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:border-foreground data-[active]:font-medium data-[active]:text-foreground";
 
 function ProfilePromptPanel({
   state,
@@ -78,16 +78,16 @@ function ProfilePromptPanel({
   return (
     <>
       <ProfileSystemPromptCard state={state} />
-      <section className="space-y-3" id="profile-prompt">
+      <section className="space-y-2" id="profile-prompt">
         <div className="flex items-center justify-between gap-3">
           {showFiles ? (
-            <h2 className="font-medium text-foreground/80 text-sm">
+            <h2 className="font-medium text-muted-foreground text-sm">
               Agent prompt
             </h2>
           ) : null}
           <button
             aria-haspopup="dialog"
-            className="ml-auto flex h-8 items-center gap-1 rounded-md font-medium text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="ml-auto flex h-8 items-center gap-1 rounded-md pr-4 text-amber-800 text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring dark:text-primary"
             onClick={() => setHistoryOpen(true)}
             type="button"
           >
@@ -137,7 +137,7 @@ function ProfileSectionTab({
     <Tabs.Tab className={sectionTabClass} value={value}>
       {label}
       {hint ? (
-        <span className="ml-1.5 hidden text-muted-foreground/70 text-xs tabular-nums sm:inline">
+        <span className="ml-1.5 hidden text-muted-foreground text-xs tabular-nums sm:inline">
           {hint}
         </span>
       ) : null}
@@ -245,7 +245,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
   return (
     <div
-      className="mx-auto flex w-fit max-w-3xl flex-col gap-8"
+      className="mx-auto flex w-full max-w-3xl flex-col gap-8"
       id="profile-detail-panel-profile"
     >
       <ProfileConfigIdentitySection state={state} />
@@ -261,7 +261,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       >
         <Tabs.List
           aria-label="Agent sections"
-          className="mx-auto grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1 sm:w-fit"
+          className="no-scrollbar flex w-full max-w-full gap-6 overflow-x-auto border-border border-b"
         >
           {sections.map((item) => (
             <ProfileSectionTab key={item.value} {...item} />
@@ -552,13 +552,13 @@ function ProfileFooterActions({
   const fullRow = new Set(regular.length % 2 === 1 ? [regular.at(-1)] : []);
 
   return (
-    <footer className="grid w-0 min-w-full grid-cols-2 gap-2">
+    <footer className="grid w-0 min-w-full grid-cols-2 gap-2.5">
       {actions.map((action) => {
         const { Icon, destructive, disabled, label, onClick } = action;
 
         return (
           <button
-            className={`flex h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "bg-destructive/10 text-destructive hover:bg-destructive/15" : "bg-muted text-foreground/80 hover:bg-muted/70 hover:text-foreground"}`}
+            className={`flex h-8 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "bg-destructive/10 text-red-700 hover:bg-destructive/15 dark:text-destructive" : "border border-border text-foreground/80 hover:bg-muted hover:text-foreground"}`}
             disabled={disabled}
             key={label}
             onClick={onClick}
