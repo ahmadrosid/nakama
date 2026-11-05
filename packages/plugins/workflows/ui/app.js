@@ -232,6 +232,20 @@ var style_default = `[data-plugin-id="workflows"] {
     width: 20px;
     height: 20px;
   }
+  .workflow-drawer-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    color: var(--muted-foreground);
+    background: var(--muted);
+    border-radius: 12px;
+  }
+  .workflow-drawer-icon > svg {
+    width: 20px;
+    height: 20px;
+  }
   .workflow-step-mark {
     display: grid;
     flex-shrink: 0;
@@ -2602,6 +2616,7 @@ function apply(ctx) {
     };
     const showPicker = selection === "pick" || picking && Boolean(selectedStep);
     const drawerApp = selectedStep ? stepApp(selectedStep.kind, selectedStep.fields) : agent?.name ?? "Bot";
+    const drawerIcon = selectedStep ? stepIcon(selectedStep.kind, selectedStep.fields) : "bot";
     const valueSources = [
       {
         label: "Run input",
@@ -2934,9 +2949,11 @@ function apply(ctx) {
       className: "workflow-drawer-header"
     }, showPicker ? /* @__PURE__ */ React.createElement("div", {
       className: "workflow-drawer-title"
-    }, /* @__PURE__ */ React.createElement("p", null, "Step ", selectedStep ? selectedIndex + 1 : steps.length + 1), /* @__PURE__ */ React.createElement("h2", null, "What should this step do?")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(AppBadge, {
-      app: drawerApp
-    }), /* @__PURE__ */ React.createElement("div", {
+    }, /* @__PURE__ */ React.createElement("p", null, "Step ", selectedStep ? selectedIndex + 1 : steps.length + 1), /* @__PURE__ */ React.createElement("h2", null, "What should this step do?")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-drawer-icon"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: drawerIcon
+    })), /* @__PURE__ */ React.createElement("div", {
       className: "workflow-drawer-title"
     }, /* @__PURE__ */ React.createElement("p", null, selectedStep ? `Step ${selectedIndex + 1}` : "Summary", " ·", " ", drawerApp), /* @__PURE__ */ React.createElement("h2", null, title(selectedStep?.id ?? summaryStep?.id ?? "summary")))), /* @__PURE__ */ React.createElement(Button, {
       "aria-label": expanded ? "Collapse step" : "Expand step",

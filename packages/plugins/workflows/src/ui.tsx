@@ -1848,6 +1848,10 @@ export function apply(ctx: Context) {
       ? stepApp(selectedStep.kind, selectedStep.fields)
       : (agent?.name ?? "Bot");
 
+    const drawerIcon = selectedStep
+      ? stepIcon(selectedStep.kind, selectedStep.fields)
+      : "bot";
+
     const valueSources: ValueSource[] = [
       {
         label: "Run input",
@@ -2349,7 +2353,9 @@ export function apply(ctx: Context) {
                 </div>
               ) : (
                 <>
-                  <AppBadge app={drawerApp} />
+                  <span className="workflow-drawer-icon">
+                    <Icon kind={drawerIcon} />
+                  </span>
                   <div className="workflow-drawer-title">
                     <p>
                       {selectedStep ? `Step ${selectedIndex + 1}` : "Summary"} ·{" "}

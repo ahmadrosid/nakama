@@ -231,6 +231,20 @@
     width: 20px;
     height: 20px;
   }
+  .workflow-drawer-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    color: var(--muted-foreground);
+    background: var(--muted);
+    border-radius: 12px;
+  }
+  .workflow-drawer-icon > svg {
+    width: 20px;
+    height: 20px;
+  }
   .workflow-step-mark {
     display: grid;
     flex-shrink: 0;
