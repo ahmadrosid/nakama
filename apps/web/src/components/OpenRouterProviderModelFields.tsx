@@ -41,8 +41,9 @@ export function OpenRouterProviderModelFields({
         fieldId="openrouter-provider-models"
         modelsError={modelsError}
         onCustomModelsChange={onCustomModelsChange}
-        renderBrowse={({ multiSelect, onAddMany, onSelect }) => (
+        renderBrowse={({ addedIds, multiSelect, onAddMany, onSelect }) => (
           <OpenRouterModelsBrowseList
+            addedIds={addedIds}
             className="h-72 rounded-md border border-border"
             multiSelect={multiSelect}
             onAddMany={onAddMany}

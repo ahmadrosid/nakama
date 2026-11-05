@@ -44,9 +44,10 @@ export function ShortlistBrowseProviderModelFields({
       fieldId={`${provider}-provider-models`}
       modelsError={modelsError}
       onCustomModelsChange={onCustomModelsChange}
-      renderBrowse={({ multiSelect, onAddMany, onSelect }) =>
+      renderBrowse={({ addedIds, multiSelect, onAddMany, onSelect }) =>
         provider === "cerebras" ? (
           <CerebrasModelsBrowseList
+            addedIds={addedIds}
             className="h-72 rounded-md border border-border"
             multiSelect={multiSelect}
             onAddMany={onAddMany}
@@ -54,6 +55,7 @@ export function ShortlistBrowseProviderModelFields({
           />
         ) : provider === "cloudflare" ? (
           <CloudflareModelsBrowseList
+            addedIds={addedIds}
             apiKey={apiKey}
             baseUrl={baseUrl}
             className="h-72 rounded-md border border-border"
@@ -64,6 +66,7 @@ export function ShortlistBrowseProviderModelFields({
           />
         ) : (
           <FireworksModelsBrowseList
+            addedIds={addedIds}
             apiKey={apiKey}
             className="h-72 rounded-md border border-border"
             multiSelect={multiSelect}

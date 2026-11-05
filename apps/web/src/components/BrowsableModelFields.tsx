@@ -92,6 +92,9 @@ export function BrowsableModelFields<T>({
     if (nextModels.length > 0) {
       onCustomModelsChange([...customModels, ...nextModels]);
     }
+
+    // Stay in the list so the user can add more.
+    setIsBrowsing(true);
   };
 
   return (

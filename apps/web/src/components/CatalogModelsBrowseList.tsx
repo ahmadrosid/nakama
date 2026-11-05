@@ -1,4 +1,3 @@
-import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
 import { Switch } from "@nakama/ui/switch";
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
@@ -172,22 +171,6 @@ function CatalogBrowseStatus({
   );
 }
 
-function CatalogBrowseFooter({
-  selectedCount,
-  onAddMany,
-}: {
-  selectedCount: number;
-  onAddMany: () => void;
-}) {
-  return (
-    <div className="sticky bottom-0 flex shrink-0 justify-end border-border border-t bg-background px-3 py-2">
-      <Button onClick={onAddMany} size="sm" type="button">
-        Add {selectedCount} model{selectedCount === 1 ? "" : "s"}
-      </Button>
-    </div>
-  );
-}
-
 export function CatalogModelsBrowseList<
   T extends { id: string; name: string },
 >({
@@ -218,18 +201,7 @@ export function CatalogModelsBrowseList<
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [hideDeprecated, setHideDeprecated] = useState(true);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const showDeprecatedFilter = Boolean(isDeprecated);
-
-  const selectedRowIds = useMemo(() => {
-    if (!multiSelect) {
-      return new Set<string>();
-    }
-
-    const rowIds = new Set(rows.map((row) => row.id));
-
-    return new Set([...selectedIds].filter((id) => rowIds.has(id)));
-  }, [multiSelect, rows, selectedIds]);
 
   const filtered = useMemo(
     () =>
@@ -266,29 +238,15 @@ export function CatalogModelsBrowseList<
 
   const toolbarDisabled = !canFetch;
 
+  // A click adds the model at once, so nothing picked can be lost.
   const handleRowSelect = (row: T) => {
-    if (!multiSelect) {
-      onSelect(row);
+    if (multiSelect && onAddMany) {
+      onAddMany([row]);
 
       return;
     }
 
-    setSelectedIds((current) => {
-      const next = new Set(current);
-
-      if (next.has(row.id)) {
-        next.delete(row.id);
-      } else {
-        next.add(row.id);
-      }
-
-      return next;
-    });
-  };
-
-  const handleAddMany = () => {
-    onAddMany?.(rows.filter((row) => selectedRowIds.has(row.id)));
-    setSelectedIds(new Set<string>());
+    onSelect(row);
   };
 
   return (
@@ -298,14 +256,6 @@ export function CatalogModelsBrowseList<
         canFetch ? resolvedEmptyMessage : (idleMessage ?? resolvedEmptyMessage)
       }
       error={canFetch ? error : null}
-      footer={
-        multiSelect && selectedRowIds.size > 0 ? (
-          <CatalogBrowseFooter
-            onAddMany={handleAddMany}
-            selectedCount={selectedRowIds.size}
-          />
-        ) : undefined
-      }
       isEmpty={!canFetch || filtered.length === 0}
       isLoading={canFetch && (isLoading || (isFetching && rows.length === 0))}
       status={
@@ -313,15 +263,7 @@ export function CatalogModelsBrowseList<
           isFetching={isFetching}
           onRefresh={onRefresh}
           refreshDisabled={refreshDisabled}
-          status={
-            multiSelect && selectedRowIds.size > 0 ? (
-              <>
-                {resolvedStatus} · {selectedRowIds.size} selected
-              </>
-            ) : (
-              resolvedStatus
-            )
-          }
+          status={resolvedStatus}
           toolbarDisabled={toolbarDisabled}
         />
       }
@@ -345,7 +287,6 @@ export function CatalogModelsBrowseList<
             onSelect={() => handleRowSelect(row)}
             row={toDisplayRow(row)}
             selectable={multiSelect}
-            selected={selectedRowIds.has(row.id)}
             style={style}
           />
         )}
