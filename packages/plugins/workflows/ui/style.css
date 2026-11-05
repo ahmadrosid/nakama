@@ -549,7 +549,7 @@
     border-radius: 3px;
   }
   [data-status="completed"] > .workflow-bar > span {
-    background: #4ade80;
+    background: #15803d;
   }
   [data-status="failed"] .workflow-bar > span {
     background: var(--destructive);
@@ -562,7 +562,7 @@
     border-radius: 50%;
   }
   .workflow-run-mark[data-status="completed"] {
-    background: #10b981;
+    background: #15803d;
   }
   .workflow-run-mark[data-status="failed"] {
     background: var(--destructive);
@@ -744,8 +744,32 @@
   }
   .workflow-run-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     align-items: flex-start;
+  }
+  .workflow-run-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .workflow-run-actions a:not([data-slot]) {
+    color: var(--primary);
+    white-space: nowrap;
+  }
+  .workflow-runs-filter {
+    display: flex;
+    gap: 4px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .workflow-runs caption {
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    text-align: left;
+    caption-side: bottom;
   }
   .workflow-run-actions > svg {
     flex-shrink: 0;
@@ -753,7 +777,7 @@
     color: var(--destructive);
   }
   .workflow-run-actions p {
-    flex: 1;
+    flex: 1 1 280px;
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;

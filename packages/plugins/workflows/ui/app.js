@@ -550,7 +550,7 @@ var style_default = `[data-plugin-id="workflows"] {
     border-radius: 3px;
   }
   [data-status="completed"] > .workflow-bar > span {
-    background: #4ade80;
+    background: #15803d;
   }
   [data-status="failed"] .workflow-bar > span {
     background: var(--destructive);
@@ -563,7 +563,7 @@ var style_default = `[data-plugin-id="workflows"] {
     border-radius: 50%;
   }
   .workflow-run-mark[data-status="completed"] {
-    background: #10b981;
+    background: #15803d;
   }
   .workflow-run-mark[data-status="failed"] {
     background: var(--destructive);
@@ -745,8 +745,32 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-run-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     align-items: flex-start;
+  }
+  .workflow-run-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .workflow-run-actions a:not([data-slot]) {
+    color: var(--primary);
+    white-space: nowrap;
+  }
+  .workflow-runs-filter {
+    display: flex;
+    gap: 4px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .workflow-runs caption {
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    text-align: left;
+    caption-side: bottom;
   }
   .workflow-run-actions > svg {
     flex-shrink: 0;
@@ -754,7 +778,7 @@ var style_default = `[data-plugin-id="workflows"] {
     color: var(--destructive);
   }
   .workflow-run-actions p {
-    flex: 1;
+    flex: 1 1 280px;
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
@@ -1651,7 +1675,7 @@ function dayGroup(iso) {
   }
   return "Earlier";
 }
-function errorHelp(error, agent) {
+function errorHelp(error, agent, failed) {
   const missingTool = /^Unknown tool: (.+)$/i.exec(error)?.[1];
   if (missingTool && agent) {
     const parts = toolParts(missingTool);
@@ -1672,11 +1696,40 @@ function errorHelp(error, agent) {
       text: `${server} isn’t connected.`
     };
   }
-  return { missingTool: Boolean(missingTool), text: readableError(error) };
+  const check = failed?.kind === "assert" ? checkFailure(failed) : "";
+  return {
+    missingTool: Boolean(missingTool),
+    text: check || readableError(error)
+  };
 }
-function failedStepName(run) {
-  const failed = run.steps?.find((step) => step.status === "failed");
-  return failed ? titleCase(failed.stepId) : "";
+function checkFailure(step) {
+  const input = parseWorkflowValue(step.input);
+  const output = parseWorkflowValue(step.output);
+  const path = isWorkflowRecord(input) ? readWorkflowString(input.path) : null;
+  if (!(path && isWorkflowRecord(input))) {
+    return "";
+  }
+  const actual = isWorkflowRecord(output) ? output.actual : undefined;
+  return `${path} should be ${JSON.stringify(input.expected)}, but it was ${actual === undefined || actual === null ? "missing" : JSON.stringify(actual)}.`;
+}
+function failedStep(run) {
+  return run.steps?.find((step) => step.status === "failed");
+}
+var WORKFLOW_DOCS = "https://ahmadrosid.github.io/nakama/workflows";
+var DISMISSED_KEY = "nakama:workflows:dismissed-runs";
+function loadDismissed() {
+  try {
+    const saved = parseWorkflowValue(JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? "[]"));
+    const ids = Array.isArray(saved) ? saved.map(readWorkflowString) : [];
+    return new Set(ids.filter((id) => id !== null).slice(-50));
+  } catch {
+    return new Set;
+  }
+}
+function saveDismissed(ids) {
+  try {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids].slice(-50)));
+  } catch {}
 }
 function runStarted(iso) {
   const group = dayGroup(iso);
@@ -2001,7 +2054,7 @@ function apply(ctx) {
     }));
   }
   ctx.styles(style_default);
-  const dismissedRuns = new Set;
+  const dismissedRuns = loadDismissed();
   function WorkflowError({ message }) {
     const help = errorHelp(message);
     return /* @__PURE__ */ React.createElement("div", {
@@ -2438,8 +2491,23 @@ function apply(ctx) {
     const canRun = Boolean(workflow) && !dirty && enabled && !busy;
     const agent = profiles.find((profile) => profile.id === agentId);
     const failedRun = view !== "runs" && lastRun?.status === "failed" && !dismissedRuns.has(lastRun.id) ? lastRun : undefined;
-    const failedHelp = failedRun?.error ? errorHelp(failedRun.error, agent) : undefined;
-    const stoppedAt = failedRun ? failedStepName(failedRun) : "";
+    const bannerStep = failedRun && failedStep(failedRun);
+    const failedHelp = failedRun?.error ? errorHelp(failedRun.error, agent, bannerStep) : undefined;
+    const stoppedAt = bannerStep ? titleCase(bannerStep.stepId) : "";
+    const runBlocked = workflow ? dirty ? "Save your changes to run again." : enabled ? "" : "Turn the workflow on to run again." : "Save the workflow to run it.";
+    const editStep = (stepId) => {
+      const draft = steps.find((step) => step.id === stepId);
+      const key = draft?.key ?? (stepId === summaryStep?.id ? "summary" : "");
+      if (key) {
+        setView("workflow");
+        setSelection(key);
+      }
+    };
+    const canEditStep = (stepId) => steps.some((step) => step.id === stepId) || stepId === summaryStep?.id;
+    const editInput = (input) => {
+      setRunInput(JSON.stringify(input ?? {}, null, 2));
+      setSelection("input");
+    };
     const showPicker = selection === "pick" || picking && Boolean(selectedStep);
     const drawerApp = selectedStep ? stepApp(selectedStep.kind, selectedStep.fields) : agent?.name ?? "Bot";
     const valueSources = [
@@ -2591,7 +2659,13 @@ function apply(ctx) {
         href: failedHelp.fix.href
       }),
       size: "sm"
-    }, failedHelp.fix.label) : /* @__PURE__ */ React.createElement(Button, {
+    }, failedHelp.fix.label) : bannerStep && canEditStep(bannerStep.stepId) ? /* @__PURE__ */ React.createElement(Button, {
+      className: "workflow-view-run",
+      onClick: () => editStep(bannerStep.stepId),
+      size: "sm",
+      type: "button",
+      variant: "ghost"
+    }, "Edit step") : /* @__PURE__ */ React.createElement(Button, {
       className: "workflow-view-run",
       onClick: () => {
         setSelection("");
@@ -2604,6 +2678,7 @@ function apply(ctx) {
       disabled: !canRun,
       onClick: () => runWorkflow(failedRun.input),
       size: "sm",
+      title: runBlocked || undefined,
       type: "button",
       variant: "outline"
     }, /* @__PURE__ */ React.createElement(Icon, {
@@ -2612,6 +2687,7 @@ function apply(ctx) {
       "aria-label": "Dismiss",
       onClick: () => {
         dismissedRuns.add(failedRun.id);
+        saveDismissed(dismissedRuns);
         redraw();
       },
       size: "icon",
@@ -2621,8 +2697,12 @@ function apply(ctx) {
       kind: "close"
     }))), view === "runs" && /* @__PURE__ */ React.createElement(RunHistory, {
       agent,
+      canEditStep,
       canRun,
+      onEditInput: editInput,
+      onEditStep: editStep,
       onRunAgain: (input) => runWorkflow(input),
+      runBlocked,
       runs,
       stepIds: allSteps.map((step) => step.id)
     }), view === "data" && /* @__PURE__ */ React.createElement("section", {
@@ -2893,8 +2973,19 @@ function apply(ctx) {
     }))), /* @__PURE__ */ React.createElement(DialogFooter, null, /* @__PURE__ */ React.createElement(Button, {
       disabled: busy,
       onClick: () => setSelection(""),
+      type: "button",
+      variant: "outline"
+    }, "Done"), /* @__PURE__ */ React.createElement(Button, {
+      disabled: !canRun,
+      onClick: () => {
+        setSelection("");
+        runWorkflow();
+      },
+      title: runBlocked || undefined,
       type: "button"
-    }, "Done")))), /* @__PURE__ */ React.createElement(Dialog, {
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "play"
+    }), "Run")))), /* @__PURE__ */ React.createElement(Dialog, {
       onOpenChange: (open) => {
         if (!busy) {
           setConfirmDelete(open);
@@ -2959,9 +3050,14 @@ function apply(ctx) {
     agent,
     stepIds,
     canRun,
+    runBlocked,
+    canEditStep,
+    onEditStep,
+    onEditInput,
     onRunAgain
   }) {
     const [openId, setOpenId] = React.useState();
+    const [onlyFailed, setOnlyFailed] = React.useState(false);
     if (!runs[0]) {
       return /* @__PURE__ */ React.createElement("section", {
         "aria-label": "History",
@@ -2971,14 +3067,30 @@ function apply(ctx) {
       }, "No runs yet."));
     }
     const open = openId === undefined ? runs[0].status === "completed" ? null : runs[0].id : openId;
+    const failedCount = runs.filter((run) => run.status === "failed").length;
+    const shown = onlyFailed ? runs.filter((run) => run.status === "failed") : runs;
     return /* @__PURE__ */ React.createElement("section", {
       "aria-label": "History",
       className: "workflow-scroll"
     }, /* @__PURE__ */ React.createElement("div", {
       className: "workflow-runs-box"
-    }, /* @__PURE__ */ React.createElement("table", {
+    }, failedCount > 0 && failedCount < runs.length && /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-runs-filter"
+    }, /* @__PURE__ */ React.createElement(Button, {
+      "aria-pressed": !onlyFailed,
+      onClick: () => setOnlyFailed(false),
+      size: "sm",
+      type: "button",
+      variant: onlyFailed ? "ghost" : "secondary"
+    }, "All ", runs.length), /* @__PURE__ */ React.createElement(Button, {
+      "aria-pressed": onlyFailed,
+      onClick: () => setOnlyFailed(true),
+      size: "sm",
+      type: "button",
+      variant: onlyFailed ? "secondary" : "ghost"
+    }, "Failed ", failedCount)), /* @__PURE__ */ React.createElement("table", {
       className: "workflow-runs"
-    }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", {
+    }, runs.length >= 20 && /* @__PURE__ */ React.createElement("caption", null, "Last 20 runs"), /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", {
       scope: "col"
     }, "Result"), /* @__PURE__ */ React.createElement("th", {
       scope: "col"
@@ -2989,14 +3101,18 @@ function apply(ctx) {
     }, "Time"), /* @__PURE__ */ React.createElement("th", {
       "aria-label": "Details",
       scope: "col"
-    }))), /* @__PURE__ */ React.createElement("tbody", null, runs.map((run) => /* @__PURE__ */ React.createElement(RunRow, {
+    }))), /* @__PURE__ */ React.createElement("tbody", null, shown.map((run) => /* @__PURE__ */ React.createElement(RunRow, {
       agent,
+      canEditStep,
       canRun,
       expanded: run.id === open,
       key: run.id,
+      onEditInput,
+      onEditStep,
       onRunAgain,
       onToggle: () => setOpenId(run.id === open ? null : run.id),
       run,
+      runBlocked,
       stepIds
     }))))));
   }
@@ -3006,19 +3122,28 @@ function apply(ctx) {
     stepIds,
     expanded,
     canRun,
+    runBlocked,
+    canEditStep,
+    onEditStep,
+    onEditInput,
     onToggle,
     onRunAgain
   }) {
     const receipts = run.steps ?? [];
     const timeline = runTimeline(run);
-    const stoppedAt = failedStepName(run);
-    const help = run.error ? errorHelp(run.error, agent) : undefined;
+    const failed = failedStep(run);
+    const stoppedAt = failed ? titleCase(failed.stepId) : "";
+    const help = run.error ? errorHelp(run.error, agent, failed) : undefined;
     const started = runStarted(run.startedAt);
     const recordedIds = receipts.map((step) => step.stepId);
     const ids = recordedIds.some((id) => !stepIds.includes(id)) ? recordedIds : stepIds;
     const reached = ids.filter((id) => timeline.has(id)).length;
     const notReached = ids.filter((id) => !timeline.has(id));
     const detailId = `run-detail-${run.id}`;
+    const barsLabel = ids.map((id) => {
+      const status = timeline.get(id)?.status;
+      return `${titleCase(id)}: ${status ? stepStatusLabels.get(status) ?? status : "not reached"}`;
+    }).join(", ");
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("tr", {
       "data-status": run.status
     }, /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement("span", {
@@ -3033,12 +3158,15 @@ function apply(ctx) {
     }, started), /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement("span", {
       className: "workflow-run-steps-cell"
     }, /* @__PURE__ */ React.createElement("span", {
-      "aria-hidden": "true",
-      className: "workflow-run-bars"
+      "aria-label": barsLabel,
+      className: "workflow-run-bars",
+      role: "img"
     }, ids.map((id) => /* @__PURE__ */ React.createElement("span", {
       "data-status": timeline.get(id)?.status ?? "pending",
       key: id
-    }))), /* @__PURE__ */ React.createElement("span", null, reached, " of ", ids.length), run.status === "failed" && /* @__PURE__ */ React.createElement("span", {
+    }))), /* @__PURE__ */ React.createElement("span", {
+      "aria-hidden": "true"
+    }, reached, " of ", ids.length), run.status === "failed" && !expanded && /* @__PURE__ */ React.createElement("span", {
       className: "workflow-empty"
     }, stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"))), /* @__PURE__ */ React.createElement("td", {
       className: "workflow-run-took"
@@ -3066,22 +3194,40 @@ function apply(ctx) {
     }), /* @__PURE__ */ React.createElement("p", {
       "data-error": true,
       "data-missing-tool": help.missingTool
-    }, /* @__PURE__ */ React.createElement("strong", null, stoppedAt ? `${stoppedAt} failed` : "Run failed"), /* @__PURE__ */ React.createElement("span", null, help.text))) : /* @__PURE__ */ React.createElement("p", {
+    }, /* @__PURE__ */ React.createElement("strong", null, stoppedAt ? `${stoppedAt} failed` : "Run failed"), /* @__PURE__ */ React.createElement("span", null, help.text, failed?.kind === "assert" && /* @__PURE__ */ React.createElement(React.Fragment, null, " ", /* @__PURE__ */ React.createElement("a", {
+      href: WORKFLOW_DOCS,
+      rel: "noreferrer",
+      target: "_blank"
+    }, "How checks work"))))) : /* @__PURE__ */ React.createElement("p", {
       className: "workflow-empty"
-    }, formatRunTime(run.startedAt)), help?.fix && /* @__PURE__ */ React.createElement(Button, {
+    }, formatRunTime(run.startedAt)), /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-run-buttons"
+    }, help?.fix && /* @__PURE__ */ React.createElement(Button, {
       render: /* @__PURE__ */ React.createElement("a", {
         href: help.fix.href
       }),
       size: "sm"
-    }, help.fix.label), /* @__PURE__ */ React.createElement(Button, {
+    }, help.fix.label), !help?.fix && failed && canEditStep(failed.stepId) && /* @__PURE__ */ React.createElement(Button, {
+      onClick: () => onEditStep(failed.stepId),
+      size: "sm",
+      type: "button"
+    }, "Edit step"), /* @__PURE__ */ React.createElement(Button, {
+      onClick: () => onEditInput(run.input),
+      size: "sm",
+      type: "button",
+      variant: "ghost"
+    }, "Change input"), /* @__PURE__ */ React.createElement(Button, {
       disabled: !canRun,
       onClick: () => onRunAgain(run.input),
       size: "sm",
+      title: runBlocked || undefined,
       type: "button",
       variant: "outline"
     }, /* @__PURE__ */ React.createElement(Icon, {
       kind: "retry"
-    }), "Run again")), /* @__PURE__ */ React.createElement("ol", {
+    }), "Run again"))), runBlocked && /* @__PURE__ */ React.createElement("p", {
+      className: "workflow-empty"
+    }, runBlocked), /* @__PURE__ */ React.createElement("ol", {
       className: "workflow-run-steps"
     }, receipts.map((receipt) => {
       const duration = timeline.get(receipt.stepId)?.duration;
