@@ -215,7 +215,7 @@ export function PluginsPage() {
     : groupPluginIds(visiblePluginIds, official, releases);
 
   return (
-    <div className="mx-auto min-w-0 max-w-4xl space-y-6">
+    <div className="mx-auto min-w-0 max-w-3xl space-y-6">
       <PluginPageHeader
         busy={busy}
         canInstall={canInstallHere}
@@ -247,9 +247,9 @@ export function PluginsPage() {
         />
       ) : (
         groups.map((group) => (
-          <section className="space-y-2.5" key={group.title ?? "all"}>
+          <section className="space-y-3" key={group.title ?? "all"}>
             {group.title ? (
-              <h2 className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+              <h2 className="type-section-title font-medium text-muted-foreground">
                 {group.title}
               </h2>
             ) : null}

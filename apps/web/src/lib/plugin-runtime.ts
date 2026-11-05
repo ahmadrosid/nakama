@@ -1,3 +1,4 @@
+import { NakamaApiError } from "@nakama/core/api-error";
 import type { OrgPluginDetail } from "@nakama/core/contract";
 import * as ui from "@nakama/ui";
 import * as React from "react";
@@ -60,6 +61,10 @@ export interface PluginClientModule {
   apply(context: PluginClientContext): void | Promise<void>;
   inject: Array<"slots" | "host" | "styles" | "ui">;
 }
+
+// The server refuses `busy` at admission, before the action runs, so a retry
+// is safe for every action. A long workflow run holds a slot for its whole run.
+const BUSY_RETRY_DELAYS_MS = [200, 400, 800, 1600, 3200];
 
 /** Each activation owns its registrations and effects, including failed startup. */
 export async function activatePlugin(
@@ -138,11 +143,49 @@ export async function activatePlugin(
     host: {
       // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
       async call(action: string, input?: unknown) {
-        assertActive();
-        const result = await options.host.call(action, input);
-        assertActive();
+        for (let attempt = 0; ; attempt++) {
+          assertActive();
 
-        return result;
+          try {
+            const result = await options.host.call(action, input);
+            assertActive();
+
+            return result;
+          } catch (error) {
+            const busy =
+              error instanceof NakamaApiError &&
+              error.status === 429 &&
+              error.message === "busy";
+
+            if (!busy) {
+              throw error;
+            }
+
+            const delay = BUSY_RETRY_DELAYS_MS[attempt];
+
+            if (delay === undefined) {
+              throw new Error("This plugin is busy. Try again in a moment.", {
+                cause: error,
+              });
+            }
+
+            const { signal } = options;
+            signal.throwIfAborted();
+            await new Promise<void>((resolve, reject) => {
+              const onAbort = () => {
+                clearTimeout(timer);
+                reject(signal.reason);
+              };
+
+              const timer = setTimeout(() => {
+                signal.removeEventListener("abort", onAbort);
+                resolve();
+              }, delay);
+
+              signal.addEventListener("abort", onAbort, { once: true });
+            });
+          }
+        }
       },
     },
     slots: {

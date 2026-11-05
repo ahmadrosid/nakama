@@ -95,16 +95,21 @@ function ProfileForbiddenState() {
           <span className="font-medium text-foreground">
             {activeOrg?.name ?? "this team"}
           </span>{" "}
-          is {role}. Ask the owner or an admin to share it with you.
+          is {role}. This agent is private, admin-only, or does not exist.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button render={<Link to={PAGE_PATHS.chat} />} type="button">
+        <Button
+          nativeButton={false}
+          render={<Link to={PAGE_PATHS.chat} />}
+          type="button"
+        >
           Back to chat
         </Button>
         {activeOrg ? (
           <Button
+            nativeButton={false}
             render={<Link to={teamDetailPath(activeOrg.id)} />}
             type="button"
             variant="outline"

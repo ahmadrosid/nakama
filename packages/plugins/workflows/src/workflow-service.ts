@@ -118,43 +118,48 @@ export class WorkflowService {
   async delete(id: string) {
     this.expireRuns();
 
-    return this.db.transaction(() => {
-      if (
-        this.db
-          .query(
-            "SELECT id FROM runs WHERE workflow_id = ? AND lease_until IS NOT NULL"
-          )
-          .get(id)
-      ) {
-        throw new Error("Workflow is running.");
-      }
+    return this.db
+      .transaction(() => {
+        if (
+          this.db
+            .query(
+              "SELECT id FROM runs WHERE workflow_id = ? AND lease_until IS NOT NULL"
+            )
+            .get(id)
+        ) {
+          throw new Error("Workflow is running.");
+        }
 
-      return (
-        this.db.query("DELETE FROM workflows WHERE id = ?").run(id).changes > 0
-      );
-    })();
+        return (
+          this.db.query("DELETE FROM workflows WHERE id = ?").run(id).changes >
+          0
+        );
+      })
+      .immediate();
   }
   private expireRuns() {
-    this.db.transaction(() => {
-      const expired = this.db
-        .query<{ id: string; data: string }, [number]>(
-          "SELECT id, data FROM runs WHERE lease_until < ?"
-        )
-        .all(Date.now());
+    this.db
+      .transaction(() => {
+        const expired = this.db
+          .query<{ id: string; data: string }, [number]>(
+            "SELECT id, data FROM runs WHERE lease_until < ?"
+          )
+          .all(Date.now());
 
-      for (const row of expired) {
-        const data = {
-          ...JSON.parse(row.data),
-          completedAt: new Date().toISOString(),
-          error: "Workflow execution was interrupted.",
-          status: "failed",
-        };
+        for (const row of expired) {
+          const data = {
+            ...JSON.parse(row.data),
+            completedAt: new Date().toISOString(),
+            error: "Workflow execution was interrupted.",
+            status: "failed",
+          };
 
-        this.db
-          .query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?")
-          .run(JSON.stringify(data), row.id);
-      }
-    })();
+          this.db
+            .query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?")
+            .run(JSON.stringify(data), row.id);
+        }
+      })
+      .immediate();
   }
   async listRuns(workflowId: string): Promise<WorkflowRunRecord[]> {
     this.expireRuns();
@@ -220,26 +225,28 @@ export class WorkflowService {
       workflowId,
     };
 
-    this.db.transaction(() => {
-      if (
+    this.db
+      .transaction(() => {
+        if (
+          this.db
+            .query(
+              "SELECT id FROM runs WHERE workflow_id = ? AND lease_until IS NOT NULL"
+            )
+            .get(workflowId)
+        ) {
+          throw new Error("Workflow is already running.");
+        }
+
+        this.db
+          .query("INSERT INTO runs VALUES (?, ?, ?, ?)")
+          .run(run.id, workflowId, JSON.stringify(run), Date.now() + 300_000);
         this.db
           .query(
-            "SELECT id FROM runs WHERE workflow_id = ? AND lease_until IS NOT NULL"
+            "UPDATE workflows SET data = json_set(data, '$.lastRunAt', ?) WHERE id = ?"
           )
-          .get(workflowId)
-      ) {
-        throw new Error("Workflow is already running.");
-      }
-
-      this.db
-        .query("INSERT INTO runs VALUES (?, ?, ?, ?)")
-        .run(run.id, workflowId, JSON.stringify(run), Date.now() + 300_000);
-      this.db
-        .query(
-          "UPDATE workflows SET data = json_set(data, '$.lastRunAt', ?) WHERE id = ?"
-        )
-        .run(run.startedAt, workflowId);
-    })();
+          .run(run.startedAt, workflowId);
+      })
+      .immediate();
 
     return run;
   }
@@ -313,73 +320,90 @@ export class WorkflowService {
       status: result.error ? "failed" : skipped ? "skipped" : "completed",
     };
 
-    this.db
-      .query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?")
+    // A run without a lease is already finished (for example expired); keep that result.
+    const { changes } = this.db
+      .query(
+        "UPDATE runs SET data = ?, lease_until = NULL WHERE id = ? AND lease_until IS NOT NULL"
+      )
       .run(JSON.stringify(run), id);
+
+    if (!changes) {
+      const stored = this.db
+        .query<{ data: string }, [string]>("SELECT data FROM runs WHERE id = ?")
+        .get(id);
+
+      if (!stored) {
+        throw new Error("Workflow run not found.");
+      }
+
+      return { ...JSON.parse(stored.data), steps: this.steps(id) };
+    }
 
     return { ...run, steps: this.steps(id) };
   }
   importLegacy(
     workflows: Array<{ workflow: StoredWorkflow; runs: WorkflowRunRecord[] }>
   ) {
-    return this.db.transaction(() => {
-      if (
-        this.db
-          .query("SELECT value FROM metadata WHERE key = 'legacy_imported'")
-          .get()
-      ) {
-        return { imported: 0 };
-      }
-
-      let imported = 0;
-
-      for (const { workflow, runs } of workflows) {
-        if (workflow.orgId !== this.orgId) {
-          throw new Error("Workflow organization mismatch.");
-        }
-
-        const inserted = this.db
-          .query("INSERT OR IGNORE INTO workflows VALUES (?, ?)")
-          .run(workflow.id, JSON.stringify(workflow));
-
-        if (!inserted.changes) {
-          continue;
-        }
-
-        imported++;
-
-        for (const run of runs) {
-          if (run.workflowId !== workflow.id) {
-            throw new Error("Workflow run mismatch.");
-          }
-
-          const { steps = [], ...data } = run;
-
-          if (data.status === "running") {
-            Object.assign(data, {
-              completedAt: new Date().toISOString(),
-              error: "Run interrupted before import.",
-              status: "failed",
-            });
-          }
-
+    return this.db
+      .transaction(() => {
+        if (
           this.db
-            .query("INSERT INTO runs VALUES (?, ?, ?, NULL)")
-            .run(run.id, workflow.id, JSON.stringify(data));
+            .query("SELECT value FROM metadata WHERE key = 'legacy_imported'")
+            .get()
+        ) {
+          return { imported: 0 };
+        }
 
-          for (const [position, step] of steps.entries()) {
+        let imported = 0;
+
+        for (const { workflow, runs } of workflows) {
+          if (workflow.orgId !== this.orgId) {
+            throw new Error("Workflow organization mismatch.");
+          }
+
+          const inserted = this.db
+            .query("INSERT OR IGNORE INTO workflows VALUES (?, ?)")
+            .run(workflow.id, JSON.stringify(workflow));
+
+          if (!inserted.changes) {
+            continue;
+          }
+
+          imported++;
+
+          for (const run of runs) {
+            if (run.workflowId !== workflow.id) {
+              throw new Error("Workflow run mismatch.");
+            }
+
+            const { steps = [], ...data } = run;
+
+            if (data.status === "running") {
+              Object.assign(data, {
+                completedAt: new Date().toISOString(),
+                error: "Run interrupted before import.",
+                status: "failed",
+              });
+            }
+
             this.db
-              .query("INSERT INTO steps VALUES (?, ?, ?, ?)")
-              .run(step.id, run.id, position, JSON.stringify(step));
+              .query("INSERT INTO runs VALUES (?, ?, ?, NULL)")
+              .run(run.id, workflow.id, JSON.stringify(data));
+
+            for (const [position, step] of steps.entries()) {
+              this.db
+                .query("INSERT INTO steps VALUES (?, ?, ?, ?)")
+                .run(step.id, run.id, position, JSON.stringify(step));
+            }
           }
         }
-      }
 
-      this.db
-        .query("INSERT INTO metadata VALUES ('legacy_imported', 'true')")
-        .run();
+        this.db
+          .query("INSERT INTO metadata VALUES ('legacy_imported', 'true')")
+          .run();
 
-      return { imported };
-    })();
+        return { imported };
+      })
+      .immediate();
   }
 }

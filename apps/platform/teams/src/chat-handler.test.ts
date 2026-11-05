@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { asTestFetch, withTempHome } from "@nakama/core/channel-test-helpers";
 import {
+  getTeamsConfigDir,
   loadTeamsConfigFile,
   regenerateTeamsHandshake,
   saveTeamsConfig,
@@ -15,7 +18,7 @@ import {
 } from "./test-helpers";
 
 describe("teams chat handler", () => {
-  async function pairingHarness(homeDir: string) {
+  async function pairingHarness(homeDir: string, allowedUserIds?: string) {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = asTestFetch(async () =>
       Response.json({ access_token: "fixture", token_type: "Bearer" })
@@ -24,6 +27,7 @@ describe("teams chat handler", () => {
     try {
       await saveTeamsConfig(
         {
+          allowedUserIds,
           clientId: CONFIG.clientId,
           clientSecret: CONFIG.clientSecret,
           tenantId: TENANT,
@@ -91,6 +95,101 @@ describe("teams chat handler", () => {
       });
     });
   }
+
+  const CODE_THREAD = "19:general@thread.tacv2;messageid=1001";
+
+  function channelPost(text: string, senderId = ALLOWED) {
+    return activity({
+      conversationId: CODE_THREAD,
+      conversationType: "channel",
+      mentionsBot: true,
+      senderId,
+      text,
+    });
+  }
+
+  for (const [name, allowed, post] of [
+    ["an unlinked sender's code", undefined, (code: string) => code],
+    ["an allowlisted sender's code", ALLOWED, (code: string) => code],
+    [
+      "a code inside a sentence",
+      undefined,
+      (code: string) => `my code is ${code.toLowerCase()} thanks`,
+    ],
+  ] as const) {
+    test(`${name} posted in a channel is spent and reaches no agent`, async () => {
+      await withTempHome("nakama-teams-handler-", async (homeDir) => {
+        const { handle, code, replies, turns } = await pairingHarness(
+          homeDir,
+          allowed
+        );
+
+        await handle(channelPost(post(code)));
+
+        const config = await loadTeamsConfigFile(OWNER);
+
+        expect(turns).toEqual([]);
+        expect(config?.pairedUserIds).toEqual([]);
+        expect(config?.handshakeCode).toBeNull();
+        expect(replies.map((entry) => entry.conversationId)).toEqual([
+          CODE_THREAD,
+        ]);
+
+        // The posted code no longer pairs, even in a personal chat.
+        const stranger = "99999999-9999-4999-8999-999999999999";
+        await handle(activity({ senderId: stranger, text: code }));
+        expect((await loadTeamsConfigFile(OWNER))?.pairedUserIds).toEqual([]);
+      });
+    });
+  }
+
+  test("a code spent before the lock is not made live again", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { code } = await pairingHarness(homeDir);
+      const stale = await loadTeamsConfigFile(OWNER);
+
+      // A personal chat pairs with the code while the channel post waits.
+      await createHarness(homeDir, {
+        loadConfig: () => loadTeamsConfigFile(OWNER),
+      }).handle(activity({ senderId: ALLOWED, text: code }));
+
+      const late = createHarness(homeDir, {
+        loadConfig: async () => stale,
+      });
+
+      await late.handle(
+        channelPost(code, "99999999-9999-4999-8999-999999999999")
+      );
+
+      const config = await loadTeamsConfigFile(OWNER);
+
+      expect(config?.handshakeCode).toBeNull();
+      expect(config?.pairedUserIds).toEqual([ALLOWED]);
+    });
+  });
+
+  test("a code that cannot be spent still reaches no agent", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, code, replies, turns } = await pairingHarness(
+        homeDir,
+        ALLOWED
+      );
+
+      // Another writer holds the pairing lock, so the spend gives up.
+      await writeFile(
+        join(getTeamsConfigDir(OWNER), "pairing.lock"),
+        `${process.pid}\n`
+      );
+
+      await handle(channelPost(`my code is ${code}`));
+
+      expect(turns).toEqual([]);
+      expect(replies.map((entry) => entry.conversationId)).toEqual([
+        CODE_THREAD,
+      ]);
+      expect((await loadTeamsConfigFile(OWNER))?.handshakeCode).toBe(code);
+    });
+  }, 15_000);
 
   test("an authorized sender's code-shaped message reaches the agent", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
@@ -174,6 +273,7 @@ describe("teams chat handler", () => {
       { senderId: "99999999-9999-4999-8999-999999999999" },
     ],
     ["a group conversation", { conversationType: "groupChat" }],
+    ["a channel message without a mention", { conversationType: "channel" }],
     ["an empty message", { text: "   " }],
     ["another Bot Framework channel", { channelId: "webchat" }],
   ] as const) {

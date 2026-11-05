@@ -32,6 +32,7 @@ import { maskTrailingSecret } from "./secret-mask";
 import { getOrgConfigDir, getUserConfigDir } from "./user-config";
 
 export {
+  containsPairingCode,
   createPairingCodeSecret,
   generatePairingCode,
   isPairingCodeActive,

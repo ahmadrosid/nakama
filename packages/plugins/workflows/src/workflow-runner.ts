@@ -90,19 +90,24 @@ export class WorkflowRunner {
         runtimeInput
       );
 
-      if (output === null) {
-        await this.workflowService.completeRun(run.id, workflowId, {
-          skipped: true,
-        });
-
-        return { runId: run.id, status: "skipped" };
-      }
-
       const completedRun = await this.workflowService.completeRun(
         run.id,
         workflowId,
-        { output }
+        output === null ? { skipped: true } : { output }
       );
+
+      // An expired run stays failed even when the runner finishes late.
+      if (completedRun.status === "failed") {
+        return {
+          error: completedRun.error ?? "Workflow run failed.",
+          runId: run.id,
+          status: "failed",
+        };
+      }
+
+      if (output === null) {
+        return { runId: run.id, status: "skipped" };
+      }
 
       return {
         output: completedRun.output ?? output,

@@ -10,6 +10,7 @@ import {
 } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
+  profileResponseFor,
   requireActiveOrgIdFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
@@ -666,11 +667,14 @@ export function registerSkillRoutes(
     const body = await readJson(c.req.raw, assignSkillSchema);
 
     return json<ProfileResponse>(
-      await agent.assignSkill(
-        orgId,
-        decodeURIComponent(c.req.param("profileId")),
-        body,
-        { actorUserId: auth.user.id, source: "dashboard" }
+      profileResponseFor(
+        c,
+        await agent.assignSkill(
+          orgId,
+          decodeURIComponent(c.req.param("profileId")),
+          body,
+          { actorUserId: auth.user.id, source: "dashboard" }
+        )
       )
     );
   });
@@ -683,11 +687,14 @@ export function registerSkillRoutes(
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(
-      await agent.unassignSkill(
-        orgId,
-        decodeURIComponent(c.req.param("profileId")),
-        decodeURIComponent(c.req.param("skillId")),
-        { actorUserId: auth.user.id, source: "dashboard" }
+      profileResponseFor(
+        c,
+        await agent.unassignSkill(
+          orgId,
+          decodeURIComponent(c.req.param("profileId")),
+          decodeURIComponent(c.req.param("skillId")),
+          { actorUserId: auth.user.id, source: "dashboard" }
+        )
       )
     );
   });

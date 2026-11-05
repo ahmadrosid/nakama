@@ -105,7 +105,7 @@ function ExampleAvatar({
 
 /** Wide screens: example messages float as cards around the heading. */
 const FLOATING_CARD =
-  "absolute w-64 rounded-2xl border bg-background px-4 py-3.5 text-sm shadow-md";
+  "absolute w-64 rounded-xl border bg-background px-4 py-3.5 text-sm shadow-md";
 
 function FloatingExample() {
   return (
@@ -118,7 +118,7 @@ function FloatingExample() {
         className={`${FLOATING_CARD} top-14 right-8 flex rotate-[2.5deg] gap-2.5`}
       >
         <ExampleAvatar
-          className="size-7 bg-primary/15 text-primary text-xs"
+          className="size-7 bg-primary/15 text-amber-800 text-xs dark:text-primary"
           letter="R"
         />
         <p>
@@ -136,15 +136,15 @@ function FloatingExample() {
         <p>
           <span className="block font-semibold">Writer</span>Draft done. 140
           words, ready for review.
-          <span className="mt-1 block font-medium text-primary text-xs">
+          <span className="mt-1 block font-medium text-amber-800 text-xs dark:text-primary">
             2 replies in thread
           </span>
         </p>
       </div>
-      <p className="absolute right-14 bottom-20 flex -rotate-2 items-center gap-2.5 rounded-xl bg-foreground px-3.5 py-2.5 text-background text-sm shadow-md">
+      <p className="absolute right-14 bottom-20 flex -rotate-2 items-center gap-2.5 rounded-full bg-foreground px-4 py-2.5 text-background text-sm shadow-md">
         <span className="size-2 rounded-full bg-primary" />
         Writer is working
-        <span className="ml-1 flex items-center gap-1.5 rounded-lg bg-background/15 px-2.5 py-1 text-xs">
+        <span className="ml-1 flex items-center gap-1.5 rounded-full bg-background/15 px-2.5 py-1 text-xs">
           <StopIcon className="size-3" />
           Stop
         </span>
@@ -200,7 +200,7 @@ function ChatExample() {
       <ExampleAgentMessage
         avatar={
           <ExampleAvatar
-            className="size-7 bg-primary/15 text-primary text-xs"
+            className="size-7 bg-primary/15 text-amber-800 text-xs dark:text-primary"
             letter="R"
           />
         }
@@ -229,18 +229,13 @@ function GroupsEmptyState({ onCreate }: { onCreate: () => void }) {
     <div className="@container my-6" id="agent-groups-empty">
       <div className="relative flex @4xl:min-h-[40rem] flex-col items-center @4xl:justify-center gap-8 overflow-hidden px-4 @4xl:py-0 py-10">
         <section className="relative z-10 flex max-w-lg flex-col items-center gap-5 text-center">
-          <h2 className="text-balance font-bold text-4xl tracking-tight sm:text-5xl">
+          <h2 className="text-balance font-semibold text-2xl tracking-tight">
             Your agents, working as a team
           </h2>
-          <p className="text-balance text-lg text-muted-foreground">
+          <p className="text-balance text-base text-muted-foreground">
             Give a group one brief. Ask one with @name, or everyone with @all.
           </p>
-          <Button
-            className="rounded-full"
-            id="btn-new-group"
-            onClick={onCreate}
-            size="lg"
-          >
+          <Button id="btn-new-group" onClick={onCreate}>
             <PlusSignIcon className="size-4" />
             New group
           </Button>

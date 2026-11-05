@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getUserConfigDir, saveUserConfig } from "@nakama/core";
+import { getUserConfigDir, NakamaApiError, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
 const organizationRequests = [
@@ -550,6 +550,25 @@ test("plugin access requests retain their explicit organization", async () => {
     "POST",
     "DELETE",
   ]);
+});
+
+test("an API error keeps the server's error code", async () => {
+  const client = new NakamaClient({
+    baseUrl: "http://localhost:4310",
+    fetch: async () =>
+      Response.json(
+        { code: "COMPOSIO_CUSTOM_AUTH_REQUIRED", error: "No managed auth." },
+        { status: 422 }
+      ),
+  });
+
+  const connect = client.connectComposioToolkit("googleforms");
+
+  await expect(connect).rejects.toBeInstanceOf(NakamaApiError);
+  await expect(connect).rejects.toMatchObject({
+    code: "COMPOSIO_CUSTOM_AUTH_REQUIRED",
+    status: 422,
+  });
 });
 
 test("official plugin reinstall sends revision and explicit organization", async () => {

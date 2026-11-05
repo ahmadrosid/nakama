@@ -3,6 +3,7 @@ import { mkdir, symlink, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getProfileSoulDir, NakamaApiError } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -31,6 +32,11 @@ test("workspace rename requires platform admin access and updates pins for every
 
         return { profile };
       },
+      getProfileAccess: (orgId: string, profileId: string) =>
+        new AgentService(null, null, databaseAdapter).getProfileAccess(
+          orgId,
+          profileId
+        ),
     },
   });
 
@@ -267,6 +273,8 @@ function createApp() {
         profileId,
       };
     },
+    getProfileAccess: async (_orgId: string, profileId: string) =>
+      profileId === "profile_1" ? { isSuper: false, ownerUserId: null } : null,
     deleteProfileArtifact: async (
       _orgId: string,
       _profileId: string,
@@ -809,6 +817,11 @@ test("personal file pins persist and enforce user, org, profile and path boundar
 
         return { profile };
       },
+      getProfileAccess: (orgId: string, profileId: string) =>
+        new AgentService(null, null, databaseAdapter).getProfileAccess(
+          orgId,
+          profileId
+        ),
     },
   });
 

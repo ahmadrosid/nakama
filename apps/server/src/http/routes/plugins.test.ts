@@ -1229,6 +1229,50 @@ describe("plugin HTTP API", () => {
       expect(
         (await jsonRequest(app, reinstallPath, admin, reinstallRequest)).status
       ).toBe(409);
+
+      const disabled = await jsonRequest(
+        app,
+        `/v1/plugins/${pluginId}/disable`,
+        admin,
+        {
+          method: "POST",
+          body: JSON.stringify({ expectedRevision: refreshed.revision }),
+        }
+      );
+
+      expect(disabled.status).toBe(200);
+
+      const removed = await jsonRequest(
+        app,
+        `/v1/plugins/${pluginId}/uninstall`,
+        admin,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            expectedRevision: (await disabled.json()).revision,
+          }),
+        }
+      );
+
+      expect(removed.status).toBe(200);
+      const retained = await removed.json();
+      expect(retained.lifecycleState).toBe("retained");
+
+      const savedData = (await databaseAdapter.getOrgPlugin(orgId, pluginId))
+        ?.databaseGeneration;
+
+      const restored = await jsonRequest(app, reinstallPath, admin, {
+        method: "POST",
+        body: JSON.stringify({ expectedRevision: retained.revision }),
+      });
+
+      expect(restored.status).toBe(200);
+      const restoredInstall = (await restored.json()).install;
+      expect(restoredInstall.lifecycleState).toBe("enabled");
+      expect(
+        (await databaseAdapter.getOrgPlugin(orgId, pluginId))
+          ?.databaseGeneration
+      ).toBe(savedData);
       const listed = await jsonRequest(app, "/v1/plugins", member);
       expect(
         (await listed.json()).plugins.some(

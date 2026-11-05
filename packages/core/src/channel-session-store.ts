@@ -83,6 +83,30 @@ export class ChannelSessionStore {
     this.hotSessions.delete(chatId);
   }
 
+  /**
+   * Keeps the `keep` newest records whose key starts with `prefix`, by
+   * updatedAt, and drops the rest. The caller saves.
+   */
+  dropOldest(prefix: string, keep: number): void {
+    const matching = Object.entries(this.map).filter(([chatId]) =>
+      chatId.startsWith(prefix)
+    );
+
+    if (matching.length <= keep) {
+      return;
+    }
+
+    // ISO timestamps sort as plain strings; localeCompare would collate them.
+    matching.sort(
+      ([, a], [, b]) =>
+        Number(a.updatedAt > b.updatedAt) - Number(a.updatedAt < b.updatedAt)
+    );
+
+    for (const [chatId] of matching.slice(0, matching.length - keep)) {
+      this.delete(chatId);
+    }
+  }
+
   getHotSession<T>(chatId: string): T | undefined {
     // SAFETY: The caller uses the same chat key and session type passed to setHotSession.
     return this.hotSessions.get(chatId) as T | undefined;

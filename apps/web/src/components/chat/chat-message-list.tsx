@@ -41,7 +41,10 @@ import {
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
-import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
+import {
+  ComposioCustomAuthSteps,
+  ComposioToolkitLogo,
+} from "@/components/ComposioToolkitLogo";
 import {
   AgentQuestionnaireAnswers,
   AgentQuestionnairePanel,
@@ -66,6 +69,7 @@ import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-pa
 import { useProfileQuery } from "@/hooks/use-app-queries";
 import {
   connectComposioApp,
+  needsComposioCustomAuth,
   profileComposioToolkitsQueryOptions,
   useComposioToolkits,
 } from "@/hooks/use-composio";
@@ -968,7 +972,11 @@ function ComposioConnectCard({
 
   const { data: profile, error: profileError } = useProfileQuery(profileId);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const [error, setError] = useState<{
+    customAuth: boolean;
+    message: string;
+  } | null>(null);
 
   const canManage = canManageAgent(profile, user, isOrgAdmin);
 
@@ -990,8 +998,6 @@ function ComposioConnectCard({
       { canManage, isOrgAdmin, onAgent },
       { error: profileError, loaded: !profileId || Boolean(profile) }
     );
-
-  const statusText = error ?? notice;
 
   async function connect() {
     if (!(toolkits && ready)) {
@@ -1033,7 +1039,12 @@ function ComposioConnectCard({
       );
     } catch (connectError) {
       tab?.close();
-      setError(formatError(connectError));
+      setError({
+        customAuth:
+          connectError instanceof Error &&
+          needsComposioCustomAuth(connectError),
+        message: formatError(connectError),
+      });
     } finally {
       setPending(false);
     }
@@ -1066,12 +1077,48 @@ function ComposioConnectCard({
           </Button>
         )}
       </div>
-      {connected || !statusText ? null : (
-        <p className="text-muted-foreground text-xs" role="status">
-          {statusText}
-        </p>
+      {connected || !(error || notice) ? null : (
+        <ComposioConnectCardStatus
+          error={error}
+          isOrgAdmin={isOrgAdmin}
+          name={name}
+          notice={notice}
+        />
       )}
     </div>
+  );
+}
+
+/** Kept apart from the card so the card stays under the complexity limit. */
+function ComposioConnectCardStatus({
+  error,
+  isOrgAdmin,
+  name,
+  notice,
+}: {
+  error: { customAuth: boolean; message: string } | null;
+  isOrgAdmin: boolean;
+  name: string;
+  notice: string | null;
+}) {
+  // Composio has no shared OAuth app for this toolkit. Only an admin can fix it.
+  if (error?.customAuth) {
+    return isOrgAdmin ? (
+      <div className="flex flex-col gap-2" role="status">
+        <p className="text-sm">{name} needs a custom auth config</p>
+        <ComposioCustomAuthSteps name={name} />
+      </div>
+    ) : (
+      <p className="text-muted-foreground text-xs" role="status">
+        Ask an org admin to add a custom auth config for {name} in Composio.
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-muted-foreground text-xs" role="status">
+      {error?.message ?? notice}
+    </p>
   );
 }
 

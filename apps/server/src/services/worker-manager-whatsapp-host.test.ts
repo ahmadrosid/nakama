@@ -67,7 +67,9 @@ describe("WhatsApp host worker", () => {
       describeProcess.mockImplementation((name, describeCb) =>
         describeCb(
           null,
-          name === opts.name ? [{ name, pm2_env: { status: "online" } }] : []
+          name === opts.name
+            ? [{ name, pm2_env: { ...opts.env, status: "online" } }]
+            : []
         )
       );
       cb(null);

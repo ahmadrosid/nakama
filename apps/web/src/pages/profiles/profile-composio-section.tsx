@@ -27,7 +27,7 @@ export function ProfileComposioSection({
     <div className="pt-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-normal text-muted-foreground/55 text-sm">
+          <h3 className="font-medium text-muted-foreground text-sm">
             Composio toolkits
           </h3>
           {assignedComposioToolkits.length > 0 ? (

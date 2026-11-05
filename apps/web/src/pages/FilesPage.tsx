@@ -1,5 +1,4 @@
 import type { ArtifactFile, WorkspaceEntry } from "@nakama/core/contract";
-import { Button } from "@nakama/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
@@ -103,27 +102,28 @@ export function FilesPage() {
         presentation="overlay"
       >
         <FilePinsContext.Provider value={pins.controls}>
-          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6">
             {canViewFiles ? (
-              <div className="space-y-4">
+              <div className="mx-auto max-w-3xl space-y-4">
                 <nav
                   aria-label="File locations"
-                  className="flex flex-wrap gap-2"
+                  className="flex gap-6 border-border border-b"
                 >
                   {(["workspace", "artifacts", "knowledge"] as const).map(
                     (location) => (
-                      <Button
+                      <button
                         aria-current={view === location ? "page" : undefined}
+                        className={`-mb-px border-b-2 py-3 text-sm ${view === location ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                         key={location}
                         onClick={() => navigate(location)}
-                        variant={view === location ? "secondary" : "ghost"}
+                        type="button"
                       >
                         {location === "workspace"
                           ? "All files"
                           : location === "artifacts"
                             ? "Artifacts"
                             : "Knowledge"}
-                      </Button>
+                      </button>
                     )
                   )}
                 </nav>

@@ -1,6 +1,7 @@
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  type ChatgptOAuthCredentials,
   getProfileSoulDir,
   inferArtifactMimeType,
   MAX_IMAGE_BYTES,
@@ -17,10 +18,11 @@ import { createAttachmentSaver } from "../services/attachment-service";
 import {
   generateImageWithOpenAI,
   IMAGE_GENERATION_SIZES,
-  IMAGE_MODEL_REQUIRED_MESSAGE,
+  imageGenerationUnavailableMessage,
   normalizeImageGenerationSize,
   resolveImageGenerationSelection,
 } from "../services/image-generation";
+import { chatgptImageInput } from "../services/image-generation-chatgpt";
 
 export const GENERATE_IMAGE_TOOL_NAME = "generate_image";
 
@@ -51,6 +53,8 @@ interface GenerateImageToolSuccess {
   mimeType: string;
   model: string;
   path: string;
+  /** The size that came back, e.g. `1536x1024`. */
+  size: string;
   sizeBytes: number;
 }
 
@@ -84,6 +88,11 @@ export interface GenerateImageToolDeps {
   /** Test seam — defaults to live OpenAI Images call. */
   generateImage?: typeof generateImageWithOpenAI;
   getUserConfig: () => UserConfig | null | undefined;
+  /** Saves rotated ChatGPT tokens; a refresh token works only once. */
+  onChatgptTokenRefresh: (
+    instanceId: string,
+    oauth: ChatgptOAuthCredentials
+  ) => Promise<void>;
   recordUsage?: (
     modelId: string,
     inputTokens: number,
@@ -98,7 +107,7 @@ export function createGenerateImageTool(
 ): ToolDefinition {
   return {
     description:
-      "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves a PNG under artifacts/ with a metadata sidecar and session attachment when available. A platform admin sets the model in Settings → AI Providers (/settings/providers#image-generation) — do not pass a model name.",
+      "Generate an image from a text prompt using the workspace image model. Saves a PNG under artifacts/ with a metadata sidecar and session attachment when available. A platform admin sets the model in Settings → AI Providers (/settings/providers#image-generation) — do not pass a model name.",
     name: GENERATE_IMAGE_TOOL_NAME,
     parallelSafe: false,
     parameters: {
@@ -114,7 +123,7 @@ export function createGenerateImageTool(
           type: "string",
         },
         size: {
-          description: `Optional image size. Allowed: ${IMAGE_GENERATION_SIZES.join(", ")}.`,
+          description: `Optional image size. Allowed: ${IMAGE_GENERATION_SIZES.join(", ")}. A ChatGPT subscription can return a different size; the result says which.`,
           type: "string",
         },
       },
@@ -188,7 +197,7 @@ export async function runGenerateImageTool(
   }
 
   if (!selection) {
-    return { error: IMAGE_MODEL_REQUIRED_MESSAGE };
+    return { error: imageGenerationUnavailableMessage(deps.getUserConfig()) };
   }
 
   const generate = deps.generateImage ?? generateImageWithOpenAI;
@@ -198,6 +207,11 @@ export async function runGenerateImageTool(
     result = await generate({
       apiKey: selection.apiKey,
       baseUrl: selection.baseUrl,
+      ...chatgptImageInput(
+        selection,
+        deps.getUserConfig,
+        deps.onChatgptTokenRefresh
+      ),
       model: selection.model,
       prompt,
       signal: context.signal,
@@ -318,6 +332,7 @@ export async function runGenerateImageTool(
     mimeType: result.mediaType,
     model: result.model,
     path: relativePath,
+    size: result.size,
     sizeBytes,
   };
 }

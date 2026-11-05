@@ -1,9 +1,18 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import type { LocalPluginPreviewResponse } from "@nakama/core/contract";
+import type {
+  LocalPluginPreviewResponse,
+  OrgPluginDetail,
+} from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
+import { PluginsPage } from "./PluginsPage";
 import { LocalPluginInstaller } from "./plugins/local-plugin-installer";
 
 const cleanups: Array<() => void> = [];
@@ -407,3 +416,148 @@ test("draft review lists code that runs before source and config", async () => {
   ).not.toBeNull();
   expect(document.body.textContent).toContain("1 of 3 read");
 });
+
+const retainedWorkflows: OrgPluginDetail = {
+  actions: [],
+  availableVersions: [],
+  databaseGeneration: "gen-1",
+  description: "Workflows",
+  installed: true,
+  lastLifecycleError: null,
+  lifecycleState: "retained",
+  name: "Workflows",
+  pendingOperation: null,
+  pluginId: "workflows",
+  revision: 4,
+  selectedVersion: "1.0.0",
+  ui: null,
+  updatedAt: "",
+};
+
+for (const path of ["/settings/plugins", "/settings/plugins/workflows"]) {
+  test(`a removed built-in plugin can be added again from ${path}`, async () => {
+    const spies = [
+      spyOn(client, "listOrgPlugins").mockResolvedValue({
+        plugins: [retainedWorkflows],
+      }),
+      spyOn(client, "listOfficialPlugins").mockResolvedValue({
+        plugins: [
+          {
+            description: "Workflows",
+            id: "workflows",
+            name: "Workflows",
+            version: "1.0.0",
+          },
+        ],
+      }),
+    ];
+
+    // SAFETY: The page reads only the call itself, not the response body.
+    const install = spyOn(client, "installOfficialPlugin").mockResolvedValue(
+      {} as Awaited<ReturnType<typeof client.installOfficialPlugin>>
+    );
+
+    const reinstall = spyOn(client, "reinstallOfficialPlugin");
+
+    // SAFETY: The page reads only the active org, its role, and the user.
+    const auth = {
+      activeOrg: {
+        createdAt: "",
+        id: "org-a",
+        name: "A",
+        role: "admin",
+        slug: "a",
+        updatedAt: "",
+      },
+      user: { email: "admin@example.com", id: "admin", isPlatformAdmin: false },
+    } as AuthContextValue;
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    cleanups.push(() => {
+      act(() => root.unmount());
+      container.remove();
+
+      for (const spy of [...spies, install, reinstall]) {
+        spy.mockRestore();
+      }
+    });
+
+    await act(async () =>
+      root.render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <AuthContext.Provider value={auth}>
+            <MemoryRouter initialEntries={[path]}>
+              <Routes>
+                <Route element={<PluginsPage />} path="/settings/plugins" />
+                <Route
+                  element={<PluginsPage />}
+                  path="/settings/plugins/:pluginId"
+                />
+              </Routes>
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      )
+    );
+    await settle();
+
+    async function openMenu() {
+      await act(async () =>
+        document
+          .querySelector<HTMLButtonElement>(
+            '[aria-label="Actions for Workflows"]'
+          )
+          ?.click()
+      );
+      await settle();
+
+      // Links leave the page; only buttons run plugin actions.
+      return [
+        ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+      ].filter((item) => item.tagName !== "A");
+    }
+
+    let items = await openMenu();
+    const itemCount = items.length;
+
+    expect(itemCount).toBeGreaterThan(0);
+
+    // No menu action may call reinstall: the server rejects it for retained.
+    for (let index = 0; index < itemCount; index++) {
+      if (index > 0) {
+        items = await openMenu();
+      }
+
+      await act(async () => items[index]?.click());
+      await settle();
+    }
+
+    expect(reinstall).not.toHaveBeenCalled();
+
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>('[aria-label="Add Workflows"]')
+        ?.click()
+    );
+    await settle();
+
+    const confirm = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[role="alertdialog"] button, [role="dialog"] button'
+      ),
+    ].find((item) => item.textContent === "Add");
+
+    await act(async () => confirm?.click());
+    await settle();
+
+    expect(install).toHaveBeenCalledWith("workflows", "org-a");
+    expect(reinstall).not.toHaveBeenCalled();
+  });
+}

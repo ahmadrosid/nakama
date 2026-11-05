@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../../services/agent-service";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -15,12 +16,15 @@ const BASE = "http://localhost:4310";
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+  const agentService = new AgentService(null, null, databaseAdapter);
 
   return {
     ...createMinimalHonoApp({
       agent: {
         getProfile: (orgId: string, profileId: string) =>
           profileService.getProfile(orgId, profileId),
+        getProfileAccess: (orgId: string, profileId: string) =>
+          agentService.getProfileAccess(orgId, profileId),
         listProfileChangeHistory: (
           orgId: string,
           profileId: string,
@@ -42,7 +46,7 @@ function createApp() {
 }
 
 describe("GET /v1/profiles/:profileId/history", () => {
-  test("org admin can read history; member gets 403", async () => {
+  test("org admin can read history; a member reads only the history of their own agent", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
 
     const platform = await setupFreshInstallSession(
@@ -101,12 +105,56 @@ describe("GET /v1/profiles/:profileId/history", () => {
       orgId
     );
 
-    const denied = await app.fetch(
+    // History holds full soul snapshots, so a shared agent's history stays
+    // with its owner and admins even though members can open its detail.
+    const shared = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}/history`, {
         headers: member.headers({}, orgId),
       })
     );
 
+    expect(shared.status).toBe(403);
+
+    const privateProfile = await profileService.createProfile(
+      orgId,
+      { name: "Private Agent" },
+      { ownerUserId: "user_platform", sharedWithTeam: false }
+    );
+
+    const denied = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${privateProfile.profile.id}/history`, {
+        headers: member.headers({}, orgId),
+      })
+    );
+
     expect(denied.status).toBe(403);
+
+    const ownProfile = await profileService.createProfile(
+      orgId,
+      { name: "Member Agent" },
+      { ownerUserId: "user_secondary_member_history", sharedWithTeam: false }
+    );
+
+    await profileService.updateProfile(
+      orgId,
+      ownProfile.profile.id,
+      { systemPrompt: "changed by owner" },
+      { actorUserId: "user_secondary_member_history", source: "dashboard" }
+    );
+
+    const own = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${ownProfile.profile.id}/history`, {
+        headers: member.headers({}, orgId),
+      })
+    );
+
+    expect(own.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const ownBody = (await own.json()) as { events: Array<{ field: string }> };
+
+    expect(ownBody.events.map((event) => event.field)).toContain(
+      "system_prompt"
+    );
   }, 20_000);
 });

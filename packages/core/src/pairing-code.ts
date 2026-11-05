@@ -49,6 +49,23 @@ export function pairingCodesMatch(
   return given.length === want.length && timingSafeEqual(given, want);
 }
 
+/**
+ * The code appears anywhere in the message, also inside a sentence. Each
+ * window is compared in constant time, like pairingCodesMatch.
+ */
+export function containsPairingCode(input: string, expected: string): boolean {
+  const text = normalizePairingCode(input);
+  const want = normalizePairingCode(expected);
+
+  for (let start = 0; start + want.length <= text.length; start += 1) {
+    if (pairingCodesMatch(text.slice(start, start + want.length), want)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /** A code plus the moment it stops being usable. */
 export interface PairingCodeSecret {
   code: string;

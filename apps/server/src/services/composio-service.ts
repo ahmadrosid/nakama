@@ -1,5 +1,6 @@
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import {
+  COMPOSIO_CUSTOM_AUTH_REQUIRED,
   type ComposioCatalogToolkitSummary,
   type ComposioConnectResponse,
   type ComposioToolkitSummary,
@@ -34,6 +35,7 @@ import {
   ComposioApiClient,
   type ComposioSessionMcpEndpoint,
   findRejectedConnectedAccountIds,
+  isComposioDefaultAuthConfigMissing,
 } from "./composio-api-client";
 
 function deriveKey(secret: string): Buffer {
@@ -877,11 +879,25 @@ export class ComposioService {
 
     const callbackUrl = `${callbackBaseUrl.replace(/\/$/, "")}/v1/composio/oauth/callback?state=${encodeURIComponent(state)}`;
 
-    const link = await apiClient.linkToolkitAccount(
-      composioUserId(actingUserId),
-      toolkitSlug,
-      callbackUrl
-    );
+    const link = await apiClient
+      .linkToolkitAccount(
+        composioUserId(actingUserId),
+        toolkitSlug,
+        callbackUrl
+      )
+      .catch((error: Error) => {
+        if (isComposioDefaultAuthConfigMissing(error)) {
+          throw new NakamaApiError(
+            `Composio has no managed auth for ${orgToolkit.displayName}. An org admin must add a custom auth config for it in Composio.`,
+            422,
+            undefined,
+            undefined,
+            { code: COMPOSIO_CUSTOM_AUTH_REQUIRED }
+          );
+        }
+
+        throw error;
+      });
 
     const connection: StoredComposioUserConnectionRecord = {
       connectedAccountId:

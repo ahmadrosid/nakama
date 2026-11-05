@@ -31,16 +31,21 @@ import {
   readWorkspaceFile,
   renameWorkspaceEntry,
 } from "@nakama/core";
-import { filterProfilesForChatAccess } from "@nakama/core/profiles";
+import {
+  canChatWithProfile,
+  filterProfilesForChatAccess,
+} from "@nakama/core/profiles";
 import type { Context } from "hono";
 import { listAcpAgentPresets } from "../../providers/acp/acp-agent-presets";
 import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
 import {
   artifactCreatorScopeFromContext,
+  profileResponseFor,
   requireActiveOrgIdFromContext,
   requireOrgAdmin,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMember,
   requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
   requireProfileManageFromContext,
@@ -78,14 +83,43 @@ export function registerProfileRoutes(
   const requireProfileManage = (c: Context<AppEnv>) =>
     requireProfileManageFromContext(c, agent);
 
-  const requireProfileReadAccess = async (c: Context<AppEnv>) => {
+  /**
+   * Admins read every agent. A member reads the agents their chat list shows
+   * (shared, the org default, their own). `owner` is true for admins and the
+   * agent's owner, who also see change history and the system prompt. Unknown
+   * ids and hidden agents answer the same 403 after the same row lookup, so
+   * members cannot probe which ids exist.
+   */
+  const requireProfileRead = async (
+    c: Context<AppEnv>
+  ): Promise<{ owner: boolean }> => {
     const auth = getRequestAuth(c);
 
     if (auth.isPlatformAdmin || auth.orgRole === "admin") {
-      return auth;
+      return { owner: true };
     }
 
-    return requireProfileManage(c);
+    requireOrgMember(auth);
+
+    const access = await agent.getProfileAccess(
+      requireActiveOrgIdFromContext(c),
+      decodeURIComponent(c.req.param("profileId") ?? "")
+    );
+
+    if (
+      !(
+        access &&
+        canChatWithProfile(access, {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          orgRole: auth.orgRole,
+          userId: auth.user.id,
+        })
+      )
+    ) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+
+    return { owner: !access.isSuper && access.ownerUserId === auth.user.id };
   };
 
   const artifactCreatorScope = (c: Context<AppEnv>) =>
@@ -2002,7 +2036,10 @@ export function registerProfileRoutes(
     const body = await readJson(c.req.raw, imageAttachmentSchema);
 
     return json<ProfileResponse>(
-      await agent.uploadProfileAvatar(orgId, profileId, body)
+      profileResponseFor(
+        c,
+        await agent.uploadProfileAvatar(orgId, profileId, body)
+      )
     );
   });
 
@@ -2016,15 +2053,26 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId", async (c) => {
-    await requireProfileReadAccess(c);
+    const { owner } = await requireProfileRead(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
 
-    return json<ProfileResponse>(await agent.getProfile(orgId, profileId));
+    return json<ProfileResponse>(
+      profileResponseFor(c, await agent.getProfile(orgId, profileId), {
+        ownsProfile: owner,
+      })
+    );
   });
 
   app.get("/v1/profiles/:profileId/history", async (c) => {
-    await requireProfileReadAccess(c);
+    // History holds full soul file snapshots (MEMORY.md too). Only the owner
+    // and admins get them, the same as the soul routes and pack export.
+    const { owner } = await requireProfileRead(c);
+
+    if (!owner) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
@@ -2102,10 +2150,18 @@ export function registerProfileRoutes(
 
     if (!auth.isPlatformAdmin) {
       // Owners edit their own agent, except settings that run code on the host.
-      const isOwner = await requireProfileManage(c).then(
-        () => true,
-        () => false
-      );
+      // Only a 403 means "not the owner". A failed lookup stays an error.
+      let isOwner = true;
+
+      try {
+        await requireProfileManage(c);
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 403)) {
+          throw error;
+        }
+
+        isOwner = false;
+      }
 
       if (isOwner) {
         // Host-run agents are an admin control.
@@ -2122,10 +2178,13 @@ export function registerProfileRoutes(
     }
 
     return json<ProfileResponse>(
-      await agent.updateProfile(orgId, profileId, body, {
-        actorUserId: auth.user.id,
-        source: "dashboard",
-      })
+      profileResponseFor(
+        c,
+        await agent.updateProfile(orgId, profileId, body, {
+          actorUserId: auth.user.id,
+          source: "dashboard",
+        })
+      )
     );
   });
 
@@ -2170,7 +2229,7 @@ export function registerProfileRoutes(
     const body = await readOptionalJson<CloneProfileRequest>(c.req.raw, {});
 
     return json<ProfileResponse>(
-      await agent.cloneProfile(orgId, profileId, body),
+      profileResponseFor(c, await agent.cloneProfile(orgId, profileId, body)),
       201
     );
   });

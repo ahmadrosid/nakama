@@ -23,6 +23,9 @@ const CHATGPT_DEVICE_REDIRECT_URI =
 
 export const CHATGPT_JWT_CLAIM_PATH = "https://api.openai.com/auth";
 
+const CHATGPT_SIGN_IN_EXPIRED_MESSAGE =
+  "ChatGPT sign-in expired. Reconnect in Settings → AI Providers (/settings/providers).";
+
 const CHATGPT_DEVICE_CODE_TIMEOUT_MS = 15 * 60 * 1000;
 
 export interface ChatgptDeviceAuthSession {
@@ -121,6 +124,15 @@ async function readTokenResponse(
   response: Response,
   operation: "exchange" | "refresh"
 ): Promise<ChatgptOAuthCredentials> {
+  // The token endpoint answers a dead or reused refresh token with 400/401.
+  if (
+    operation === "refresh" &&
+    (response.status === 400 || response.status === 401)
+  ) {
+    await response.body?.cancel();
+    throw new NakamaApiError(CHATGPT_SIGN_IN_EXPIRED_MESSAGE, 400);
+  }
+
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(
@@ -352,10 +364,7 @@ export async function fetchChatgptCodexModels(
     try {
       refreshed = await refreshChatgptOAuthToken(oauth.refreshToken);
     } catch {
-      throw new NakamaApiError(
-        "ChatGPT sign-in expired. Reconnect in Settings → AI Providers (/settings/providers).",
-        400
-      );
+      throw new NakamaApiError(CHATGPT_SIGN_IN_EXPIRED_MESSAGE, 400);
     }
 
     await onTokenRefresh(refreshed);
@@ -364,10 +373,7 @@ export async function fetchChatgptCodexModels(
 
   if (response.status === 401) {
     await response.body?.cancel();
-    throw new NakamaApiError(
-      "ChatGPT sign-in expired. Reconnect in Settings → AI Providers (/settings/providers).",
-      400
-    );
+    throw new NakamaApiError(CHATGPT_SIGN_IN_EXPIRED_MESSAGE, 400);
   }
 
   if (!response.ok) {
@@ -386,7 +392,37 @@ export async function fetchChatgptCodexModels(
   return models;
 }
 
-export async function refreshChatgptOAuthToken(
+/**
+ * A refresh token works once. Calls that race on the same token share one
+ * redeem, so a second redeem cannot invalidate the new token chain.
+ */
+const pendingChatgptRefreshes = new Map<
+  string,
+  Promise<ChatgptOAuthCredentials>
+>();
+
+/** A stalled token endpoint must not hang the turn that waits on it. */
+const CHATGPT_REFRESH_TIMEOUT_MS = 30_000;
+
+export function refreshChatgptOAuthToken(
+  refreshToken: string
+): Promise<ChatgptOAuthCredentials> {
+  const pending = pendingChatgptRefreshes.get(refreshToken);
+
+  if (pending) {
+    return pending;
+  }
+
+  const refresh = redeemChatgptRefreshToken(refreshToken).finally(() => {
+    pendingChatgptRefreshes.delete(refreshToken);
+  });
+
+  pendingChatgptRefreshes.set(refreshToken, refresh);
+
+  return refresh;
+}
+
+async function redeemChatgptRefreshToken(
   refreshToken: string
 ): Promise<ChatgptOAuthCredentials> {
   const response = await fetch(CHATGPT_OAUTH_TOKEN_URL, {
@@ -397,6 +433,7 @@ export async function refreshChatgptOAuthToken(
     }),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     method: "POST",
+    signal: AbortSignal.timeout(CHATGPT_REFRESH_TIMEOUT_MS),
   });
 
   return readTokenResponse(response, "refresh");

@@ -20,7 +20,7 @@ import type {
   UpdateTeamsSettingsRequest,
 } from "./contract";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
-import { pairingFailureMessage } from "./pairing-code";
+import { containsPairingCode, pairingFailureMessage } from "./pairing-code";
 
 const guidSchema = z
   .string()
@@ -347,6 +347,37 @@ export async function regenerateTeamsHandshake(
     );
 
     return loadTeamsSettingsPublic(owner);
+  });
+}
+
+/**
+ * Spends the live code when a message that others can read carries it. The
+ * code is checked again under the lock, so a code that was already spent or
+ * replaced is left as it is. True when this call spent it.
+ */
+export async function spendExposedTeamsHandshake(
+  message: string,
+  owner: ChannelOwner
+): Promise<boolean> {
+  return withPairingConfigLock(getTeamsConfigDir(owner), async () => {
+    const config = await loadTeamsConfigFile(owner);
+
+    if (
+      !(
+        config?.handshakeCode &&
+        hasActiveHandshakeCode(config) &&
+        containsPairingCode(message, config.handshakeCode)
+      )
+    ) {
+      return false;
+    }
+
+    await writeTeamsConfig(
+      { ...config, handshakeCode: null, handshakeExpiresAt: null },
+      owner
+    );
+
+    return true;
   });
 }
 

@@ -235,7 +235,12 @@ export function OrgMemberInvitePopover({
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger
         render={
-          <Button aria-label="Invite by email" type="button" variant="outline">
+          <Button
+            aria-label="Invite by email"
+            size="sm"
+            type="button"
+            variant="outline"
+          >
             Invite by email
           </Button>
         }

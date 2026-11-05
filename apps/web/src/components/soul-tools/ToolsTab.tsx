@@ -34,7 +34,7 @@ import {
 } from "@/lib/navigation";
 import { findSuperNakamaProfile } from "@/lib/profiles";
 
-const toolSearchThreshold = 4;
+const toolSearchThreshold = 10;
 
 function isDeletableTool(tool: ToolDetail): boolean {
   return !(isProtectedToolId(tool.id) || isPluginOwned(tool));
@@ -113,15 +113,14 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
     <div className={cn("min-w-0 space-y-8", embedded && "p-4 sm:p-5")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-normal text-sm">All tools</h2>
-          <p className="type-body mt-1 text-pretty text-xs tabular-nums">
+          <p className="type-body text-pretty text-muted-foreground text-xs tabular-nums">
             {tools.length === 0
               ? "No tools registered yet"
               : `${tools.length} registered · ${customTools.length} custom · ${builtinTools.length} built-in`}
           </p>
         </div>
 
-        <Button onClick={goToCreateTool} size="sm" type="button">
+        <Button onClick={goToCreateTool} type="button">
           <Add01Icon aria-hidden className="size-4" data-icon="inline-start" />
           Create tool
         </Button>
@@ -130,7 +129,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
       {tools.length === 0 ? (
         <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center text-muted-foreground text-sm">
           <p>No tools yet. Ask Super Nakama to create one.</p>
-          <Button onClick={goToCreateTool} size="sm" type="button">
+          <Button onClick={goToCreateTool} type="button">
             <Add01Icon
               aria-hidden
               className="size-4"
@@ -283,9 +282,7 @@ function ToolListSection({
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
-        <h3 className="font-normal text-muted-foreground/55 text-sm">
-          {title}
-        </h3>
+        <h3 className="font-medium text-muted-foreground text-sm">{title}</h3>
         {tools.length > 0 ? (
           <span className="text-muted-foreground text-xs tabular-nums">
             {trimmedQuery
@@ -399,7 +396,7 @@ function PluginToolGroup({
         <summary className="cursor-pointer rounded-md px-4 py-3 text-sm marker:text-muted-foreground hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
           <span className="ml-2 inline-flex items-center gap-2 align-middle">
             <Icon aria-hidden className="size-4" />
-            <span>{label}</span>
+            <span className="font-medium font-mono text-[13px]">{label}</span>
             <span className="text-muted-foreground text-xs tabular-nums">
               {tools.length} {tools.length === 1 ? "tool" : "tools"}
             </span>
@@ -432,7 +429,22 @@ function ToolListItem({
 
   const summary = (
     <div className="min-w-0">
-      <p className="font-normal text-foreground text-sm">{tool.name}</p>
+      <p className="flex flex-wrap items-center gap-2">
+        <span className="font-medium font-mono text-[13px] text-foreground">
+          {tool.name}
+        </span>
+        {isPluginOwned(tool) ? (
+          <span className="scope-badge scope-badge-custom">
+            {tool.pluginId}
+          </span>
+        ) : deletable ? (
+          <span className="scope-badge scope-badge-custom">custom</span>
+        ) : (
+          <span className="scope-badge bg-muted text-muted-foreground">
+            built-in
+          </span>
+        )}
+      </p>
       <p className="mt-0.5 line-clamp-2 text-pretty text-muted-foreground text-xs leading-relaxed">
         {tool.description}
       </p>
@@ -457,15 +469,6 @@ function ToolListItem({
       )}
 
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-        {isPluginOwned(tool) ? (
-          <span className="scope-badge scope-badge-custom">
-            {tool.pluginId}
-          </span>
-        ) : deletable ? (
-          <span className="scope-badge scope-badge-custom">custom</span>
-        ) : (
-          <span className="scope-badge scope-badge-active">built-in</span>
-        )}
         {tool.pluginId ? (
           <Button
             render={<Link to={pluginManagementPath()} />}

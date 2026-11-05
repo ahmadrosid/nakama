@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core/api-error";
 import * as ui from "@nakama/ui";
 import * as React from "react";
 import { createElement } from "react";
@@ -357,4 +358,102 @@ test("the Workflows plugin owns the run result renderer", async () => {
   expect(html).toContain("News digest");
   expect(html).toContain("2 words");
   expect(html).toContain("Fetch News");
+});
+
+describe("plugin host calls", () => {
+  test("a busy plugin action is retried until the server admits it", async () => {
+    let calls = 0;
+    let context!: PluginClientContext;
+
+    const runtime = await activatePlugin(
+      {
+        apply(ctx) {
+          context = ctx;
+          ctx.slots.register("page", () => null);
+        },
+        inject: ["slots", "host"],
+      },
+      {
+        ...options(),
+        host: {
+          call: async () => {
+            calls++;
+
+            if (calls === 1) {
+              throw new NakamaApiError("busy", 429);
+            }
+
+            return ["workflow"];
+          },
+        },
+      }
+    );
+
+    expect(await context.host.call("list_workflows")).toEqual(["workflow"]);
+    expect(calls).toBe(2);
+    runtime.dispose();
+  });
+
+  test("other plugin errors are not retried", async () => {
+    let calls = 0;
+    let context!: PluginClientContext;
+
+    const runtime = await activatePlugin(
+      {
+        apply(ctx) {
+          context = ctx;
+          ctx.slots.register("page", () => null);
+        },
+        inject: ["slots", "host"],
+      },
+      {
+        ...options(),
+        host: {
+          call: () => {
+            calls++;
+
+            return Promise.reject(new NakamaApiError("forbidden", 403));
+          },
+        },
+      }
+    );
+
+    await expect(context.host.call("list_workflows")).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(calls).toBe(1);
+    runtime.dispose();
+  });
+
+  test("unloading the page stops a busy retry", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    let context!: PluginClientContext;
+
+    await activatePlugin(
+      {
+        apply(ctx) {
+          context = ctx;
+          ctx.slots.register("page", () => null);
+        },
+        inject: ["slots", "host"],
+      },
+      {
+        ...options(controller),
+        host: {
+          call: () => {
+            calls++;
+
+            return Promise.reject(new NakamaApiError("busy", 429));
+          },
+        },
+      }
+    );
+
+    const pending = context.host.call("list_workflows");
+    controller.abort();
+    await expect(pending).rejects.toBeDefined();
+    await Bun.sleep(300);
+    expect(calls).toBe(1);
+  });
 });

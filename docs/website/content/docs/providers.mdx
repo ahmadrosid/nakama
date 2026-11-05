@@ -95,7 +95,7 @@ Some capabilities depend on the active provider:
 - **Audio transcription** (Telegram voice notes): needs a transcription model in **AI Providers → Audio transcription model**, backed by an OpenAI provider or an OpenAI-compatible provider with a base URL (ChatGPT Plus/Pro cannot replace this)
 - **Image parsing**: used when the chat model cannot see images. Set **AI Providers → Image parsing model**. The list only includes models marked as vision-capable. For a custom endpoint, turn **Vision** on for that model under **AI Providers**
 - **Responses API endpoints**: a custom endpoint that serves `/responses` rather than `/chat/completions`. Set **API** to Responses under **AI Providers**, or answer `responses` in the CLI setup wizard. Required for endpoints that do not serve chat/completions at all, and it keeps reasoning available alongside tools on models that reject the pair on chat/completions
-- **Context window**: models in the built-in catalog carry their own size. A model Nakama does not recognise (a custom endpoint, an OpenRouter slug, a self-hosted build) falls back to 128k, which cuts history early on a larger model and overflows a smaller one. Set **Context** for that model under **AI Providers** to the real token window; leave it on auto to keep the fallback. Browsing models.dev fills it in for you
+- **Context window**: models in the built-in catalog carry their own size. A model Nakama does not recognise (a custom endpoint, an OpenRouter slug, a self-hosted build) falls back to 128k, which cuts history early on a larger model and overflows a smaller one. Set **Context** for that model under **AI Providers** to the real token window; leave it on auto to keep the fallback
 - **Coding agent provider passthrough** — spawn-time credentials for Claude Code / Codex / OpenCode; see [Coding agent](/coding-agent)
 
 ## Per-profile models
@@ -138,7 +138,7 @@ Keep prompts, images, and audio entirely inside your network (data residency) by
 
 ### Image generation
 
-Set **Image generation model** in **AI Providers**. The dropdown lists the models of every compatible provider, stored as `<providerId>::<modelId>`, so a gateway that namespaces its ids works too:
+Set **Image generation** in **AI Providers**. The dropdown lists the models of every compatible provider, stored as `<providerId>::<modelId>`, so a gateway that namespaces its ids works too:
 
 ```text
 p-my-local::cb/gpt-image-2

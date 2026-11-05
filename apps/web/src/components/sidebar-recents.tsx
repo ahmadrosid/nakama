@@ -294,7 +294,7 @@ export function PinnedChats<T>({
       <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
         <button
           aria-expanded={!pinnedCollapsed}
-          className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
+          className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 font-medium text-sm"
           onClick={togglePinned}
           type="button"
         >
@@ -337,7 +337,7 @@ export function RecentsHeader({
     <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
       <button
         aria-expanded={!collapsed}
-        className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
+        className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 font-medium text-sm"
         onClick={onToggle}
         type="button"
       >

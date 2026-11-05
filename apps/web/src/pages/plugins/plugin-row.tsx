@@ -223,20 +223,20 @@ function PluginIdentity({
         >
           {name}
           {!detail && plugin?.selectedVersion ? (
-            <span className="ml-2 font-mono font-normal text-[11px] text-muted-foreground">
+            <span className="ml-2 font-mono font-normal text-[11px] text-foreground/70">
               {plugin.selectedVersion.split("+")[0]}
             </span>
           ) : null}
           {updateVersion ? (
-            <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 font-normal text-[10px] text-primary">
-              Update {updateVersion}
+            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 font-normal text-2xs text-amber-800 dark:text-primary">
+              Update <span className="font-mono">{updateVersion}</span>
             </span>
           ) : null}
         </h2>
         {detail ? (
           <PluginStatusLine official={official} plugin={plugin} />
         ) : (
-          <p className="mt-0.5 line-clamp-1 break-words text-muted-foreground text-sm">
+          <p className="mt-0.5 line-clamp-1 break-words pr-6 text-muted-foreground text-sm">
             {PLUGIN_DESCRIPTIONS.get(pluginId) ||
               plugin?.description ||
               catalogDescription ||
@@ -256,7 +256,7 @@ function PluginStatusLine({
 
   if (plugin?.lifecycleState === "enabled") {
     status = "On";
-  } else if (plugin?.installed) {
+  } else if (plugin?.installed && plugin.lifecycleState !== "retained") {
     status = "Off";
   }
 
@@ -306,7 +306,10 @@ function PluginRowControls({
 >) {
   const actions = plugin ? pluginRowActions(plugin) : null;
   const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
-  const canInstall = !plugin?.installed && (official || Boolean(plugin));
+
+  const canInstall =
+    (!plugin?.installed || plugin.lifecycleState === "retained") &&
+    (official || Boolean(plugin));
 
   return (
     <div className="flex shrink-0 items-center gap-1">
@@ -321,7 +324,7 @@ function PluginRowControls({
         </Button>
       ) : null}
       {plugin?.lifecycleState === "enabled" && !detail ? (
-        <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 font-medium text-emerald-700 text-sm dark:text-emerald-400">
+        <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 font-medium text-emerald-800 text-xs dark:text-emerald-400">
           <Tick02Icon aria-hidden="true" className="size-4" />
           Added
         </span>
@@ -364,7 +367,6 @@ function PluginInstallButton({
   return (
     <Button
       aria-label={canInstall ? `Add ${name}` : undefined}
-      className={canInstall && !detail ? "rounded-full" : undefined}
       disabled={busy}
       onClick={(event) =>
         onAction(canInstall ? "install" : "enable", event.currentTarget)
@@ -397,7 +399,13 @@ function pluginMenuActions({
   const all = [
     ["disable", "Turn off", actions?.disable],
     ["update", "Update", actions?.update || Boolean(updateVersion)],
-    ["reinstall", "Reinstall", official && plugin?.installed],
+    [
+      "reinstall",
+      "Reinstall",
+      official &&
+        (plugin?.lifecycleState === "enabled" ||
+          plugin?.lifecycleState === "disabled"),
+    ],
     ["uninstall", "Remove", actions?.uninstall],
     ["purge", "Delete saved data", actions?.purge],
     [
@@ -568,7 +576,7 @@ function PluginIcon({ icon, pluginId }: { icon?: string; pluginId: string }) {
   const Icon = pluginIcon(pluginId);
 
   return (
-    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted text-foreground">
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted text-foreground">
       {icon && icon !== failedIcon ? (
         <img
           alt=""
