@@ -216,7 +216,14 @@ function ReplaceKeyForm({
   showApiKey: boolean;
 }) {
   return (
-    <>
+    // Enter in the key field saves, like the Add provider form.
+    <form
+      className="contents"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave();
+      }}
+    >
       <DialogHeader>
         <DialogTitle>
           {instance.hasApiKey ? "Update API key" : "Add API key"} for{" "}
@@ -282,14 +289,13 @@ function ReplaceKeyForm({
         </Button>
         <Button
           disabled={busy || instance.secretSource === "environment"}
-          onClick={onSave}
-          type="button"
+          type="submit"
         >
           {busy ? <Spinner className="mr-2" /> : null}
           Save
         </Button>
       </DialogFooter>
-    </>
+    </form>
   );
 }
 
@@ -408,7 +414,8 @@ function ProviderModelsDialogShell({
   const titleRef = useRef<HTMLHeadingElement>(null);
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    // A click outside must not drop unsaved model edits.
+    <Dialog disablePointerDismissal onOpenChange={onOpenChange} open={open}>
       <DialogContent
         className="w-[min(96vw,56rem)] scroll-pb-24 grid-cols-1 sm:max-w-4xl"
         initialFocus={titleRef}

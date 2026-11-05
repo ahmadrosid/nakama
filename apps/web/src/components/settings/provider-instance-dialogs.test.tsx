@@ -86,3 +86,35 @@ test("remove lists the settings that lose their model", async () => {
 
   expect(items).toEqual(["Image parsing model"]);
 });
+
+test("submitting the key form saves the key", async () => {
+  let saves = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () =>
+    root!.render(
+      <ProviderReplaceKeyDialog
+        apiKey="sk-test"
+        busy={false}
+        dialogError={null}
+        instance={instance}
+        onApiKeyChange={() => undefined}
+        onOpenChange={() => undefined}
+        onSave={() => {
+          saves += 1;
+        }}
+        onToggleShowApiKey={() => undefined}
+        open
+        providerType="deepseek"
+        showApiKey={false}
+      />
+    )
+  );
+
+  const form = document.querySelector("#replace-api-key")?.closest("form");
+
+  await act(async () => form?.requestSubmit());
+  expect(saves).toBe(1);
+});

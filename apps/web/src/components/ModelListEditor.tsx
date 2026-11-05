@@ -142,7 +142,7 @@ export function ModelListEditor({
                       value={row.name ?? ""}
                     />
                   </InputGroup>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     {showThinking ? (
                       <span className="flex items-center gap-1.5 text-xs">
                         <Switch

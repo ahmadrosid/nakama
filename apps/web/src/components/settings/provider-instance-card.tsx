@@ -111,10 +111,12 @@ function ProviderInstanceRow({
   instance,
   card,
   canManage,
+  isDefault,
 }: {
   instance: ProviderInstanceSummary;
   card: ReturnType<typeof useProviderInstanceCard>;
   canManage: boolean;
+  isDefault: boolean;
 }) {
   const endpoint = instance.baseUrl?.trim() || null;
 
@@ -127,8 +129,13 @@ function ProviderInstanceRow({
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
       <div className="min-w-0 flex-[1_1_14rem]">
-        <p className="truncate font-medium text-foreground text-sm">
-          {instance.label}
+        <p className="flex min-w-0 items-center gap-2 font-medium text-foreground text-sm">
+          <span className="truncate">{instance.label}</span>
+          {isDefault ? (
+            <span className="shrink-0 rounded-md border border-border px-1.5 font-normal text-muted-foreground text-xs">
+              Default
+            </span>
+          ) : null}
         </p>
         <p className="flex min-w-0 flex-wrap gap-x-2 text-muted-foreground text-xs">
           <span>{providerModelCountLabel(instance.modelCount)}</span>
@@ -413,6 +420,7 @@ export function ProviderInstanceCard({
         canManage={canManage}
         card={card}
         instance={instance}
+        isDefault={isDefault}
       />
       <ProviderInstanceCardDialogs
         canManage={canManage}
