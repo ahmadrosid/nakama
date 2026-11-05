@@ -123,31 +123,29 @@ export function ModelListEditor({
             return (
               <li className="space-y-2 p-2" key={rowKey}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <InputGroup
-                    className={
-                      idLocked
-                        ? "min-w-0 basis-full bg-muted/60"
-                        : "min-w-0 basis-full"
-                    }
-                  >
-                    <InputGroupInput
-                      aria-invalid={duplicate}
-                      aria-label={`Model ID ${index + 1}`}
-                      className={
-                        idLocked
-                          ? "font-mono text-muted-foreground text-xs"
-                          : "font-mono text-xs"
-                      }
-                      disabled={disabled}
-                      onChange={(event) =>
-                        updateRow(index, { id: event.target.value })
-                      }
-                      placeholder="Model ID"
-                      readOnly={idLocked}
+                  {idLocked ? (
+                    <p
+                      className="basis-full truncate px-1 font-mono text-muted-foreground text-xs"
                       title={row.id}
-                      value={row.id}
-                    />
-                  </InputGroup>
+                    >
+                      {row.id}
+                    </p>
+                  ) : (
+                    <InputGroup className="min-w-0 basis-full">
+                      <InputGroupInput
+                        aria-invalid={duplicate}
+                        aria-label={`Model ID ${index + 1}`}
+                        className="font-mono text-xs"
+                        disabled={disabled}
+                        onChange={(event) =>
+                          updateRow(index, { id: event.target.value })
+                        }
+                        placeholder="Model ID"
+                        title={row.id}
+                        value={row.id}
+                      />
+                    </InputGroup>
+                  )}
                   <InputGroup className="min-w-0 flex-[1_1_12rem]">
                     <InputGroupInput
                       aria-label={`Display name for ${label}`}

@@ -633,12 +633,13 @@ export function ProviderRemoveDialog({
             {isDefault && !isSole
               ? `This is your default provider. ${nextDefaultLabel ?? "Another provider"} becomes the default. `
               : null}
-            Models using {label} will stop working. This cannot be undone.
+            Chats, agents and automations that use a {label} model will stop
+            working. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
         {usedBy.length > 0 ? (
           <div className="space-y-1 text-sm">
-            <p className="font-medium">These settings lose their model:</p>
+            <p className="font-medium">These settings will have no model:</p>
             <ul className="list-disc pl-5 text-muted-foreground">
               {usedBy.map((name) => (
                 <li key={name}>{name}</li>

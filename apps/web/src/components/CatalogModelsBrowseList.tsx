@@ -313,7 +313,15 @@ export function CatalogModelsBrowseList<
           isFetching={isFetching}
           onRefresh={onRefresh}
           refreshDisabled={refreshDisabled}
-          status={resolvedStatus}
+          status={
+            multiSelect && selectedRowIds.size > 0 ? (
+              <>
+                {resolvedStatus} · {selectedRowIds.size} selected
+              </>
+            ) : (
+              resolvedStatus
+            )
+          }
           toolbarDisabled={toolbarDisabled}
         />
       }
