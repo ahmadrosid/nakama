@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import type { CreateProviderRequest } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -7,6 +8,7 @@ import {
   AuthContext,
   type AuthContextValue,
 } from "@/context/auth-context-shared";
+import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import { ProviderSetupForm } from "./ProviderSetupForm";
 
 let container: HTMLDivElement;
@@ -61,4 +63,77 @@ test("setup hides the model picker and Settings keeps it", async () => {
   await renderForm(false);
   expect(container.querySelector("#model")).toBeNull();
   expect(container.querySelector("#provider")).not.toBeNull();
+});
+
+test("switching to a provider with no models does not save the last provider's model", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  queryClient.setQueryData(["models"], {
+    catalog: [
+      {
+        default: true,
+        id: "opencode-go/kimi-k2.7-code",
+        name: "Kimi",
+        provider: "opencode_go",
+      },
+    ],
+  });
+  queryClient.setQueryData(["providers"], { providers: [] });
+
+  const requests: CreateProviderRequest[] = [];
+  let form: ReturnType<typeof useProviderSetupForm> | undefined;
+
+  function Harness() {
+    form = useProviderSetupForm();
+
+    return null;
+  }
+
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The hook reads only isAuthenticated from auth. */
+            { isAuthenticated: true } as AuthContextValue
+          }
+        >
+          <AppContext.Provider
+            value={
+              /* SAFETY: The hook reads only createProvider from the app context. */
+              {
+                createProvider: (request: CreateProviderRequest) => {
+                  requests.push(request);
+
+                  return Promise.reject(new Error("stop after capture"));
+                },
+              } as never
+            }
+          >
+            <Harness />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    )
+  );
+
+  await act(async () => form?.handleProviderSelect("opencode_go"));
+  expect(form?.selectedModel).toBe("opencode-go/kimi-k2.7-code");
+
+  await act(async () => form?.handleProviderSelect("minimax"));
+  await act(async () => form?.handleApiKeyChange("test-key"));
+  await act(async () =>
+    form?.handleSubmit(
+      /* SAFETY: handleSubmit calls only preventDefault on the event. */
+      { preventDefault: () => undefined } as never
+    )
+  );
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({ type: "minimax" });
+  expect(requests[0]).not.toHaveProperty("model");
 });

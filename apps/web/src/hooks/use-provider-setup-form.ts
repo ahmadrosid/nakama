@@ -177,7 +177,11 @@ export function useProviderSetupForm(
   );
 
   useEffect(() => {
+    // No models for this provider: drop the last provider's pick, so save
+    // lets the server choose this provider's default.
     if (filteredModels.length === 0) {
+      setSelectedModel("");
+
       return;
     }
 
