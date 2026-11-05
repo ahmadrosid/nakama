@@ -5,6 +5,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  describeDevice,
   formatFutureRelativeTime,
   formatSessionRelativeTime,
 } from "@/lib/chat-history";
@@ -48,10 +49,6 @@ export function BrowserSessionsCard() {
             <p className="font-medium text-foreground text-sm">
               Active sessions
             </p>
-            <p className="text-muted-foreground text-xs">
-              Browsers currently signed in to your account. Sign out of one you
-              do not recognise.
-            </p>
             {error ? (
               <p className="text-destructive text-xs" role="status">
                 {error}
@@ -78,8 +75,13 @@ export function BrowserSessionsCard() {
             key={session.id}
           >
             <div className="min-w-0 space-y-0.5">
-              <p className="text-foreground text-sm">
-                {session.current ? "This browser" : "Another browser"}
+              <p className="flex items-center gap-2 text-foreground text-sm">
+                {describeDevice(session.userAgent)}
+                {session.current ? (
+                  <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
+                    This browser
+                  </span>
+                ) : null}
               </p>
               <p className="text-muted-foreground text-xs">
                 {describeSession(session)}
@@ -87,7 +89,7 @@ export function BrowserSessionsCard() {
             </div>
             {session.current ? null : (
               <Button
-                aria-label="Sign out this session"
+                aria-label={`Sign out ${describeDevice(session.userAgent)}, ${describeSession(session)}`}
                 disabled={revoke.isPending}
                 onClick={() => revoke.mutate(session.id)}
                 size="sm"

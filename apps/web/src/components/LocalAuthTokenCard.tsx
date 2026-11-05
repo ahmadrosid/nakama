@@ -1,6 +1,6 @@
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
-import { Spinner } from "@nakama/ui/spinner";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy01Icon, RefreshIcon } from "hugeicons-react";
 import { useState } from "react";
@@ -21,7 +21,7 @@ export function LocalAuthTokenCard() {
   const rotateMutation = useRotateLocalAuthToken();
   const [rotatedToken, setRotatedToken] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function copyToken(): Promise<void> {
     if (!rotatedToken) {
@@ -32,25 +32,19 @@ export function LocalAuthTokenCard() {
     setHint("Copied to clipboard");
   }
 
-  function handleRotate(): void {
-    setFormError(null);
+  async function handleRotate(): Promise<void> {
     setHint(null);
     setRotatedToken(null);
 
-    rotateMutation.mutate(undefined, {
-      onError: (error) => {
-        setFormError(formatError(error));
-      },
-      onSuccess: (response) => {
-        setRotatedToken(response.token);
-        setHint(
-          "New token generated. Copy it now — it will not be shown again."
-        );
-      },
-    });
+    try {
+      const response = await rotateMutation.mutateAsync();
+      setRotatedToken(response.token);
+      setHint("New token generated. Copy it now — it will not be shown again.");
+    } catch (error) {
+      // The dialog stays open and shows this message.
+      throw new Error(formatError(error));
+    }
   }
-
-  const statusLine = formError ?? hint;
 
   return (
     <Card className="w-full shadow-none">
@@ -60,40 +54,35 @@ export function LocalAuthTokenCard() {
             <p className="font-medium text-foreground text-sm">
               Local API token
             </p>
-            <p className="text-muted-foreground text-xs">
-              Used by the CLI, Telegram, and WhatsApp bridges on this machine.
-              Rotate if the token may have leaked.
-            </p>
-            {statusLine ? (
+            {hint ? (
               <p
-                className={
-                  formError
-                    ? "text-destructive text-xs"
-                    : "text-emerald-200 text-xs"
-                }
+                className="text-emerald-700 text-xs dark:text-emerald-300"
                 role="status"
               >
-                {statusLine}
+                {hint}
               </p>
             ) : null}
           </div>
           <Button
             disabled={rotateMutation.isPending}
-            onClick={handleRotate}
+            onClick={() => setConfirmOpen(true)}
             size="sm"
             type="button"
             variant="outline"
           >
-            {rotateMutation.isPending ? (
-              <Spinner />
-            ) : (
-              <>
-                <RefreshIcon aria-hidden="true" className="size-3.5" />
-                Rotate token
-              </>
-            )}
+            <RefreshIcon aria-hidden="true" className="size-3.5" />
+            Rotate token
           </Button>
         </div>
+        {confirmOpen ? (
+          <ConfirmDialog
+            confirmLabel="Rotate"
+            description="The CLI, Telegram, and WhatsApp bridges on this machine stop working until they load the new token."
+            onClose={() => setConfirmOpen(false)}
+            onConfirm={handleRotate}
+            title="Rotate the local API token?"
+          />
+        ) : null}
 
         {rotatedToken ? (
           <div className="space-y-3 px-4 py-3">

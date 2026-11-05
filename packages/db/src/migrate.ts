@@ -1614,6 +1614,7 @@ function migrateBrowserSessionsTable(db: Database): void {
       revoked_at TEXT,
       last_used_at TEXT,
       active_org_id TEXT,
+      user_agent TEXT,
       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     );
     CREATE UNIQUE INDEX IF NOT EXISTS browser_sessions_token_hash_unique
@@ -1630,6 +1631,10 @@ function migrateBrowserSessionsTable(db: Database): void {
 
   if (!columnNames.has("active_org_id")) {
     db.exec("ALTER TABLE browser_sessions ADD COLUMN active_org_id TEXT;");
+  }
+
+  if (!columnNames.has("user_agent")) {
+    db.exec("ALTER TABLE browser_sessions ADD COLUMN user_agent TEXT;");
   }
 }
 

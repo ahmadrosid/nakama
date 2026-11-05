@@ -241,6 +241,67 @@ describe("getCustomToolHandler seam", () => {
     expect(getCustomToolHandler("ruby")).toBeNull();
   });
 
+  test.each([
+    {
+      file: "marker.py",
+      handlerType: "python",
+      source: `import json, os, sys
+def run(input, context):
+    open(os.path.join(os.environ["NAKAMA_WORKSPACE_ROOT"], "ran.txt"), "w").write("ran")
+    return {}
+if __name__ == "__main__":
+    sys.stdout.write(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
+`,
+    },
+    {
+      file: "marker.js",
+      handlerType: "javascript",
+      source: `import { writeFileSync } from "node:fs";
+import path from "node:path";
+
+export async function run() {
+  writeFileSync(path.join(process.env.NAKAMA_WORKSPACE_ROOT, "ran.txt"), "ran");
+  return {};
+}
+`,
+    },
+  ])(
+    "$handlerType tools do not run on the host under the remote bash backend",
+    async ({ file, handlerType, source }) => {
+      const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+      process.env.NAKAMA_CONFIG_DIR = configDir;
+      const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
+      const wsDir = path.join(configDir, "ws");
+      await mkdir(toolsDir, { recursive: true });
+      await mkdir(wsDir, { recursive: true });
+      await writeFile(path.join(toolsDir, file), source, "utf8");
+      process.env.NAKAMA_BASH_BACKEND = "remote";
+
+      try {
+        const tool = await getCustomToolHandler(handlerType)!.load(
+          makeRecord({ handlerConfig: { modulePath: file }, handlerType })
+        );
+
+        await expect(
+          tool!.run({}, { orgId: "org_test", workspaceRoot: wsDir })
+        ).rejects.toThrow();
+        expect(await Bun.file(path.join(wsDir, "ran.txt")).exists()).toBe(
+          false
+        );
+      } finally {
+        delete process.env.NAKAMA_BASH_BACKEND;
+
+        if (originalConfigDir === undefined) {
+          delete process.env.NAKAMA_CONFIG_DIR;
+        } else {
+          process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+        }
+
+        await rm(configDir, { force: true, recursive: true });
+      }
+    }
+  );
+
   test("does not retry post-side-effect failures", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
