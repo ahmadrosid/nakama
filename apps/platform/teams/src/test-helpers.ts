@@ -32,6 +32,7 @@ export function activity(patch: Partial<TeamsActivity> = {}): TeamsActivity {
     conversationType: "personal",
     id: `act_${Math.random().toString(16).slice(2)}`,
     isBot: false,
+    mentionsBot: false,
     senderId: ALLOWED,
     tenantId: TENANT,
     text: "hello",

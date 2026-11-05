@@ -238,7 +238,6 @@ import {
   commandCodeModelSupportsVision,
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
-  NETRA_AGENT_MODEL_ID,
 } from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
@@ -364,9 +363,10 @@ import {
 import type { EphemeralSession } from "./ephemeral-session-store";
 import {
   generateImageWithOpenAI,
-  IMAGE_MODEL_REQUIRED_MESSAGE,
+  imageGenerationUnavailableMessage,
   resolveImageGenerationSelection,
 } from "./image-generation";
+import { chatgptImageInput } from "./image-generation-chatgpt";
 import {
   describeImagesWithVisionModel,
   resolvePrimaryModelVisionSupport,
@@ -1121,12 +1121,20 @@ export class AgentService {
     const selection = resolveImageGenerationSelection(this.userConfig);
 
     if (!selection) {
-      throw new NakamaApiError(IMAGE_MODEL_REQUIRED_MESSAGE, 400);
+      throw new NakamaApiError(
+        imageGenerationUnavailableMessage(this.userConfig),
+        400
+      );
     }
 
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
       baseUrl: selection.baseUrl,
+      ...chatgptImageInput(
+        selection,
+        () => this.userConfig,
+        (instanceId, oauth) => this.persistChatgptOAuth(instanceId, oauth)
+      ),
       model: selection.model,
       prompt,
       size: input.size,
@@ -4518,18 +4526,16 @@ export class AgentService {
     const model = resolveInitialModel(updated, undefined);
 
     if (updated.type === "netra") {
-      if (model !== NETRA_AGENT_MODEL_ID) {
-        throw new NakamaApiError(
-          "This Netra model needs a verified tool-turn test.",
-          400
-        );
-      }
-
-      let discovered: Awaited<ReturnType<typeof fetchNetraModels>> | null =
-        null;
+      // The full list, so a model added by hand is checked too.
+      let discovered: Awaited<
+        ReturnType<typeof fetchRemoteOpenAIModels>
+      > | null = null;
 
       try {
-        discovered = await fetchNetraModels(updated.apiKey);
+        discovered = await fetchRemoteOpenAIModels(
+          defaultDiscoveryBaseUrl("netra")!,
+          updated.apiKey
+        );
       } catch (error) {
         if (error instanceof NakamaApiError && error.status === 400) {
           throw error;

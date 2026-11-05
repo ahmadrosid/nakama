@@ -19,6 +19,7 @@ export async function createApiError(
   const details = await readApiErrorDetails(response);
 
   return new NakamaApiError(details.message, response.status, path, undefined, {
+    code: details.code,
     totpEnabled: details.totpEnabled,
   });
 }

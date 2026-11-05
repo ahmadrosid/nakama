@@ -216,6 +216,78 @@ describe("WorkerManagerService", () => {
       }
     });
 
+    test("keeps PM2 process keys out of the worker env", async () => {
+      const pm2Keys = {
+        _km_monitored: "true",
+        args: "run start",
+        cron_restart: "0 4 * * *",
+        cwd: "/srv/nakama",
+        exec_mode: "fork_mode",
+        kill_timeout: "3000",
+        km_link: "false",
+        max_restarts: "10",
+        name: "nakama",
+        namespace: "default",
+        pm_cwd: "/srv/nakama",
+        pm_exec_path: "/usr/local/bin/bun",
+        pm_id: "17",
+        status: "online",
+        uid: "1000",
+        updateEnv: "true",
+      };
+
+      const operatorEnv = { app_env: "prod", db_name: "nakama" };
+
+      const previous = new Map(
+        [...Object.keys(pm2Keys), ...Object.keys(operatorEnv), "PWD"].map(
+          (key) => [key, process.env[key]]
+        )
+      );
+
+      async function startedEnv() {
+        const pm2 = createMockPm2();
+        await new WorkerManagerService(projectRoot, pm2).startWorker(
+          "telegram"
+        );
+
+        // SAFETY: startWorker completes the mock's single start call.
+        const options = (pm2.start as ReturnType<typeof mock>).mock.calls[0][0];
+
+        return prepareAppConf({ cwd: projectRoot }, { ...options }).env;
+      }
+
+      try {
+        Object.assign(process.env, pm2Keys, operatorEnv);
+        process.env.PWD = "/srv/previous-worker";
+
+        const underPm2 = await startedEnv();
+
+        expect(Object.keys(pm2Keys).filter((key) => key in underPm2)).toEqual(
+          []
+        );
+        expect(underPm2.db_name).toBe("nakama");
+        expect(underPm2.app_env).toBe("prod");
+        expect(underPm2.PWD).toBe(projectRoot);
+
+        delete process.env.pm_id;
+        process.env.PWD = "/srv/previous-worker";
+
+        const local = await startedEnv();
+
+        expect(Object.keys(pm2Keys).filter((key) => key in local)).toEqual([]);
+        expect(local.db_name).toBe("nakama");
+        expect(local.PWD).toBe(projectRoot);
+      } finally {
+        for (const [key, value] of previous) {
+          if (value === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = value;
+          }
+        }
+      }
+    });
+
     test("rejects an unscoped whatsapp worker when org accounts exist", async () => {
       await saveWhatsAppConfig({ profileId: "well-test" }, "org_a");
       await saveWhatsAppConfig({ profileId: "finance" }, "org_b");

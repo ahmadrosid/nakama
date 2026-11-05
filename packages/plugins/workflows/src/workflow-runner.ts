@@ -90,6 +90,13 @@ export class WorkflowRunner {
         { output }
       );
 
+      if (completedRun.status === "failed") {
+        return {
+          error: completedRun.error ?? "Workflow run failed.",
+          runId: run.id,
+        };
+      }
+
       return { output: completedRun.output ?? output, runId: run.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

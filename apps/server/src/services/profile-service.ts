@@ -78,6 +78,7 @@ import {
 import {
   BASH_TOOL_ID,
   BUILTIN_TOOL_IDS,
+  GENERATE_IMAGE_TOOL_ID,
   isProtectedToolId,
   SAVE_ARTIFACT_TOOL_ID,
 } from "@nakama/core/tools/protected";
@@ -224,6 +225,7 @@ const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.knowledge_base_search,
   BUILTIN_TOOL_IDS.web_fetch,
   SAVE_ARTIFACT_TOOL_ID,
+  GENERATE_IMAGE_TOOL_ID,
 ] as const;
 
 const SOUL_FILE_KEY_BY_NAME = {

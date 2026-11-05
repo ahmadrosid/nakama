@@ -2216,3 +2216,57 @@ test("upgrades drop the removed token optimiser table and column", () => {
     db.close();
   }
 });
+
+describe("generate_image default-on migration", () => {
+  const seedProfileAndTool = (db: Database) => {
+    db.prepare(
+      `INSERT INTO profiles (id, name, system_prompt, model, is_super, created_at, updated_at)
+      VALUES ('ops', 'ops', '', NULL, 0, '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z')`
+    ).run();
+    db.prepare(
+      `INSERT INTO tools (id, name, description, handler_type, created_at, updated_at)
+      VALUES ('tool_generate_image', 'generate_image', 'image', 'generate_image', '2026-10-16T00:00:00.000Z', '2026-10-16T00:00:00.000Z')`
+    ).run();
+  };
+
+  const opsHasTool = (db: Database) =>
+    db
+      .prepare(
+        "SELECT 1 FROM profile_tools WHERE profile_id = 'ops' AND tool_id = 'tool_generate_image'"
+      )
+      .get() !== null;
+
+  test("gives existing agents the tool once, and a later removal stays", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      // A database from before the migration: agents, no marker.
+      db.exec("DROP TABLE applied_data_migrations");
+      seedProfileAndTool(db);
+
+      migrateDatabase(db);
+      expect(opsHasTool(db)).toBe(true);
+
+      db.exec("DELETE FROM profile_tools WHERE profile_id = 'ops'");
+      migrateDatabase(db);
+      expect(opsHasTool(db)).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("a fresh database only records the marker", () => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      seedProfileAndTool(db);
+
+      migrateDatabase(db);
+      expect(opsHasTool(db)).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+});

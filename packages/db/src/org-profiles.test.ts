@@ -7,6 +7,7 @@ import {
 import { createInMemoryDatabaseAdapter } from "./index";
 import {
   ensureBundledSkillsAssigned,
+  ensureGenerateImageToolDefinition,
   ensureOrgSuperNakamaProfiles,
   seedOrgDefaultProfile,
   seedOrgSuperNakamaProfile,
@@ -408,4 +409,19 @@ test("shared listing is seeded and assigned to fresh profiles, without restoring
       )
     ).toBe(true);
   }
+});
+
+describe("generate_image on by default", () => {
+  const toolIdsOf = async (
+    db: ReturnType<typeof createInMemoryDatabaseAdapter>,
+    profileId: string
+  ) => (await db.listToolsForProfile(profileId)).map((tool) => tool.id);
+
+  test("a new default profile gets generate_image", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureGenerateImageToolDefinition(db);
+    const profile = await seedOrgDefaultProfile(db, "org_a");
+
+    expect(await toolIdsOf(db, profile.id)).toContain(GENERATE_IMAGE_TOOL_ID);
+  });
 });

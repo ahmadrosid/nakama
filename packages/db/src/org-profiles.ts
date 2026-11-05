@@ -38,6 +38,12 @@ export async function ensureProfileDefaultBuiltinTools(
   if (await db.getTool(SAVE_ARTIFACT_TOOL_ID)) {
     await db.assignToolToProfile(profileId, SAVE_ARTIFACT_TOOL_ID);
   }
+
+  // Only on a new profile: this runs on every boot, and an admin who removed
+  // the tool must not get it back.
+  if (!existingProfile && (await db.getTool(GENERATE_IMAGE_TOOL_ID))) {
+    await db.assignToolToProfile(profileId, GENERATE_IMAGE_TOOL_ID);
+  }
 }
 
 export async function ensureProfileDefaultBundledSkills(
@@ -206,7 +212,7 @@ export async function ensureGenerateImageToolDefinition(
   await db.upsertTool({
     createdAt: existing?.createdAt ?? now,
     description:
-      "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves under artifacts/ with a metadata sidecar.",
+      "Generate an image from a text prompt using the workspace image model. Saves under artifacts/ with a metadata sidecar.",
     handlerConfig: {},
     handlerType: "generate_image",
     id: GENERATE_IMAGE_TOOL_ID,

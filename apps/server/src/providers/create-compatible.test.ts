@@ -10,11 +10,14 @@ afterEach(() => {
 });
 
 describe("compatible provider routing", () => {
-  test("allows verified Netra V4.1 and maps retired selections", () => {
+  test("allows Netra V4.1, a model added by hand and retired selections", () => {
     const instance: ProviderInstance = {
       apiKey: "test-key",
       createdAt: "2026-10-05T00:00:00.000Z",
-      customModels: [{ id: "deepseek/deepseek-v4.1-flash" }],
+      customModels: [
+        { id: "deepseek/deepseek-v4.1-flash" },
+        { id: "hand-added-model" },
+      ],
       id: "netra-1",
       label: "Netra Runtime",
       type: "netra",
@@ -23,13 +26,10 @@ describe("compatible provider routing", () => {
     for (const model of [
       "deepseek/deepseek-v4.1-flash",
       "deepseek/deepseek-v4-flash-0731",
+      "hand-added-model",
     ]) {
       expect(createProviderForInstance(instance, model)?.name).toBe("netra");
     }
-
-    expect(() =>
-      createProviderForInstance(instance, "unverified-model")
-    ).toThrow();
   });
 
   test.each([

@@ -246,6 +246,32 @@ describe("WorkerManagerService", () => {
       expect(mockPm2.start).not.toHaveBeenCalled();
     });
 
+    test("restarts an online worker that an older server started", async () => {
+      await setWorkerDesiredRunning("automation", true);
+
+      for (const [env, starts] of [
+        [{}, 1],
+        [{ NAKAMA_WORKER_ENV: "2" }, 0],
+      ] as const) {
+        const mockPm2 = createMockPm2();
+        mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>
+          cb(null, [
+            {
+              name: "automation",
+              pm2_env: { ...env, pm_uptime: Date.now(), status: "online" },
+            },
+          ])
+        );
+
+        await new WorkerManagerService(
+          projectRoot,
+          mockPm2
+        ).recoverDesiredWorkers();
+
+        expect(mockPm2.start).toHaveBeenCalledTimes(starts);
+      }
+    });
+
     test("recovery does not start over a live manual owner", async () => {
       const owner = { orgId: "org_a", profileId: "agent_a" };
       await saveWhatsAppConfig({}, owner);

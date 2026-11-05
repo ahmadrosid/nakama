@@ -10,7 +10,14 @@
  * If the cassette is missing and no API key is available, the test is skipped.
  */
 import { expect, test } from "bun:test";
-import { loadUserConfig } from "@nakama/core";
+import {
+  applyChatgptOAuthToInstance,
+  type ChatgptOAuthCredentials,
+  loadUserConfig,
+  readChatgptOAuthFromInstance,
+  saveUserConfig,
+} from "@nakama/core";
+import { z } from "zod";
 import { readApiKeyForInstance } from "../providers/create";
 import {
   cassetteFilePath,
@@ -79,3 +86,89 @@ test("generates a non-empty png via Images API under cassette replay", async () 
     expect(result.data[1]).toBe(0x50);
   }
 });
+
+const chatgptCassetteName = "image-generation-chatgpt";
+
+/** 1x1 transparent PNG: keeps the cassette small. */
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+/** Swaps the image for a tiny PNG and drops the ChatGPT user id. */
+function shrinkChatgptImageStream<T>(body: T): T | string {
+  const text = z.string().safeParse(body);
+
+  if (!text.success) {
+    return body;
+  }
+
+  return text.data
+    .replaceAll(/"result":"[^"]*"/g, `"result":"${TINY_PNG_BASE64}"`)
+    .replaceAll(
+      /"safety_identifier":"[^"]*"/g,
+      '"safety_identifier":"redacted"'
+    );
+}
+
+test("generates a png through the ChatGPT image tool under cassette replay", async () => {
+  const cassettePath = cassetteFilePath(chatgptCassetteName);
+  const existing = await loadCassette(cassettePath);
+  const config = existing ? null : await loadUserConfig();
+
+  const instance =
+    config?.providers.find((provider) => provider.type === "chatgpt") ?? null;
+
+  const oauth = existing
+    ? {
+        accessToken: "cassette-replay-token",
+        accountId: "cassette-account",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        refreshToken: "cassette-refresh",
+      }
+    : instance && readChatgptOAuthFromInstance(instance);
+
+  if (!oauth) {
+    console.warn(
+      `Skipping ${chatgptCassetteName}: no cassette at ${cassettePath} and no connected ChatGPT provider.`
+    );
+
+    return;
+  }
+
+  // Recording uses the real sign-in. A refresh token works once, so a
+  // rotated one must be saved or the local ChatGPT provider stops working.
+  const saveRecordedOAuth = async (next: ChatgptOAuthCredentials) => {
+    if (config && instance) {
+      await saveUserConfig({
+        ...config,
+        providers: config.providers.map((provider) =>
+          provider.id === instance.id
+            ? applyChatgptOAuthToInstance(provider, next)
+            : provider
+        ),
+      });
+    }
+  };
+
+  const result = await withMswCassette(
+    chatgptCassetteName,
+    () =>
+      generateImageWithOpenAI({
+        apiKey: oauth.accessToken,
+        chatgpt: { oauth, onTokenRefresh: saveRecordedOAuth },
+        model: "gpt-6-sol",
+        prompt: "A tiny red circle on white background, minimal",
+        size: "1024x1024",
+      }),
+    {
+      redactResponse: shrinkChatgptImageStream,
+      url: "https://chatgpt.com/backend-api/codex/responses",
+    }
+  );
+
+  expect(result.model).toBe("gpt-6-sol");
+  expect(result.mediaType).toBe("image/png");
+  expect(result.data[0]).toBe(0x89);
+  expect(result.data[1]).toBe(0x50);
+  expect(result.usage?.outputTokens).toBeGreaterThan(0);
+  // Recording waits on a real generation (25-80s).
+}, 180_000);

@@ -372,6 +372,12 @@ class WorkflowRunner {
     try {
       const output = await this.executeWorkflow(orgId, workflow, run.id, runtimeInput);
       const completedRun = await this.workflowService.completeRun(run.id, workflowId, { output });
+      if (completedRun.status === "failed") {
+        return {
+          error: completedRun.error ?? "Workflow run failed.",
+          runId: run.id
+        };
+      }
       return { output: completedRun.output ?? output, runId: run.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -580,7 +586,7 @@ class WorkflowService {
         throw new Error("Workflow is running.");
       }
       return this.db.query("DELETE FROM workflows WHERE id = ?").run(id).changes > 0;
-    })();
+    }).immediate();
   }
   expireRuns() {
     this.db.transaction(() => {
@@ -594,7 +600,7 @@ class WorkflowService {
         };
         this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?").run(JSON.stringify(data), row.id);
       }
-    })();
+    }).immediate();
   }
   async listRuns(workflowId) {
     this.expireRuns();
@@ -633,7 +639,7 @@ class WorkflowService {
       }
       this.db.query("INSERT INTO runs VALUES (?, ?, ?, ?)").run(run.id, workflowId, JSON.stringify(run), Date.now() + 300000);
       this.db.query("UPDATE workflows SET data = json_set(data, '$.lastRunAt', ?) WHERE id = ?").run(run.startedAt, workflowId);
-    })();
+    }).immediate();
     return run;
   }
   async createRunStep(runId, step, position) {
@@ -674,7 +680,14 @@ class WorkflowService {
       completedAt: new Date().toISOString(),
       status: result.error ? "failed" : "completed"
     };
-    this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?").run(JSON.stringify(run), id);
+    const { changes } = this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ? AND lease_until IS NOT NULL").run(JSON.stringify(run), id);
+    if (!changes) {
+      const stored = this.db.query("SELECT data FROM runs WHERE id = ?").get(id);
+      if (!stored) {
+        throw new Error("Workflow run not found.");
+      }
+      return { ...JSON.parse(stored.data), steps: this.steps(id) };
+    }
     return { ...run, steps: this.steps(id) };
   }
   importLegacy(workflows) {
@@ -712,7 +725,7 @@ class WorkflowService {
       }
       this.db.query("INSERT INTO metadata VALUES ('legacy_imported', 'true')").run();
       return { imported };
-    })();
+    }).immediate();
   }
 }
 

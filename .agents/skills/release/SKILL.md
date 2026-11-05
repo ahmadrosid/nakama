@@ -99,12 +99,10 @@ Run every `gh` call outside the sandbox. Prefer `gh api` (REST) to `gh pr` /
     and the Detail column. "Host operation ensure is running" and "Waiting
     for another replacement on this host" are normal. Stop and tell the user
     if a row says failed or rolled back.
-11. **Validate on the canary.**
-    ```bash
-    curl -s https://nakama.withnakama.com/health   # "version" must be X.Y.Z
-    ```
-    Then in BrowserOS open `https://nakama.withnakama.com/`, open the account
-    menu, and check that the footer shows `Nakama X.Y.Z` and **What's new**
+11. **Validate on the canary.** In BrowserOS open
+    `https://nakama.withnakama.com/` and reload until the canary serves the
+    new version. Open the account menu, and check that the footer shows
+    `Nakama X.Y.Z` and **What's new**
     links to `releases/tag/vX.Y.Z`. Check any feature in this release that is
     visible on that page. Take a screenshot.
 12. **Finish.** Wait for "Complete" and N of N updated before you report.
