@@ -82,6 +82,10 @@ import type {
   StoredSkillUsageRecord,
 } from "@nakama/db";
 import { z } from "zod";
+import {
+  REMOTE_BACKEND_HOST_CODE_REFUSAL,
+  resolveBashBackend,
+} from "../tools/bash-config";
 import { isCloudBrowserRuntime } from "./agent-browser-service";
 import { loadJavascriptSkillTool } from "./javascript-tool-loader";
 import type { PluginService } from "./plugin-service";
@@ -2015,6 +2019,8 @@ export class SkillsService {
       return true;
     };
 
+    const remoteBackend = resolveBashBackend() === "remote";
+
     const loadable: typeof assigned = [];
 
     const blocked: Array<{
@@ -2024,6 +2030,19 @@ export class SkillsService {
 
     for (const item of assigned) {
       if (isPluginOwnedSkill(item.record)) {
+        continue;
+      }
+
+      // Review approves code for the host, but under the remote backend only
+      // code the operator installed may run there.
+      if (
+        remoteBackend &&
+        !isGlobalSkillSourcePath(item.discovered.directory)
+      ) {
+        blocked.push({
+          discovered: item.discovered,
+          reason: REMOTE_BACKEND_HOST_CODE_REFUSAL,
+        });
         continue;
       }
 
@@ -2122,9 +2141,10 @@ export class SkillsService {
     // A profile that already holds a host shell gets a runner for each skill
     // whose Python no harness reaches, so nothing runs here that the profile
     // could not already run through bash. A shared skill executes for another
-    // org's profile, whose tools this one does not see, so it gets none.
+    // org's profile, whose tools this one does not see, so it gets none. Under
+    // the remote backend bash is not a host shell, so no profile gets one.
     const runners =
-      !sharedContext &&
+      !(sharedContext || remoteBackend) &&
       (await this.db.listToolsForProfile(profileId)).some(
         (tool) => tool.handlerType === "bash"
       )

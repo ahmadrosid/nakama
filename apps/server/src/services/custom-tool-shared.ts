@@ -19,6 +19,10 @@ import {
 } from "@nakama/core";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { z } from "zod";
+import {
+  REMOTE_BACKEND_HOST_CODE_REFUSAL,
+  resolveBashBackend,
+} from "../tools/bash-config";
 import { type ManagedSecrets, toolSecretEnvName } from "./managed-secrets";
 
 const CREDENTIAL_SECTION_PREFIX = "tool-key.";
@@ -688,6 +692,10 @@ export async function loadCustomSubprocessTool(options: {
 
       if (!record.orgId || record.orgId !== context.orgId) {
         throw new Error("Tool not available in this organization.");
+      }
+
+      if (resolveBashBackend() === "remote") {
+        throw new Error(REMOTE_BACKEND_HOST_CODE_REFUSAL);
       }
 
       const needsCredentials = config.requiresApiKey || config.env.length > 0;
