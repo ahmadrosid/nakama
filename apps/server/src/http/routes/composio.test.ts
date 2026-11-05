@@ -77,7 +77,8 @@ async function createApp(client = createMockClient()) {
 /** Enable Gmail as admin, then connect as `role` while Composio throws `linkError`. */
 async function connectWhenLinkFails(
   role: "admin" | "member",
-  linkError: Error
+  linkError: Error,
+  connectPath = "/v1/composio/toolkits/gmail/connect"
 ) {
   const { app, databaseAdapter } = await createApp({
     ...createMockClient(),
@@ -139,7 +140,7 @@ async function connectWhenLinkFails(
     );
   }
 
-  return post("/v1/composio/toolkits/gmail/connect", session, {
+  return post(connectPath, session, {
     callbackOrigin: "http://localhost:3003",
   });
 }
@@ -435,6 +436,20 @@ describe("composio routes", () => {
 
     expect(memberBody.error).not.toContain("Some_Other_Error");
     expect(adminBody.error).toContain("Some_Other_Error");
+  });
+
+  test("meet connect also hides raw Composio errors from members", async () => {
+    const response = await connectWhenLinkFails(
+      "member",
+      OTHER_COMPOSIO_ERROR,
+      "/v1/composio/meet/gmail/connect"
+    );
+
+    // SAFETY: errorResponse writes `{ error }` for this route.
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).not.toContain("Some_Other_Error");
   });
 
   test("oauth callback does not require a browser session", async () => {

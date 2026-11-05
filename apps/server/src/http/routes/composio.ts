@@ -25,6 +25,24 @@ import {
 } from "../shared";
 import type { HonoApp } from "../types";
 
+/** Raw Composio errors are for org admins only. Members get a plain message. */
+function connectErrorResponse(error: Error, isOrgAdmin: boolean): Response {
+  if (error instanceof NakamaApiError) {
+    return errorResponse(error.message, error.status, { code: error.code });
+  }
+
+  if (isOrgAdmin) {
+    return errorResponse(error.message, 400);
+  }
+
+  console.error("[composio] connect failed", { error: error.message });
+
+  return errorResponse(
+    "Composio could not start sign-in. Ask an org admin to check the Composio setup.",
+    400
+  );
+}
+
 export function registerComposioOAuthRoutes(
   app: HonoApp,
   options: ServerOptions
@@ -164,13 +182,9 @@ export function registerComposioRoutes(
         )
       );
     } catch (error) {
-      if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status);
-      }
-
-      return errorResponse(
-        error instanceof Error ? error.message : String(error),
-        400
+      return connectErrorResponse(
+        error instanceof Error ? error : new Error(String(error)),
+        auth.orgRole === "admin"
       );
     }
   });
@@ -202,24 +216,9 @@ export function registerComposioRoutes(
         )
       );
     } catch (error) {
-      if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status, {
-          code: error.code,
-        });
-      }
-
-      const message = error instanceof Error ? error.message : String(error);
-
-      if (auth.orgRole === "admin") {
-        return errorResponse(message, 400);
-      }
-
-      // Raw Composio errors are for admins only.
-      console.error("[composio] connect failed", { error: message });
-
-      return errorResponse(
-        "Composio could not start sign-in. Ask an org admin to check the Composio setup.",
-        400
+      return connectErrorResponse(
+        error instanceof Error ? error : new Error(String(error)),
+        auth.orgRole === "admin"
       );
     }
   });
