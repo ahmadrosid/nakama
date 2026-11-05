@@ -66,6 +66,7 @@ That is the whole setup. Ask the agent to check your inbox and it will.
 | The agent never mentions the app at all | The app was enabled, but not given to this agent | Press the profiles button on the app's row and tick that agent |
 | Composio says "not reachable" on the Composio card | The API key is saved but Composio is not answering | Check the key, and check that the server has internet access |
 | On Telegram or WhatsApp, the agent says it cannot start the sign-in | The sign-in link would point at the server's own machine, which your phone cannot open | Set **Settings → Workspace → Preferences → Public web URL**, then restart the channel |
+| **Connect** says the app needs a custom auth config | Composio has no shared sign-in for this app, for example Google Forms | An org admin creates a custom auth config for the app in the Composio project, then presses **Connect** again |
 
 ## Who can do what
 
@@ -86,7 +87,7 @@ For anyone who wants the mechanics rather than the steps.
 
 - Nakama talks to Composio through the `@composio/core` SDK, and the agent reaches the tools over an MCP session that Composio hosts.
 - An API key saved through **Settings → Integrations → Composio** is stored as `api_key` in `~/.nakama/composio/config.ini` on the server. `COMPOSIO_API_KEY` and `COMPOSIO_API_KEY_FILE` keep it outside that file.
-- Nakama creates the Composio auth config for a toolkit the first time somebody connects it, which is why the Google Cloud project and consent screen walkthrough in Composio's own documentation does not apply here.
+- Nakama creates the Composio auth config for a toolkit the first time somebody connects it, which is why the Google Cloud project and consent screen walkthrough in Composio's own documentation does not apply here. The exception is an app with no Composio managed credentials, such as Google Forms. For that app, an org admin creates a custom auth config in Composio first.
 - An agent never sees hundreds of tools at once. It gets two, `composio__search_actions` to find an action and `composio__invoke_action` to run it, so the prompt stays the same size no matter how large the toolkit is. When an account is not connected it also gets `composio__connect_account`, which produces a sign-in link the agent can paste into the reply.
 - Each member's connection lives in `composio_user_connections`, and the Composio user id is `nakama:user:{userId}`. Web chat resolves tools against the connection of the person talking. On Telegram, WhatsApp, Discord, and CLI, it uses the connection of the earliest org admin.
 - The sign-in callback (`/v1/composio/oauth/callback`) is public, because Composio redirects a browser there with no Nakama session.

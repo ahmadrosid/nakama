@@ -1,7 +1,9 @@
 import {
   type AgentChannel,
+  COMPOSIO_CUSTOM_AUTH_REQUIRED,
   COMPOSIO_TOOLKIT_SLUG_PATTERN,
   type ComposioToolErrorResult,
+  NakamaApiError,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -387,8 +389,15 @@ export async function buildComposioConnectTools(
           const message =
             error instanceof Error ? error.message : String(error);
 
+          // A retry cannot fix a missing auth config. Only an admin can.
+          const customAuth =
+            error instanceof NakamaApiError &&
+            error.code === COMPOSIO_CUSTOM_AUTH_REQUIRED;
+
           return {
-            code: "COMPOSIO_TRANSIENT",
+            code: customAuth
+              ? COMPOSIO_CUSTOM_AUTH_REQUIRED
+              : "COMPOSIO_TRANSIENT",
             error: message,
             toolkitSlug,
           } satisfies ComposioToolErrorResult;

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { COMPOSIO_CUSTOM_AUTH_REQUIRED, NakamaApiError } from "@nakama/core";
 import {
   buildComposioConnectTools,
   buildComposioToolDefinitions,
@@ -762,6 +763,66 @@ describe("composio-tool-bridge", () => {
     expect(result).toMatchObject({
       displayName: "Gmail",
       redirectUrl: "https://oauth.example.com/authorize",
+      toolkitSlug: "gmail",
+    });
+  });
+
+  test("connect tool reports a missing auth config as its own code", async () => {
+    const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
+      async connectToolkit() {
+        throw new NakamaApiError(
+          "No managed auth.",
+          422,
+          undefined,
+          undefined,
+          {
+            code: COMPOSIO_CUSTOM_AUTH_REQUIRED,
+          }
+        );
+      },
+      async getAssignedToolkitRecords() {
+        return [
+          {
+            allowedActions: null,
+            orgToolkit: {
+              cachedTools: [
+                {
+                  description: "Send",
+                  inputSchema: { properties: {}, type: "object" },
+                  name: "Send Email",
+                  slug: "GMAIL_SEND_EMAIL",
+                },
+              ],
+              createdAt: "2026-01-01T00:00:00.000Z",
+              displayName: "Gmail",
+              id: "ctk_1",
+              lastError: null,
+              orgId: "org_1",
+              status: "enabled",
+              toolkitSlug: "gmail",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+            userConnection: null,
+          },
+        ];
+      },
+      isAvailable: async () => true,
+    };
+
+    const tools = await buildComposioConnectTools(
+      "org_1",
+      "usr_1",
+      "profile_1",
+      composioService
+    );
+
+    const result = await tools[0]?.run(
+      { toolkit_slug: "gmail" },
+      { clientOrigin: "https://nakama.example.com" }
+    );
+
+    expect(result).toMatchObject({
+      code: COMPOSIO_CUSTOM_AUTH_REQUIRED,
       toolkitSlug: "gmail",
     });
   });

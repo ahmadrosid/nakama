@@ -3393,6 +3393,7 @@ export type ComposioUserConnectionStatus =
   | "error";
 
 export type ComposioToolErrorCode =
+  | "COMPOSIO_CUSTOM_AUTH_REQUIRED"
   | "COMPOSIO_NOT_CONNECTED"
   | "COMPOSIO_TRANSIENT"
   | "COMPOSIO_POLICY";
