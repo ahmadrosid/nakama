@@ -205,13 +205,9 @@ function UserContextStatusCopy({
     );
   }
 
-  return (
-    <p className="text-muted-foreground text-xs">
-      {isActive
-        ? "USER.md is set for this org"
-        : "Answer a few questions so replies fit how you work"}
-    </p>
-  );
+  return isActive ? (
+    <p className="text-muted-foreground text-xs">Set for this org</p>
+  ) : null;
 }
 
 /** USER.md row for settings and the setup wizard. Render inside a parent card. */

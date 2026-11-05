@@ -69,7 +69,7 @@ function MfaSettingsContent({
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="font-medium text-foreground text-sm">
-              Multi Factor Authentication
+              Multi-factor authentication
             </p>
             <p className="text-muted-foreground text-xs">
               Choose a passkey or authenticator app to protect this account.

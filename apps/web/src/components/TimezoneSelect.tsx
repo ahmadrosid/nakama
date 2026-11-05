@@ -164,7 +164,7 @@ function TimezoneSelectTrigger({
 }) {
   return (
     <PopoverTrigger
-      aria-label="Select timezone"
+      aria-label={`Timezone: ${timezoneTriggerLabel({ loading, selectedLabel, unavailable })}`}
       className={cn(
         "flex h-8 w-full cursor-pointer select-none items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
         !value?.trim() && allowAccountDefault && "text-muted-foreground",

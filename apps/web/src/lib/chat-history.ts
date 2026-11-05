@@ -873,3 +873,39 @@ function formatRelativeTime(value: string, tense: "past" | "future"): string {
 
   return formatSessionTimestamp(value);
 }
+
+const BROWSER_PATTERNS: [RegExp, string][] = [
+  [/Edg\//, "Edge"],
+  [/OPR\//, "Opera"],
+  [/Firefox\//, "Firefox"],
+  [/Chrome\//, "Chrome"],
+  [/Safari\//, "Safari"],
+];
+
+const OS_PATTERNS: [RegExp, string][] = [
+  [/iPhone|iPad/, "iOS"],
+  [/Android/, "Android"],
+  [/Mac OS X|Macintosh/, "macOS"],
+  [/Windows/, "Windows"],
+  [/CrOS/, "ChromeOS"],
+  [/Linux/, "Linux"],
+];
+
+/** "Chrome on macOS" from a User-Agent, so two sessions can be told apart. */
+export function describeDevice(userAgent: string | null): string {
+  if (!userAgent) {
+    return "Unknown browser";
+  }
+
+  const browser = BROWSER_PATTERNS.find(([pattern]) =>
+    pattern.test(userAgent)
+  )?.[1];
+
+  const os = OS_PATTERNS.find(([pattern]) => pattern.test(userAgent))?.[1];
+
+  if (browser && os) {
+    return `${browser} on ${os}`;
+  }
+
+  return browser ?? os ?? "Unknown browser";
+}
