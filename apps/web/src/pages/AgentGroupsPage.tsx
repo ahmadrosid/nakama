@@ -136,7 +136,7 @@ function FloatingExample() {
         <p>
           <span className="block font-semibold">Writer</span>Draft done. 140
           words, ready for review.
-          <span className="mt-1 block font-medium text-primary text-xs">
+          <span className="mt-1 block font-medium text-amber-800 text-xs dark:text-primary">
             2 replies in thread
           </span>
         </p>

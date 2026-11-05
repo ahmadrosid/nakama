@@ -214,7 +214,7 @@ export function VersionSettingsRow({
           <UpgradeMessage status={status} />
         </div>
         <div className="flex items-center gap-2">
-          <p className="font-mono text-muted-foreground text-sm tabular-nums">
+          <p className="font-mono text-foreground/70 text-sm tabular-nums">
             {version}
           </p>
           {canCheck ? (

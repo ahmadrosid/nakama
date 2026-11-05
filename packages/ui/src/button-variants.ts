@@ -22,7 +22,7 @@ export const buttonVariants = cva(
       },
       variant: {
         default:
-          "bg-primary text-primary-foreground disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 [a]:hover:bg-primary/80",
+          "bg-primary text-primary-foreground disabled:bg-primary/15 disabled:text-amber-800 disabled:opacity-100 dark:disabled:text-primary [a]:hover:bg-primary/80",
         destructive:
           "bg-destructive/10 text-red-700 hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:text-destructive dark:focus-visible:ring-destructive/40 dark:hover:bg-destructive/30",
         ghost:

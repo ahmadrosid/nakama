@@ -223,7 +223,7 @@ function PluginIdentity({
         >
           {name}
           {!detail && plugin?.selectedVersion ? (
-            <span className="ml-2 font-mono font-normal text-[11px] text-muted-foreground">
+            <span className="ml-2 font-mono font-normal text-[11px] text-foreground/70">
               {plugin.selectedVersion.split("+")[0]}
             </span>
           ) : null}
