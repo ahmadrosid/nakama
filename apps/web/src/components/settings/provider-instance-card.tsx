@@ -21,6 +21,17 @@ import {
   CHATGPT_SIGN_IN,
   XAI_SIGN_IN,
 } from "@/components/subscription-sign-in.shared";
+import {
+  useImageGenerationSettings,
+  useModelsQuery,
+  useTranscriptionSettings,
+  useVisionSettings,
+} from "@/hooks/use-app-queries";
+import {
+  decodeModelSelection,
+  groupModelsByProvider,
+  profileModelSelectionValue,
+} from "@/lib/models";
 
 function ProviderActionButton({
   label,
@@ -255,23 +266,62 @@ function ProviderKeyDialog({
 function ProviderInstanceCardDialogs({
   card,
   instance,
+  isDefault,
   isSole,
   canManage,
 }: {
   card: ReturnType<typeof useProviderInstanceCard>;
   instance: ProviderInstanceSummary;
+  isDefault: boolean;
   isSole: boolean;
   canManage: boolean;
 }) {
+  const { data: modelsResponse } = useModelsQuery();
+  const { data: vision } = useVisionSettings();
+  const { data: transcription } = useTranscriptionSettings();
+  const { data: imageGeneration } = useImageGenerationSettings();
+  const groups = groupModelsByProvider(modelsResponse?.models ?? []);
+
+  // Settings that pick a model from this provider lose it on remove.
+  const settingModels: Array<[string, string | null | undefined]> = [
+    ["Image parsing model", vision?.model],
+    ["Audio transcription model", transcription?.model],
+    ["Image generation model", imageGeneration?.model],
+  ];
+
+  // With no model saved, images come from a connected ChatGPT. Removing the
+  // last one leaves image generation with no provider.
+  const lastChatgpt =
+    instance.type === "chatgpt" &&
+    !groups.some(
+      (group) =>
+        group.providerId !== instance.id &&
+        group.models.some((model) => model.provider === "chatgpt")
+    );
+
+  const usedBy = settingModels.flatMap(([name, model]) => {
+    if (!model) {
+      return name === "Image generation model" && lastChatgpt ? [name] : [];
+    }
+
+    const resolved = decodeModelSelection(
+      profileModelSelectionValue(model, groups)
+    );
+
+    return resolved?.providerId === instance.id ? [name] : [];
+  });
+
   return (
     <>
       <ProviderRemoveDialog
         busy={card.busy}
+        isDefault={isDefault}
         isSole={isSole}
         label={instance.label}
         onConfirm={() => void card.handleDelete()}
         onOpenChange={card.setDeleteOpen}
         open={card.deleteOpen}
+        usedBy={usedBy}
       />
 
       <ProviderKeyDialog card={card} instance={instance} />
@@ -328,6 +378,7 @@ export function ProviderInstanceCard({
   onDelete,
   onManage,
   onError,
+  isDefault = false,
   isSole = false,
 }: {
   instance: ProviderInstanceSummary;
@@ -342,6 +393,7 @@ export function ProviderInstanceCard({
     action: "clear" | "use-stored"
   ) => Promise<void>;
   onError: (error: string | null) => void;
+  isDefault?: boolean;
   isSole?: boolean;
 }) {
   const card = useProviderInstanceCard({
@@ -366,6 +418,7 @@ export function ProviderInstanceCard({
         canManage={canManage}
         card={card}
         instance={instance}
+        isDefault={isDefault}
         isSole={isSole}
       />
     </>

@@ -91,10 +91,10 @@ export function ProviderSettingsCard({
                 <ProviderInstanceCard
                   catalog={catalog}
                   instance={instance}
-                  isSole={
-                    providers.length === 1 ||
+                  isDefault={
                     providersResponse?.defaultProviderId === instance.id
                   }
+                  isSole={providers.length === 1}
                   key={instance.id}
                   onDelete={async (providerId) => {
                     await deleteProviderMutation.mutateAsync(providerId);
@@ -153,7 +153,8 @@ export function ProviderSettingsCard({
         </p>
       ) : null}
 
-      <Dialog onOpenChange={setAddOpen} open={addOpen}>
+      {/* A click outside must not throw away a typed key or picked models. */}
+      <Dialog disablePointerDismissal onOpenChange={setAddOpen} open={addOpen}>
         <DialogContent className="w-[min(96vw,56rem)] scroll-pb-24 grid-cols-[minmax(0,1fr)] sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Add provider</DialogTitle>

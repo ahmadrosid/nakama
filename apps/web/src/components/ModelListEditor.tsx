@@ -12,8 +12,6 @@ export interface ModelListRow extends CustomModelEntry {}
 interface ModelListEditorProps {
   browse?: { disabled?: boolean; label: string; onClick: () => void };
   disabled?: boolean;
-  /** Saved IDs from a provider catalog are fixed; only new rows take an ID. */
-  lockSavedIds?: boolean;
   models: ModelListRow[];
   onChange: (models: ModelListRow[]) => void;
   showPricing?: boolean;
@@ -44,7 +42,6 @@ export function ModelListEditor({
   showVision = false,
   visionDefaultOn = false,
   browse,
-  lockSavedIds = false,
   onChange,
 }: ModelListEditorProps) {
   const rowKeysRef = useRef<string[]>([]);
@@ -103,48 +100,48 @@ export function ModelListEditor({
             const detailsOpen = openDetails.has(rowKey);
             const detailsId = `model-details-${rowKey}`;
 
-            const idLocked = lockSavedIds && id !== "" && savedIds.has(id);
+            // Saved IDs are fixed; only new rows take an ID.
+            const idLocked = id !== "" && savedIds.has(id);
 
             return (
               <li className="space-y-2 p-2" key={rowKey}>
                 <div className="flex flex-wrap items-center gap-2">
-                  {idLocked ? null : (
-                    <InputGroup className="min-w-0 basis-full">
-                      <InputGroupInput
-                        aria-invalid={duplicate}
-                        aria-label={`Model ID ${index + 1}`}
-                        className="font-mono text-xs"
-                        disabled={disabled}
-                        onChange={(event) =>
-                          updateRow(index, { id: event.target.value })
-                        }
-                        placeholder="Model ID"
-                        title={row.id}
-                        value={row.id}
-                      />
-                    </InputGroup>
-                  )}
-                  <div className="min-w-0 flex-[1_1_12rem] space-y-0.5">
-                    <InputGroup>
-                      <InputGroupInput
-                        aria-label={`Display name for ${label}`}
-                        disabled={disabled}
-                        onChange={(event) =>
-                          updateRow(index, { name: event.target.value })
-                        }
-                        placeholder="Display name"
-                        value={row.name ?? ""}
-                      />
-                    </InputGroup>
-                    {idLocked ? (
-                      <p
-                        className="truncate px-1 font-mono text-2xs text-muted-foreground"
-                        title={row.id}
-                      >
-                        {row.id}
-                      </p>
-                    ) : null}
-                  </div>
+                  <InputGroup
+                    className={
+                      idLocked
+                        ? "min-w-0 basis-full bg-muted/60"
+                        : "min-w-0 basis-full"
+                    }
+                  >
+                    <InputGroupInput
+                      aria-invalid={duplicate}
+                      aria-label={`Model ID ${index + 1}`}
+                      className={
+                        idLocked
+                          ? "font-mono text-muted-foreground text-xs"
+                          : "font-mono text-xs"
+                      }
+                      disabled={disabled}
+                      onChange={(event) =>
+                        updateRow(index, { id: event.target.value })
+                      }
+                      placeholder="Model ID"
+                      readOnly={idLocked}
+                      title={row.id}
+                      value={row.id}
+                    />
+                  </InputGroup>
+                  <InputGroup className="min-w-0 flex-[1_1_12rem]">
+                    <InputGroupInput
+                      aria-label={`Display name for ${label}`}
+                      disabled={disabled}
+                      onChange={(event) =>
+                        updateRow(index, { name: event.target.value })
+                      }
+                      placeholder="Display name"
+                      value={row.name ?? ""}
+                    />
+                  </InputGroup>
                   <div className="flex items-center gap-3">
                     {showThinking ? (
                       <span className="flex items-center gap-1.5 text-xs">
@@ -186,7 +183,7 @@ export function ModelListEditor({
                       type="button"
                       variant="ghost"
                     >
-                      Details
+                      {showPricing ? "Price and context" : "Context"}
                     </Button>
                     <Button
                       aria-label={`Remove ${label}`}
@@ -282,7 +279,7 @@ export function ModelListEditor({
             onClick={browse.onClick}
             size="sm"
             type="button"
-            variant="secondary"
+            variant="outline"
           >
             {browse.label}
           </Button>

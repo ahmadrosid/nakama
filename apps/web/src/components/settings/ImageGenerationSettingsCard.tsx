@@ -206,7 +206,7 @@ export function ImageGenerationSettingsCard() {
           </>
         ) : undefined
       }
-      title="Image generation"
+      title="Image generation model"
     >
       <Select
         disabled={saveImageGenerationMutation.isPending || !providerAvailable}
@@ -235,7 +235,10 @@ export function ImageGenerationSettingsCard() {
         }}
         value={selection || CLEAR_IMAGE_GENERATION_MODEL_VALUE}
       >
-        <SelectTrigger aria-label="Image generation" className="h-9 w-full">
+        <SelectTrigger
+          aria-label="Image generation model"
+          className="h-9 w-full"
+        >
           <SelectValue placeholder="Select image generation model">
             {labelOf(selection)}
           </SelectValue>

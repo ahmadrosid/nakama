@@ -228,7 +228,9 @@ function ReplaceKeyForm({
           {instance.hasApiKey ? "New API key" : "API key"}
         </label>
         {instance.secretSource === "settings" ? (
-          <span className="text-muted-foreground text-xs">Key saved</span>
+          <span className="text-muted-foreground text-xs">
+            A key is already saved
+          </span>
         ) : null}
       </div>
       <InputGroup>
@@ -525,17 +527,21 @@ export function ProviderCompatibleEditDialog({
 export function ProviderRemoveDialog({
   open,
   label,
+  isDefault = false,
   isSole,
   busy,
   onOpenChange,
   onConfirm,
+  usedBy = [],
 }: {
   open: boolean;
   label: string;
+  isDefault?: boolean;
   isSole: boolean;
   busy: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
+  usedBy?: string[];
 }) {
   return (
     <Dialog
@@ -551,9 +557,20 @@ export function ProviderRemoveDialog({
           <DialogTitle>Remove provider?</DialogTitle>
           <DialogDescription>
             {isSole ? "This is your only LLM provider. " : null}
+            {isDefault && !isSole ? "This is your default provider. " : null}
             Models using {label} will stop working. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
+        {usedBy.length > 0 ? (
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">These settings lose their model:</p>
+            <ul className="list-disc pl-5 text-muted-foreground">
+              {usedBy.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <DialogFooter>
           <Button
             disabled={busy}

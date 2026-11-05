@@ -2,7 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import type { ProviderInstanceSummary } from "@nakama/core/contract";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ProviderReplaceKeyDialog } from "./provider-instance-dialogs";
+import {
+  ProviderRemoveDialog,
+  ProviderReplaceKeyDialog,
+} from "./provider-instance-dialogs";
 
 let root: Root | null = null;
 
@@ -56,4 +59,30 @@ test("clearing a saved key asks to confirm first", async () => {
 
   await act(async () => button(/^Clear key$/)!.click());
   expect(actions).toEqual(["clear"]);
+});
+
+test("remove lists the settings that lose their model", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () =>
+    root!.render(
+      <ProviderRemoveDialog
+        busy={false}
+        isSole={false}
+        label="DeepSeek"
+        onConfirm={() => undefined}
+        onOpenChange={() => undefined}
+        open
+        usedBy={["Image parsing model"]}
+      />
+    )
+  );
+
+  const items = [...document.querySelectorAll("li")].map(
+    (item) => item.textContent
+  );
+
+  expect(items).toEqual(["Image parsing model"]);
 });

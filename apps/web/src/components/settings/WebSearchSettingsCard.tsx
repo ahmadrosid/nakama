@@ -266,7 +266,7 @@ export function WebSearchSettingsCard() {
             </p>
           ) : null}
         </div>
-        <div className="w-full min-w-0 sm:w-56">
+        <div className="w-full min-w-0 sm:w-80">
           <Select
             disabled={form.pending}
             onValueChange={form.selectProvider}

@@ -229,7 +229,6 @@ export function CatalogProviderModelFields({
             onClick: () => setIsBrowsing(true),
           }}
           disabled={disabled}
-          lockSavedIds
           models={customModels}
           onChange={onCustomModelsChange}
           showPricing

@@ -70,95 +70,104 @@ export function OpenRouterProviderModelFields({
           return model;
         }}
       />
-      <fieldset className="space-y-3" disabled={disabled}>
-        <legend className="font-medium text-sm">OpenRouter routing</legend>
-        {(
-          [
+      {/* Routing is optional, so it stays closed until the user needs it. */}
+      <details
+        className="rounded-lg border border-border px-3 py-2"
+        open={Object.values(routing).some((value) => value !== undefined)}
+      >
+        <summary className="cursor-pointer font-medium text-sm">
+          Routing (optional)
+        </summary>
+        <fieldset className="mt-3 space-y-3" disabled={disabled}>
+          <legend className="sr-only">OpenRouter routing</legend>
+          {(
             [
-              "zdr",
-              "Zero data retention (ZDR)",
-              "Enforce",
-              "No request-level enforcement",
-            ],
-            [
-              "requireParameters",
-              "Require all parameters",
-              "Require",
-              "Do not require",
-            ],
-          ] as const
-        ).map(([key, label, enabled, disabledLabel]) => (
+              [
+                "zdr",
+                "Zero data retention (ZDR)",
+                "Enforce",
+                "No request-level enforcement",
+              ],
+              [
+                "requireParameters",
+                "Require all parameters",
+                "Require",
+                "Do not require",
+              ],
+            ] as const
+          ).map(([key, label, enabled, disabledLabel]) => (
+            <FormField
+              density={density}
+              id={`openrouter-${key}`}
+              key={key}
+              label={label}
+            >
+              <Select
+                disabled={disabled}
+                onValueChange={(value) =>
+                  onRoutingChange({
+                    ...routing,
+                    [key]: value === "unset" ? undefined : value === "true",
+                  })
+                }
+                value={
+                  routing[key] === undefined ? "unset" : String(routing[key])
+                }
+              >
+                <SelectTrigger className="w-full" id={`openrouter-${key}`}>
+                  <SelectValue>
+                    {routing[key] === undefined
+                      ? "Default (not sent)"
+                      : routing[key]
+                        ? enabled
+                        : disabledLabel}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unset">Default (not sent)</SelectItem>
+                  <SelectItem value="true">{enabled}</SelectItem>
+                  <SelectItem value="false">{disabledLabel}</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+          ))}
           <FormField
             density={density}
-            id={`openrouter-${key}`}
-            key={key}
-            label={label}
+            id="openrouter-data-collection"
+            label="Data collection policy"
           >
             <Select
               disabled={disabled}
               onValueChange={(value) =>
                 onRoutingChange({
                   ...routing,
-                  [key]: value === "unset" ? undefined : value === "true",
+                  dataCollection:
+                    value === "allow" || value === "deny" ? value : undefined,
                 })
               }
-              value={
-                routing[key] === undefined ? "unset" : String(routing[key])
-              }
+              value={routing.dataCollection ?? "unset"}
             >
-              <SelectTrigger className="w-full" id={`openrouter-${key}`}>
+              <SelectTrigger className="w-full" id="openrouter-data-collection">
                 <SelectValue>
-                  {routing[key] === undefined
-                    ? "Default (not sent)"
-                    : routing[key]
-                      ? enabled
-                      : disabledLabel}
+                  {routing.dataCollection === "deny"
+                    ? "Deny"
+                    : routing.dataCollection === "allow"
+                      ? "Allow"
+                      : "Default (not sent)"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unset">Default (not sent)</SelectItem>
-                <SelectItem value="true">{enabled}</SelectItem>
-                <SelectItem value="false">{disabledLabel}</SelectItem>
+                <SelectItem value="deny">Deny</SelectItem>
+                <SelectItem value="allow">Allow</SelectItem>
               </SelectContent>
             </Select>
           </FormField>
-        ))}
-        <FormField
-          density={density}
-          id="openrouter-data-collection"
-          label="Data collection policy"
-        >
-          <Select
-            disabled={disabled}
-            onValueChange={(value) =>
-              onRoutingChange({
-                ...routing,
-                dataCollection:
-                  value === "allow" || value === "deny" ? value : undefined,
-              })
-            }
-            value={routing.dataCollection ?? "unset"}
-          >
-            <SelectTrigger className="w-full" id="openrouter-data-collection">
-              <SelectValue>
-                {routing.dataCollection === "deny"
-                  ? "Deny"
-                  : routing.dataCollection === "allow"
-                    ? "Allow"
-                    : "Default (not sent)"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unset">Default (not sent)</SelectItem>
-              <SelectItem value="deny">Deny</SelectItem>
-              <SelectItem value="allow">Allow</SelectItem>
-            </SelectContent>
-          </Select>
-        </FormField>
-        <p className="text-muted-foreground text-xs">
-          Stricter routing can fail when no endpoint supports the request.
-        </p>
-      </fieldset>
+          <p className="text-muted-foreground text-xs">
+            Stricter routing can fail when no endpoint supports the request.
+          </p>
+        </fieldset>
+      </details>
     </div>
   );
 }
