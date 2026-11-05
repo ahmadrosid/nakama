@@ -653,21 +653,12 @@
   .workflow-runs tr[data-status] td:last-child {
     text-align: right;
   }
-  .workflow-runs tr[data-status="failed"] {
-    background: color-mix(in srgb, var(--destructive) 4%, var(--background));
-  }
   .workflow-runs tr[data-status]:hover {
     background: color-mix(in srgb, var(--muted) 50%, var(--background));
-  }
-  .workflow-runs tr[data-status="failed"]:hover {
-    background: color-mix(in srgb, var(--destructive) 7%, var(--background));
   }
   .workflow-runs .workflow-run-detail-row td {
     padding: 0 12px 12px;
     white-space: normal;
-  }
-  .workflow-runs tr[data-status="failed"] + .workflow-run-detail-row {
-    background: color-mix(in srgb, var(--destructive) 4%, var(--background));
   }
   .workflow-run-badge {
     display: inline-flex;

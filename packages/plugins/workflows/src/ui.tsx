@@ -2725,7 +2725,7 @@ export function apply(ctx: Context) {
     return (
       <section aria-label="History" className="workflow-scroll">
         <div className="workflow-runs-box">
-          {failedCount > 0 && failedCount < runs.length && (
+          {runs.length >= 5 && failedCount > 0 && failedCount < runs.length && (
             <div className="workflow-runs-filter">
               <Button
                 aria-pressed={!onlyFailed}
@@ -2905,21 +2905,7 @@ export function apply(ctx: Context) {
                         <strong>
                           {stoppedAt ? `${stoppedAt} failed` : "Run failed"}
                         </strong>
-                        <span>
-                          {help.text}
-                          {failed?.kind === "assert" && (
-                            <>
-                              {" "}
-                              <a
-                                href={WORKFLOW_DOCS}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                How checks work
-                              </a>
-                            </>
-                          )}
-                        </span>
+                        <span>{help.text}</span>
                       </p>
                     </>
                   ) : (
@@ -2943,14 +2929,6 @@ export function apply(ctx: Context) {
                       </Button>
                     )}
                     <Button
-                      onClick={() => onEditInput(run.input)}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      Change input
-                    </Button>
-                    <Button
                       disabled={!canRun}
                       onClick={() => onRunAgain(run.input)}
                       size="sm"
@@ -2961,6 +2939,40 @@ export function apply(ctx: Context) {
                       <Icon kind="retry" />
                       Run again
                     </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            aria-label="More run actions"
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
+                          />
+                        }
+                      >
+                        <Icon kind="more" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => onEditInput(run.input)}
+                        >
+                          Change input
+                        </DropdownMenuItem>
+                        {failed?.kind === "assert" && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              window.open(
+                                WORKFLOW_DOCS,
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
+                          >
+                            How checks work
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
                 {runBlocked && <p className="workflow-empty">{runBlocked}</p>}
@@ -2981,6 +2993,7 @@ export function apply(ctx: Context) {
                               {stepStatusLabels.get(receipt.status) ??
                                 receipt.status}
                               {duration != null &&
+                                duration >= 1000 &&
                                 ` · ${formatDuration(duration)}`}
                             </span>
                             <Icon kind="chevronRight" />

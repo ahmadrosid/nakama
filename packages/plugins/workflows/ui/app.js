@@ -654,21 +654,12 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-runs tr[data-status] td:last-child {
     text-align: right;
   }
-  .workflow-runs tr[data-status="failed"] {
-    background: color-mix(in srgb, var(--destructive) 4%, var(--background));
-  }
   .workflow-runs tr[data-status]:hover {
     background: color-mix(in srgb, var(--muted) 50%, var(--background));
-  }
-  .workflow-runs tr[data-status="failed"]:hover {
-    background: color-mix(in srgb, var(--destructive) 7%, var(--background));
   }
   .workflow-runs .workflow-run-detail-row td {
     padding: 0 12px 12px;
     white-space: normal;
-  }
-  .workflow-runs tr[data-status="failed"] + .workflow-run-detail-row {
-    background: color-mix(in srgb, var(--destructive) 4%, var(--background));
   }
   .workflow-run-badge {
     display: inline-flex;
@@ -3074,7 +3065,7 @@ function apply(ctx) {
       className: "workflow-scroll"
     }, /* @__PURE__ */ React.createElement("div", {
       className: "workflow-runs-box"
-    }, failedCount > 0 && failedCount < runs.length && /* @__PURE__ */ React.createElement("div", {
+    }, runs.length >= 5 && failedCount > 0 && failedCount < runs.length && /* @__PURE__ */ React.createElement("div", {
       className: "workflow-runs-filter"
     }, /* @__PURE__ */ React.createElement(Button, {
       "aria-pressed": !onlyFailed,
@@ -3194,11 +3185,7 @@ function apply(ctx) {
     }), /* @__PURE__ */ React.createElement("p", {
       "data-error": true,
       "data-missing-tool": help.missingTool
-    }, /* @__PURE__ */ React.createElement("strong", null, stoppedAt ? `${stoppedAt} failed` : "Run failed"), /* @__PURE__ */ React.createElement("span", null, help.text, failed?.kind === "assert" && /* @__PURE__ */ React.createElement(React.Fragment, null, " ", /* @__PURE__ */ React.createElement("a", {
-      href: WORKFLOW_DOCS,
-      rel: "noreferrer",
-      target: "_blank"
-    }, "How checks work"))))) : /* @__PURE__ */ React.createElement("p", {
+    }, /* @__PURE__ */ React.createElement("strong", null, stoppedAt ? `${stoppedAt} failed` : "Run failed"), /* @__PURE__ */ React.createElement("span", null, help.text))) : /* @__PURE__ */ React.createElement("p", {
       className: "workflow-empty"
     }, formatRunTime(run.startedAt)), /* @__PURE__ */ React.createElement("div", {
       className: "workflow-run-buttons"
@@ -3212,11 +3199,6 @@ function apply(ctx) {
       size: "sm",
       type: "button"
     }, "Edit step"), /* @__PURE__ */ React.createElement(Button, {
-      onClick: () => onEditInput(run.input),
-      size: "sm",
-      type: "button",
-      variant: "ghost"
-    }, "Change input"), /* @__PURE__ */ React.createElement(Button, {
       disabled: !canRun,
       onClick: () => onRunAgain(run.input),
       size: "sm",
@@ -3225,7 +3207,22 @@ function apply(ctx) {
       variant: "outline"
     }, /* @__PURE__ */ React.createElement(Icon, {
       kind: "retry"
-    }), "Run again"))), runBlocked && /* @__PURE__ */ React.createElement("p", {
+    }), "Run again"), /* @__PURE__ */ React.createElement(DropdownMenu, null, /* @__PURE__ */ React.createElement(DropdownMenuTrigger, {
+      render: /* @__PURE__ */ React.createElement(Button, {
+        "aria-label": "More run actions",
+        size: "icon-sm",
+        type: "button",
+        variant: "ghost"
+      })
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "more"
+    })), /* @__PURE__ */ React.createElement(DropdownMenuContent, {
+      align: "end"
+    }, /* @__PURE__ */ React.createElement(DropdownMenuItem, {
+      onClick: () => onEditInput(run.input)
+    }, "Change input"), failed?.kind === "assert" && /* @__PURE__ */ React.createElement(DropdownMenuItem, {
+      onClick: () => window.open(WORKFLOW_DOCS, "_blank", "noopener,noreferrer")
+    }, "How checks work"))))), runBlocked && /* @__PURE__ */ React.createElement("p", {
       className: "workflow-empty"
     }, runBlocked), /* @__PURE__ */ React.createElement("ol", {
       className: "workflow-run-steps"
@@ -3239,7 +3236,7 @@ function apply(ctx) {
         "data-status": receipt.status
       }), /* @__PURE__ */ React.createElement("span", null, titleCase(receipt.stepId)), /* @__PURE__ */ React.createElement("span", {
         className: "workflow-empty"
-      }, stepStatusLabels.get(receipt.status) ?? receipt.status, duration != null && ` · ${formatDuration(duration)}`), /* @__PURE__ */ React.createElement(Icon, {
+      }, stepStatusLabels.get(receipt.status) ?? receipt.status, duration != null && duration >= 1000 && ` · ${formatDuration(duration)}`), /* @__PURE__ */ React.createElement(Icon, {
         kind: "chevronRight"
       })), /* @__PURE__ */ React.createElement(StepReceipt, {
         receipt,
