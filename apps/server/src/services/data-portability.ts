@@ -1912,10 +1912,7 @@ async function snapshotDatabaseInto(
     await vacuumPluginDatabaseInto(sourcePath, targetPath);
   } catch (error) {
     await access(sourcePath, constants.R_OK).catch((accessError: Error) =>
-      rethrowIfUnreadable(
-        toZipPath(relative(rootDir, sourcePath)),
-        accessError
-      )
+      rethrowIfUnreadable(toZipPath(relative(rootDir, sourcePath)), accessError)
     );
 
     throw error;

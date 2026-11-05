@@ -440,6 +440,7 @@ interface BrowserSessionRow {
   last_used_at: string | null;
   revoked_at: string | null;
   session_token_hash: string;
+  user_agent?: string | null;
   user_id: string;
 }
 
@@ -2913,9 +2914,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       expires_at,
       revoked_at,
       last_used_at,
-      active_org_id
+      active_org_id,
+      user_agent
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const getBrowserSessionByTokenHashStmt = db.prepare<
@@ -2976,7 +2978,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const updateBrowserSessionLastUsedAtStmt = db.prepare(`
     UPDATE browser_sessions
-    SET last_used_at = ?
+    SET last_used_at = ?, user_agent = COALESCE(user_agent, ?)
     WHERE id = ?
   `);
 
@@ -3655,6 +3657,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM artifacts a
     LEFT JOIN users u ON u.id = a.user_id
     WHERE a.org_id = ? AND a.profile_id = ?
+  `);
+
+  const getArtifactRecordStmt = db.prepare<
+    ArtifactOwnerRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      org_id, profile_id, filename, session_id, user_id, channel, created_at,
+      NULL AS user_name
+    FROM artifacts
+    WHERE org_id = ? AND profile_id = ? AND filename = ?
   `);
 
   const deleteArtifactRecordStmt = db.prepare(`
@@ -4782,7 +4795,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.expiresAt,
         record.revokedAt,
         record.lastUsedAt,
-        record.activeOrgId ?? null
+        record.activeOrgId ?? null,
+        capSessionUserAgent(record.userAgent)
       );
     },
     async createMfaBackupCode(record) {
@@ -5215,6 +5229,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getActiveAutomationRunStmt.get(automationId);
 
       return row ? toAutomationRunRecord(row) : null;
+    },
+
+    async getArtifactRecord(orgId, profileId, filename) {
+      const row = getArtifactRecordStmt.get(orgId, profileId, filename);
+
+      return row ? toArtifactOwnerRecord(row) : null;
     },
 
     async getArtifactShareById(orgId, profileId, shareId) {
@@ -6484,8 +6504,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updateBrowserSessionActiveOrgIdStmt.run(activeOrgId, id);
     },
 
-    async updateBrowserSessionLastUsedAt(id, lastUsedAt) {
-      updateBrowserSessionLastUsedAtStmt.run(lastUsedAt, id);
+    async updateBrowserSessionLastUsedAt(id, lastUsedAt, userAgent) {
+      updateBrowserSessionLastUsedAtStmt.run(
+        lastUsedAt,
+        capSessionUserAgent(userAgent),
+        id
+      );
     },
 
     async updateOrgMemberRole(orgId, userId, role) {
@@ -7926,6 +7950,15 @@ function toArtifactShareRecord(
   };
 }
 
+const MAX_SESSION_USER_AGENT_LENGTH = 512;
+
+/** Capped so a client cannot grow the session row with a huge header. */
+function capSessionUserAgent(userAgent: string | null | undefined) {
+  const trimmed = userAgent?.trim();
+
+  return trimmed ? trimmed.slice(0, MAX_SESSION_USER_AGENT_LENGTH) : null;
+}
+
 function toBrowserSessionRecord(
   row: BrowserSessionRow
 ): StoredBrowserSessionRecord {
@@ -7938,6 +7971,7 @@ function toBrowserSessionRecord(
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
     sessionTokenHash: row.session_token_hash,
+    userAgent: row.user_agent ?? null,
     userId: row.user_id,
   };
 }

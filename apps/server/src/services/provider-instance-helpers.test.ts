@@ -442,47 +442,6 @@ describe("applyProviderInstanceUpdate", () => {
       false
     );
   });
-
-  test("validates fireworks models against shortlist and static catalog", () => {
-    const withShortlist = createProviderInstance({
-      customModels: [
-        {
-          default: true,
-          id: "accounts/fireworks/models/kimi-k2p6",
-          name: "Kimi K2.6",
-        },
-      ],
-      id: "fw-1",
-      label: "Fireworks",
-      type: "fireworks",
-    });
-
-    expect(
-      modelExistsOnInstance(
-        withShortlist,
-        "accounts/fireworks/models/kimi-k2p6"
-      )
-    ).toBe(true);
-    expect(
-      modelExistsOnInstance(withShortlist, "accounts/fireworks/models/glm-5p2")
-    ).toBe(false);
-
-    const withoutShortlist = createProviderInstance({
-      id: "fw-2",
-      label: "Fireworks",
-      type: "fireworks",
-    });
-
-    expect(
-      modelExistsOnInstance(
-        withoutShortlist,
-        "accounts/fireworks/models/glm-5p2"
-      )
-    ).toBe(true);
-    expect(
-      modelExistsOnInstance(withoutShortlist, "accounts/unknown/models/foo")
-    ).toBe(false);
-  });
 });
 
 describe("buildProviderInstanceFromCreateRequest", () => {

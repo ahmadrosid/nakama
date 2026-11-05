@@ -3,8 +3,6 @@ import {
   explainGroupMessageHandling,
   extraJidsFromGroupParticipants,
   isWhatsAppBotAddress,
-  isWhatsAppGroupChat,
-  resolveChannelOrgKey,
   stripWhatsAppBotMention,
   type WhatsAppAccount,
 } from "./group-message";
@@ -15,19 +13,6 @@ const me: WhatsAppAccount = {
 };
 
 describe("group-message helpers", () => {
-  test("isWhatsAppGroupChat detects group JIDs", () => {
-    expect(isWhatsAppGroupChat("120363@g.us")).toBe(true);
-    expect(isWhatsAppGroupChat("628100000000@s.whatsapp.net")).toBe(false);
-    expect(isWhatsAppGroupChat("236283431522503@lid")).toBe(false);
-  });
-
-  test("resolveChannelOrgKey scopes org store by group or private chat", () => {
-    expect(resolveChannelOrgKey("120363@g.us", true)).toBe("g:120363@g.us");
-    expect(resolveChannelOrgKey("628100000000@s.whatsapp.net", false)).toBe(
-      "628100000000@s.whatsapp.net"
-    );
-  });
-
   test("isWhatsAppBotAddress matches phone and lid identities", () => {
     expect(isWhatsAppBotAddress("628100000000@s.whatsapp.net", me)).toBe(true);
     expect(isWhatsAppBotAddress("628100000000:12@s.whatsapp.net", me)).toBe(

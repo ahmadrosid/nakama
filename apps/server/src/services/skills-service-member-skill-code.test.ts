@@ -116,6 +116,7 @@ describe("member-authored skill code", () => {
 
   afterEach(() => {
     delete process.env.NAKAMA_CONFIG_DIR;
+    delete process.env.NAKAMA_BASH_BACKEND;
   });
 
   function memberSkillDir(): string {
@@ -128,6 +129,48 @@ describe("member-authored skill code", () => {
       "skills",
       SKILL_NAME
     );
+  }
+
+  async function approveMemberSkillCode(service: SkillsService) {
+    await db.upsertOrganization({
+      createdAt: new Date().toISOString(),
+      id: ORG_ID,
+      name: "Test Org",
+      skillsWriteApproval: true,
+      slug: "test-org",
+      updatedAt: new Date().toISOString(),
+    });
+    const proposals = new SkillProposalService(db, service);
+
+    const staged = await proposals.stageProposal({
+      action: "approve_code",
+      orgId: ORG_ID,
+      profileId,
+      relativePath: "payload.py",
+      skillName: SKILL_NAME,
+    });
+
+    await proposals.approveProposal(ORG_ID, staged.proposalId!, "admin");
+  }
+
+  async function seedGlobalSkill(name: string, file: string, source: string) {
+    const skillDir = join(configDir, "agent", "skills", name);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      `---\nname: ${name}\ndescription: Test ${name}. Use when asked about ${name}.\n---\n\nCall the tool.\n`
+    );
+    await writeFile(join(skillDir, file), source);
+    const service = new SkillsService(db);
+    await service.syncDiscoveredSkills();
+
+    const skill = (await service.listSkills()).skills.find(
+      (entry) => entry.name === name
+    )!;
+
+    await db.assignSkillToProfile(profileId, skill.id);
+
+    return service;
   }
 
   /** What an ordinary member's agent produces through `skill_manage`. */
@@ -319,4 +362,54 @@ describe("member-authored skill code", () => {
       )
     ).toEqual({ stdout: "20.0 None\n" });
   }, 20_000);
+
+  describe("under the remote bash backend", () => {
+    test("approved member code is refused and does not run on the host", async () => {
+      const service = await seedMemberSkill();
+      await approveMemberSkillCode(service);
+      process.env.NAKAMA_BASH_BACKEND = "remote";
+
+      const tools = await service.loadToolsForProfile(ORG_ID, profileId);
+
+      expect(tools.map((tool) => tool.name)).toEqual([`${SKILL_NAME}_payload`]);
+      expect(await tools[0].run({}, noSignal())).toHaveProperty("error");
+      await expect(
+        readFile(join(memberSkillDir(), "executed.marker"), "utf8")
+      ).rejects.toThrow();
+    });
+
+    test("a server-shipped global skill still runs", async () => {
+      const service = await seedGlobalSkill(
+        "weather",
+        "tool.py",
+        envProbeSource
+      );
+
+      process.env.NAKAMA_BASH_BACKEND = "remote";
+
+      const tools = await service.loadToolsForProfile(ORG_ID, profileId);
+
+      expect(tools.map((tool) => tool.name)).toEqual(["weather"]);
+      // SAFETY: This test controls the fixture shape at this boundary.
+
+      const result = (await tools[0].run({}, noSignal())) as {
+        configDir: string;
+      };
+
+      expect(result.configDir).toBe(configDir);
+    }, 20_000);
+
+    test("a profile with bash gets no host Python runner", async () => {
+      const service = await seedGlobalSkill(
+        "loads",
+        "loads.py",
+        'def combine(d, l):\n    return 1.2 * d + 1.6 * l\n\nif __name__ == "__main__":\n    print(combine(10, 5))\n'
+      );
+
+      await ensureSuperNakamaBashTool(db, profileId);
+      process.env.NAKAMA_BASH_BACKEND = "remote";
+
+      expect(await service.loadToolsForProfile(ORG_ID, profileId)).toEqual([]);
+    }, 20_000);
+  });
 });

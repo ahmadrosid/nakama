@@ -209,6 +209,7 @@ import {
   removeTelegramAccessRequest,
   replaceImagePartsWithDescriptions,
   requireToolOrgMember,
+  resolveArtifactName,
   resolveCloudflareAccountInput,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
@@ -5720,14 +5721,18 @@ export class AgentService {
   ): Promise<void> {
     await this.requireProfile(orgId, profileId);
 
-    // Exact match on the stored name, so no path trick reaches another file.
-    if (
-      createdByUserId &&
-      !(await this.db.listArtifactRecords(orgId, profileId)).some(
-        (record) =>
-          record.filename === filename && record.userId === createdByUserId
-      )
-    ) {
+    if (!createdByUserId) {
+      return;
+    }
+
+    // Check the file the path reaches, in the form the record stores.
+    const name = await resolveArtifactName({ filename, orgId, profileId });
+
+    const record = name
+      ? await this.db.getArtifactRecord(orgId, profileId, name)
+      : null;
+
+    if (record?.userId !== createdByUserId) {
       throw new NakamaApiError("Forbidden", 403);
     }
   }

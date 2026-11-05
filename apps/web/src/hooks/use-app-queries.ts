@@ -517,7 +517,13 @@ const webPublicUrlSettings = createSettingsHooks<
 
     return { envOverride: null, webPublicUrl: saved.webPublicUrl };
   },
-  onSaveSuccess: (queryClient) => {
+  onSaveSuccess: (queryClient, saved) => {
+    // Keep envOverride from the server; the save response does not carry it.
+    queryClient.setQueryData<WebPublicUrlSettingsResponse>(
+      queryKeys.webPublicUrl,
+      (current) =>
+        current ? { ...current, webPublicUrl: saved.webPublicUrl } : saved
+    );
     void invalidateQueries(queryClient, queryKeys.webPublicUrl);
   },
   queryFn: () => client.getWebPublicUrl(),

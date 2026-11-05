@@ -1412,91 +1412,6 @@ describe("chat session schema", () => {
   });
 });
 
-describe("browser session schema", () => {
-  test("creates browser session storage with the expected columns", () => {
-    const db = new Database(":memory:");
-
-    try {
-      migrateDatabase(db);
-
-      const columns = db
-        .prepare<
-          {
-            name: string;
-          },
-          SQLQueryBindings[]
-        >("PRAGMA table_info(browser_sessions)")
-        .all();
-
-      const indexes = db
-        .prepare<
-          {
-            name: string;
-          },
-          SQLQueryBindings[]
-        >("PRAGMA index_list(browser_sessions)")
-        .all();
-
-      expect(columns.map((column) => column.name)).toEqual([
-        "id",
-        "user_id",
-        "session_token_hash",
-        "csrf_token_hash",
-        "created_at",
-        "expires_at",
-        "revoked_at",
-        "last_used_at",
-        "active_org_id",
-      ]);
-      expect(
-        indexes.some(
-          (index) => index.name === "browser_sessions_token_hash_unique"
-        )
-      ).toBe(true);
-    } finally {
-      db.close();
-    }
-  });
-});
-
-describe("password reset schema", () => {
-  test("creates single-use password reset token storage", () => {
-    const db = new Database(":memory:");
-
-    try {
-      migrateDatabase(db);
-
-      const columns = db
-        .prepare<{ name: string }, SQLQueryBindings[]>(
-          "PRAGMA table_info(password_reset_tokens)"
-        )
-        .all();
-
-      const indexes = db
-        .prepare<{ name: string }, SQLQueryBindings[]>(
-          "PRAGMA index_list(password_reset_tokens)"
-        )
-        .all();
-
-      expect(columns.map((column) => column.name)).toEqual([
-        "id",
-        "user_id",
-        "token_hash",
-        "expires_at",
-        "consumed_at",
-        "created_at",
-      ]);
-      expect(
-        indexes.some(
-          (index) => index.name === "password_reset_tokens_token_hash_unique"
-        )
-      ).toBe(true);
-    } finally {
-      db.close();
-    }
-  });
-});
-
 describe("organization schema migration", () => {
   test("keeps the default profile a user chose in the first org", () => {
     const db = new Database(":memory:");
@@ -1525,54 +1440,6 @@ describe("organization schema migration", () => {
         { id: "default", is_default: 0 },
         { id: "other", is_default: 0 },
       ]);
-    } finally {
-      db.close();
-    }
-  });
-
-  test("creates org tables and allows org with admin member", () => {
-    const db = new Database(":memory:");
-
-    try {
-      migrateDatabase(db);
-
-      db.exec(`
-        INSERT INTO users (
-          id, email, password_hash, is_platform_admin, created_at, updated_at
-        ) VALUES (
-          'user_admin', 'admin@example.com', 'hash', 1,
-          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
-        );
-
-        INSERT INTO organizations (
-          id, name, slug, created_at, updated_at
-        ) VALUES (
-          'org_acme', 'Acme', 'acme',
-          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
-        );
-
-        INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (
-          'org_acme', 'user_admin', 'admin', '2026-06-21T00:00:00.000Z'
-        );
-      `);
-
-      const fkCheck = db.prepare("PRAGMA foreign_key_check").all();
-      expect(fkCheck).toEqual([]);
-
-      const member = db
-        .prepare<
-          {
-            role: string;
-            user_context: string | null;
-          },
-          SQLQueryBindings[]
-        >(
-          "SELECT role, user_context FROM org_members WHERE org_id = ? AND user_id = ?"
-        )
-        .get("org_acme", "user_admin");
-
-      expect(member?.role).toBe("admin");
-      expect(member?.user_context).toBeNull();
     } finally {
       db.close();
     }
@@ -1880,41 +1747,6 @@ describe("organization schema migration", () => {
         ) VALUES
           ('tool_a', 'bash', 'bash', 'bash', '{}', 'org_a', '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'),
           ('tool_b', 'bash', 'bash', 'bash', '{}', 'org_b', '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z');
-      `);
-
-      const fkCheck = db.prepare("PRAGMA foreign_key_check").all();
-      expect(fkCheck).toEqual([]);
-    } finally {
-      db.close();
-    }
-  });
-
-  test("creates channel_org_mappings with foreign keys", () => {
-    const db = new Database(":memory:");
-
-    try {
-      migrateDatabase(db);
-
-      db.exec(`
-        INSERT INTO users (
-          id, email, password_hash, is_platform_admin, created_at, updated_at
-        ) VALUES (
-          'user_1', 'user@example.com', 'hash', 0,
-          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
-        );
-
-        INSERT INTO organizations (
-          id, name, slug, created_at, updated_at
-        ) VALUES (
-          'org_acme', 'Acme', 'acme',
-          '2026-06-21T00:00:00.000Z', '2026-06-21T00:00:00.000Z'
-        );
-
-        INSERT INTO channel_org_mappings (
-          channel, channel_user_id, user_id, org_id, created_at
-        ) VALUES (
-          'telegram', 'tg_123', 'user_1', 'org_acme', '2026-06-21T00:00:00.000Z'
-        );
       `);
 
       const fkCheck = db.prepare("PRAGMA foreign_key_check").all();

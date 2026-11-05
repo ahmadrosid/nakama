@@ -39,6 +39,14 @@ export function resolveBashSandboxNetwork(
   );
 }
 
+/**
+ * Custom tools and non-global skill code run as host subprocesses. An operator
+ * who picks the remote backend has moved tenant code off the host, so that
+ * code is refused instead of running here with the server's permissions.
+ */
+export const REMOTE_BACKEND_HOST_CODE_REFUSAL =
+  "This code would run on the Nakama server, but this server runs tenant code only in its remote sandbox (NAKAMA_BASH_BACKEND=remote). Use the bash tool instead.";
+
 export const TENANT_BASH_DISABLED =
   "The bash tool is turned off on this server (NAKAMA_TENANT_BASH=0).";
 

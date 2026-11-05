@@ -85,6 +85,13 @@ export function registerArtifactShareRoutes(
       return json({ error: "path is required" }, 400);
     }
 
+    await options.agent.requireArtifactCreator(
+      orgId,
+      profileId,
+      sourcePath.trim(),
+      (await artifactCreatorScopeFromContext(c, options.agent)) ?? undefined
+    );
+
     const status = await service.getArtifactShareStatus({
       orgId,
       profileId,

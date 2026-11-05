@@ -1019,35 +1019,35 @@ describe("Nakama data portability", () => {
     }
   });
 
-  test.each([
-    "notes.txt",
-    "config.ini",
-  ])("names %s when the server cannot read it", async (name) => {
-    await writeFile(join(rootDir, name), "ok");
-    const realReadFile = fsPromises.readFile;
+  test.each(["notes.txt", "config.ini"])(
+    "names %s when the server cannot read it",
+    async (name) => {
+      await writeFile(join(rootDir, name), "ok");
+      const realReadFile = fsPromises.readFile;
 
-    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
-      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
-      (async (...args: Parameters<typeof realReadFile>) => {
-        if (args[0] === join(rootDir, name)) {
-          throw Object.assign(new Error("denied"), { code: "EPERM" });
-        }
+      const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+        // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+        (async (...args: Parameters<typeof realReadFile>) => {
+          if (args[0] === join(rootDir, name)) {
+            throw Object.assign(new Error("denied"), { code: "EPERM" });
+          }
 
-        return await realReadFile(...args);
-      }) as typeof realReadFile
-    );
+          return await realReadFile(...args);
+        }) as typeof realReadFile
+      );
 
-    try {
-      await expect(
-        createNakamaDataExport({ databasePath: null, rootDir })
-      ).rejects.toMatchObject({
-        message: expect.stringContaining(name),
-        status: 409,
-      });
-    } finally {
-      readMock.mockRestore();
+      try {
+        await expect(
+          createNakamaDataExport({ databasePath: null, rootDir })
+        ).rejects.toMatchObject({
+          message: expect.stringContaining(name),
+          status: 409,
+        });
+      } finally {
+        readMock.mockRestore();
+      }
     }
-  });
+  );
 
   // chmod does nothing on Windows, and root lists a mode 000 folder anyway.
   describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)(

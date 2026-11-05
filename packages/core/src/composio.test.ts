@@ -7,7 +7,6 @@ import {
   normalizeUpdateProfileComposioToolkitsRequest,
 } from "./composio";
 import {
-  composioOrgUserId,
   composioUserId,
   isComposioConfigured,
   isComposioConfiguredAsync,
@@ -58,10 +57,6 @@ describe("composio-config", () => {
         }
       )
     ).toBe("ck-direct");
-  });
-
-  test("composioOrgUserId namespaces org id", () => {
-    expect(composioOrgUserId("org_123")).toBe("nakama:org:org_123");
   });
 
   test("composioUserId namespaces nakama user id", () => {

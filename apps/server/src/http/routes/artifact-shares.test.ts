@@ -10,7 +10,6 @@ import {
 } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir, withTestEnv } from "../../test-config-dir";
-import { isPublicRouteRequest } from "../public-routes";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   loginUserSession,
@@ -156,31 +155,39 @@ describe("artifact share routes", () => {
 
     const boSession = await loginUserSession(app, bo.email, bo.password, orgId);
 
+    // The dashboard sends the absolute path listArtifacts returns.
+    const absolutePath = join(
+      getProfileArtifactsDir(orgId, profileId),
+      "ana.md"
+    );
+
     const publish = (session: TestBrowserSession) =>
       app.fetch(
         publishArtifactShareRequest({
-          body: { path: "ana.md" },
+          body: { path: absolutePath },
           orgId,
           profileId,
           session,
         })
       );
 
-    const revoke = (session: TestBrowserSession, shareId: string) =>
+    const call = (session: TestBrowserSession, route: string, method = "GET") =>
       app.fetch(
         new Request(
-          `http://localhost:4310/v1/profiles/${profileId}/artifacts/shares/${shareId}`,
+          `http://localhost:4310/v1/profiles/${profileId}/artifacts/${route}?path=${encodeURIComponent(absolutePath)}`,
           {
             headers: session.headers(
               { "X-CSRF-Token": session.csrfToken },
               orgId
             ),
-            method: "DELETE",
+            method,
           }
         )
       );
 
     expect((await publish(boSession)).status).toBe(403);
+    expect((await call(boSession, "content")).status).toBe(403);
+    expect((await call(anaSession, "content")).status).toBe(200);
 
     const published = await publish(anaSession);
     expect(published.status).toBe(201);
@@ -188,17 +195,13 @@ describe("artifact share routes", () => {
     // SAFETY: This test controls the fixture shape at this boundary.
     const { id } = (await published.json()) as { id: string };
 
-    expect((await revoke(boSession, id)).status).toBe(403);
-    expect((await revoke(anaSession, id)).status).toBe(200);
-  });
+    expect((await call(boSession, "shares/status")).status).toBe(403);
+    expect(
+      await (await call(anaSession, "shares/status")).json()
+    ).toMatchObject({ id });
 
-  test("public artifact share GET is allowlisted", () => {
-    expect(
-      isPublicRouteRequest("GET", "/v1/public/artifact-shares/abc123")
-    ).toBe(true);
-    expect(
-      isPublicRouteRequest("POST", "/v1/public/artifact-shares/abc123")
-    ).toBe(false);
+    expect((await call(boSession, `shares/${id}`, "DELETE")).status).toBe(403);
+    expect((await call(anaSession, `shares/${id}`, "DELETE")).status).toBe(200);
   });
 
   test("member can publish and anonymous visitor can read snapshot", async () => {

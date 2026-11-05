@@ -55,7 +55,7 @@ async function ensureComposioMcpConnection(
   }
 }
 
-export function composioConnectionKey(
+function composioConnectionKey(
   orgId: string,
   userId: string,
   profileId: string

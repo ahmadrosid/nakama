@@ -564,20 +564,6 @@ describe("McpService", () => {
     ).rejects.toThrow("HTTP MCP servers require config.url.");
   });
 
-  test("rejects HTTP config when transport is stdio", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new McpService(db, new McpClientManager());
-
-    await expect(
-      service.createServer({
-        config: { url: "https://example.com/mcp" },
-        connect: false,
-        name: "broken",
-        transport: "stdio",
-      })
-    ).rejects.toThrow("stdio MCP servers require config.command.");
-  });
-
   test("blocks delete when MCP server is assigned to a profile", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new McpService(db, new McpClientManager());

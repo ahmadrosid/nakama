@@ -36,7 +36,10 @@ export function ThemeToggle() {
       }}
       value={theme}
     >
-      <SelectTrigger aria-label="Color theme" className="w-[8.25rem]">
+      <SelectTrigger
+        aria-label={`Appearance: ${selected.label}`}
+        className="w-[8.25rem]"
+      >
         <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <SelectedIcon
             aria-hidden="true"

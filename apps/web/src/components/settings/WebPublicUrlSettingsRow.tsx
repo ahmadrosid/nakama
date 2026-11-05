@@ -8,6 +8,55 @@ import {
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 
+function WebPublicUrlActions({
+  currentOrigin,
+  isDirty,
+  onSave,
+  onUseCurrent,
+  pending,
+  value,
+}: {
+  currentOrigin: string;
+  isDirty: boolean;
+  onSave: () => void;
+  onUseCurrent: () => void;
+  pending: boolean;
+  value: string;
+}) {
+  return (
+    <>
+      {currentOrigin && value.trim() !== currentOrigin ? (
+        <Button
+          disabled={pending}
+          onClick={onUseCurrent}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Use {currentOrigin}
+        </Button>
+      ) : null}
+      {isDirty || pending ? (
+        <Button
+          disabled={pending || !value.trim()}
+          onClick={onSave}
+          size="sm"
+          type="button"
+        >
+          {pending ? (
+            <>
+              <Spinner className="mr-2" />
+              Saving…
+            </>
+          ) : (
+            "Save"
+          )}
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
 export function WebPublicUrlSettingsRow() {
   const { data, isLoading } = useWebPublicUrlSettings();
   const saveMutation = useSaveWebPublicUrl();
@@ -51,17 +100,25 @@ export function WebPublicUrlSettingsRow() {
       onSuccess: (saved) => {
         setValue(saved.webPublicUrl ?? trimmed);
         setSavedHint("Saved");
+        // Save unmounts now that nothing changed; keep focus in the row.
+        document.getElementById("web-public-url")?.focus();
       },
     });
   };
 
+  const currentOrigin =
+    typeof window === "undefined" ? "" : (window.location?.origin ?? "");
+
+  const savedValue = data?.webPublicUrl ?? "";
+  const isDirty = value.trim() !== savedValue;
+
   const handleUseCurrent = () => {
-    if (typeof window !== "undefined" && window.location?.origin) {
-      setValue(window.location.origin);
-      setSavedHint(null);
-      setFormError(null);
-      saveMutation.reset();
-    }
+    setValue(currentOrigin);
+    setSavedHint(null);
+    setFormError(null);
+    saveMutation.reset();
+    // This button hides once the field matches; keep focus in the row.
+    document.getElementById("web-public-url")?.focus();
   };
 
   if (isLoading) {
@@ -106,7 +163,6 @@ export function WebPublicUrlSettingsRow() {
           aria-describedby={formError ? "web-public-url-error" : undefined}
           aria-invalid={formError ? true : undefined}
           className="min-w-[12rem] flex-1"
-          disabled={saveMutation.isPending}
           id="web-public-url"
           onChange={(event) => {
             setValue(event.target.value);
@@ -117,36 +173,24 @@ export function WebPublicUrlSettingsRow() {
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              handleSave();
+
+              if (isDirty && !saveMutation.isPending) {
+                handleSave();
+              }
             }
           }}
           placeholder="https://nakama.example.com"
+          readOnly={saveMutation.isPending}
           value={value}
         />
-        <Button
-          disabled={saveMutation.isPending}
-          onClick={handleUseCurrent}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Use current
-        </Button>
-        <Button
-          disabled={saveMutation.isPending || !value.trim()}
-          onClick={handleSave}
-          size="sm"
-          type="button"
-        >
-          {saveMutation.isPending ? (
-            <>
-              <Spinner className="mr-2" />
-              Saving…
-            </>
-          ) : (
-            "Save"
-          )}
-        </Button>
+        <WebPublicUrlActions
+          currentOrigin={currentOrigin}
+          isDirty={isDirty}
+          onSave={handleSave}
+          onUseCurrent={handleUseCurrent}
+          pending={saveMutation.isPending}
+          value={value}
+        />
       </div>
 
       {formError ? (

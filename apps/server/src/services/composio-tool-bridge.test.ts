@@ -2,11 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
 import {
   buildComposioConnectTools,
   buildComposioToolDefinitions,
-  composioConnectionKey,
 } from "./composio-tool-bridge";
 import { McpClientManager } from "./mcp-client-manager";
 
@@ -55,12 +53,6 @@ describe("composio-tool-bridge", () => {
     } else {
       process.env.NAKAMA_WEB_PUBLIC_URL = previous.webPublicUrl;
     }
-  });
-
-  test("connection key includes user id", () => {
-    expect(composioConnectionKey("org_1", "usr_a", "profile_1")).toBe(
-      "composio:org_1:usr_a:profile_1"
-    );
   });
 
   test("runs the turn without Composio tools when the session cannot open", async () => {
@@ -913,26 +905,5 @@ describe("composio-tool-bridge", () => {
     });
     // SAFETY: The test fixture matches the contract used by this test.
     expect(String((result as { error?: string }).error)).toContain("localhost");
-  });
-
-  test("resolveComposioCallbackBaseUrl prefers clientOrigin from browser", () => {
-    expect(
-      resolveComposioCallbackBaseUrl({
-        clientOrigin: "https://app.example.com/",
-      })
-    ).toBe("https://app.example.com");
-  });
-
-  test("resolveComposioCallbackBaseUrl reads Origin header from request", () => {
-    const request = new Request(
-      "http://127.0.0.1:4310/v1/sessions/s1/messages",
-      {
-        headers: { Origin: "http://localhost:3003" },
-      }
-    );
-
-    expect(resolveComposioCallbackBaseUrl({ request })).toBe(
-      "http://localhost:3003"
-    );
   });
 });

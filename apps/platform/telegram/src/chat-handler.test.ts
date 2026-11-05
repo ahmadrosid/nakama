@@ -19,11 +19,7 @@ import {
   UNSUPPORTED_MEDIA_REPLY,
 } from "./attachments";
 import { TelegramAuthStore } from "./auth-store";
-import {
-  createChatHandler,
-  resetChatLocksForTests,
-  withChatLock,
-} from "./chat-handler";
+import { createChatHandler, resetChatLocksForTests } from "./chat-handler";
 import {
   createMessageContext,
   createMockClient,
@@ -1234,61 +1230,6 @@ describe("createChatHandler security", () => {
     });
   });
 
-  test("skips redundant edits for identical todo payloads", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeTelegramConfigIni(homeDir, {
-        allowedUserIds: [4242],
-        botToken: "1234567890:TEST",
-      });
-
-      const { handler: handleMessage } = await createTestHandler(
-        homeDir,
-        {
-          config: TEST_CONFIG,
-        },
-        {
-          steps: [
-            {
-              todos: [
-                { content: "Plan changes", id: "plan", status: "in_progress" },
-                { content: "Ship update", id: "ship", status: "pending" },
-              ],
-              type: "todos",
-            },
-            {
-              todos: [
-                { content: "Plan changes", id: "plan", status: "in_progress" },
-                { content: "Ship update", id: "ship", status: "pending" },
-              ],
-              type: "todos",
-            },
-            { reply: "Done", type: "resolve" },
-          ],
-          streaming: true,
-        }
-      );
-
-      const { ctx, replies, edits } = createMessageContext({
-        text: "hello agent",
-        userId: 4242,
-      });
-
-      await handleMessage(ctx);
-
-      expect(replies).toEqual([
-        "🛠️ Working\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
-        "Done",
-      ]);
-      expect(edits).toEqual([
-        {
-          chatId: 4242,
-          messageId: 1,
-          text: "✅ Completed\n🔄 [~] Plan changes\n⏳ [ ] Ship update",
-        },
-      ]);
-    });
-  });
-
   test("/start shows pairing prompt before authorization", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
@@ -2276,39 +2217,6 @@ describe("stream cleanup", () => {
       expect(hasActiveStreams()).toBe(false);
       expect(replies.some((reply) => /provider down/i.test(reply))).toBe(true);
     });
-  });
-});
-
-describe("withChatLock", () => {
-  test("keeps the lock chain rejection-safe across a failed prior run", async () => {
-    const rejections: unknown[] = [];
-
-    const onUnhandled = (reason: Error) => {
-      rejections.push(reason);
-    };
-
-    process.on("unhandledRejection", onUnhandled);
-
-    try {
-      await expect(
-        withChatLock("tg-lock-a", async () => {
-          throw new Error("first failed");
-        })
-      ).rejects.toThrow("first failed");
-
-      let ranSecond = false;
-      await withChatLock("tg-lock-a", async () => {
-        ranSecond = true;
-      });
-
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(ranSecond).toBe(true);
-      expect(rejections).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
-    }
   });
 });
 

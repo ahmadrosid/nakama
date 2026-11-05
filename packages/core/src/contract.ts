@@ -860,6 +860,8 @@ export interface BrowserSessionSummary {
   expiresAt: string;
   id: string;
   lastUsedAt: string | null;
+  /** Raw User-Agent the session signed in with; null for sessions not seen since it was recorded. */
+  userAgent: string | null;
 }
 
 /** A computer that runs Nakama Desktop with this account's models. */

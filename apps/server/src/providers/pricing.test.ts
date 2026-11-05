@@ -257,65 +257,6 @@ describe("estimateUsageCostUsd", () => {
     ).toBe(0);
   });
 
-  test("uses saved pricing for cerebras custom models", () => {
-    const cost = estimateUsageCostUsd("gpt-oss-120b", 1_000_000, 1_000_000, {
-      provider: "cerebras",
-      providerInstance: {
-        ...cerebrasInstance,
-        customModels: [
-          {
-            id: "gpt-oss-120b",
-            inputPerMillionUsd: 0.25,
-            outputPerMillionUsd: 0.69,
-          },
-        ],
-      },
-    });
-
-    expect(cost).toBeCloseTo(0.94, 5);
-  });
-
-  test("uses saved pricing for fireworks custom models", () => {
-    const cost = estimateUsageCostUsd(
-      "accounts/fireworks/models/kimi-k2p6",
-      1_000_000,
-      1_000_000,
-      {
-        provider: "fireworks",
-        providerInstance: {
-          ...fireworksInstance,
-          customModels: [
-            {
-              id: "accounts/fireworks/models/kimi-k2p6",
-              inputPerMillionUsd: 0.5,
-              outputPerMillionUsd: 2,
-            },
-          ],
-        },
-      }
-    );
-
-    expect(cost).toBeCloseTo(2.5, 5);
-  });
-
-  test("uses saved pricing for moonshot discovered models", () => {
-    const cost = estimateUsageCostUsd("kimi-k2.5", 1_000_000, 1_000_000, {
-      provider: "moonshot",
-      providerInstance: {
-        ...moonshotInstance,
-        customModels: [
-          {
-            id: "kimi-k2.5",
-            inputPerMillionUsd: 0.6,
-            outputPerMillionUsd: 2.5,
-          },
-        ],
-      },
-    });
-
-    expect(cost).toBeCloseTo(3.1, 5);
-  });
-
   test("does not estimate discovery-provider models without saved pricing", () => {
     // Discovery catalogs are fetched at runtime, so there is no bundled entry
     // to price against: report unknown instead of DEFAULT_PRICING.

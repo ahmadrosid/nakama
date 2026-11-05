@@ -113,31 +113,29 @@ export async function artifactCreatorScopeFromContext(
   c: Context<AppEnv>,
   agent: ProfileOwnerLookup
 ): Promise<string | null> {
-  try {
-    await requireProfileManageFromContext(c, agent, { allowOrgAdmin: true });
+  const auth = getRequestAuth(c);
 
+  if (auth.isPlatformAdmin || auth.orgRole === "admin") {
     return null;
-  } catch (error) {
-    if (!(error instanceof NakamaApiError && error.status === 403)) {
-      throw error;
-    }
-
-    const auth = requireOrgMemberFromContext(c);
-
-    // Same answer as the manage guard for a missing agent: no probing ids.
-    const found = await agent
-      .getProfile(
-        requireActiveOrgIdFromContext(c),
-        decodeURIComponent(c.req.param("profileId") ?? "")
-      )
-      .catch(() => null);
-
-    if (!found) {
-      throw error;
-    }
-
-    return auth.user.id;
   }
+
+  requireOrgMember(auth);
+
+  // Same answer as the manage guard for a missing agent: no probing ids.
+  const found = await agent
+    .getProfile(
+      requireActiveOrgIdFromContext(c),
+      decodeURIComponent(c.req.param("profileId") ?? "")
+    )
+    .catch(() => null);
+
+  if (!found) {
+    throw new NakamaApiError("Forbidden", 403);
+  }
+
+  return !found.profile.isSuper && found.profile.ownerUserId === auth.user.id
+    ? null
+    : auth.user.id;
 }
 
 export function requirePlatformAdminFromContext(

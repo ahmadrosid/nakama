@@ -4,7 +4,6 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { MAX_HTML_ARTIFACT_BYTES } from "./artifact-mime";
 import {
-  buildArtifactSharePath,
   deleteArtifactShareSnapshot,
   generateArtifactShareToken,
   readArtifactShareSnapshot,
@@ -29,10 +28,6 @@ describe("artifact shares", () => {
     expect(token.startsWith("nkshare")).toBe(true);
     expect(token).not.toContain("_");
     expect(token.length).toBeGreaterThan(40);
-  });
-
-  test("buildArtifactSharePath returns SPA route", () => {
-    expect(buildArtifactSharePath("abc123")).toBe("/s/abc123");
   });
 
   test("write and read snapshot round-trip", async () => {

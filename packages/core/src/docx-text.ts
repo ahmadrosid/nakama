@@ -113,8 +113,3 @@ export async function convertDocxToMarkdown(bytes: Buffer): Promise<string> {
 
   return text.trim();
 }
-
-/** Plain text of a `.docx`, for callers that index or embed rather than render. */
-export async function extractDocxText(bytes: Buffer): Promise<string> {
-  return convertDocxToMarkdown(bytes);
-}

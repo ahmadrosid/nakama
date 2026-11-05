@@ -815,6 +815,8 @@ export interface StoredBrowserSessionRecord {
   lastUsedAt: string | null;
   revokedAt: string | null;
   sessionTokenHash: string;
+  /** Capped User-Agent header, so the owner can tell sessions apart. */
+  userAgent?: string | null;
   userId: string;
 }
 
@@ -1075,6 +1077,11 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
+  getArtifactRecord(
+    orgId: string,
+    profileId: string,
+    filename: string
+  ): Promise<StoredArtifactRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,
@@ -1625,7 +1632,12 @@ export interface DatabaseAdapter {
     id: string,
     activeOrgId: string | null
   ): Promise<void>;
-  updateBrowserSessionLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
+  /** Also fills user_agent when the row has none, so sessions from before the column get a device label. */
+  updateBrowserSessionLastUsedAt(
+    id: string,
+    lastUsedAt: string,
+    userAgent?: string | null
+  ): Promise<void>;
   /** False when the change would leave the org without an admin. */
   updateOrgMemberRole(
     orgId: string,
