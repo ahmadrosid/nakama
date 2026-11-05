@@ -594,7 +594,7 @@
   }
 
   .type-label {
-    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
+    @apply text-sm font-medium text-muted-foreground;
   }
 
   .type-code {
@@ -777,11 +777,11 @@
       max-height 320ms cubic-bezier(0.4, 0, 0.2, 1),
       margin 320ms cubic-bezier(0.4, 0, 0.2, 1),
       color 150ms ease-out;
-    @apply mb-1.5 flex w-full cursor-pointer items-center gap-1 overflow-hidden rounded-md px-2 py-1 text-left text-xs text-muted-foreground/55 motion-reduce:transition-none;
+    @apply mb-1.5 flex w-full cursor-pointer items-center gap-1 overflow-hidden rounded-md px-2 py-1 text-left text-xs text-muted-foreground motion-reduce:transition-none;
   }
 
   .sidebar-nav-group-label:hover {
-    @apply text-muted-foreground;
+    @apply text-foreground;
   }
 
   .sidebar-shell:not([data-collapsed]) .sidebar-nav-group-label {

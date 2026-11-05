@@ -209,7 +209,7 @@ function appShellMainClassName(page: PageId, pathname: string): string {
     "min-h-0 flex-1",
     flush
       ? "flex flex-col overflow-hidden"
-      : "overflow-y-auto overflow-x-hidden",
+      : "overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
     flush || skillDetail ? null : "p-4 sm:p-6"
   );
 }
