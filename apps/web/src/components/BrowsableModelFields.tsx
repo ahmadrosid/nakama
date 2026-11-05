@@ -88,7 +88,7 @@ export function BrowsableModelFields<T>({
         // click; the list opens so they remove it there on purpose.
         if (
           existing.default === true ||
-          (existing.name ?? "") !== (toModelRow(single).name ?? "")
+          modelEdited(existing, toModelRow(single))
         ) {
           setIsBrowsing(false);
 
@@ -191,5 +191,21 @@ export function BrowsableModelFields<T>({
         />
       )}
     </FormField>
+  );
+}
+
+const EDITABLE_FIELDS = [
+  "name",
+  "supportsThinking",
+  "supportsVision",
+  "inputPerMillionUsd",
+  "outputPerMillionUsd",
+  "contextWindow",
+] as const;
+
+// True when the user changed a field the list row set.
+function modelEdited(current: ModelListRow, fromList: ModelListRow): boolean {
+  return EDITABLE_FIELDS.some(
+    (field) => (current[field] ?? null) !== (fromList[field] ?? null)
   );
 }

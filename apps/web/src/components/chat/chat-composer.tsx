@@ -1341,7 +1341,7 @@ function resolveModelPickerState(props: ChatComposerFullProps) {
 
   const modelLabel =
     selectedGroup && sharedName
-      ? `${baseModelLabel} (${selectedGroup.providerLabel})`
+      ? `${baseModelLabel} · ${selectedGroup.providerLabel}`
       : baseModelLabel;
 
   return {

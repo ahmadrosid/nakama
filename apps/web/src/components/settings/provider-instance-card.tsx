@@ -121,6 +121,7 @@ function ProviderCheckStatus({
   // first in a chat. Once per provider every 10 minutes.
   const {
     data: check,
+    isError,
     isFetching: checking,
     refetch: checkAgain,
   } = useQuery({
@@ -131,8 +132,9 @@ function ProviderCheckStatus({
     staleTime: 10 * 60_000,
   });
 
-  const warning =
-    check?.status === "rejected"
+  const warning = isError
+    ? "Could not check"
+    : check?.status === "rejected"
       ? "Key rejected"
       : check?.status === "needs-key"
         ? "Needs a key"
@@ -148,7 +150,7 @@ function ProviderCheckStatus({
     <>
       <span
         className={
-          check?.status === "unreachable"
+          isError || check?.status === "unreachable"
             ? "text-amber-700 dark:text-amber-300"
             : "text-destructive"
         }

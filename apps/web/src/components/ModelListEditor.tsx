@@ -203,13 +203,17 @@ export function ModelListEditor({
                     <Button
                       aria-controls={detailsId}
                       aria-expanded={detailsOpen}
+                      aria-label={`${showPricing ? "Price and context" : "Context"} for ${label}`}
                       disabled={disabled}
                       onClick={() => toggleDetails(rowKey)}
                       size="sm"
                       type="button"
                       variant="outline"
                     >
-                      {showPricing ? "Price and context" : "Context"}
+                      <span className="sm:hidden">More</span>
+                      <span className="hidden sm:inline">
+                        {showPricing ? "Price and context" : "Context"}
+                      </span>
                     </Button>
                     <Button
                       aria-label={`Remove ${label}`}
