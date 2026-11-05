@@ -386,8 +386,15 @@ export async function buildComposioConnectTools(
             toolkitSlug,
           };
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
+          // The model relays this text to whoever is chatting, maybe a member,
+          // so only Nakama's own messages pass. Raw Composio text goes to the log.
+          let message = "Composio could not start sign-in. Try again later.";
+
+          if (error instanceof NakamaApiError) {
+            message = error.message;
+          } else {
+            console.error("[composio] connect_account failed", error);
+          }
 
           // A retry cannot fix a missing auth config. Only an admin can.
           const customAuth =

@@ -16,8 +16,9 @@ import { client } from "@/lib/client";
 
 const cleanups: Array<() => Promise<void>> = [];
 
+// Last in, first out: unmount the card before its client spies are restored.
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0)) {
+  for (const cleanup of cleanups.splice(0).reverse()) {
     await cleanup();
   }
 });

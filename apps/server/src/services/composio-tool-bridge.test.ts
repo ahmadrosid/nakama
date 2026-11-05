@@ -767,18 +767,11 @@ describe("composio-tool-bridge", () => {
     });
   });
 
-  test("connect tool reports a missing auth config as its own code", async () => {
+  /** Runs the channel connect tool for Gmail while connect throws `error`. */
+  async function runConnectToolWhenConnectFails(error: Error) {
     const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
       async connectToolkit() {
-        throw new NakamaApiError(
-          "No managed auth.",
-          422,
-          undefined,
-          undefined,
-          {
-            code: COMPOSIO_CUSTOM_AUTH_REQUIRED,
-          }
-        );
+        throw error;
       },
       async getAssignedToolkitRecords() {
         return [
@@ -816,15 +809,35 @@ describe("composio-tool-bridge", () => {
       composioService
     );
 
-    const result = await tools[0]?.run(
+    return await tools[0]?.run(
       { toolkit_slug: "gmail" },
       { clientOrigin: "https://nakama.example.com" }
+    );
+  }
+
+  test("connect tool reports a missing auth config as its own code", async () => {
+    const result = await runConnectToolWhenConnectFails(
+      new NakamaApiError("No managed auth.", 422, undefined, undefined, {
+        code: COMPOSIO_CUSTOM_AUTH_REQUIRED,
+      })
     );
 
     expect(result).toMatchObject({
       code: COMPOSIO_CUSTOM_AUTH_REQUIRED,
       toolkitSlug: "gmail",
     });
+  });
+
+  test("connect tool keeps raw Composio errors out of the reply", async () => {
+    const result = await runConnectToolWhenConnectFails(
+      new Error('400 {"error":{"slug":"Some_Other_Error"}}')
+    );
+
+    expect(result).toMatchObject({
+      code: "COMPOSIO_TRANSIENT",
+      toolkitSlug: "gmail",
+    });
+    expect(JSON.stringify(result)).not.toContain("Some_Other_Error");
   });
 
   test("web chat offers a connect button for any app without starting OAuth", async () => {

@@ -75,31 +75,52 @@ async function createApp(client = createMockClient()) {
 }
 
 /** Enable Gmail as admin, then connect as `role` while Composio throws `linkError`. */
-async function connectWhenLinkFails(
+function connectWhenLinkFails(
   role: "admin" | "member",
   linkError: Error,
   connectPath = "/v1/composio/toolkits/gmail/connect"
 ) {
+  return postAsRole(
+    role,
+    {
+      async linkToolkitAccount() {
+        throw linkError;
+      },
+    },
+    connectPath
+  );
+}
+
+/** Enable Gmail as admin, run `seed`, then POST `path` as `role`. */
+async function postAsRole(
+  role: "admin" | "member",
+  clientOverrides: Partial<ReturnType<typeof createMockClient>>,
+  path: string,
+  seed?: (
+    databaseAdapter: Awaited<ReturnType<typeof createApp>>["databaseAdapter"],
+    orgId: string,
+    userId: string
+  ) => Promise<void>
+) {
   const { app, databaseAdapter } = await createApp({
     ...createMockClient(),
-    async linkToolkitAccount() {
-      throw linkError;
-    },
+    ...clientOverrides,
   });
 
-  const { email, password, orgId } = await seedOrgAdmin(databaseAdapter, {
+  const seeded = await seedOrgAdmin(databaseAdapter, {
     profileId: "profile_test",
   });
 
+  const { email, password, orgId } = seeded;
   const admin = await loginUserSession(app, email, password, orgId);
 
   const post = (
-    path: string,
+    target: string,
     session: typeof admin,
     body: Record<string, string>
   ) =>
     app.fetch(
-      new Request(`http://localhost:4310${path}`, {
+      new Request(`http://localhost:4310${target}`, {
         body: JSON.stringify(body),
         headers: session.headers({
           "Content-Type": "application/json",
@@ -114,6 +135,7 @@ async function connectWhenLinkFails(
   });
 
   let session = admin;
+  let userId = seeded.userId;
 
   if (role === "member") {
     const now = new Date().toISOString();
@@ -138,9 +160,12 @@ async function connectWhenLinkFails(
       "password123",
       orgId
     );
+    userId = "user_member";
   }
 
-  return post(connectPath, session, {
+  await seed?.(databaseAdapter, orgId, userId);
+
+  return post(path, session, {
     callbackOrigin: "http://localhost:3003",
   });
 }
@@ -443,6 +468,46 @@ describe("composio routes", () => {
       "member",
       OTHER_COMPOSIO_ERROR,
       "/v1/composio/meet/gmail/connect"
+    );
+
+    // SAFETY: errorResponse writes `{ error }` for this route.
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).not.toContain("Some_Other_Error");
+  });
+
+  test("sync hides raw Composio errors from members", async () => {
+    const response = await postAsRole(
+      "member",
+      {
+        createProfileSession() {
+          return Promise.reject(OTHER_COMPOSIO_ERROR);
+        },
+      },
+      "/v1/composio/toolkits/gmail/sync",
+      async (databaseAdapter, orgId, userId) => {
+        const toolkit = await databaseAdapter.getComposioToolkitBySlug(
+          orgId,
+          "gmail"
+        );
+
+        const now = new Date().toISOString();
+
+        await databaseAdapter.upsertComposioUserConnection({
+          connectedAccountId: "ca_1",
+          createdAt: now,
+          id: "cuc_1",
+          lastError: null,
+          oauthStateHash: null,
+          orgId,
+          sessionIdEnc: null,
+          status: "connected",
+          toolkitId: toolkit?.id ?? "",
+          updatedAt: now,
+          userId,
+        });
+      }
     );
 
     // SAFETY: errorResponse writes `{ error }` for this route.

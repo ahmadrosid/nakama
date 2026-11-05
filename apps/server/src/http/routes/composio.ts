@@ -25,8 +25,15 @@ import {
 } from "../shared";
 import type { HonoApp } from "../types";
 
-/** Raw Composio errors are for org admins only. Members get a plain message. */
-function connectErrorResponse(error: Error, isOrgAdmin: boolean): Response {
+/**
+ * Error response for a Composio route that members can call. Raw Composio
+ * errors are for org admins only. Members get a plain message.
+ */
+function memberSafeErrorResponse(
+  error: Error,
+  isOrgAdmin: boolean,
+  action: string
+): Response {
   if (error instanceof NakamaApiError) {
     return errorResponse(error.message, error.status, { code: error.code });
   }
@@ -35,10 +42,10 @@ function connectErrorResponse(error: Error, isOrgAdmin: boolean): Response {
     return errorResponse(error.message, 400);
   }
 
-  console.error("[composio] connect failed", { error: error.message });
+  console.error(`[composio] ${action} failed`, { error: error.message });
 
   return errorResponse(
-    "Composio could not start sign-in. Ask an org admin to check the Composio setup.",
+    `Composio could not ${action}. Ask an org admin to check the Composio setup.`,
     400
   );
 }
@@ -182,9 +189,10 @@ export function registerComposioRoutes(
         )
       );
     } catch (error) {
-      return connectErrorResponse(
+      return memberSafeErrorResponse(
         error instanceof Error ? error : new Error(String(error)),
-        auth.orgRole === "admin"
+        auth.orgRole === "admin",
+        "start sign-in"
       );
     }
   });
@@ -216,9 +224,10 @@ export function registerComposioRoutes(
         )
       );
     } catch (error) {
-      return connectErrorResponse(
+      return memberSafeErrorResponse(
         error instanceof Error ? error : new Error(String(error)),
-        auth.orgRole === "admin"
+        auth.orgRole === "admin",
+        "start sign-in"
       );
     }
   });
@@ -235,13 +244,10 @@ export function registerComposioRoutes(
         )
       );
     } catch (error) {
-      if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status);
-      }
-
-      return errorResponse(
-        error instanceof Error ? error.message : String(error),
-        400
+      return memberSafeErrorResponse(
+        error instanceof Error ? error : new Error(String(error)),
+        auth.orgRole === "admin",
+        "disconnect the app"
       );
     }
   });
@@ -258,13 +264,10 @@ export function registerComposioRoutes(
         )
       );
     } catch (error) {
-      if (error instanceof NakamaApiError) {
-        return errorResponse(error.message, error.status);
-      }
-
-      return errorResponse(
-        error instanceof Error ? error.message : String(error),
-        400
+      return memberSafeErrorResponse(
+        error instanceof Error ? error : new Error(String(error)),
+        auth.orgRole === "admin",
+        "sync the app"
       );
     }
   });
