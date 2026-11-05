@@ -376,7 +376,7 @@ export class SystemClient extends NakamaClientCore {
   }
 
   async getExternalModelCatalog(
-    catalogId: "models-dev" | "openrouter" | "cerebras"
+    catalogId: "openrouter" | "cerebras"
   ): Promise<JsonValue> {
     return this.request<JsonValue>(
       `/v1/model-catalogs/${encodeURIComponent(catalogId)}`

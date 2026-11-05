@@ -516,6 +516,10 @@ export function registerModelRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        410: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Removed catalog",
+        },
         502: {
           content: { "application/json": { schema: errorSchema } },
           description: "Upstream error",
@@ -1762,6 +1766,14 @@ export function registerModelRoutes(
   app.get("/v1/model-catalogs/:catalogId", async (c) => {
     getRequestAuth(c);
     const catalogId = decodeURIComponent(c.req.param("catalogId"));
+
+    // A web page opened before the upgrade can still ask for this one.
+    if (catalogId === "models-dev") {
+      return errorResponse(
+        "This model catalog was removed. Reload the page.",
+        410
+      );
+    }
 
     if (!isExternalModelCatalogId(catalogId)) {
       return errorResponse("Unknown model catalog.", 400);

@@ -10,7 +10,6 @@ import {
 } from "@nakama/ui/select";
 import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
-import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 
 interface CustomProviderFieldsProps {
@@ -18,11 +17,6 @@ interface CustomProviderFieldsProps {
   baseUrl: string;
   baseUrlError?: string | null;
   browseLabel?: string;
-  /**
-   * `remote` fetches models from the provider endpoint via /v1/models/discover.
-   * `models.dev` browses the public models.dev catalog (setup helper for custom endpoints).
-   */
-  browseSource?: "remote" | "models.dev";
   customModels: ModelListRow[];
   density?: "default" | "compact";
   disabled?: boolean;
@@ -56,7 +50,6 @@ export function CustomProviderFields({
   displayNameError,
   baseUrlError,
   modelsError,
-  browseSource = "remote",
   remoteProvider = "openai_compatible",
   providerInstanceId,
   hostMode,
@@ -152,11 +145,7 @@ export function CustomProviderFields({
 
       {showModelsEditor ? (
         <BrowsableModelFields
-          browseLabel={
-            browseSource === "remote"
-              ? `Browse ${resolvedBrowseLabel}`
-              : "Browse models.dev"
-          }
+          browseLabel={`Browse ${resolvedBrowseLabel}`}
           customModels={customModels}
           density={density}
           disabled={disabled}
@@ -173,33 +162,20 @@ export function CustomProviderFields({
                 : models
             )
           }
-          renderBrowse={({ multiSelect, onAddMany, onSelect }) =>
-            browseSource === "remote" ? (
-              <RemoteModelsBrowseList
-                apiKey={apiKey}
-                baseUrl={baseUrl}
-                browseLabel={resolvedBrowseLabel}
-                className="h-72 rounded-md border border-border"
-                hostMode={hostMode}
-                multiSelect={multiSelect}
-                onAddMany={onAddMany}
-                onSelect={onSelect}
-                provider={remoteProvider}
-                providerId={providerInstanceId}
-              />
-            ) : (
-              <ModelsBrowseList
-                className="h-72 rounded-md border border-border"
-                onSelect={(_provider, modelId, row) =>
-                  onSelect({
-                    id: modelId,
-                    name: row.modelName,
-                    supportsVision: row.vision,
-                  })
-                }
-              />
-            )
-          }
+          renderBrowse={({ multiSelect, onAddMany, onSelect }) => (
+            <RemoteModelsBrowseList
+              apiKey={apiKey}
+              baseUrl={baseUrl}
+              browseLabel={resolvedBrowseLabel}
+              className="h-72 rounded-md border border-border"
+              hostMode={hostMode}
+              multiSelect={multiSelect}
+              onAddMany={onAddMany}
+              onSelect={onSelect}
+              provider={remoteProvider}
+              providerId={providerInstanceId}
+            />
+          )}
           showThinking
           showVision
           toModelRow={(row: ModelListRow) => row}
