@@ -352,12 +352,12 @@ describe("modelSupportsVision", () => {
         { id: retired, supportsVision: false },
       ])
     ).toBe(true);
-    expect(modelSupportsVision("unverified-model", "netra")).toBe(false);
+    expect(modelSupportsVision("hand-added-model", "netra")).toBe(false);
     expect(
-      modelSupportsVision("unverified-model", "netra", [
-        { id: "unverified-model", supportsVision: true },
+      modelSupportsVision("hand-added-model", "netra", [
+        { id: "hand-added-model", supportsVision: true },
       ])
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test("keeps OpenCode Go models opt-in only", () => {

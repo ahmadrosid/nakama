@@ -49,10 +49,6 @@ async function bootstrapProviderFromEnv(
         )
       : null;
 
-  if (providerType === "netra" && netraModel !== NETRA_AGENT_MODEL_ID) {
-    return null;
-  }
-
   const instance = {
     apiKey: "",
     createdAt: new Date().toISOString(),

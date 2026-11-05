@@ -34,6 +34,34 @@ describe("Netra provider setup", () => {
     expect(instance.customModels?.[0]?.cachedInputPerMillionUsd).toBe(0.01);
   });
 
+  test("keeps models added by hand next to V4.1 Flash", () => {
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        apiKey: "netra-key",
+        customModels: [
+          { default: true, id: "deepseek/deepseek-v4.1-flash" },
+          { id: "qwen/qwen3-coder" },
+          { id: "deepseek/deepseek-v4-flash-0731" },
+        ],
+        type: "netra",
+      },
+      []
+    );
+
+    expect(
+      getModelsForProviderInstance(instance).map((model) => model.id)
+    ).toEqual(["deepseek/deepseek-v4.1-flash", "qwen/qwen3-coder"]);
+    expect(modelExistsOnInstance(instance, "qwen/qwen3-coder")).toBe(true);
+    expect(modelExistsOnInstance(instance, "other/model")).toBe(false);
+    expect(
+      resolveProfileProviderSelection({
+        defaultProviderId: instance.id,
+        profileModel: `${instance.id}::qwen/qwen3-coder`,
+        providers: [instance],
+      })?.model
+    ).toBe("qwen/qwen3-coder");
+  });
+
   test("rejects the unsupported Responses API", () => {
     expect(() =>
       buildProviderInstanceFromCreateRequest(
