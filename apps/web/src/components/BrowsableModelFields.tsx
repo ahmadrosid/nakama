@@ -75,6 +75,20 @@ export function BrowsableModelFields<T>({
   };
 
   const handleAddMany = (rows: T[]) => {
+    // A click on a row that is already in the form takes it out again.
+    const [single] = rows;
+
+    if (rows.length === 1 && single) {
+      const id = toModelRow(single).id;
+
+      if (customModels.some((model) => model.id === id)) {
+        onCustomModelsChange(customModels.filter((model) => model.id !== id));
+        setIsBrowsing(true);
+
+        return;
+      }
+    }
+
     const existingIds = new Set(customModels.map((model) => model.id));
     const nextModels: ModelListRow[] = [];
 

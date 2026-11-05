@@ -263,7 +263,15 @@ export function CatalogModelsBrowseList<
           isFetching={isFetching}
           onRefresh={onRefresh}
           refreshDisabled={refreshDisabled}
-          status={resolvedStatus}
+          status={
+            multiSelect && status == null && addedIds?.size ? (
+              <>
+                {resolvedStatus} · {addedIds.size} in your list
+              </>
+            ) : (
+              resolvedStatus
+            )
+          }
           toolbarDisabled={toolbarDisabled}
         />
       }
@@ -283,10 +291,12 @@ export function CatalogModelsBrowseList<
         getKey={(row) => row.id}
         renderRow={(row, style) => (
           <BrowseModelRowButton
-            added={addedIds?.has(row.id) ?? false}
+            // In a multi-pick list an added row stays clickable to take it out.
+            added={!multiSelect && (addedIds?.has(row.id) ?? false)}
             onSelect={() => handleRowSelect(row)}
             row={toDisplayRow(row)}
             selectable={multiSelect}
+            selected={multiSelect && (addedIds?.has(row.id) ?? false)}
             style={style}
           />
         )}
