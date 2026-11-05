@@ -42,7 +42,7 @@ function createApp() {
 }
 
 describe("GET /v1/profiles/:profileId/history", () => {
-  test("org admin can read history; member gets 403", async () => {
+  test("org admin can read history; member reads the shared default, cannot read another member's private agent", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
 
     const platform = await setupFreshInstallSession(
@@ -101,8 +101,24 @@ describe("GET /v1/profiles/:profileId/history", () => {
       orgId
     );
 
-    const denied = await app.fetch(
+    // The org's shared default follows the list visibility: members can read.
+    const shared = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}/history`, {
+        headers: member.headers({}, orgId),
+      })
+    );
+
+    expect(shared.status).toBe(200);
+
+    // A private agent owned by someone else stays hidden.
+    const privateProfile = await profileService.createProfile(
+      orgId,
+      { name: "Private Agent" },
+      { ownerUserId: "user_platform", sharedWithTeam: false }
+    );
+
+    const denied = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${privateProfile.profile.id}/history`, {
         headers: member.headers({}, orgId),
       })
     );
