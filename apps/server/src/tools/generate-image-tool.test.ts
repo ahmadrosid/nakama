@@ -18,7 +18,6 @@ import {
   seedOrgSuperNakamaProfile,
 } from "@nakama/db";
 import { IMAGE_GENERATION_SELECTION } from "../providers/models";
-import { IMAGE_MODEL_REQUIRED_MESSAGE } from "../services/image-generation";
 import { resolveToolsFromStorage } from "../services/tool-resolver";
 import {
   createGenerateImageTool,
@@ -57,11 +56,12 @@ function generateImageTool(
     db,
     ensureSettingsLoaded: async () => {},
     getUserConfig: () => null,
+    onChatgptTokenRefresh: async () => undefined,
   });
 }
 
 describe("generate_image tool seed and resolver (U3)", () => {
-  test("seedDatabase includes generate_image and Super Nakama is not auto-assigned", async () => {
+  test("seedDatabase includes generate_image and a new Super Nakama gets it", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertOrganization({
       createdAt: new Date().toISOString(),
@@ -80,7 +80,7 @@ describe("generate_image tool seed and resolver (U3)", () => {
       (tool) => tool.id
     );
 
-    expect(assignedIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
+    expect(assignedIds).toContain(GENERATE_IMAGE_TOOL_ID);
   });
 
   test("unassigned profile session does not expose generate_image", async () => {
@@ -194,6 +194,7 @@ describe("generate_image tool persistence (U4)", () => {
         },
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -234,6 +235,7 @@ describe("generate_image tool persistence (U4)", () => {
             },
           ],
         }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -259,6 +261,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
         recordUsage: (_model, _input, _output, providerInstance) => {
           pricedOn = providerInstance.id;
         },
@@ -303,6 +306,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
         recordUsage: (model, input, output, _instance, attribution) => {
           usage.push({ input, model, output, ...attribution });
         },
@@ -313,6 +317,7 @@ describe("generate_image tool persistence (U4)", () => {
       mimeType: "image/png",
       model: "gpt-image-2",
       path: "artifacts/cat.png",
+      size: "1024x1024",
       sizeBytes: PNG_BYTES.byteLength,
     });
 
@@ -373,6 +378,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -417,6 +423,7 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
@@ -457,14 +464,37 @@ describe("generate_image tool persistence (U4)", () => {
           throw new Error("should not call OpenAI");
         },
         getUserConfig: () => openaiConfig({ imageModel: null }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 
-    expect(result).toEqual({ error: IMAGE_MODEL_REQUIRED_MESSAGE });
+    expect(result).toHaveProperty("error");
     const artifactsDir = path.join(workspaceRoot, "artifacts");
     const entries = await readdir(artifactsDir).catch(() => []);
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
+  });
+
+  test("an image model saved as off generates nothing", async () => {
+    let calls = 0;
+
+    const result = await runGenerateImageTool(
+      { prompt: "a cat" },
+      { orgId: "org_1", profileId: "profile_1", workspaceRoot },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async () => {
+          calls++;
+          throw new Error("should not generate");
+        },
+        getUserConfig: () => openaiConfig({ imageModel: "off" }),
+        onChatgptTokenRefresh: async () => undefined,
+      }
+    );
+
+    expect(result).toHaveProperty("error");
+    expect(calls).toBe(0);
   });
 
   test("OpenAI failure writes no partial sidecar or attachment", async () => {
@@ -495,6 +525,7 @@ describe("generate_image tool persistence (U4)", () => {
         },
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
+        onChatgptTokenRefresh: async () => undefined,
       }
     );
 

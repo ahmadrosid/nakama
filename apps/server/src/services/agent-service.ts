@@ -364,9 +364,10 @@ import {
 import type { EphemeralSession } from "./ephemeral-session-store";
 import {
   generateImageWithOpenAI,
-  IMAGE_MODEL_REQUIRED_MESSAGE,
+  imageGenerationUnavailableMessage,
   resolveImageGenerationSelection,
 } from "./image-generation";
+import { chatgptImageInput } from "./image-generation-chatgpt";
 import {
   describeImagesWithVisionModel,
   resolvePrimaryModelVisionSupport,
@@ -1121,12 +1122,20 @@ export class AgentService {
     const selection = resolveImageGenerationSelection(this.userConfig);
 
     if (!selection) {
-      throw new NakamaApiError(IMAGE_MODEL_REQUIRED_MESSAGE, 400);
+      throw new NakamaApiError(
+        imageGenerationUnavailableMessage(this.userConfig),
+        400
+      );
     }
 
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
       baseUrl: selection.baseUrl,
+      ...chatgptImageInput(
+        selection,
+        () => this.userConfig,
+        (instanceId, oauth) => this.persistChatgptOAuth(instanceId, oauth)
+      ),
       model: selection.model,
       prompt,
       size: input.size,
