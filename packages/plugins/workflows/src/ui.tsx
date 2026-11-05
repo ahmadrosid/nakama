@@ -2008,58 +2008,60 @@ export function apply(ctx: Context) {
                   </span>
                   <span>{failedHelp?.text ?? "Stopped"}</span>
                 </p>
-                {failedHelp?.fix ? (
-                  <Button render={<a href={failedHelp.fix.href} />} size="sm">
-                    {failedHelp.fix.label}
-                  </Button>
-                ) : bannerStep && canEditStep(bannerStep.stepId) ? (
+                <div className="workflow-run-buttons">
+                  {failedHelp?.fix ? (
+                    <Button render={<a href={failedHelp.fix.href} />} size="sm">
+                      {failedHelp.fix.label}
+                    </Button>
+                  ) : bannerStep && canEditStep(bannerStep.stepId) ? (
+                    <Button
+                      className="workflow-view-run"
+                      onClick={() => editStep(bannerStep.stepId)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Edit step
+                    </Button>
+                  ) : (
+                    <Button
+                      className="workflow-view-run"
+                      onClick={() => {
+                        setSelection("");
+                        setView("runs");
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      View run
+                    </Button>
+                  )}
                   <Button
-                    className="workflow-view-run"
-                    onClick={() => editStep(bannerStep.stepId)}
+                    disabled={!canRun}
+                    onClick={() => runWorkflow(failedRun.input)}
                     size="sm"
+                    title={runBlocked || undefined}
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                   >
-                    Edit step
+                    <Icon kind="retry" />
+                    Run again
                   </Button>
-                ) : (
                   <Button
-                    className="workflow-view-run"
+                    aria-label="Dismiss"
                     onClick={() => {
-                      setSelection("");
-                      setView("runs");
+                      dismissedRuns.add(failedRun.id);
+                      saveDismissed(dismissedRuns);
+                      redraw();
                     }}
-                    size="sm"
+                    size="icon-lg"
                     type="button"
                     variant="ghost"
                   >
-                    View run
+                    <Icon kind="close" />
                   </Button>
-                )}
-                <Button
-                  disabled={!canRun}
-                  onClick={() => runWorkflow(failedRun.input)}
-                  size="sm"
-                  title={runBlocked || undefined}
-                  type="button"
-                  variant="outline"
-                >
-                  <Icon kind="retry" />
-                  Run again
-                </Button>
-                <Button
-                  aria-label="Dismiss"
-                  onClick={() => {
-                    dismissedRuns.add(failedRun.id);
-                    saveDismissed(dismissedRuns);
-                    redraw();
-                  }}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Icon kind="close" />
-                </Button>
+                </div>
               </div>
             )}
             {view === "runs" && (
@@ -2885,7 +2887,7 @@ export function apply(ctx: Context) {
               aria-expanded={expanded}
               aria-label={`${expanded ? "Hide" : "Open"} run from ${started}`}
               onClick={onToggle}
-              size="icon"
+              size="icon-lg"
               type="button"
               variant="ghost"
             >

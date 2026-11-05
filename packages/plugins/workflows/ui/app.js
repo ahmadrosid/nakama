@@ -227,9 +227,9 @@ var style_default = `[data-plugin-id="workflows"] {
     display: flex;
     flex-shrink: 0;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
-    padding: 12px 14px;
+    padding: 12px 16px;
     margin: 16px 16px 0;
     color: var(--destructive);
     background: color-mix(in srgb, var(--destructive) 6%, var(--background));
@@ -266,6 +266,9 @@ var style_default = `[data-plugin-id="workflows"] {
     }
     .workflow-scroll {
       padding: 20px 12px;
+    }
+    .workflow-last-run {
+      width: calc(100% - 24px);
     }
   }
 }
@@ -572,9 +575,16 @@ var style_default = `[data-plugin-id="workflows"] {
     background: #3b82f6;
   }
   .workflow-last-run {
+    box-sizing: border-box;
     gap: 8px 12px;
-    padding: 10px 8px 10px 14px;
+    width: calc(100% - 40px);
+    max-width: 960px;
+    padding: 12px 8px 12px 16px;
+    margin: 24px auto 0;
     border-radius: 12px;
+  }
+  .workflow-last-run + .workflow-scroll {
+    padding-top: 16px;
   }
   .workflow-last-run-icon {
     display: grid;
@@ -619,7 +629,7 @@ var style_default = `[data-plugin-id="workflows"] {
     border-collapse: collapse;
   }
   .workflow-runs th {
-    padding: 10px 16px;
+    padding: 12px 16px;
     font-size: 12px;
     font-weight: 500;
     color: var(--muted-foreground);
@@ -632,9 +642,21 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-runs .workflow-run-took {
     text-align: right;
   }
+  .workflow-runs thead th:nth-child(1) {
+    width: 18%;
+  }
+  .workflow-runs thead th:nth-child(2) {
+    width: 24%;
+  }
+  .workflow-runs thead th:nth-child(3) {
+    width: 38%;
+  }
+  .workflow-runs thead th:nth-child(4) {
+    width: 12%;
+  }
   .workflow-runs td,
   .workflow-runs th[scope="row"] {
-    padding: 10px 16px;
+    padding: 8px 16px;
     font-size: 14px;
     font-weight: 400;
     color: inherit;
@@ -658,15 +680,26 @@ var style_default = `[data-plugin-id="workflows"] {
     background: color-mix(in srgb, var(--muted) 50%, var(--background));
   }
   .workflow-runs .workflow-run-detail-row td {
-    padding: 0 12px 12px;
+    padding: 16px;
     white-space: normal;
+    background: color-mix(in srgb, var(--muted) 30%, var(--background));
+  }
+  .workflow-runs td:last-child > [data-slot="button"],
+  .workflow-last-run [aria-label="Dismiss"] {
+    position: relative;
+  }
+  .workflow-runs td:last-child > [data-slot="button"]::after,
+  .workflow-last-run [aria-label="Dismiss"]::after {
+    position: absolute;
+    inset: -4px;
+    content: "";
   }
   .workflow-run-badge {
     display: inline-flex;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
     height: 24px;
-    padding: 0 10px 0 8px;
+    padding: 0 12px 0 8px;
     font-size: 13px;
     font-weight: 500;
     background: var(--muted);
@@ -692,7 +725,7 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-steps-cell {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 10px;
+    gap: 4px 12px;
     align-items: center;
   }
   .workflow-run-steps-cell > .workflow-empty {
@@ -700,7 +733,7 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-run-bars {
     display: inline-flex;
-    gap: 3px;
+    gap: 4px;
   }
   .workflow-run-bars > span {
     width: 16px;
@@ -729,10 +762,6 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-detail {
     display: grid;
     gap: 12px;
-    padding: 14px 16px;
-    background: var(--background);
-    border: 1px solid var(--border);
-    border-radius: 10px;
   }
   .workflow-run-actions {
     display: flex;
@@ -753,7 +782,7 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-runs-filter {
     display: flex;
     gap: 4px;
-    padding: 8px 10px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border);
   }
   .workflow-runs caption {
@@ -765,7 +794,7 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-run-actions > svg {
     flex-shrink: 0;
-    margin-top: 3px;
+    margin-top: 2px;
     color: var(--destructive);
   }
   .workflow-run-actions p {
@@ -803,7 +832,7 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-steps summary,
   .workflow-run-steps > li[data-status="pending"] {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
     min-height: 44px;
     cursor: pointer;
@@ -831,10 +860,10 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-steps > li[data-status="failed"] summary > .workflow-empty {
     color: var(--destructive);
   }
-  .workflow-last-run > button[data-slot="button"] {
+  .workflow-last-run .workflow-run-buttons > button[data-slot="button"] {
     color: var(--foreground);
   }
-  .workflow-last-run > button.workflow-view-run {
+  .workflow-last-run .workflow-run-buttons > button.workflow-view-run {
     color: var(--primary);
   }
   .workflow-run-steps > li[data-status="pending"] {
@@ -852,8 +881,8 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-run-steps details[open] {
     display: grid;
-    gap: 10px;
-    padding-bottom: 10px;
+    gap: 8px;
+    padding-bottom: 12px;
   }
   .workflow-receipt {
     display: grid;
@@ -2645,7 +2674,9 @@ function apply(ctx) {
       kind: "warning"
     })), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("span", null, /* @__PURE__ */ React.createElement("strong", null, "Last run failed"), /* @__PURE__ */ React.createElement("span", {
       className: "workflow-empty"
-    }, ` · ${runStarted(failedRun.startedAt)}`, stoppedAt && ` · stopped at ${stoppedAt}`)), /* @__PURE__ */ React.createElement("span", null, failedHelp?.text ?? "Stopped")), failedHelp?.fix ? /* @__PURE__ */ React.createElement(Button, {
+    }, ` · ${runStarted(failedRun.startedAt)}`, stoppedAt && ` · stopped at ${stoppedAt}`)), /* @__PURE__ */ React.createElement("span", null, failedHelp?.text ?? "Stopped")), /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-run-buttons"
+    }, failedHelp?.fix ? /* @__PURE__ */ React.createElement(Button, {
       render: /* @__PURE__ */ React.createElement("a", {
         href: failedHelp.fix.href
       }),
@@ -2681,12 +2712,12 @@ function apply(ctx) {
         saveDismissed(dismissedRuns);
         redraw();
       },
-      size: "icon",
+      size: "icon-lg",
       type: "button",
       variant: "ghost"
     }, /* @__PURE__ */ React.createElement(Icon, {
       kind: "close"
-    }))), view === "runs" && /* @__PURE__ */ React.createElement(RunHistory, {
+    })))), view === "runs" && /* @__PURE__ */ React.createElement(RunHistory, {
       agent,
       canEditStep,
       canRun,
@@ -3166,7 +3197,7 @@ function apply(ctx) {
       "aria-expanded": expanded,
       "aria-label": `${expanded ? "Hide" : "Open"} run from ${started}`,
       onClick: onToggle,
-      size: "icon",
+      size: "icon-lg",
       type: "button",
       variant: "ghost"
     }, /* @__PURE__ */ React.createElement(Icon, {
