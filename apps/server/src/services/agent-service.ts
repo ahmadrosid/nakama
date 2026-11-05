@@ -4655,6 +4655,30 @@ export class AgentService {
     return this.profileService.getProfile(orgId, profileId);
   }
 
+  /**
+   * The fields an access check reads, from one row lookup. A guard uses it so
+   * an unknown id and a hidden agent cost the same, and the full detail loads
+   * only after access passes.
+   */
+  async getProfileAccess(
+    orgId: string,
+    profileId: string
+  ): Promise<{
+    isSuper: boolean;
+    ownerUserId: string | null;
+    sharedWithTeam: boolean;
+  } | null> {
+    const profile = await this.db.getProfileForOrg(profileId, orgId);
+
+    return profile
+      ? {
+          isSuper: profile.isSuper,
+          ownerUserId: profile.ownerUserId ?? null,
+          sharedWithTeam: profile.sharedWithTeam !== false,
+        }
+      : null;
+  }
+
   async createProfile(
     orgId: string,
     request: CreateProfileRequest,

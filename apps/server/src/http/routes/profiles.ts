@@ -31,7 +31,10 @@ import {
   readWorkspaceFile,
   renameWorkspaceEntry,
 } from "@nakama/core";
-import { filterProfilesForChatAccess } from "@nakama/core/profiles";
+import {
+  canChatWithProfile,
+  filterProfilesForChatAccess,
+} from "@nakama/core/profiles";
 import type { Context } from "hono";
 import { listAcpAgentPresets } from "../../providers/acp/acp-agent-presets";
 import { ArtifactShareService } from "../../services/artifact-share-service";
@@ -79,63 +82,43 @@ export function registerProfileRoutes(
   const requireProfileManage = (c: Context<AppEnv>) =>
     requireProfileManageFromContext(c, agent);
 
-  const requireProfileReadAccess = async (c: Context<AppEnv>) => {
+  /**
+   * Admins read every agent. A member reads the agents their chat list shows
+   * (shared, the org default, their own). `owner` is true for admins and the
+   * agent's owner, who also see change history and raw MCP errors. Unknown
+   * ids and hidden agents answer the same 403 after the same row lookup, so
+   * members cannot probe which ids exist.
+   */
+  const requireProfileRead = async (
+    c: Context<AppEnv>
+  ): Promise<{ owner: boolean }> => {
     const auth = getRequestAuth(c);
 
     if (auth.isPlatformAdmin || auth.orgRole === "admin") {
-      return auth;
+      return { owner: true };
     }
 
-    try {
-      return await requireProfileManage(c);
-    } catch (error) {
-      if (!(error instanceof NakamaApiError && error.status === 403)) {
-        throw error;
-      }
+    requireOrgMember(auth);
 
-      // The manage guard's 403 also covers a non-member; re-check membership
-      // so only a member who is not the owner reaches the visibility check.
-      requireOrgMember(auth);
+    const access = await agent.getProfileAccess(
+      requireActiveOrgIdFromContext(c),
+      decodeURIComponent(c.req.param("profileId") ?? "")
+    );
 
-      // A member can read an agent the org can use (shared or the org
-      // default) — the list they picked it from already filtered those. Re-run
-      // that filter on this one profile: unknown ids and other members'
-      // private agents both answer the same Forbidden, so members cannot
-      // probe which ids exist. Only a not-found profile is treated as
-      // absent; backend errors propagate so outages are not reported as
-      // permission failures.
-      let result: Awaited<ReturnType<typeof agent.getProfile>> | null = null;
-
-      try {
-        result = await agent.getProfile(
-          requireActiveOrgIdFromContext(c),
-          decodeURIComponent(c.req.param("profileId") ?? "")
-        );
-      } catch (profileError) {
-        if (
-          profileError instanceof NakamaApiError &&
-          profileError.status === 404
-        ) {
-          result = null;
-        } else {
-          throw profileError;
-        }
-      }
-
-      const visible = result
-        ? filterProfilesForChatAccess([result.profile], {
-            isPlatformAdmin: auth.isPlatformAdmin,
-            orgRole: auth.orgRole,
-            userId: auth.user.id,
-          })
-        : [];
-
-      if (visible.length === 0) {
-        throw new NakamaApiError("Forbidden", 403);
-      }
-
-      return auth;
+    if (
+      !(
+        access &&
+        canChatWithProfile(access, {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          orgRole: auth.orgRole,
+          userId: auth.user.id,
+        })
+      )
+    ) {
+      throw new NakamaApiError("Forbidden", 403);
     }
+
+    return { owner: !access.isSuper && access.ownerUserId === auth.user.id };
   };
 
   const artifactCreatorScope = (c: Context<AppEnv>) =>
@@ -2066,15 +2049,36 @@ export function registerProfileRoutes(
   });
 
   app.get("/v1/profiles/:profileId", async (c) => {
-    await requireProfileReadAccess(c);
+    const { owner } = await requireProfileRead(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
+    const response = await agent.getProfile(orgId, profileId);
 
-    return json<ProfileResponse>(await agent.getProfile(orgId, profileId));
+    if (owner) {
+      return json<ProfileResponse>(response);
+    }
+
+    // MCP errors are raw provider text; members only see the status.
+    return json<ProfileResponse>({
+      profile: {
+        ...response.profile,
+        mcpServers: response.profile.mcpServers.map((server) => ({
+          ...server,
+          lastError: null,
+        })),
+      },
+    });
   });
 
   app.get("/v1/profiles/:profileId/history", async (c) => {
-    await requireProfileReadAccess(c);
+    // History holds full soul file snapshots (MEMORY.md too), which the soul
+    // routes keep from members who do not own the agent.
+    const { owner } = await requireProfileRead(c);
+
+    if (!owner) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
