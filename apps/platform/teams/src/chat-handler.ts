@@ -10,11 +10,14 @@ import {
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   type ChannelOwner,
+  hasActiveHandshakeCode,
   looksLikePairingCode,
+  pairingCodesMatch,
 } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
   isTeamsUserAuthorized,
+  regenerateTeamsHandshake,
   type TeamsConfigFile,
   verifyAndPairTeamsUser,
 } from "@nakama/core/teams-config";
@@ -62,13 +65,30 @@ const TEAMS_MAX_MESSAGE_CHARS = 6000;
 // "!" and not "/": typing "/" in Teams opens its own command menu.
 const HELP_TEXT = [
   "Chat with me in this chat.",
+  "In a channel, @mention me in a thread. I read only the message that mentions me, not the rest of the thread.",
   "",
   "!new: start a fresh conversation",
   "!clear: clear this conversation's history",
   "!stop: stop the current reply",
-  "!status: server and model status",
+  "!status: server and model status (personal chat only)",
   "!help: this message",
 ].join("\n");
+
+const CHANNEL_MESSAGE_PREFIX =
+  "[Teams channel thread. Your reply is visible to everyone in this channel.]\n";
+
+// Pairing codes stay out of channels: anyone reading could use the code first.
+const LINK_IN_PERSONAL_CHAT_REPLY =
+  "I can't answer you yet. Link your account first: open a personal chat with me and send the pairing code from Connections → Teams there.";
+
+const THREAD_SESSION_PREFIX = "teams-thread:";
+
+/**
+ * Every channel thread and sender gets a session that never ends, so only this
+ * many are kept. At about 150 bytes a record, they add at most about 75 KB to
+ * the chat-sessions.json that each new session rewrites.
+ */
+const MAX_THREAD_SESSIONS = 500;
 
 const COMMANDS = ["clear", "help", "new", "status", "stop"] as const;
 
@@ -93,14 +113,17 @@ function isPersonal(activity: TeamsActivity): boolean {
   return activity.conversationType === "personal";
 }
 
-/** A personal chat, or a channel thread message that mentions the bot. */
+/**
+ * A personal chat, or a channel thread message that mentions the bot. A bare
+ * mention is served too, so the sender hears how to start.
+ */
 function isServedMessage(activity: TeamsActivity): boolean {
   return (
     activity.channelId === "msteams" &&
     (isPersonal(activity) ||
       (activity.conversationType === "channel" && activity.mentionsBot)) &&
     !activity.isBot &&
-    activity.text.trim().length > 0 &&
+    (activity.mentionsBot || activity.text.trim().length > 0) &&
     activity.conversationId.trim().length > 0
   );
 }
@@ -196,6 +219,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       updatedAt: new Date().toISOString(),
     });
     sessionStore.setHotSession(sessionKey, session);
+    sessionStore.dropOldest(THREAD_SESSION_PREFIX, MAX_THREAD_SESSIONS);
     await sessionStore.save();
 
     return session;
@@ -277,7 +301,12 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       }
 
       case "status": {
-        await answer(await describeStatus(sessionKey));
+        // Everyone in a channel would read the agent, model and session.
+        await answer(
+          isPersonal(activity)
+            ? await describeStatus(sessionKey)
+            : "Send !status to me in a personal chat."
+        );
 
         return;
       }
@@ -335,7 +364,11 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
         // Streamed so the turn can be aborted and the text before a stop is
         // kept; the reply is still sent only once the turn ends.
         answer = await session.sendStream(
-          { message: text },
+          {
+            message: isPersonal(activity)
+              ? text
+              : `${CHANNEL_MESSAGE_PREFIX}${text}`,
+          },
           (delta) => {
             streamed += delta;
           },
@@ -399,14 +432,34 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       return;
     }
 
-    const sessionKey = `teams:${activity.conversationId}`;
+    // In a channel each sender has their own session in the thread: messages
+    // do not say who sent them, and one user's !stop, !new or !clear must not
+    // reach another's turn.
+    const sessionKey = isPersonal(activity)
+      ? `teams:${activity.conversationId}`
+      : `${THREAD_SESSION_PREFIX}${activity.conversationId}:${activity.senderId.toLowerCase()}`;
+
     const text = activity.text.trim();
     const command = parseCommand(text);
 
     if (!allows(config, activity)) {
-      // Only an unauthorized sender's code-shaped message is a pairing attempt,
-      // and only in a personal chat, so a code is never posted to a channel.
-      if (isPersonal(activity) && looksLikePairingCode(activity.text)) {
+      if (!isPersonal(activity)) {
+        // Everyone in the channel read the code, so it no longer pairs anyone.
+        if (
+          config.handshakeCode !== null &&
+          hasActiveHandshakeCode(config) &&
+          pairingCodesMatch(text, config.handshakeCode)
+        ) {
+          await regenerateTeamsHandshake(owner);
+        }
+
+        await send(activity.conversationId, LINK_IN_PERSONAL_CHAT_REPLY);
+
+        return;
+      }
+
+      // Only an unauthorized sender's code-shaped message is a pairing attempt.
+      if (looksLikePairingCode(activity.text)) {
         await chatLock.withLock(sessionKey, async () => {
           const result = await verifyAndPairTeamsUser(
             activity.text,
@@ -418,6 +471,15 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
           await send(activity.conversationId, result.message);
         });
       }
+
+      return;
+    }
+
+    if (!text) {
+      await reply(
+        activity.conversationId,
+        "Send me a message to get started. Try !help."
+      );
 
       return;
     }

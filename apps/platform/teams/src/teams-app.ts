@@ -73,32 +73,25 @@ export function createSafeLogger() {
   return logger;
 }
 
-const mentionSchema = z.object({
-  mentioned: z.object({ id: z.string() }),
-  text: z.string().optional(),
-  type: z.literal("mention"),
-});
-
-interface SdkMessageActivity {
+/**
+ * Reads the fields this slice acts on from an SDK message activity. Every
+ * mention of the bot is cut from the text; other mentions stay.
+ */
+function toTeamsActivity(activity: {
   channelId: string;
   conversation: { conversationType?: string; id: string; tenantId?: string };
-  entities?: readonly unknown[];
   from: { aadObjectId?: string; role?: string };
   id?: string;
+  isRecipientMentioned: () => boolean;
   recipient: { id: string };
+  stripMentionsText: (options: { accountId: string }) => { text?: string };
   text?: string;
-}
+}): TeamsActivity {
+  const mentionsBot = activity.isRecipientMentioned();
 
-/**
- * Reads the fields this slice acts on from an SDK message activity. The bot's
- * own "<at>Name</at>" is cut from the text; other mentions stay.
- */
-export function toTeamsActivity(activity: SdkMessageActivity): TeamsActivity {
-  const botMention = (activity.entities ?? [])
-    .map((entity) => mentionSchema.safeParse(entity).data)
-    .find((mention) => mention?.mentioned.id === activity.recipient.id);
-
-  const text = activity.text ?? "";
+  const text = mentionsBot
+    ? activity.stripMentionsText({ accountId: activity.recipient.id }).text
+    : activity.text;
 
   return {
     channelId: activity.channelId,
@@ -106,10 +99,10 @@ export function toTeamsActivity(activity: SdkMessageActivity): TeamsActivity {
     conversationType: activity.conversation.conversationType ?? "",
     id: activity.id ?? "",
     isBot: activity.from.role === "bot",
-    mentionsBot: botMention !== undefined,
+    mentionsBot,
     senderId: activity.from.aadObjectId ?? "",
     tenantId: activity.conversation.tenantId ?? "",
-    text: botMention?.text ? text.replace(botMention.text, "") : text,
+    text: text ?? "",
   };
 }
 

@@ -72,7 +72,6 @@ describe("teams chat handler", () => {
   for (const patch of [
     { conversationType: "groupChat" },
     { conversationType: "channel" },
-    { conversationType: "channel", mentionsBot: true },
     { tenantId: CONFIG.clientId },
     { senderId: "not-a-guid" },
     { senderId: "" },
@@ -92,6 +91,34 @@ describe("teams chat handler", () => {
       });
     });
   }
+
+  test("a code posted in a channel is replaced and pairs no one", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, code, replies, turns } = await pairingHarness(homeDir);
+      const thread = "19:general@thread.tacv2;messageid=1001";
+
+      await handle(
+        activity({
+          conversationId: thread,
+          conversationType: "channel",
+          mentionsBot: true,
+          text: code,
+        })
+      );
+
+      const config = await loadTeamsConfigFile(OWNER);
+
+      expect(turns).toEqual([]);
+      expect(config?.pairedUserIds).toEqual([]);
+      expect(config?.handshakeCode).not.toBe(code);
+      expect(replies.map((entry) => entry.conversationId)).toEqual([thread]);
+      expect(replies[0]?.text).toContain("personal chat");
+
+      // The posted code no longer pairs, even in a personal chat.
+      await handle(activity({ text: code }));
+      expect((await loadTeamsConfigFile(OWNER))?.pairedUserIds).toEqual([]);
+    });
+  });
 
   test("an authorized sender's code-shaped message reaches the agent", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
@@ -185,9 +212,15 @@ describe("teams chat handler", () => {
 
       await handle(mention({ text: " what is nakama" }));
 
-      expect(turns.map((turn) => turn.message)).toEqual(["what is nakama"]);
+      // The agent is told its answer is public.
+      expect(turns.map((turn) => turn.message)).toEqual([
+        "[Teams channel thread. Your reply is visible to everyone in this channel.]\nwhat is nakama",
+      ]);
       expect(replies).toEqual([
-        { conversationId: THREAD_A, text: "echo: what is nakama" },
+        {
+          conversationId: THREAD_A,
+          text: "echo: [Teams channel thread. Your reply is visible to everyone in this channel.]\nwhat is nakama",
+        },
       ]);
     });
   });
@@ -209,6 +242,82 @@ describe("teams chat handler", () => {
     });
   });
 
+  test("each sender in a thread keeps their own session", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const other = "55555555-5555-4555-8555-555555555555";
+
+      const { createdSessions, handle, turns } = createHarness(homeDir, {
+        config: { ...CONFIG, allowedUserIds: [ALLOWED, other] },
+      });
+
+      await handle(mention());
+      await handle(mention({ senderId: other }));
+      await handle(mention());
+
+      expect(createdSessions).toEqual(["session_1", "session_2"]);
+      expect(turns.map((turn) => turn.sessionId)).toEqual([
+        "session_1",
+        "session_2",
+        "session_1",
+      ]);
+    });
+  });
+
+  test("only the newest thread sessions are kept", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, sessionStore } = createHarness(homeDir);
+
+      await handle(activity({ conversationId: "conv_personal" }));
+
+      for (let index = 0; index < 501; index += 1) {
+        await handle(
+          mention({
+            conversationId: `19:general@thread.tacv2;messageid=${index}`,
+          })
+        );
+      }
+
+      const key = (index: number) =>
+        `teams-thread:19:general@thread.tacv2;messageid=${index}:${ALLOWED}`;
+
+      expect(sessionStore.get(key(0))).toBeUndefined();
+      expect(sessionStore.get(key(1))).toBeDefined();
+      expect(sessionStore.get(key(500))).toBeDefined();
+      expect(sessionStore.get("teams:conv_personal")).toBeDefined();
+    });
+  });
+
+  test("a bare mention says how to start and runs no turn", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, replies, turns } = createHarness(homeDir);
+
+      await handle(mention({ text: "" }));
+
+      expect(turns).toEqual([]);
+      expect(replies).toEqual([
+        {
+          conversationId: THREAD_A,
+          text: "Send me a message to get started. Try !help.",
+        },
+      ]);
+    });
+  });
+
+  test("!status in a channel shows nothing about the agent", async () => {
+    await withTempHome("nakama-teams-handler-", async (homeDir) => {
+      const { handle, replies } = createHarness(homeDir);
+
+      await handle(mention({ text: "!status" }));
+
+      expect(replies).toEqual([
+        {
+          conversationId: THREAD_A,
+          text: "Send !status to me in a personal chat.",
+        },
+      ]);
+    });
+  });
+
   test("a channel mention delivered twice is answered once", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
       const { handle, replies, turns } = createHarness(homeDir);
@@ -221,7 +330,7 @@ describe("teams chat handler", () => {
     });
   });
 
-  test("an unlinked sender's channel mention gets no reply", async () => {
+  test("an unlinked sender's channel mention is told to pair in a personal chat", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
       const { handle, replies, turns } = createHarness(homeDir);
 
@@ -230,7 +339,8 @@ describe("teams chat handler", () => {
       );
 
       expect(turns).toEqual([]);
-      expect(replies).toEqual([]);
+      expect(replies).toHaveLength(1);
+      expect(replies[0]?.text).toContain("personal chat");
     });
   });
 

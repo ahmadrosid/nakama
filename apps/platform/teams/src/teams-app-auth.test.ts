@@ -99,6 +99,12 @@ function message(id: string, conversationId = `conv_${id}`) {
 /** Fields a test sets on the message activity, as Teams would send them. */
 interface MessagePatch {
   attachments?: { content: string; contentType: string }[];
+  conversation?: { conversationType: string; id: string; tenantId: string };
+  entities?: {
+    mentioned: { id: string; name: string };
+    text?: string;
+    type: "mention";
+  }[];
   text?: string;
   textFormat?: "plain";
 }
@@ -236,6 +242,62 @@ describe("teams app message text", () => {
       await waitFor(() => received.some((a) => a.id === "act_command"))
     ).toBe(true);
     expect(received.find((a) => a.id === "act_command")?.text).toBe("!stop");
+  });
+});
+
+describe("teams app channel mentions", () => {
+  const conversation = {
+    conversationType: "channel",
+    id: "19:general@thread.tacv2;messageid=1001",
+    tenantId: "33333333-3333-4333-8333-333333333333",
+  };
+
+  const mentionOf = (id: string, name = "Nakama") => ({
+    mentioned: { id, name },
+    text: `<at>${name}</at>`,
+    type: "mention" as const,
+  });
+
+  async function deliver(id: string, patch: MessagePatch) {
+    const response = await post(id, signToken(claims()), undefined, {
+      conversation,
+      ...patch,
+    });
+
+    expect(response.status).toBeLessThan(300);
+    expect(await waitFor(() => received.some((a) => a.id === id))).toBe(true);
+
+    return received.find((a) => a.id === id);
+  }
+
+  test("a mention of the bot is flagged and every bot tag is cut", async () => {
+    const activity = await deliver("act_mention", {
+      entities: [mentionOf("bot"), mentionOf("bot")],
+      text: "<at>Nakama</at> <at>Nakama</at> !stop",
+    });
+
+    expect(activity?.mentionsBot).toBe(true);
+    expect(activity?.text).toBe("!stop");
+  });
+
+  test("a mention without text is cut by the bot's name", async () => {
+    const activity = await deliver("act_mention_no_text", {
+      entities: [{ mentioned: { id: "bot", name: "Nakama" }, type: "mention" }],
+      text: "<at>Nakama</at> summarise this thread",
+    });
+
+    expect(activity?.mentionsBot).toBe(true);
+    expect(activity?.text).toBe("summarise this thread");
+  });
+
+  test("a mention of someone else is not a mention of the bot", async () => {
+    const activity = await deliver("act_mention_other", {
+      entities: [mentionOf("someone-else")],
+      text: "<at>Nakama</at> summarise this thread",
+    });
+
+    expect(activity?.mentionsBot).toBe(false);
+    expect(activity?.text).toBe("<at>Nakama</at> summarise this thread");
   });
 });
 
