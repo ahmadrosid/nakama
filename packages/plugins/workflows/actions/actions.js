@@ -580,7 +580,7 @@ class WorkflowService {
         throw new Error("Workflow is running.");
       }
       return this.db.query("DELETE FROM workflows WHERE id = ?").run(id).changes > 0;
-    })();
+    }).immediate();
   }
   expireRuns() {
     this.db.transaction(() => {
@@ -594,7 +594,7 @@ class WorkflowService {
         };
         this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?").run(JSON.stringify(data), row.id);
       }
-    })();
+    }).immediate();
   }
   async listRuns(workflowId) {
     this.expireRuns();
@@ -633,7 +633,7 @@ class WorkflowService {
       }
       this.db.query("INSERT INTO runs VALUES (?, ?, ?, ?)").run(run.id, workflowId, JSON.stringify(run), Date.now() + 300000);
       this.db.query("UPDATE workflows SET data = json_set(data, '$.lastRunAt', ?) WHERE id = ?").run(run.startedAt, workflowId);
-    })();
+    }).immediate();
     return run;
   }
   async createRunStep(runId, step, position) {
@@ -712,7 +712,7 @@ class WorkflowService {
       }
       this.db.query("INSERT INTO metadata VALUES ('legacy_imported', 'true')").run();
       return { imported };
-    })();
+    }).immediate();
   }
 }
 
