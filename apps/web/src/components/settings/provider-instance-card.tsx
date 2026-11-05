@@ -214,7 +214,6 @@ function ProviderManageModelsFields({
           baseUrl={instance.baseUrl ?? ""}
           baseUrlError={null}
           browseLabel={card.isOllama ? "Ollama" : undefined}
-          browseSource="remote"
           customModels={card.manageModels}
           disabled={card.busy}
           displayName={instance.label}

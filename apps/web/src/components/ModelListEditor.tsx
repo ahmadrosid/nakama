@@ -33,7 +33,7 @@ export function ModelListEditor({
   showVision = false,
   visionDefaultOn = false,
   onBrowse,
-  browseLabel = "Browse models.dev",
+  browseLabel = "Browse models",
   onChange,
 }: ModelListEditorProps) {
   const rowKeysRef = useRef<string[]>([]);

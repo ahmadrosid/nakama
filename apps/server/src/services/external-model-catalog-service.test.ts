@@ -12,13 +12,13 @@ describe("getExternalModelCatalog", () => {
   test("fetches and returns catalog payload", async () => {
     globalThis.fetch = asTestFetch(
       async () =>
-        new Response(JSON.stringify({ openai: { models: {} } }), {
+        new Response(JSON.stringify({ data: [] }), {
           status: 200,
         })
     );
 
-    await expect(getExternalModelCatalog("models-dev")).resolves.toEqual({
-      openai: { models: {} },
+    await expect(getExternalModelCatalog("cerebras")).resolves.toEqual({
+      data: [],
     });
   });
 
