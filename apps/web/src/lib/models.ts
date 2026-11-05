@@ -574,6 +574,20 @@ export function buildCreateProviderRequest(options: {
       "fireworks",
       "ollama",
       "opencode_go",
+      // Catalog providers keep a list the user changed in Add.
+      "openai",
+      "anthropic",
+      "gemini",
+      "deepseek",
+      "doubao",
+      "together",
+      "xiaomi",
+      "meta",
+      "vercel_ai_gateway",
+      "mistral",
+      "qwen",
+      "qwen_cn",
+      "perplexity",
     ].includes(options.provider) &&
       options.customModels?.length)
       ? options.customModels

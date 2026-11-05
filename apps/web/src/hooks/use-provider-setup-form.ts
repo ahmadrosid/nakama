@@ -15,7 +15,9 @@ import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
+import { focusModelsField } from "@/hooks/focus-models-field";
 import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
+import { useCatalogModelRows } from "@/hooks/use-catalog-model-rows";
 import { formatError } from "@/lib/client";
 import {
   buildCreateProviderRequest,
@@ -176,6 +178,14 @@ export function useProviderSetupForm(
     [ollamaHostMode]
   );
 
+  const {
+    catalogModelRows,
+    catalogRows,
+    handleCatalogModelsChange,
+    setCatalogRows,
+    usesCatalogList,
+  } = useCatalogModelRows(selectedProvider, filteredModels, setModelsError);
+
   useEffect(() => {
     if (filteredModels.length === 0) {
       setSelectedModel("");
@@ -246,6 +256,7 @@ export function useProviderSetupForm(
       // A name or key typed for one provider must not carry to the next one.
       setDisplayName("");
       setApiKey("");
+      setCatalogRows(null);
 
       if (provider === "ollama") {
         setOllamaHostMode("local");
@@ -289,7 +300,7 @@ export function useProviderSetupForm(
         setChatgptOAuth(null);
       }
     },
-    [configuredTypes]
+    [configuredTypes, setCatalogRows]
   );
 
   const handleSubscriptionModelsChange = useCallback(
@@ -408,7 +419,9 @@ export function useProviderSetupForm(
         selectedProvider === "netra" ||
         selectedProvider === "ollama"
           ? validateCustomModelsInput(customModels)
-          : null;
+          : usesCatalogList && catalogRows
+            ? validateCustomModelsInput(catalogRows)
+            : null;
 
       setApiKeyTouched(true);
       setApiKeyError(nextApiKeyError);
@@ -487,7 +500,9 @@ export function useProviderSetupForm(
             ? resolveOpenRouterSetupModel(shortlistModels, selectedModel)
             : selectedProvider === "ollama"
               ? resolveOpenRouterSetupModel(customModels, selectedModel)
-              : selectedModel;
+              : usesCatalogList && catalogRows
+                ? resolveOpenRouterSetupModel(catalogRows, selectedModel)
+                : selectedModel;
 
       setBusy(true);
       setFormError(null);
@@ -504,37 +519,43 @@ export function useProviderSetupForm(
             baseUrl: resolvedCloudflareBaseUrl ?? baseUrl,
             chatgptOAuth: chatgptOAuth ?? undefined,
             customModels:
-              (selectedProvider === "chatgpt" && subscriptionModels.length) ||
-              selectedProvider === "xai_oauth"
-                ? filteredModels.map((entry) => ({
+              usesCatalogList && catalogRows
+                ? normalizeModelListRows(catalogRows).map((entry) => ({
+                    ...entry,
                     default: entry.id === modelToSave,
-                    id: entry.id,
-                    name: entry.name,
-                    supportsVision: entry.supportsVision !== false,
                   }))
-                : selectedProvider === "openai_compatible" ||
-                    selectedProvider === "netra" ||
-                    selectedProvider === "ollama"
-                  ? normalizeModelListRows(customModels).map((entry) => ({
-                      ...entry,
+                : (selectedProvider === "chatgpt" &&
+                      subscriptionModels.length) ||
+                    selectedProvider === "xai_oauth"
+                  ? filteredModels.map((entry) => ({
                       default: entry.id === modelToSave,
+                      id: entry.id,
+                      name: entry.name,
+                      supportsVision: entry.supportsVision !== false,
                     }))
-                  : selectedProvider === "openrouter"
-                    ? normalizeModelListRows(openRouterModels)
-                    : isShortlistCapabilityProvider(selectedProvider)
-                      ? normalizeModelListRows(shortlistModels)
-                      : selectedProvider === "opencode_go" && modelToSave
-                        ? normalizeModelListRows([
-                            {
-                              default: true,
-                              id: modelToSave,
-                              name: getModelDisplayName(
-                                filteredModels,
-                                modelToSave
-                              ),
-                            },
-                          ])
-                        : undefined,
+                  : selectedProvider === "openai_compatible" ||
+                      selectedProvider === "netra" ||
+                      selectedProvider === "ollama"
+                    ? normalizeModelListRows(customModels).map((entry) => ({
+                        ...entry,
+                        default: entry.id === modelToSave,
+                      }))
+                    : selectedProvider === "openrouter"
+                      ? normalizeModelListRows(openRouterModels)
+                      : isShortlistCapabilityProvider(selectedProvider)
+                        ? normalizeModelListRows(shortlistModels)
+                        : selectedProvider === "opencode_go" && modelToSave
+                          ? normalizeModelListRows([
+                              {
+                                default: true,
+                                id: modelToSave,
+                                name: getModelDisplayName(
+                                  filteredModels,
+                                  modelToSave
+                                ),
+                              },
+                            ])
+                          : undefined,
             displayName,
             hostMode:
               selectedProvider === "ollama" ? ollamaHostMode : undefined,
@@ -556,6 +577,7 @@ export function useProviderSetupForm(
         setXaiOAuth(null);
         setChatgptOAuth(null);
         setSubscriptionModels([]);
+        setCatalogRows(null);
         setOpenRouterModels([]);
         setOpenRouterRouting({});
         setShortlistModels([]);
@@ -579,6 +601,9 @@ export function useProviderSetupForm(
     [
       apiKey,
       baseUrl,
+      catalogRows,
+      setCatalogRows,
+      usesCatalogList,
       xaiOAuth,
       chatgptOAuth,
       openRouterModels,
@@ -604,6 +629,7 @@ export function useProviderSetupForm(
     apiKey.trim() !== "" ||
     displayName.trim() !== "" ||
     customModels.length > 0 ||
+    catalogRows !== null ||
     openRouterModels.length > 0 ||
     shortlistModels.length > 0;
 
@@ -614,6 +640,7 @@ export function useProviderSetupForm(
     baseUrlError,
     busy,
     catalog,
+    catalogModelRows,
     chatgptOAuth,
     configuredTypes,
     customModels,
@@ -629,6 +656,7 @@ export function useProviderSetupForm(
     handleBaseUrlBlur,
     handleBaseUrlChange,
     handleBaseUrlRequired,
+    handleCatalogModelsChange,
     handleCustomModelsChange,
     handleDisplayNameChange,
     handleOllamaHostModeChange,
@@ -653,21 +681,8 @@ export function useProviderSetupForm(
     shortlistModels,
     shortlistModelsError,
     showApiKey,
+    usesCatalogList,
     wireApi,
     xaiOAuth,
   };
-}
-
-// The models field has no single input. "Add model by ID" works even when
-// the endpoint cannot list models, so it takes focus first.
-function focusModelsField() {
-  const label = document.querySelector('label[for$="-models"]');
-  const field = label?.parentElement?.parentElement;
-
-  const addById = [...(field?.querySelectorAll("button") ?? [])].find(
-    (button) => button.textContent?.trim() === "Add model by ID"
-  );
-
-  field?.scrollIntoView({ block: "center" });
-  (addById ?? field?.querySelector<HTMLElement>("input, button"))?.focus();
 }

@@ -28,6 +28,19 @@ describe("buildCreateProviderRequest", () => {
       "fireworks",
       "ollama",
       "opencode_go",
+      "openai",
+      "anthropic",
+      "gemini",
+      "deepseek",
+      "doubao",
+      "together",
+      "xiaomi",
+      "meta",
+      "vercel_ai_gateway",
+      "mistral",
+      "qwen",
+      "qwen_cn",
+      "perplexity",
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {

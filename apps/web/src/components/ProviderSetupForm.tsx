@@ -21,12 +21,17 @@ import {
 } from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import {
   ChatgptSignInPanel,
   XaiSignInPanel,
 } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
+import {
+  type CatalogShortlistProvider,
+  isCatalogShortlistProvider,
+} from "@/components/catalog-provider-model-fields.shared";
 import { OllamaProviderModelFields } from "@/components/OllamaProviderModelFields";
 import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
@@ -362,6 +367,55 @@ function DefaultModelSelectField({
   );
 }
 
+// Most people keep the catalog list, so Add shows one line until asked.
+function CatalogModelsStep({
+  density,
+  form,
+  provider,
+}: {
+  density: "default" | "compact";
+  form: ReturnType<typeof useProviderSetupForm>;
+  provider: CatalogShortlistProvider;
+}) {
+  const [open, setOpen] = useState(false);
+  const rows = form.catalogModelRows;
+  const defaultRow = rows.find((row) => row.default) ?? rows[0];
+
+  if (!(open || form.modelsError)) {
+    return (
+      <FormField density={density} id="catalog-models-summary" label="Models">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+          <span id="catalog-models-summary">
+            {rows.length} model{rows.length === 1 ? "" : "s"}
+            {defaultRow ? ` · default ${defaultRow.name || defaultRow.id}` : ""}
+          </span>
+          <Button
+            disabled={form.busy}
+            onClick={() => setOpen(true)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Edit models
+          </Button>
+        </div>
+      </FormField>
+    );
+  }
+
+  return (
+    <CatalogProviderModelFields
+      catalogModels={form.filteredModels}
+      customModels={rows}
+      density={density}
+      disabled={form.busy}
+      modelsError={form.modelsError}
+      onCustomModelsChange={form.handleCatalogModelsChange}
+      provider={provider}
+    />
+  );
+}
+
 function ProviderSetupExtraFields({
   canConnect,
   density,
@@ -465,6 +519,22 @@ function ProviderSetupExtraFields({
       !canConnect)
   ) {
     return null;
+  }
+
+  // Same model list as Manage, so a provider picks models one way. A new
+  // provider gets a new list, so its catalog IDs stay read-only.
+  if (
+    form.usesCatalogList &&
+    isCatalogShortlistProvider(form.selectedProvider)
+  ) {
+    return (
+      <CatalogModelsStep
+        density={density}
+        form={form}
+        key={form.selectedProvider}
+        provider={form.selectedProvider}
+      />
+    );
   }
 
   return <DefaultModelSelectField density={density} form={form} />;

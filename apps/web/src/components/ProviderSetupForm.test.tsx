@@ -63,11 +63,14 @@ async function renderForm(
 // Setup keeps the provider's default model: a first-time user cannot judge
 // one model name against another. Settings still lets an admin choose.
 test("setup hides the model picker and Settings keeps it", async () => {
+  // OpenAI shows its model list as one line until the user opens it.
+  const modelsField = 'label[for="catalog-models-summary"]';
+
   await renderForm();
-  expect(container.querySelector("#model")).not.toBeNull();
+  expect(container.querySelector(modelsField)).not.toBeNull();
 
   await renderForm(false);
-  expect(container.querySelector("#model")).toBeNull();
+  expect(container.querySelector(modelsField)).toBeNull();
   expect(container.querySelector("#provider")).not.toBeNull();
 });
 
@@ -275,4 +278,17 @@ test("the discard step replaces the footer buttons", async () => {
 
   await act(async () => discard?.click());
   expect(discarded).toBe(true);
+});
+
+test("Edit models opens the same model list as Manage", async () => {
+  await renderForm();
+
+  const edit = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Edit models"
+  );
+
+  await act(async () => edit?.click());
+  expect(
+    container.querySelector('label[for="openai-provider-models"]')
+  ).not.toBeNull();
 });
