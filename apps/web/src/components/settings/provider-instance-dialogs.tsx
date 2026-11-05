@@ -139,6 +139,8 @@ export function ProviderReplaceKeyDialog({
   onManage?: (action: "clear" | "use-stored") => void;
 }) {
   const [confirmingClear, setConfirmingClear] = useState(false);
+  // An error from before the clear request is old news once the user moves on.
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
 
   return (
     <Dialog
@@ -160,11 +162,14 @@ export function ProviderReplaceKeyDialog({
           <ReplaceKeyForm
             apiKey={apiKey}
             busy={busy}
-            dialogError={dialogError}
+            dialogError={dialogError === dismissedError ? null : dialogError}
             instance={instance}
             onApiKeyChange={onApiKeyChange}
             onCancel={() => onOpenChange(false)}
-            onClearRequest={() => setConfirmingClear(true)}
+            onClearRequest={() => {
+              setDismissedError(dialogError);
+              setConfirmingClear(true);
+            }}
             onManage={onManage}
             onSave={onSave}
             onToggleShowApiKey={onToggleShowApiKey}
@@ -408,7 +413,7 @@ function ProviderModelsDialogShell({
             {dialogError}
           </p>
         ) : null}
-        <DialogFooter className="sticky bottom-0 z-10">
+        <DialogFooter className="sticky bottom-0 z-10 bg-muted">
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}

@@ -33,6 +33,43 @@ export function OpenRouterProviderModelFields({
 }: OpenRouterProviderModelFieldsProps) {
   return (
     <div className="space-y-4">
+      <BrowsableModelFields
+        browseLabel="Browse models"
+        customModels={customModels}
+        density={density}
+        disabled={disabled}
+        fieldId="openrouter-provider-models"
+        modelsError={modelsError}
+        onCustomModelsChange={onCustomModelsChange}
+        renderBrowse={({ multiSelect, onAddMany, onSelect }) => (
+          <OpenRouterModelsBrowseList
+            className="h-72 rounded-md border border-border"
+            multiSelect={multiSelect}
+            onAddMany={onAddMany}
+            onSelect={onSelect}
+          />
+        )}
+        showThinking
+        showVision
+        toModelRow={(row: OpenRouterModelRow) => {
+          const model: ModelListRow = {
+            id: row.id,
+            name: row.name,
+            supportsThinking: row.reasoning,
+            supportsVision: row.vision,
+          };
+
+          if (row.inputPerMillionUsd !== undefined) {
+            model.inputPerMillionUsd = row.inputPerMillionUsd;
+          }
+
+          if (row.outputPerMillionUsd !== undefined) {
+            model.outputPerMillionUsd = row.outputPerMillionUsd;
+          }
+
+          return model;
+        }}
+      />
       <fieldset className="space-y-3" disabled={disabled}>
         <legend className="font-medium text-sm">OpenRouter routing</legend>
         {(
@@ -122,43 +159,6 @@ export function OpenRouterProviderModelFields({
           Stricter routing can fail when no endpoint supports the request.
         </p>
       </fieldset>
-      <BrowsableModelFields
-        browseLabel="Browse models"
-        customModels={customModels}
-        density={density}
-        disabled={disabled}
-        fieldId="openrouter-provider-models"
-        modelsError={modelsError}
-        onCustomModelsChange={onCustomModelsChange}
-        renderBrowse={({ multiSelect, onAddMany, onSelect }) => (
-          <OpenRouterModelsBrowseList
-            className="h-72 rounded-md border border-border"
-            multiSelect={multiSelect}
-            onAddMany={onAddMany}
-            onSelect={onSelect}
-          />
-        )}
-        showThinking
-        showVision
-        toModelRow={(row: OpenRouterModelRow) => {
-          const model: ModelListRow = {
-            id: row.id,
-            name: row.name,
-            supportsThinking: row.reasoning,
-            supportsVision: row.vision,
-          };
-
-          if (row.inputPerMillionUsd !== undefined) {
-            model.inputPerMillionUsd = row.inputPerMillionUsd;
-          }
-
-          if (row.outputPerMillionUsd !== undefined) {
-            model.outputPerMillionUsd = row.outputPerMillionUsd;
-          }
-
-          return model;
-        }}
-      />
     </div>
   );
 }

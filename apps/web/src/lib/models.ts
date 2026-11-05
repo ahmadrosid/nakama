@@ -833,7 +833,7 @@ export function profileModelLabel(
     if (match) {
       // Match the menu items, which name the provider too.
       return options.withProvider && group
-        ? `${group.providerLabel}: ${match.name}`
+        ? `${match.name} · ${group.providerLabel}`
         : match.name;
     }
   }

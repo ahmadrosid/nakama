@@ -181,7 +181,7 @@ export function TranscriptionSettingsCard({
                 key={`${group.providerId}:${model.id}`}
                 value={encodeModelSelection(group.providerId, model.id)}
               >
-                {group.providerLabel}: {model.name}
+                {model.name} · {group.providerLabel}
               </SelectItem>
             ))
           )}

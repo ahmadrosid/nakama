@@ -110,53 +110,51 @@ export function ProviderSetupForm({
       ) : null}
 
       <FormField density={density} id="provider" label="Provider">
-        <ProviderSelect
-          configuredTypes={form.configuredTypes}
-          disabled={form.busy}
-          id="provider"
-          onValueChange={(nextValue) => {
-            if (nextValue === "__browse__") {
-              setIsBrowsing(true);
+        {pickedFromCatalog && !isBrowsing ? (
+          <PickedFreeModel
+            model={pickedFromCatalog.model}
+            onChange={() => setIsBrowsing(true)}
+            provider={pickedFromCatalog.provider}
+          />
+        ) : (
+          <ProviderSelect
+            configuredTypes={form.configuredTypes}
+            disabled={form.busy}
+            id="provider"
+            onValueChange={(nextValue) => {
+              if (nextValue === "__browse__") {
+                setIsBrowsing(true);
 
-              return;
-            }
+                return;
+              }
 
-            setIsBrowsing(false);
-            setPickedFromCatalog(null);
-            form.handleProviderSelect(nextValue);
-          }}
-          value={isBrowsing ? "__browse__" : form.selectedProvider}
-        />
+              setIsBrowsing(false);
+              setPickedFromCatalog(null);
+              form.handleProviderSelect(nextValue);
+            }}
+            value={isBrowsing ? "__browse__" : form.selectedProvider}
+          />
+        )}
       </FormField>
 
-      {pickedFromCatalog && !isBrowsing ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-          <span className="min-w-0 truncate">
-            <span className="font-medium">{pickedFromCatalog.model}</span>
-            <span className="text-muted-foreground">
-              {" "}
-              from {pickedFromCatalog.provider}
-            </span>
-          </span>
-          <Button
-            onClick={() => setIsBrowsing(true)}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            Change
-          </Button>
-        </div>
-      ) : null}
-
       {isBrowsing ? (
-        <ModelsBrowseList
-          className="h-72 rounded-md border border-border"
-          configuredTypes={form.configuredTypes}
-          initialCostFilter="free"
-          onSelect={handleBrowseSelect}
-          openCodeZenConfigured={form.openCodeZenConfigured}
-        />
+        <>
+          <ModelsBrowseList
+            className="h-72 rounded-md border border-border"
+            configuredTypes={form.configuredTypes}
+            initialCostFilter="free"
+            onSelect={handleBrowseSelect}
+            openCodeZenConfigured={form.openCodeZenConfigured}
+          />
+          {onCancel ? (
+            <ProviderSetupActions
+              busy={form.busy}
+              onCancel={onCancel}
+              primary={false}
+              submitLabel={submitLabel}
+            />
+          ) : null}
+        </>
       ) : (
         <ProviderSetupDetails
           apiKeyOptional={apiKeyOptional}
@@ -169,6 +167,29 @@ export function ProviderSetupForm({
         />
       )}
     </form>
+  );
+}
+
+// A free model from the catalog stands in for the provider it runs on.
+function PickedFreeModel({
+  model,
+  provider,
+  onChange,
+}: {
+  model: string;
+  provider: string;
+  onChange: () => void;
+}) {
+  return (
+    <div className="flex h-9 items-center justify-between gap-3 rounded-lg border border-input px-3 text-sm">
+      <span className="min-w-0 truncate">
+        <span className="font-medium">{model}</span>
+        <span className="text-muted-foreground"> from {provider}</span>
+      </span>
+      <Button onClick={onChange} size="sm" type="button" variant="ghost">
+        Change
+      </Button>
+    </div>
   );
 }
 
@@ -518,16 +539,12 @@ function ProviderSetupActions({
 }: {
   busy: boolean;
   onCancel?: () => void;
-  /** False while another step (a sign-in) must come first. */
+  /** False while another step (a sign-in) must come first: no submit yet. */
   primary: boolean;
   submitLabel: string;
 }) {
-  const submit = (
-    <Button
-      disabled={busy}
-      type="submit"
-      variant={primary ? "default" : "outline"}
-    >
+  const submit = primary ? (
+    <Button disabled={busy} type="submit">
       {busy ? (
         <>
           <Spinner className="mr-2" />
@@ -537,14 +554,14 @@ function ProviderSetupActions({
         submitLabel
       )}
     </Button>
-  );
+  ) : null;
 
   if (!onCancel) {
     return <div className="flex flex-wrap gap-2 pt-1">{submit}</div>;
   }
 
   return (
-    <DialogFooter className="sticky bottom-0 z-10">
+    <DialogFooter className="sticky bottom-0 z-10 bg-muted">
       <Button
         disabled={busy}
         onClick={onCancel}
