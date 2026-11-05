@@ -813,7 +813,8 @@ export function knownModelSelection(
 
 export function profileModelLabel(
   modelId: string | null,
-  groups: ReturnType<typeof groupModelsByProvider>
+  groups: ReturnType<typeof groupModelsByProvider>,
+  options: { withProvider?: boolean } = {}
 ): string {
   if (!modelId) {
     return "Select model";
@@ -830,7 +831,10 @@ export function profileModelLabel(
     const match = group?.models.find((model) => model.id === resolvedModelId);
 
     if (match) {
-      return match.name;
+      // Match the menu items, which name the provider too.
+      return options.withProvider && group
+        ? `${group.providerLabel}: ${match.name}`
+        : match.name;
     }
   }
 

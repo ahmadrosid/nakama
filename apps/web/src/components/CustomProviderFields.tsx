@@ -128,6 +128,7 @@ function CustomProviderIdentityFields({
             inputMode="url"
             onBlur={onBaseUrlBlur}
             onChange={(event) => onBaseUrlChange(event.target.value)}
+            placeholder="https://api.example.com/v1"
             readOnly={readOnly}
             value={baseUrl}
           />

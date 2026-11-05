@@ -154,7 +154,7 @@ export function ProviderSettingsCard({
       ) : null}
 
       <Dialog onOpenChange={setAddOpen} open={addOpen}>
-        <DialogContent className="w-[min(96vw,56rem)] grid-cols-[minmax(0,1fr)] sm:max-w-3xl">
+        <DialogContent className="w-[min(96vw,56rem)] scroll-pb-24 grid-cols-[minmax(0,1fr)] sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Add provider</DialogTitle>
           </DialogHeader>

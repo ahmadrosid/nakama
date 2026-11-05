@@ -240,6 +240,7 @@ export function BrowseModelRowButton({
       disabled={added}
       onClick={onSelect}
       style={style}
+      title={added ? "Already in your list. Remove it there." : undefined}
       type="button"
     >
       {selectable ? <BrowseRowCheckMark checked={checked} /> : null}

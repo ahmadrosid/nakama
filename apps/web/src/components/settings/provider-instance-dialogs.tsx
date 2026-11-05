@@ -1,7 +1,6 @@
 import type { ProviderInstanceSummary, WireApi } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
-  ConfirmDialog,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -30,37 +29,25 @@ import { apiKeyPlaceholder, type SelectedProvider } from "@/lib/models";
 function SavedKeyActions({
   busy,
   instance,
+  onClearRequest,
   onManage,
 }: {
   busy: boolean;
   instance: ProviderInstanceSummary;
+  onClearRequest: () => void;
   onManage?: (action: "clear" | "use-stored") => void;
 }) {
-  // Clearing a key stops chat for this provider: confirm it, as Remove does.
-  const [confirmClear, setConfirmClear] = useState(false);
-
   if (instance.secretSource === "settings") {
     return (
-      <>
-        <Button
-          className="text-destructive hover:text-destructive sm:mr-auto"
-          disabled={busy}
-          onClick={() => setConfirmClear(true)}
-          type="button"
-          variant="ghost"
-        >
-          Clear saved key
-        </Button>
-        {confirmClear ? (
-          <ConfirmDialog
-            confirmLabel="Clear key"
-            description={`Chat with ${instance.label} stops until you add a key again.`}
-            onClose={() => setConfirmClear(false)}
-            onConfirm={async () => onManage?.("clear")}
-            title="Clear saved key?"
-          />
-        ) : null}
-      </>
+      <Button
+        className="text-destructive hover:text-destructive sm:mr-auto"
+        disabled={busy}
+        onClick={onClearRequest}
+        type="button"
+        variant="ghost"
+      >
+        Clear saved key
+      </Button>
     );
   }
 
@@ -78,6 +65,50 @@ function SavedKeyActions({
   }
 
   return null;
+}
+
+// Clearing a key stops chat for this provider: the dialog asks first, as
+// Remove does, in place instead of a second dialog on top.
+function ClearKeyConfirm({
+  busy,
+  label,
+  onBack,
+  onConfirm,
+}: {
+  busy: boolean;
+  label: string;
+  onBack: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Clear saved key?</DialogTitle>
+        <DialogDescription>
+          Chat with {label} stops until you add a key again.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button
+          disabled={busy}
+          onClick={onBack}
+          type="button"
+          variant="outline"
+        >
+          Cancel
+        </Button>
+        <Button
+          disabled={busy}
+          onClick={onConfirm}
+          type="button"
+          variant="destructive"
+        >
+          {busy ? <Spinner className="mr-2" /> : null}
+          Clear key
+        </Button>
+      </DialogFooter>
+    </>
+  );
 }
 
 export function ProviderReplaceKeyDialog({
@@ -107,77 +138,142 @@ export function ProviderReplaceKeyDialog({
   onSave: () => void;
   onManage?: (action: "clear" | "use-stored") => void;
 }) {
+  const [confirmingClear, setConfirmingClear] = useState(false);
+
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        setConfirmingClear(false);
+        onOpenChange(nextOpen);
+      }}
+      open={open}
+    >
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {instance.hasApiKey ? "Update API key" : "Add API key"} for{" "}
-            {instance.label}
-          </DialogTitle>
-        </DialogHeader>
-        <label className="font-medium text-sm" htmlFor="replace-api-key">
-          {instance.hasApiKey
-            ? "New API key (replaces the saved key)"
-            : "API key"}
-        </label>
-        <InputGroup>
-          <InputGroupInput
-            aria-invalid={dialogError != null}
-            autoComplete="off"
-            disabled={busy || instance.secretSource === "environment"}
-            id="replace-api-key"
-            onChange={(event) => onApiKeyChange(event.target.value)}
-            placeholder={apiKeyPlaceholder(providerType)}
-            type={showApiKey ? "text" : "password"}
-            value={apiKey}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              aria-label={showApiKey ? "Hide API key" : "Show API key"}
-              onClick={onToggleShowApiKey}
-              size="icon-sm"
-            >
-              {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-        {instance.secretSource === "environment" ? (
-          <p className="text-sm">
-            Managed by {instance.secretEnvName}. Restart Nakama after you change
-            it.
-          </p>
-        ) : null}
-        {dialogError ? (
-          <p className="text-destructive text-sm" role="alert">
-            {dialogError}
-          </p>
-        ) : null}
-        <DialogFooter>
-          <SavedKeyActions
+        {confirmingClear ? (
+          <ClearKeyConfirm
             busy={busy}
-            instance={instance}
-            onManage={onManage}
+            label={instance.label}
+            onBack={() => setConfirmingClear(false)}
+            onConfirm={() => onManage?.("clear")}
           />
-          <Button
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={busy || instance.secretSource === "environment"}
-            onClick={onSave}
-            type="button"
-          >
-            {busy ? <Spinner className="mr-2" /> : null}
-            Save
-          </Button>
-        </DialogFooter>
+        ) : (
+          <ReplaceKeyForm
+            apiKey={apiKey}
+            busy={busy}
+            dialogError={dialogError}
+            instance={instance}
+            onApiKeyChange={onApiKeyChange}
+            onCancel={() => onOpenChange(false)}
+            onClearRequest={() => setConfirmingClear(true)}
+            onManage={onManage}
+            onSave={onSave}
+            onToggleShowApiKey={onToggleShowApiKey}
+            providerType={providerType}
+            showApiKey={showApiKey}
+          />
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ReplaceKeyForm({
+  apiKey,
+  busy,
+  dialogError,
+  instance,
+  onApiKeyChange,
+  onCancel,
+  onClearRequest,
+  onManage,
+  onSave,
+  onToggleShowApiKey,
+  providerType,
+  showApiKey,
+}: {
+  apiKey: string;
+  busy: boolean;
+  dialogError: string | null;
+  instance: ProviderInstanceSummary;
+  onApiKeyChange: (value: string) => void;
+  onCancel: () => void;
+  onClearRequest: () => void;
+  onManage?: (action: "clear" | "use-stored") => void;
+  onSave: () => void;
+  onToggleShowApiKey: () => void;
+  providerType: SelectedProvider;
+  showApiKey: boolean;
+}) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          {instance.hasApiKey ? "Update API key" : "Add API key"} for{" "}
+          {instance.label}
+        </DialogTitle>
+      </DialogHeader>
+      <label className="font-medium text-sm" htmlFor="replace-api-key">
+        {instance.hasApiKey
+          ? "New API key (replaces the saved key)"
+          : "API key"}
+      </label>
+      <InputGroup>
+        <InputGroupInput
+          aria-invalid={dialogError != null}
+          autoComplete="off"
+          disabled={busy || instance.secretSource === "environment"}
+          id="replace-api-key"
+          onChange={(event) => onApiKeyChange(event.target.value)}
+          placeholder={apiKeyPlaceholder(providerType)}
+          type={showApiKey ? "text" : "password"}
+          value={apiKey}
+        />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            aria-label={showApiKey ? "Hide API key" : "Show API key"}
+            onClick={onToggleShowApiKey}
+            size="icon-sm"
+          >
+            {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+      {instance.secretSource === "environment" ? (
+        <p className="text-sm">
+          Managed by {instance.secretEnvName}. Restart Nakama after you change
+          it.
+        </p>
+      ) : null}
+      {dialogError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {dialogError}
+        </p>
+      ) : null}
+      <DialogFooter>
+        <SavedKeyActions
+          busy={busy}
+          instance={instance}
+          onClearRequest={onClearRequest}
+          onManage={onManage}
+        />
+        <Button
+          disabled={busy}
+          onClick={onCancel}
+          type="button"
+          variant="outline"
+        >
+          Cancel
+        </Button>
+        <Button
+          disabled={busy || instance.secretSource === "environment"}
+          onClick={onSave}
+          type="button"
+        >
+          {busy ? <Spinner className="mr-2" /> : null}
+          Save
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 
@@ -298,7 +394,7 @@ function ProviderModelsDialogShell({
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
-        className="w-[min(96vw,56rem)] grid-cols-1 sm:max-w-4xl"
+        className="w-[min(96vw,56rem)] scroll-pb-24 grid-cols-1 sm:max-w-4xl"
         initialFocus={titleRef}
       >
         <DialogHeader>
@@ -312,7 +408,7 @@ function ProviderModelsDialogShell({
             {dialogError}
           </p>
         ) : null}
-        <DialogFooter>
+        <DialogFooter className="sticky bottom-0 z-10">
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}

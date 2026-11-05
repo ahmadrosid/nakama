@@ -102,7 +102,7 @@ export function ModelListEditor({
             return (
               <li className="space-y-2 p-2" key={rowKey}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <InputGroup className="min-w-0 flex-[2_1_14rem]">
+                  <InputGroup className="min-w-0 basis-full">
                     <InputGroupInput
                       aria-invalid={duplicate}
                       aria-label={`Model ID ${index + 1}`}
@@ -116,7 +116,7 @@ export function ModelListEditor({
                       value={row.id}
                     />
                   </InputGroup>
-                  <InputGroup className="min-w-0 flex-[1_1_10rem]">
+                  <InputGroup className="min-w-0 flex-[1_1_12rem]">
                     <InputGroupInput
                       aria-label={`Display name for ${label}`}
                       disabled={disabled}

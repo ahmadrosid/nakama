@@ -44,8 +44,9 @@ function browseStatus(
     return `Loading models from ${label}…`;
   }
 
+  // The error itself shows below; the header keeps naming the source.
   if (state.error) {
-    return "Could not load models";
+    return `Models from ${label}`;
   }
 
   const found = `${count} model${count === 1 ? "" : "s"} from ${label}`;

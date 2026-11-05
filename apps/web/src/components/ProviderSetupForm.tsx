@@ -63,7 +63,12 @@ export function ProviderSetupForm({
 }: ProviderSetupFormProps) {
   const form = useProviderSetupForm({ onSuccess });
   const [isBrowsing, setIsBrowsing] = useState(false);
-  const [pickedFromCatalog, setPickedFromCatalog] = useState(false);
+
+  const [pickedFromCatalog, setPickedFromCatalog] = useState<{
+    model: string;
+    provider: string;
+  } | null>(null);
+
   const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
 
   const apiKeyOptional =
@@ -88,7 +93,7 @@ export function ProviderSetupForm({
   ) {
     form.handleBrowseSelect(provider, modelId, row);
     setIsBrowsing(false);
-    setPickedFromCatalog(true);
+    setPickedFromCatalog({ model: row.modelName, provider: row.providerName });
   }
 
   return (
@@ -117,7 +122,7 @@ export function ProviderSetupForm({
             }
 
             setIsBrowsing(false);
-            setPickedFromCatalog(false);
+            setPickedFromCatalog(null);
             form.handleProviderSelect(nextValue);
           }}
           value={isBrowsing ? "__browse__" : form.selectedProvider}
@@ -125,15 +130,23 @@ export function ProviderSetupForm({
       </FormField>
 
       {pickedFromCatalog && !isBrowsing ? (
-        <Button
-          className="-mt-2 self-start px-0"
-          onClick={() => setIsBrowsing(true)}
-          size="sm"
-          type="button"
-          variant="link"
-        >
-          Pick another free model
-        </Button>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+          <span className="min-w-0 truncate">
+            <span className="font-medium">{pickedFromCatalog.model}</span>
+            <span className="text-muted-foreground">
+              {" "}
+              from {pickedFromCatalog.provider}
+            </span>
+          </span>
+          <Button
+            onClick={() => setIsBrowsing(true)}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Change
+          </Button>
+        </div>
       ) : null}
 
       {isBrowsing ? (
@@ -262,18 +275,12 @@ function CloudflareAccountIdField({
 }
 
 function OpenRouterModelFields({
-  canConnect,
   density,
   form,
 }: {
-  canConnect: boolean;
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
-  if (!canConnect) {
-    return null;
-  }
-
   return (
     <OpenRouterProviderModelFields
       customModels={form.openRouterModels}
@@ -466,13 +473,7 @@ function ProviderSetupExtraFields({
   }
 
   if (form.selectedProvider === "openrouter") {
-    return (
-      <OpenRouterModelFields
-        canConnect={canConnect}
-        density={density}
-        form={form}
-      />
-    );
+    return <OpenRouterModelFields density={density} form={form} />;
   }
 
   if (form.selectedProvider === "ollama") {
@@ -543,7 +544,7 @@ function ProviderSetupActions({
   }
 
   return (
-    <DialogFooter>
+    <DialogFooter className="sticky bottom-0 z-10">
       <Button
         disabled={busy}
         onClick={onCancel}

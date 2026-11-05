@@ -770,6 +770,14 @@ export async function fetchNetraModels(
     }));
 }
 
+function endpointHost(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+}
+
 async function fetchRemoteOpenAIModelsRaw(
   baseUrl: string,
   apiKey: string
@@ -785,7 +793,10 @@ async function fetchRemoteOpenAIModelsRaw(
 
     response = await fetch(`${baseUrl}/models`, { headers });
   } catch {
-    throw new NakamaApiError("Could not reach the model endpoint.", 502);
+    throw new NakamaApiError(
+      `Cannot reach ${endpointHost(baseUrl)}. Check the base URL and that the server is running.`,
+      502
+    );
   }
 
   if (!response.ok) {

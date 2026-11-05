@@ -157,10 +157,10 @@ export function TranscriptionSettingsCard({
         >
           <SelectValue placeholder="Select transcription model">
             {selection
-              ? profileModelLabel(selection, transcriptionModelGroups)
-              : transcriptionUnavailable
-                ? "No OpenAI provider"
-                : "Not configured"}
+              ? profileModelLabel(selection, transcriptionModelGroups, {
+                  withProvider: true,
+                })
+              : "Not configured"}
           </SelectValue>
         </SelectTrigger>
         <SelectContent

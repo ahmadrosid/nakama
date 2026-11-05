@@ -128,7 +128,9 @@ export function ModelsBrowseList({
       </div>
 
       <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
-        {filtered.length} models · {freeCount} free
+        {costFilter === "free"
+          ? `${filtered.length} free models`
+          : `${filtered.length} models · ${freeCount} free`}
       </div>
 
       <div className="min-h-0 flex-1">
