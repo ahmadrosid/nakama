@@ -47,4 +47,5 @@ tmp-repro-setup-auth.mjs
 .jscpd-report/
 nakama-secrets.env
 .idea
+ecosystem.config.js
 ecosystem.config.cjs

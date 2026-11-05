@@ -83,6 +83,7 @@ const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
  * config keys come from PM2's own schema in `isPm2EnvKey`.
  */
 const PM2_RUNTIME_ENV_KEYS = [
+  "_km_monitored",
   "axm_actions",
   "axm_dynamic",
   "axm_monitor",
@@ -101,6 +102,7 @@ const PM2_RUNTIME_ENV_KEYS = [
   "unique_id",
   "unstable_restart",
   "unstable_restarts",
+  "updateEnv",
   "version",
   "versioning",
   "vizion_running",
@@ -112,7 +114,17 @@ interface Pm2SchemaRule {
   alias?: string | string[];
 }
 
-/** True for a key PM2 put in the env of a server that PM2 runs. */
+/**
+ * Marks a worker whose env was built by `pm2StartOptions`. Recovery restarts
+ * an online worker without it, because an older server gave it PM2 options.
+ */
+const WORKER_ENV_VERSION = "2";
+
+function hasCurrentWorkerEnv(process: Pm2ProcessDescription | undefined) {
+  return process?.pm2_env?.NAKAMA_WORKER_ENV === WORKER_ENV_VERSION;
+}
+
+/** True for a key that PM2 reads as a process option or writes as state. */
 function isPm2EnvKey(key: string): boolean {
   if (key.startsWith("pm_") || key.startsWith("env_")) {
     return true;
@@ -147,24 +159,22 @@ function isWhatsAppHostChannel(channel: ChannelOwner, owner: ChannelOwner) {
  * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
  * A "shutdown" message lets the worker clean up before pm2 escalates.
  *
- * The worker env is built here: the server env without secrets and, when PM2
- * runs the server, without the keys PM2 added. PM2 would read those keys as
- * the worker's own options (name, pm_id, kill_timeout, cron_restart, ...).
- * pm2's `filter_env` drops every key that contains an entry, so it gets every
- * inherited key and keeps none of them; `env` then carries the exact set.
+ * The worker env is built here: the server env without secrets and without
+ * PM2 keys. The PM2 daemon copies every env key onto the worker's own options
+ * (name, pm_id, kill_timeout, cron_restart, ...), whether or not PM2 runs the
+ * server. pm2's `filter_env` drops every key that contains an entry, so it
+ * gets every inherited key and keeps none of them; `env` then carries the
+ * exact set. pm2 sets `process.env.PWD` to the worker cwd only after this
+ * snapshot, so `PWD` is set here.
  */
 function pm2StartOptions(
-  env: Record<string, string>
+  env: Record<string, string>,
+  cwd: string
 ): Pick<WorkerStartOptions, "env" | "filter_env" | "shutdown_with_message"> {
-  const underPm2 = process.env.pm_id !== undefined;
   const inherited: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(process.env)) {
-    if (
-      value !== undefined &&
-      !isSecretEnvKey(key) &&
-      !(underPm2 && isPm2EnvKey(key))
-    ) {
+    if (value !== undefined && !isSecretEnvKey(key) && !isPm2EnvKey(key)) {
       inherited[key] = value;
     }
   }
@@ -173,7 +183,12 @@ function pm2StartOptions(
     WorkerStartOptions,
     "env" | "filter_env" | "shutdown_with_message"
   > = {
-    env: { ...inherited, ...env },
+    env: {
+      ...inherited,
+      ...env,
+      NAKAMA_WORKER_ENV: WORKER_ENV_VERSION,
+      PWD: cwd,
+    },
     filter_env: Object.keys(process.env),
   };
 
@@ -780,7 +795,8 @@ export class WorkerManagerService {
 
         if (
           process?.pm2_env?.status !== "online" ||
-          process.pm2_env.NAKAMA_PLUGIN_VERSION !== registration.version
+          process.pm2_env.NAKAMA_PLUGIN_VERSION !== registration.version ||
+          !hasCurrentWorkerEnv(process)
         ) {
           await this.startWorker(name);
         }
@@ -978,7 +994,6 @@ export class WorkerManagerService {
             args: ["run", worker.script],
             autorestart: true,
             cwd: worker.registration.dataDir,
-            env,
             error: join(worker.directory, "stderr.log"),
             exp_backoff_restart_delay: 1000,
             interpreter: "none",
@@ -988,7 +1003,7 @@ export class WorkerManagerService {
             name,
             output: join(worker.directory, "stdout.log"),
             script: process.env.NAKAMA_BUN_BIN ?? "bun",
-            ...pm2StartOptions(env),
+            ...pm2StartOptions(env, worker.registration.dataDir),
           },
           (error) => cb(error)
         )
@@ -1126,7 +1141,7 @@ export class WorkerManagerService {
         cwd: this.projectRoot,
         name: processName,
         script: "bun",
-        ...pm2StartOptions(env),
+        ...pm2StartOptions(env, this.projectRoot),
       };
 
       if (isChannelOwner(scope)) {
@@ -1150,7 +1165,7 @@ export class WorkerManagerService {
       pm2.describe(WHATSAPP_HOST_PROCESS, cb)
     );
 
-    if (host?.pm2_env?.status === "online") {
+    if (host?.pm2_env?.status === "online" && hasCurrentWorkerEnv(host)) {
       return;
     }
 
@@ -1169,7 +1184,7 @@ export class WorkerManagerService {
           cwd: this.projectRoot,
           name: WHATSAPP_HOST_PROCESS,
           script: "bun",
-          ...pm2StartOptions(env),
+          ...pm2StartOptions(env, this.projectRoot),
         },
         (error) => cb(error)
       )
@@ -1407,17 +1422,28 @@ export class WorkerManagerService {
           continue;
         }
 
+        const online =
+          (await this.getWorkerStatus(platform, owner))?.status === "online";
+
         if (
-          (await this.getWorkerStatus(platform, owner))?.status === "online"
+          online &&
+          hasCurrentWorkerEnv(
+            await this.findPm2Process(
+              platform === "whatsapp"
+                ? WHATSAPP_HOST_PROCESS
+                : this.processName(platform, owner)
+            )
+          )
         ) {
           continue;
         }
 
         // A pid in an old heartbeat may now belong to another process.
         if (
-          await createWorkerHeartbeatStore({
+          !online &&
+          (await createWorkerHeartbeatStore({
             getDir: () => getChannelConfigDir(platform, owner),
-          }).isLeaseHeld()
+          }).isLeaseHeld())
         ) {
           continue;
         }
@@ -1438,7 +1464,10 @@ export class WorkerManagerService {
         continue;
       }
 
-      if (statuses[name]?.status === "online") {
+      if (
+        statuses[name]?.status === "online" &&
+        hasCurrentWorkerEnv(await this.findPm2Process(name))
+      ) {
         continue;
       }
 
@@ -1664,6 +1693,14 @@ export class WorkerManagerService {
     });
   }
 
+  private async findPm2Process(
+    name: string
+  ): Promise<Pm2ProcessDescription | undefined> {
+    return (await this.listAllPm2Processes()).find(
+      (item) => item.name === name
+    );
+  }
+
   private async listAllPm2Processes(): Promise<Pm2ProcessDescription[]> {
     return this.withPm2(async (pm2) =>
       promisifyPm2<Pm2ProcessDescription[]>((cb) => pm2.list(cb))
@@ -1717,6 +1754,7 @@ interface Pm2ProcessDescription {
     pm_err_log_path?: string;
     NAKAMA_PLUGIN_VERSION?: string;
     NAKAMA_PLUGIN_WORKER_ROOT?: string;
+    NAKAMA_WORKER_ENV?: string;
   };
 }
 
