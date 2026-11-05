@@ -53,6 +53,8 @@ interface GenerateImageToolSuccess {
   mimeType: string;
   model: string;
   path: string;
+  /** The size that came back, e.g. `1536x1024`. */
+  size: string;
   sizeBytes: number;
 }
 
@@ -121,7 +123,7 @@ export function createGenerateImageTool(
           type: "string",
         },
         size: {
-          description: `Optional image size. Allowed: ${IMAGE_GENERATION_SIZES.join(", ")}.`,
+          description: `Optional image size. Allowed: ${IMAGE_GENERATION_SIZES.join(", ")}. A ChatGPT subscription can return a different size; the result says which.`,
           type: "string",
         },
       },
@@ -330,6 +332,7 @@ export async function runGenerateImageTool(
     mimeType: result.mediaType,
     model: result.model,
     path: relativePath,
+    size: result.size,
     sizeBytes,
   };
 }

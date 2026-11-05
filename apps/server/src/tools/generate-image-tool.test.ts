@@ -317,6 +317,7 @@ describe("generate_image tool persistence (U4)", () => {
       mimeType: "image/png",
       model: "gpt-image-2",
       path: "artifacts/cat.png",
+      size: "1024x1024",
       sizeBytes: PNG_BYTES.byteLength,
     });
 
