@@ -15,6 +15,7 @@ import {
   truncate,
   writeFile,
 } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type {
   ProviderInstance,
@@ -77,49 +78,63 @@ const WORKER_DIST_SCRIPTS = new Map(
 
 const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
 
-const PM2_PROCESS_ENV_KEYS = new Set([
-  "automation",
-  "autostart",
-  "autorestart",
-  "args",
+/**
+ * Runtime state PM2 writes into the environment of a process it runs. Its
+ * config keys come from PM2's own schema in `isPm2EnvKey`.
+ */
+const PM2_RUNTIME_ENV_KEYS = [
   "axm_actions",
   "axm_dynamic",
   "axm_monitor",
   "axm_options",
   "command",
   "created_at",
-  "env",
-  "exec_interpreter",
-  "exec_mode",
   "exit_code",
-  "filter_env",
-  "instances",
-  "instance_var",
-  "kill_retry_time",
-  "merge_logs",
+  "km_link",
   "MODULE_DEBUG",
-  "name",
-  "node_args",
-  "pm_err_log_path",
-  "pm_exec_path",
-  "pm_out_log_path",
-  "pm_pid_path",
-  "pmx",
+  "NODE_APP_INSTANCE",
+  "node_version",
   "pmx_module",
   "prev_restart_delay",
   "restart_time",
   "status",
-  "stop_exit_codes",
-  "treekill",
+  "unique_id",
   "unstable_restart",
   "unstable_restarts",
-  "username",
+  "version",
   "versioning",
-  "vizion",
-  "vizion_runing",
-  "watch",
-  "windowsHide",
-]);
+  "vizion_running",
+];
+
+let pm2EnvKeys: Set<string> | null = null;
+
+interface Pm2SchemaRule {
+  alias?: string | string[];
+}
+
+/** True for a key PM2 put in the env of a server that PM2 runs. */
+function isPm2EnvKey(key: string): boolean {
+  if (key.startsWith("pm_") || key.startsWith("env_")) {
+    return true;
+  }
+
+  if (!pm2EnvKeys) {
+    // SAFETY: pm2 ships its option schema as JSON keyed by option name.
+    const schema = createRequire(import.meta.url)(
+      "pm2/lib/API/schema.json"
+    ) as Record<string, Pm2SchemaRule>;
+
+    pm2EnvKeys = new Set([
+      ...PM2_RUNTIME_ENV_KEYS,
+      ...Object.entries(schema).flatMap(([name, rule]) => [
+        name,
+        ...[rule.alias ?? []].flat(),
+      ]),
+    ]);
+  }
+
+  return pm2EnvKeys.has(key);
+}
 
 /** One pm2 process runs the WhatsApp number of every agent connection. */
 const WHATSAPP_HOST_PROCESS = "whatsapp-host";
@@ -132,29 +147,34 @@ function isWhatsAppHostChannel(channel: ChannelOwner, owner: ChannelOwner) {
  * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
  * A "shutdown" message lets the worker clean up before pm2 escalates.
  *
- * pm2 copies the server's environment into every worker. `filter_env` keeps
- * secrets out and prevents a PM2-managed server's identity from replacing the
- * worker process when it starts.
+ * The worker env is built here: the server env without secrets and, when PM2
+ * runs the server, without the keys PM2 added. PM2 would read those keys as
+ * the worker's own options (name, pm_id, kill_timeout, cron_restart, ...).
+ * pm2's `filter_env` drops every key that contains an entry, so it gets every
+ * inherited key and keeps none of them; `env` then carries the exact set.
  */
-function pm2StartOptions(): Pick<
-  WorkerStartOptions,
-  "filter_env" | "shutdown_with_message"
-> {
-  const pm2IdentityKeys =
-    process.env.pm_id === undefined
-      ? []
-      : Object.keys(process.env).filter(
-          (key) => key.startsWith("pm_") || PM2_PROCESS_ENV_KEYS.has(key)
-        );
+function pm2StartOptions(
+  env: Record<string, string>
+): Pick<WorkerStartOptions, "env" | "filter_env" | "shutdown_with_message"> {
+  const underPm2 = process.env.pm_id !== undefined;
+  const inherited: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (
+      value !== undefined &&
+      !isSecretEnvKey(key) &&
+      !(underPm2 && isPm2EnvKey(key))
+    ) {
+      inherited[key] = value;
+    }
+  }
 
   const options: Pick<
     WorkerStartOptions,
-    "filter_env" | "shutdown_with_message"
+    "env" | "filter_env" | "shutdown_with_message"
   > = {
-    filter_env: [
-      ...Object.keys(process.env).filter(isSecretEnvKey),
-      ...pm2IdentityKeys,
-    ],
+    env: { ...inherited, ...env },
+    filter_env: Object.keys(process.env),
   };
 
   if (process.platform === "win32") {
@@ -188,7 +208,7 @@ type WorkerProcessEnv = {
 interface WorkerStartOptions {
   args: string[];
   cwd: string;
-  env: WorkerProcessEnv;
+  env: Record<string, string>;
   error?: string;
   filter_env?: string[];
   name: string;
@@ -968,7 +988,7 @@ export class WorkerManagerService {
             name,
             output: join(worker.directory, "stdout.log"),
             script: process.env.NAKAMA_BUN_BIN ?? "bun",
-            ...pm2StartOptions(),
+            ...pm2StartOptions(env),
           },
           (error) => cb(error)
         )
@@ -1104,10 +1124,9 @@ export class WorkerManagerService {
       const startOptions: WorkerStartOptions = {
         args: ["run", script],
         cwd: this.projectRoot,
-        env,
         name: processName,
         script: "bun",
-        ...pm2StartOptions(),
+        ...pm2StartOptions(env),
       };
 
       if (isChannelOwner(scope)) {
@@ -1148,10 +1167,9 @@ export class WorkerManagerService {
         {
           args: ["run", script],
           cwd: this.projectRoot,
-          env,
           name: WHATSAPP_HOST_PROCESS,
           script: "bun",
-          ...pm2StartOptions(),
+          ...pm2StartOptions(env),
         },
         (error) => cb(error)
       )

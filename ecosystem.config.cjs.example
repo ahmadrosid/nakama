@@ -1,0 +1,17 @@
+module.exports = {
+  apps: [
+    {
+      name: "nakama",
+      cwd: "/path/to/nakama",
+      script: "/path/to/.bun/bin/bun",
+      args: "run start",
+      interpreter: "none",
+      env: {
+        NODE_ENV: "production",
+        NAKAMA_PORT: "4310",
+        NAKAMA_SECRETS_KEY: "paste the output of: openssl rand -base64 32",
+        NAKAMA_WEB_PUBLIC_URL: "https://nakama.example.com",
+      },
+    },
+  ],
+};

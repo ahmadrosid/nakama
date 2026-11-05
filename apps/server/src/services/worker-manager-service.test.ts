@@ -216,24 +216,34 @@ describe("WorkerManagerService", () => {
       }
     });
 
-    test("filters PM2 identity variables only when the server runs under PM2", async () => {
-      const identity = {
-        args: "run dev:web",
+    test("filters PM2 process keys only when the server runs under PM2", async () => {
+      const pm2Keys = {
+        args: "run start",
+        cron_restart: "0 4 * * *",
+        cwd: projectRoot,
         exec_mode: "fork_mode",
+        kill_timeout: "3000",
+        km_link: "false",
+        max_restarts: "10",
         name: "nakama",
+        namespace: "default",
         pm_cwd: projectRoot,
         pm_exec_path: "/usr/local/bin/bun",
         pm_id: "17",
-        pm_uptime: "1762225200000",
         status: "online",
+        uid: "1000",
       };
 
+      const operatorEnv = { app_env: "prod", db_name: "nakama" };
+
       const previous = new Map(
-        [...Object.keys(identity), "cwd"].map((key) => [key, process.env[key]])
+        [...Object.keys(pm2Keys), ...Object.keys(operatorEnv), "PWD"].map(
+          (key) => [key, process.env[key]]
+        )
       );
 
       try {
-        Object.assign(process.env, identity);
+        Object.assign(process.env, pm2Keys, operatorEnv);
 
         const pm2Mock = createMockPm2();
         const pm2Service = new WorkerManagerService(projectRoot, pm2Mock);
@@ -246,13 +256,13 @@ describe("WorkerManagerService", () => {
 
         const pm2App = prepareAppConf({ cwd: projectRoot }, { ...pm2Options });
 
-        expect(
-          Object.keys(identity).filter((key) => key in pm2App.env)
-        ).toEqual([]);
+        expect(Object.keys(pm2Keys).filter((key) => key in pm2App.env)).toEqual(
+          []
+        );
+        expect(pm2App.env.db_name).toBe("nakama");
+        expect(pm2App.env.app_env).toBe("prod");
 
         delete process.env.pm_id;
-        process.env.name = "local-worker";
-        process.env.cwd = projectRoot;
 
         const localMock = createMockPm2();
         const localService = new WorkerManagerService(projectRoot, localMock);
@@ -268,8 +278,8 @@ describe("WorkerManagerService", () => {
           { ...localOptions }
         );
 
-        expect(localApp.env.name).toBe("local-worker");
-        expect(localApp.env.cwd).toBe(projectRoot);
+        expect(localApp.env.name).toBe("nakama");
+        expect(localApp.env.kill_timeout).toBe("3000");
       } finally {
         for (const [key, value] of previous) {
           if (value === undefined) {
