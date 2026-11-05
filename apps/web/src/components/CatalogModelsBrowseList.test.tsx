@@ -70,3 +70,33 @@ test("a second click on an added model takes it out of the form", async () => {
   await act(async () => addMany?.([{ id: "a/one" }]));
   expect(models).toEqual([]);
 });
+
+test("a click does not drop a model the user made default", async () => {
+  let models: ModelListRow[] = [{ default: true, id: "a/one" }];
+  let addMany: ((rows: Array<{ id: string }>) => void) | undefined;
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () =>
+    root!.render(
+      <BrowsableModelFields<{ id: string }>
+        browseLabel="Browse models"
+        customModels={models}
+        fieldId="test-models"
+        onCustomModelsChange={(next) => {
+          models = next;
+        }}
+        renderBrowse={({ onAddMany }) => {
+          addMany = onAddMany;
+
+          return null;
+        }}
+        toModelRow={(row) => ({ id: row.id })}
+      />
+    )
+  );
+
+  await act(async () => addMany?.([{ id: "a/one" }]));
+  expect(models.map((model) => model.id)).toEqual(["a/one"]);
+});

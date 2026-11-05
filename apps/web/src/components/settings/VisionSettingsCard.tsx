@@ -140,16 +140,14 @@ export function VisionSettingsCard() {
                 })
               : visionUnavailable
                 ? "No vision providers"
-                : "Not configured"}
+                : "None"}
           </SelectValue>
         </SelectTrigger>
         <SelectContent
           alignItemWithTrigger={false}
           className="w-max min-w-72 max-w-[min(24rem,92vw)]"
         >
-          <SelectItem value={CLEAR_VISION_MODEL_VALUE}>
-            Not configured
-          </SelectItem>
+          <SelectItem value={CLEAR_VISION_MODEL_VALUE}>None</SelectItem>
           {visionModelGroups.flatMap((group) =>
             group.models.map((model) => (
               <SelectItem

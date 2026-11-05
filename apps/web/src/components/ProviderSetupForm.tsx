@@ -411,15 +411,27 @@ function CatalogModelsStep({
   }
 
   return (
-    <CatalogProviderModelFields
-      catalogModels={form.filteredModels}
-      customModels={rows}
-      density={density}
-      disabled={form.busy}
-      modelsError={form.modelsError}
-      onCustomModelsChange={form.handleCatalogModelsChange}
-      provider={provider}
-    />
+    <>
+      <CatalogProviderModelFields
+        catalogModels={form.filteredModels}
+        customModels={rows}
+        density={density}
+        disabled={form.busy}
+        modelsError={form.modelsError}
+        onCustomModelsChange={form.handleCatalogModelsChange}
+        provider={provider}
+      />
+      {form.modelsError ? null : (
+        <Button
+          onClick={() => setOpen(false)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          Close model list
+        </Button>
+      )}
+    </>
   );
 }
 

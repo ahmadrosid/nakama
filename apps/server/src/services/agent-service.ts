@@ -517,7 +517,12 @@ async function checkApiKey(
 
   await response.body?.cancel();
 
-  return response.status === 401 || response.status === 403 ? "rejected" : "ok";
+  if (response.status === 401 || response.status === 403) {
+    // With no key sent, the endpoint is asking for one, not refusing it.
+    return instance.apiKey ? "rejected" : "needs-key";
+  }
+
+  return "ok";
 }
 
 // Only a key the provider refuses stops a save; an outage does not.

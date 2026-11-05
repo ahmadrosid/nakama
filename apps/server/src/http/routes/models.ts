@@ -658,6 +658,7 @@ export function registerModelRoutes(
                   status: z.enum([
                     "ok",
                     "rejected",
+                    "needs-key",
                     "unreachable",
                     "unchecked",
                   ]),

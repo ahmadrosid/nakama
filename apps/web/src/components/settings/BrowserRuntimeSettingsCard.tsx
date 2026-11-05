@@ -170,14 +170,10 @@ export function BrowserRuntimeSettingsCard() {
               className="h-8 w-full"
               id="browser-runtime-provider"
             >
-              <SelectValue>
-                {kernel ? "Kernel" : "Local Chrome (default)"}
-              </SelectValue>
+              <SelectValue>{kernel ? "Kernel" : "Local Chrome"}</SelectValue>
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value={LOCAL_VALUE}>
-                Local Chrome (default)
-              </SelectItem>
+              <SelectItem value={LOCAL_VALUE}>Local Chrome</SelectItem>
               <SelectItem value={KERNEL_VALUE}>Kernel</SelectItem>
             </SelectContent>
           </Select>

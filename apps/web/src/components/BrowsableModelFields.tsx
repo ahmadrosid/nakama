@@ -81,7 +81,20 @@ export function BrowsableModelFields<T>({
     if (rows.length === 1 && single) {
       const id = toModelRow(single).id;
 
-      if (customModels.some((model) => model.id === id)) {
+      const existing = customModels.find((model) => model.id === id);
+
+      if (existing) {
+        // A model the user renamed or made default is not dropped by a
+        // click; the list opens so they remove it there on purpose.
+        if (
+          existing.default === true ||
+          (existing.name ?? "") !== (toModelRow(single).name ?? "")
+        ) {
+          setIsBrowsing(false);
+
+          return;
+        }
+
         onCustomModelsChange(customModels.filter((model) => model.id !== id));
         setIsBrowsing(true);
 

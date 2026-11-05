@@ -289,8 +289,9 @@ export function BrowseModelRowButton({
             </span>
           ) : null}
         </div>
+        {/* On a phone the name gets the room; the tags show from sm up. */}
         {(row.capabilities?.length ?? 0) > 0 ? (
-          <div className="flex gap-1">
+          <div className="hidden gap-1 sm:flex">
             {row.capabilities!.map((capability) => (
               <span
                 className="rounded bg-muted px-1 py-0.5 text-2xs"

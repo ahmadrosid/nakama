@@ -2165,7 +2165,7 @@ export interface UpdateProviderResponse {
 
 /** What a live check of the saved key found. */
 export interface CheckProviderResponse {
-  status: "ok" | "rejected" | "unreachable" | "unchecked";
+  status: "ok" | "rejected" | "needs-key" | "unreachable" | "unchecked";
 }
 
 export interface DeleteProviderResponse {

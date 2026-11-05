@@ -146,6 +146,23 @@ describe("API key check on save", () => {
     );
   });
 
+  test("a check tells a keyless endpoint that wants a key apart", async () => {
+    await withDeepSeekProvider(
+      async () => new Response("unauthorized", { status: 401 }),
+      async (service, providerId) => {
+        expect(await service.checkProvider(providerId)).toEqual({
+          status: "needs-key",
+        });
+      },
+      {
+        baseUrl: "http://127.0.0.1:9/v1",
+        customModels: [{ id: "local-model" }],
+        label: "verify-bs keyed",
+        type: "openai_compatible",
+      }
+    );
+  });
+
   test("saves a key the provider accepts", async () => {
     await withDeepSeekProvider(
       async () => Response.json({ data: [{ id: "deepseek-chat" }] }),

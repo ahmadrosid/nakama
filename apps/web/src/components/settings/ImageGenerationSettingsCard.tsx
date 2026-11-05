@@ -93,7 +93,7 @@ function imageGenerationChoices(
   // With nothing saved, the server makes images with a connected ChatGPT.
   const chatgptAvailable = chatgptGroups.length > 0;
   const providerAvailable = chatgptAvailable || labelGroups.length > 0;
-  const unsetLabel = chatgptAvailable ? "ChatGPT (default)" : "Not configured";
+  const unsetLabel = chatgptAvailable ? "Automatic · ChatGPT" : "None";
 
   const chatgptGroupOf = (model: string) =>
     chatgptGroups.find((group) => model.startsWith(`${group.providerId}::`));

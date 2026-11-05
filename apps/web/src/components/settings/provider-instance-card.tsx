@@ -131,19 +131,31 @@ function ProviderCheckStatus({
     staleTime: 10 * 60_000,
   });
 
-  if (!(check?.status === "rejected" || check?.status === "unreachable")) {
+  const warning =
+    check?.status === "rejected"
+      ? "Key rejected"
+      : check?.status === "needs-key"
+        ? "Needs a key"
+        : check?.status === "unreachable"
+          ? `Cannot reach ${instance.label}`
+          : null;
+
+  if (!warning) {
     return null;
   }
 
   return (
     <>
-      {check.status === "rejected" ? (
-        <span className="text-destructive">Key rejected</span>
-      ) : (
-        <span className="text-amber-700 dark:text-amber-300">
-          Cannot reach {instance.label}
-        </span>
-      )}
+      <span
+        className={
+          check?.status === "unreachable"
+            ? "text-amber-700 dark:text-amber-300"
+            : "text-destructive"
+        }
+        role="status"
+      >
+        {warning}
+      </span>
       <button
         className="text-foreground underline underline-offset-2 disabled:opacity-50"
         disabled={checking}
