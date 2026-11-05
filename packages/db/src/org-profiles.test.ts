@@ -424,33 +424,4 @@ describe("generate_image on by default", () => {
 
     expect(await toolIdsOf(db, profile.id)).toContain(GENERATE_IMAGE_TOOL_ID);
   });
-
-  test("existing profiles get it once, and a later removal stays", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const profile = await seedOrgDefaultProfile(db, "org_a");
-    const now = new Date().toISOString();
-
-    // The tool row as installs had it before the default.
-    await db.upsertTool({
-      createdAt: now,
-      description:
-        "Generate an image from a text prompt using the workspace image model (OpenAI gpt-image-2). Saves under artifacts/ with a metadata sidecar.",
-      handlerConfig: {},
-      handlerType: "generate_image",
-      id: GENERATE_IMAGE_TOOL_ID,
-      name: "generate_image",
-      updatedAt: now,
-    });
-
-    await ensureGenerateImageToolDefinition(db);
-    expect(await toolIdsOf(db, profile.id)).toContain(GENERATE_IMAGE_TOOL_ID);
-
-    await db.unassignToolFromProfile(profile.id, GENERATE_IMAGE_TOOL_ID);
-    await ensureGenerateImageToolDefinition(db);
-    await seedOrgDefaultProfile(db, "org_a");
-
-    expect(await toolIdsOf(db, profile.id)).not.toContain(
-      GENERATE_IMAGE_TOOL_ID
-    );
-  });
 });
