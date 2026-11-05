@@ -167,7 +167,7 @@ export function BrowserRuntimeSettingsCard() {
           >
             <SelectTrigger
               aria-label="Browser runtime"
-              className="h-9 w-full"
+              className="h-8 w-full"
               id="browser-runtime-provider"
             >
               <SelectValue>

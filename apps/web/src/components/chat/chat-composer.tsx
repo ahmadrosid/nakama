@@ -1464,7 +1464,7 @@ function ChatModelPicker({
       >
         <PopoverTrigger
           aria-label="Select model and effort"
-          className="flex h-7 max-w-full items-center overflow-hidden rounded-full bg-muted px-2.5 font-medium text-foreground text-xs transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
+          className="flex h-7 max-w-full items-center overflow-hidden rounded-lg bg-muted px-2.5 font-medium text-foreground text-xs transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
           disabled={disabled || !(hasModels || effort)}
           ref={props.modelPickerTriggerRef}
           title={triggerLabel}

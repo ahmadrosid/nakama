@@ -124,7 +124,7 @@ export function WebPublicUrlSettingsRow() {
     return (
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div className="space-y-0.5">
-          <p className="font-medium text-foreground text-sm">Public web URL</p>
+          <p className="text-foreground text-sm">Public web URL</p>
           <p className="text-muted-foreground text-xs">Loading…</p>
         </div>
         <Spinner className="size-4 text-muted-foreground" />

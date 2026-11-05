@@ -81,7 +81,7 @@ function ProfilePromptPanel({
     <>
       <ProfileSystemPromptCard state={state} />
       {canPack || isOwner ? (
-        <section className="space-y-3" id="profile-prompt">
+        <section className="space-y-2" id="profile-prompt">
           <div className="flex items-center justify-between gap-3">
             {showFiles ? (
               <h2 className="font-medium text-muted-foreground text-sm">
@@ -90,7 +90,7 @@ function ProfilePromptPanel({
             ) : null}
             <button
               aria-haspopup="dialog"
-              className="ml-auto flex h-8 items-center gap-1 rounded-md text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              className="ml-auto flex h-8 items-center gap-1 rounded-md pr-4 text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => setHistoryOpen(true)}
               type="button"
             >
@@ -255,7 +255,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       >
         <Tabs.List
           aria-label="Agent sections"
-          className="no-scrollbar flex w-full max-w-full gap-6 overflow-x-auto border-border border-b sm:justify-center"
+          className="no-scrollbar flex w-full max-w-full gap-6 overflow-x-auto border-border border-b"
         >
           {sections.map((item) => (
             <ProfileSectionTab key={item.value} {...item} />

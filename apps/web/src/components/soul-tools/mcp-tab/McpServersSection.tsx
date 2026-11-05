@@ -182,10 +182,7 @@ export function McpServersSection({
     >
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-medium text-muted-foreground text-sm">
-            MCP servers
-          </h2>
-          <p className="type-body mt-1 text-xs">
+          <p className="type-body text-muted-foreground text-sm">
             {servers.length === 0
               ? "No MCP servers registered yet"
               : `${servers.length} registered`}

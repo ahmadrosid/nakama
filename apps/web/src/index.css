@@ -691,7 +691,7 @@
 
   .sidebar-chat-title-clip {
     container-type: inline-size;
-    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
   }
 
   .group:hover .sidebar-chat-title-clip,
@@ -1354,7 +1354,7 @@
 .dark {
   --background: #0a0a0b;
   --foreground: #fafafa;
-  --card: #18181b;
+  --card: #1c1c21;
   --card-foreground: #fafafa;
   --popover: #18181b;
   --popover-foreground: #fafafa;

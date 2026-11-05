@@ -984,7 +984,7 @@ function QuickStat({
         active && "bg-primary/5 dark:bg-primary/10"
       )}
     >
-      <p className="font-medium text-foreground text-sm">{label}</p>
+      <p className="text-foreground text-sm">{label}</p>
       <p
         className={cn(
           "font-medium text-foreground text-sm tabular-nums",

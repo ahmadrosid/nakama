@@ -151,7 +151,7 @@ function ProviderInstanceTableRow({
           <span className="text-muted-foreground text-xs">—</span>
         )}
       </td>
-      <td className="whitespace-nowrap px-3 py-2.5 align-middle">
+      <td className="whitespace-nowrap px-4 py-2.5 align-middle">
         <span className="text-muted-foreground text-sm">
           {providerModelCountLabel(instance.modelCount)}
         </span>

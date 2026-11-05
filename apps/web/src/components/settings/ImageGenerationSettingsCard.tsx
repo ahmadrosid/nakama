@@ -148,7 +148,7 @@ export function ImageGenerationSettingsCard() {
       >
         <SelectTrigger
           aria-label="Image generation model"
-          className="h-9 w-full"
+          className="h-8 w-full"
         >
           <SelectValue placeholder="Select image generation model">
             {selection

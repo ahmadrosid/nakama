@@ -104,7 +104,7 @@ export function SettingsRow({
       )}
     >
       <div className="min-w-0 space-y-0.5">
-        <p className="font-medium text-foreground text-sm">{label}</p>
+        <p className="text-foreground text-sm">{label}</p>
         {description ? (
           <p className="text-pretty text-muted-foreground text-xs">
             {description}

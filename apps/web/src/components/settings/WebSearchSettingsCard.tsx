@@ -274,7 +274,7 @@ export function WebSearchSettingsCard() {
           >
             <SelectTrigger
               aria-label="Web search provider"
-              className="h-9 w-full"
+              className="h-8 w-full"
               id="web-search-provider"
             >
               <SelectValue>

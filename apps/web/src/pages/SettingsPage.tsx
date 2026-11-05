@@ -99,9 +99,7 @@ export function SettingsPage() {
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
               <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <p className="font-medium text-foreground text-sm">
-                  Appearance
-                </p>
+                <p className="text-foreground text-sm">Appearance</p>
                 <ThemeToggle />
               </div>
 
@@ -111,9 +109,7 @@ export function SettingsPage() {
                 className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
                 id="chat-usage-setting"
               >
-                <p className="font-medium text-foreground text-sm">
-                  Token usage in chat
-                </p>
+                <p className="text-foreground text-sm">Token usage in chat</p>
                 <Switch
                   aria-label="Token usage in chat"
                   checked={chatUsage.visible}
@@ -195,7 +191,7 @@ export function TimezoneSettingsRow() {
       className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
     >
       <div className="min-w-0 space-y-0.5">
-        <p className="font-medium text-foreground text-sm">Timezone</p>
+        <p className="text-foreground text-sm">Timezone</p>
         {error ? (
           <p className="text-destructive text-xs" role="alert">
             {error}

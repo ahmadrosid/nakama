@@ -321,7 +321,7 @@ function PluginRowControls({
         </Button>
       ) : null}
       {plugin?.lifecycleState === "enabled" && !detail ? (
-        <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 font-medium text-emerald-700 text-sm dark:text-emerald-400">
+        <span className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 font-medium text-emerald-700 text-sm dark:text-emerald-400">
           <Tick02Icon aria-hidden="true" className="size-4" />
           Added
         </span>

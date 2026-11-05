@@ -230,7 +230,7 @@ export function UserContextSettings() {
     <>
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0 space-y-0.5">
-          <p className="font-medium text-foreground text-sm">Personalisation</p>
+          <p className="text-foreground text-sm">Personalisation</p>
           <UserContextStatusCopy isActive={isActive} loadError={loadError} />
         </div>
 
