@@ -242,6 +242,35 @@ export function findRejectedConnectedAccountIds(
   return requestedIds.length === 1 ? requestedIds : [];
 }
 
+const DEFAULT_AUTH_CONFIG_NOT_FOUND_SLUG =
+  "Auth_Config_DefaultAuthConfigNotFound";
+
+/** Composio has no managed OAuth app for the toolkit, so it needs a custom auth config. */
+export function isComposioDefaultAuthConfigMissing(error: Error): boolean {
+  for (
+    let current: Error | null = error;
+    current;
+    current = current.cause instanceof Error ? current.cause : null
+  ) {
+    if (current.message.includes(DEFAULT_AUTH_CONFIG_NOT_FOUND_SLUG)) {
+      return true;
+    }
+
+    const apiError = ComposioApiErrorSchema.safeParse(current);
+
+    if (
+      apiError.success &&
+      [apiError.data.details, apiError.data.error?.error].some(
+        (details) => details?.slug === DEFAULT_AUTH_CONFIG_NOT_FOUND_SLUG
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 type ComposioAuthConfigClient = {
   authConfigs: {
     list(query?: { toolkit?: string }): Promise<{

@@ -117,6 +117,71 @@ test("database prevents overlapping subprocess runs and imports transactionally"
   }
 });
 
+test("separate processes start runs of different workflows at once", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "workflow-race-"));
+  const databasePath = join(dir, "data.sqlite");
+  const service = new WorkflowService(databasePath, "org_a");
+  service.db.exec(
+    await readFile(
+      new URL("../migrations/001-workflows.sql", import.meta.url),
+      "utf8"
+    )
+  );
+
+  try {
+    const ids: string[] = [];
+
+    for (let index = 0; index < 4; index++) {
+      const workflow = await service.create(
+        {
+          name: `Workflow ${index}`,
+          steps: [{ id: "summary", kind: "summarize", prompt: "Summarize" }],
+        },
+        "profile",
+        new Set()
+      );
+
+      ids.push(workflow.id);
+    }
+
+    const modulePath = new URL("./workflow-service.ts", import.meta.url)
+      .pathname;
+
+    const startAt = Date.now() + 300;
+
+    const script = `
+      const { WorkflowService } = await import(${JSON.stringify(modulePath)});
+      const [path, workflowId, startAt] = process.argv.slice(1);
+      const service = new WorkflowService(path, "org_a");
+      while (Date.now() < Number(startAt)) {}
+      try {
+        await service.createRun(workflowId, {});
+      } finally {
+        service.close();
+      }
+    `;
+
+    const exitCodes = await Promise.all(
+      ids.map(
+        (id) =>
+          Bun.spawn(["bun", "-e", script, databasePath, id, String(startAt)], {
+            stderr: "ignore",
+            stdout: "ignore",
+          }).exited
+      )
+    );
+
+    expect(exitCodes).toEqual([0, 0, 0, 0]);
+
+    for (const id of ids) {
+      expect(await service.listRuns(id)).toHaveLength(1);
+    }
+  } finally {
+    service.close();
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
 test("create and update reject malformed tool inputs without persisting changes", async () => {
   const service = new WorkflowService(":memory:", "org_a");
   service.db.exec(

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { COMPOSIO_CUSTOM_AUTH_REQUIRED } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { AuthService } from "../../services/auth-service";
@@ -48,7 +49,7 @@ function createMockClient(): Pick<
   };
 }
 
-async function createApp() {
+async function createApp(client = createMockClient()) {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-composio-route-"));
   process.env.NAKAMA_CONFIG_DIR = configDir;
   process.env.COMPOSIO_API_KEY = TEST_API_KEY;
@@ -60,7 +61,7 @@ async function createApp() {
 
   Object.assign(composioService, {
     apiClientCache: {
-      client: createMockClient(),
+      client,
       key: TEST_API_KEY,
     },
   });
@@ -72,6 +73,112 @@ async function createApp() {
     databaseAdapter,
   });
 }
+
+/** Enable Gmail as admin, then connect as `role` while Composio throws `linkError`. */
+function connectWhenLinkFails(
+  role: "admin" | "member",
+  linkError: Error,
+  connectPath = "/v1/composio/toolkits/gmail/connect"
+) {
+  return postAsRole(
+    role,
+    {
+      async linkToolkitAccount() {
+        throw linkError;
+      },
+    },
+    connectPath
+  );
+}
+
+/** Enable Gmail as admin, run `seed`, then POST `path` as `role`. */
+async function postAsRole(
+  role: "admin" | "member",
+  clientOverrides: Partial<ReturnType<typeof createMockClient>>,
+  path: string,
+  seed?: (
+    databaseAdapter: Awaited<ReturnType<typeof createApp>>["databaseAdapter"],
+    orgId: string,
+    userId: string
+  ) => Promise<void>
+) {
+  const { app, databaseAdapter } = await createApp({
+    ...createMockClient(),
+    ...clientOverrides,
+  });
+
+  const seeded = await seedOrgAdmin(databaseAdapter, {
+    profileId: "profile_test",
+  });
+
+  const { email, password, orgId } = seeded;
+  const admin = await loginUserSession(app, email, password, orgId);
+
+  const post = (
+    target: string,
+    session: typeof admin,
+    body: Record<string, string>
+  ) =>
+    app.fetch(
+      new Request(`http://localhost:4310${target}`, {
+        body: JSON.stringify(body),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+  await post("/v1/composio/toolkits/gmail/enable", admin, {
+    toolkitSlug: "gmail",
+  });
+
+  let session = admin;
+  let userId = seeded.userId;
+
+  if (role === "member") {
+    const now = new Date().toISOString();
+
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "member@example.com",
+      id: "user_member",
+      passwordHash: await new AuthService().hashPassword("password123"),
+      updatedAt: now,
+    });
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId,
+      role: "member",
+      userId: "user_member",
+    });
+
+    session = await loginUserSession(
+      app,
+      "member@example.com",
+      "password123",
+      orgId
+    );
+    userId = "user_member";
+  }
+
+  await seed?.(databaseAdapter, orgId, userId);
+
+  return post(path, session, {
+    callbackOrigin: "http://localhost:3003",
+  });
+}
+
+const DEFAULT_AUTH_CONFIG_NOT_FOUND = new Error("Failed to link account", {
+  cause: new Error(
+    '404 {"error":{"message":"Default auth config not found","slug":"Auth_Config_DefaultAuthConfigNotFound","status":404}}'
+  ),
+});
+
+const OTHER_COMPOSIO_ERROR = new Error(
+  '400 {"error":{"message":"Bad request","slug":"Some_Other_Error"}}'
+);
 
 describe("composio routes", () => {
   test("org admin can enable toolkit and assign it to a profile", async () => {
@@ -324,6 +431,90 @@ describe("composio routes", () => {
     });
 
     expect((await assign("profile_admin")).status).toBe(403);
+  });
+
+  test("connect returns a custom auth code when Composio has no managed auth", async () => {
+    const response = await connectWhenLinkFails(
+      "member",
+      DEFAULT_AUTH_CONFIG_NOT_FOUND
+    );
+
+    expect(response.status).toBe(422);
+
+    // SAFETY: errorResponse writes `{ code, error }` for this route.
+    const body = (await response.json()) as { code?: string; error: string };
+
+    expect(body.code).toBe(COMPOSIO_CUSTOM_AUTH_REQUIRED);
+    expect(body.error).not.toContain("Auth_Config_");
+  });
+
+  test("connect hides raw Composio errors from members, not admins", async () => {
+    const member = await connectWhenLinkFails("member", OTHER_COMPOSIO_ERROR);
+    const admin = await connectWhenLinkFails("admin", OTHER_COMPOSIO_ERROR);
+
+    expect(member.status).toBe(400);
+
+    // SAFETY: errorResponse writes `{ error }` for this route.
+    const memberBody = (await member.json()) as { error: string };
+    // SAFETY: errorResponse writes `{ error }` for this route.
+    const adminBody = (await admin.json()) as { error: string };
+
+    expect(memberBody.error).not.toContain("Some_Other_Error");
+    expect(adminBody.error).toContain("Some_Other_Error");
+  });
+
+  test("meet connect also hides raw Composio errors from members", async () => {
+    const response = await connectWhenLinkFails(
+      "member",
+      OTHER_COMPOSIO_ERROR,
+      "/v1/composio/meet/gmail/connect"
+    );
+
+    // SAFETY: errorResponse writes `{ error }` for this route.
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).not.toContain("Some_Other_Error");
+  });
+
+  test("sync hides raw Composio errors from members", async () => {
+    const response = await postAsRole(
+      "member",
+      {
+        createProfileSession() {
+          return Promise.reject(OTHER_COMPOSIO_ERROR);
+        },
+      },
+      "/v1/composio/toolkits/gmail/sync",
+      async (databaseAdapter, orgId, userId) => {
+        const toolkit = await databaseAdapter.getComposioToolkitBySlug(
+          orgId,
+          "gmail"
+        );
+
+        const now = new Date().toISOString();
+
+        await databaseAdapter.upsertComposioUserConnection({
+          connectedAccountId: "ca_1",
+          createdAt: now,
+          id: "cuc_1",
+          lastError: null,
+          oauthStateHash: null,
+          orgId,
+          sessionIdEnc: null,
+          status: "connected",
+          toolkitId: toolkit?.id ?? "",
+          updatedAt: now,
+          userId,
+        });
+      }
+    );
+
+    // SAFETY: errorResponse writes `{ error }` for this route.
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).not.toContain("Some_Other_Error");
   });
 
   test("oauth callback does not require a browser session", async () => {

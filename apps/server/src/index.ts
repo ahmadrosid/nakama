@@ -256,6 +256,8 @@ agent.setServerTools({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
+    onChatgptTokenRefresh: (instanceId, oauth) =>
+      agent.persistChatgptOAuth(instanceId, oauth),
     recordUsage: (
       modelId,
       inputTokens,
