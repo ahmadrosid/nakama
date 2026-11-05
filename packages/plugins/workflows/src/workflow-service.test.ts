@@ -199,3 +199,114 @@ test("create and update reject malformed tool inputs without persisting changes"
     service.close();
   }
 });
+
+test("a filter check ends the run as skipped while a plain check still fails", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "workflow-filter-"));
+  const databasePath = join(dir, "data.sqlite");
+  const service = new WorkflowService(databasePath, "org_a");
+
+  try {
+    service.db.exec(
+      await readFile(
+        new URL("../migrations/001-workflows.sql", import.meta.url),
+        "utf8"
+      )
+    );
+
+    let summaries = 0;
+
+    const context = {
+      actionKey: "create_workflow",
+      actor: { id: "admin", role: "admin" as const },
+      apiVersion: 1 as const,
+      databasePath,
+      dataDir: dir,
+      host: async ({ op }: { op: string }) => {
+        if (op === "summarize") {
+          summaries += 1;
+
+          return "Summary";
+        }
+
+        return op === "profiles" ? [{ id: "profile", isDefault: true }] : [];
+      },
+      invocationId: "test",
+      orgId: "org_a",
+      pluginId: "workflows",
+      pluginVersion: "1.0.1",
+    };
+
+    const create = async (onFail?: "fail" | "skip") => {
+      const created = parseWorkflowRecord(
+        await run(
+          {
+            name: "GitHub mail",
+            steps: [
+              {
+                id: "from_github",
+                kind: "compare",
+                left: "{{input.from}}",
+                onFail,
+                op: "contains",
+                right: "github.com",
+              },
+              { id: "note", kind: "template", template: "{{input.from}}" },
+              { id: "summary", kind: "summarize", prompt: "Summarize" },
+            ],
+          },
+          context
+        )
+      );
+
+      return String(created.id);
+    };
+
+    const runWorkflow = async (workflowId: string, from: string) =>
+      parseWorkflowRecord(
+        await run(
+          { input: { from }, workflowId },
+          { ...context, actionKey: "run_workflow" }
+        )
+      );
+
+    const filter = await create("skip");
+    const skipped = await runWorkflow(filter, "Stripe <billing@stripe.com>");
+    const skippedRun = parseWorkflowRecord(skipped.run);
+
+    expect(skipped.status).toBe("skipped");
+    expect(skipped.error).toBeUndefined();
+    expect(skippedRun.status).toBe("skipped");
+    expect(skippedRun.error).toBeNull();
+    expect(
+      (await service.getRun(filter, String(skippedRun.id)))?.steps?.map(
+        (step) => [step.stepId, step.status, step.error ?? null]
+      )
+    ).toEqual([["from_github", "skipped", null]]);
+    expect(summaries).toBe(0);
+
+    const passed = await runWorkflow(filter, "GitHub <noreply@github.com>");
+    expect(passed.status).toBe("completed");
+    expect(passed.output).toBe("Summary");
+    expect(summaries).toBe(1);
+
+    for (const onFail of [undefined, "fail"] as const) {
+      const plain = await create(onFail);
+      const failed = await runWorkflow(plain, "Stripe <billing@stripe.com>");
+      const failedRun = parseWorkflowRecord(failed.run);
+
+      expect(failed.status).toBe("failed");
+      expect(failedRun.status).toBe("failed");
+      expect(failedRun.error).toEqual(expect.any(String));
+      expect(
+        (await service.getRun(plain, String(failedRun.id)))?.steps?.map(
+          (step) => step.status
+        )
+      ).toEqual(["failed"]);
+    }
+
+    expect(summaries).toBe(1);
+  } finally {
+    service.close();
+    await rm(dir, { force: true, recursive: true });
+  }
+});

@@ -1426,6 +1426,9 @@ export type WorkflowStepKind =
 
 export type WorkflowCompareOp = "eq" | "near" | "contains";
 
+/** What a false compare or assert does: fail the run (default) or end it as skipped. */
+export type WorkflowCheckOnFail = "fail" | "skip";
+
 export interface WorkflowToolStep {
   id: string;
   input: Record<string, JsonValue>;
@@ -1437,6 +1440,7 @@ export interface WorkflowCompareStep {
   id: string;
   kind: "compare";
   left: unknown;
+  onFail?: WorkflowCheckOnFail;
   op: WorkflowCompareOp;
   right: unknown;
   tolerance?: number;
@@ -1446,6 +1450,7 @@ export interface WorkflowAssertStep {
   expected: unknown;
   id: string;
   kind: "assert";
+  onFail?: WorkflowCheckOnFail;
   path: string;
 }
 
@@ -1485,7 +1490,7 @@ export interface StoredWorkflow extends WorkflowDefinition {
   updatedAt: string;
 }
 
-export type WorkflowRunStatus = "running" | "completed" | "failed";
+export type WorkflowRunStatus = "running" | "completed" | "failed" | "skipped";
 
 export type WorkflowRunStepStatus =
   | "pending"

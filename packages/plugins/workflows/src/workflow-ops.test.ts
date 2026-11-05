@@ -216,3 +216,39 @@ test("intermediate summaries are rejected before validating dependent references
     )
   ).toThrow(/summarize step must be the last/i);
 });
+
+test("onFail is only accepted on compare and assert steps", () => {
+  const summary = { id: "summary", kind: "summarize", prompt: "Brief." };
+
+  const check = (step: WorkflowValue) => () =>
+    validateWorkflowSteps([step, summary], new Set());
+
+  for (const onFail of ["skip", "fail"]) {
+    expect(
+      check({ id: "c", kind: "compare", left: 1, onFail, op: "eq", right: 1 })
+    ).not.toThrow();
+    expect(
+      check({
+        expected: true,
+        id: "a",
+        kind: "assert",
+        onFail,
+        path: "input.ok",
+      })
+    ).not.toThrow();
+  }
+
+  expect(
+    check({
+      id: "c",
+      kind: "compare",
+      left: 1,
+      onFail: "ignore",
+      op: "eq",
+      right: 1,
+    })
+  ).toThrow();
+  expect(
+    check({ id: "t", kind: "template", onFail: "skip", template: "hi" })
+  ).toThrow();
+});

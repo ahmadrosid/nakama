@@ -104,8 +104,8 @@ const checkFieldHints = new Map([
 ]);
 
 const stepFields = {
-  assert: ["path", "expected"],
-  compare: ["left", "op", "right", "tolerance"],
+  assert: ["path", "expected", "onFail"],
+  compare: ["left", "op", "right", "tolerance", "onFail"],
   template: ["template"],
   tool: ["tool", "input"],
 } satisfies Record<string, string[]>;
@@ -151,7 +151,11 @@ function serializeSteps(steps: StepDraft[]) {
     kind,
     ...Object.fromEntries(
       (stepFields[kind] ?? [])
-        .filter((key) => key !== "tolerance" || fields[key])
+        .filter(
+          (key) =>
+            (key !== "tolerance" || fields[key]) &&
+            (key !== "onFail" || fields[key] === "skip")
+        )
         .map((key) => [
           key,
           key === "input"
@@ -1222,11 +1226,13 @@ export function apply(ctx: Context) {
     const label =
       run?.status === "failed" || record?.error
         ? "Failed"
-        : status === "running"
-          ? "Running"
-          : run?.status === "completed"
-            ? "Done"
-            : "Finished";
+        : run?.status === "skipped"
+          ? "Skipped"
+          : status === "running"
+            ? "Running"
+            : run?.status === "completed"
+              ? "Done"
+              : "Finished";
 
     return (
       <section aria-label="Workflow run" className="workflow-chat-card">
@@ -1980,7 +1986,8 @@ export function apply(ctx: Context) {
     const failedRun =
       view !== "runs" && !failureInCard ? lastFailed : undefined;
 
-    const lastStopped = lastRun?.status === "failed";
+    const lastStopped =
+      lastRun?.status === "failed" || lastRun?.status === "skipped";
 
     return (
       <section className="workflow-editor">
@@ -2526,6 +2533,25 @@ export function apply(ctx: Context) {
                                 sources={valueSources}
                                 text={selectedStep.fields.input ?? ""}
                               />
+                            ) : field === "onFail" ? (
+                              <label className="workflow-enabled" key={field}>
+                                <Switch
+                                  aria-label="Skip the run when false"
+                                  checked={
+                                    selectedStep.fields.onFail === "skip"
+                                  }
+                                  disabled={busy}
+                                  onCheckedChange={(checked: boolean) =>
+                                    updateStep(selectedStep.key, {
+                                      fields: {
+                                        ...selectedStep.fields,
+                                        onFail: checked ? "skip" : "",
+                                      },
+                                    })
+                                  }
+                                />
+                                Skip the run when false
+                              </label>
                             ) : field === "op" ? (
                               <Choice
                                 disabled={busy}
@@ -2882,7 +2908,7 @@ export function apply(ctx: Context) {
 
     const open =
       openId === undefined
-        ? runs[0].status === "completed"
+        ? runs[0].status === "completed" || runs[0].status === "skipped"
           ? null
           : runs[0].id
         : openId;
@@ -2982,6 +3008,13 @@ export function apply(ctx: Context) {
     const timeline = runTimeline(run);
     const failed = failedStep(run);
     const stoppedAt = failed ? titleCase(failed.stepId) : "";
+
+    const filter =
+      run.status === "skipped"
+        ? run.steps?.find((step) => step.status === "skipped")
+        : undefined;
+
+    const skippedAt = filter ? titleCase(filter.stepId) : "";
     const help = run.error ? errorHelp(run.error, agent, failed) : undefined;
     const started = runStarted(run.startedAt);
 
@@ -3041,6 +3074,9 @@ export function apply(ctx: Context) {
                 <span className="workflow-empty">
                   {stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"}
                 </span>
+              )}
+              {skippedAt && (
+                <span className="workflow-empty">{`Skipped at ${skippedAt}`}</span>
               )}
             </span>
           </td>

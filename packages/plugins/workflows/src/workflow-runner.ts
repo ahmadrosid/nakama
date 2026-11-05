@@ -1,4 +1,8 @@
-import type { StoredWorkflow, WorkflowStep } from "@nakama/core/contract";
+import type {
+  StoredWorkflow,
+  WorkflowRunStatus,
+  WorkflowStep,
+} from "@nakama/core/contract";
 import {
   buildReceiptBag,
   executeAssert,
@@ -16,7 +20,9 @@ type WorkflowRunResult = {
   error?: string;
   output?: string;
   runId?: string;
+  /** Set when the workflow is off and no run was made. */
   skipped?: boolean;
+  status?: Exclude<WorkflowRunStatus, "running">;
 };
 
 type DataStepResult = {
@@ -84,20 +90,32 @@ export class WorkflowRunner {
         runtimeInput
       );
 
+      if (output === null) {
+        await this.workflowService.completeRun(run.id, workflowId, {
+          skipped: true,
+        });
+
+        return { runId: run.id, status: "skipped" };
+      }
+
       const completedRun = await this.workflowService.completeRun(
         run.id,
         workflowId,
         { output }
       );
 
-      return { output: completedRun.output ?? output, runId: run.id };
+      return {
+        output: completedRun.output ?? output,
+        runId: run.id,
+        status: "completed",
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.completeRun(run.id, workflowId, {
         error: message,
       });
 
-      return { error: message, runId: run.id };
+      return { error: message, runId: run.id, status: "failed" };
     }
   }
 
@@ -106,7 +124,7 @@ export class WorkflowRunner {
     workflow: StoredWorkflow,
     runId: string,
     runtimeInput: WorkflowRecord
-  ): Promise<string> {
+  ): Promise<string | null> {
     const stepOutputs: WorkflowRecord = {};
     const bag = () => buildReceiptBag(runtimeInput, stepOutputs);
 
@@ -130,12 +148,22 @@ export class WorkflowRunner {
           workflowId: workflow.id,
         });
 
+        // A filter check that is false ends the run as skipped, not failed.
+        const filtered =
+          Boolean(result.error) &&
+          (step.kind === "compare" || step.kind === "assert") &&
+          step.onFail === "skip";
+
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
-          error: result.error,
+          error: filtered ? undefined : result.error,
           input: result.input,
           output: result.output,
-          status: result.error ? "failed" : "completed",
+          status: filtered ? "skipped" : result.error ? "failed" : "completed",
         });
+
+        if (filtered) {
+          return null;
+        }
 
         if (result.error) {
           failure = result.error;

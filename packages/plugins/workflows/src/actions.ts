@@ -285,7 +285,7 @@ export async function run(
         ...result,
         name: existing!.name,
         run: completed,
-        status: result.error ? "failed" : "completed",
+        status: result.status,
         workflowId: existing!.id,
       };
     }

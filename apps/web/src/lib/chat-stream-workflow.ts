@@ -118,7 +118,7 @@ export function parseWorkflowId(
 export function parseRunWorkflowResult(result: unknown): {
   name: string | null;
   run: WorkflowRunRecord | null;
-  status: "completed" | "failed" | null;
+  status: "completed" | "failed" | "skipped" | null;
 } | null {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (!result || typeof result !== "object" || Array.isArray(result)) {
@@ -130,7 +130,9 @@ export function parseRunWorkflowResult(result: unknown): {
   const record = result as Record<string, unknown>;
 
   const status =
-    record.status === "completed" || record.status === "failed"
+    record.status === "completed" ||
+    record.status === "failed" ||
+    record.status === "skipped"
       ? record.status
       : null;
 
@@ -189,13 +191,17 @@ export function buildWorkflowRunCard({
 }
 
 function formatWorkflowRunStatusLabel(
-  status: "running" | "completed" | "failed" | "off",
+  status: "running" | "completed" | "failed" | "skipped" | "off",
   isRunning: boolean,
   activeIndex: number,
   total: number
 ): string {
   if (status === "failed") {
     return total ? `Failed · step ${activeIndex + 1} of ${total}` : "Failed";
+  }
+
+  if (status === "skipped") {
+    return total ? `Skipped · step ${activeIndex + 1} of ${total}` : "Skipped";
   }
 
   if (status === "off") {
@@ -284,7 +290,9 @@ function activeWorkflowStepIndex(views: WorkflowStepView[]): number {
     return running;
   }
 
-  const failed = views.findIndex((step) => step.status === "failed");
+  const failed = views.findIndex(
+    (step) => step.status === "failed" || step.status === "skipped"
+  );
 
   if (failed >= 0) {
     return failed;

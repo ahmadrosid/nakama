@@ -830,6 +830,9 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-bars > [data-status="failed"] {
     background: var(--destructive);
   }
+  .workflow-run-bars > [data-status="skipped"] {
+    background: var(--muted-foreground);
+  }
   .workflow-run-bars > [data-status="running"] {
     background: #3b82f6;
   }
@@ -1557,8 +1560,8 @@ var checkFieldHints = new Map([
   ["expected", 'The value it must equal, like true, 3 or "done"']
 ]);
 var stepFields = {
-  assert: ["path", "expected"],
-  compare: ["left", "op", "right", "tolerance"],
+  assert: ["path", "expected", "onFail"],
+  compare: ["left", "op", "right", "tolerance", "onFail"],
   template: ["template"],
   tool: ["tool", "input"]
 };
@@ -1590,7 +1593,7 @@ function serializeSteps(steps) {
   return steps.map(({ id, kind, fields }) => ({
     id,
     kind,
-    ...Object.fromEntries((stepFields[kind] ?? []).filter((key) => key !== "tolerance" || fields[key]).map((key) => [
+    ...Object.fromEntries((stepFields[kind] ?? []).filter((key) => (key !== "tolerance" || fields[key]) && (key !== "onFail" || fields[key] === "skip")).map((key) => [
       key,
       key === "input" ? JSON.parse(fields[key] || "{}") : ["left", "right", "expected", "tolerance"].includes(key) ? parseValue(fields[key] ?? "") : fields[key] ?? ""
     ]))
@@ -2241,7 +2244,7 @@ function apply(ctx) {
     const receipts = run?.steps ?? [];
     const steps = workflow?.steps ?? receipts.map((receipt) => ({ id: receipt.stepId, kind: receipt.kind }));
     const complete = receipts.filter((receipt) => receipt.status === "completed").length;
-    const label = run?.status === "failed" || record?.error ? "Failed" : status === "running" ? "Running" : run?.status === "completed" ? "Done" : "Finished";
+    const label = run?.status === "failed" || record?.error ? "Failed" : run?.status === "skipped" ? "Skipped" : status === "running" ? "Running" : run?.status === "completed" ? "Done" : "Finished";
     return /* @__PURE__ */ React.createElement("section", {
       "aria-label": "Workflow run",
       className: "workflow-chat-card"
@@ -2695,7 +2698,7 @@ function apply(ctx) {
     ];
     const failureInCard = view === "workflow" && Boolean(bannerStep && allSteps.some((entry) => entry.id === bannerStep.stepId));
     const failedRun = view !== "runs" && !failureInCard ? lastFailed : undefined;
-    const lastStopped = lastRun?.status === "failed";
+    const lastStopped = lastRun?.status === "failed" || lastRun?.status === "skipped";
     return /* @__PURE__ */ React.createElement("section", {
       className: "workflow-editor"
     }, /* @__PURE__ */ React.createElement("form", {
@@ -3058,7 +3061,20 @@ function apply(ctx) {
       schema: tools.find((tool) => tool.name === selectedStep.fields.tool)?.parameters,
       sources: valueSources,
       text: selectedStep.fields.input ?? ""
-    }) : field === "op" ? /* @__PURE__ */ React.createElement(Choice, {
+    }) : field === "onFail" ? /* @__PURE__ */ React.createElement("label", {
+      className: "workflow-enabled",
+      key: field
+    }, /* @__PURE__ */ React.createElement(Switch, {
+      "aria-label": "Skip the run when false",
+      checked: selectedStep.fields.onFail === "skip",
+      disabled: busy,
+      onCheckedChange: (checked) => updateStep(selectedStep.key, {
+        fields: {
+          ...selectedStep.fields,
+          onFail: checked ? "skip" : ""
+        }
+      })
+    }), "Skip the run when false") : field === "op" ? /* @__PURE__ */ React.createElement(Choice, {
       disabled: busy,
       key: field,
       label: "Operator",
@@ -3245,7 +3261,7 @@ function apply(ctx) {
         className: "workflow-empty"
       }, "No runs yet."));
     }
-    const open = openId === undefined ? runs[0].status === "completed" ? null : runs[0].id : openId;
+    const open = openId === undefined ? runs[0].status === "completed" || runs[0].status === "skipped" ? null : runs[0].id : openId;
     const failedCount = runs.filter((run) => run.status === "failed").length;
     const shown = onlyFailed ? runs.filter((run) => run.status === "failed") : runs;
     return /* @__PURE__ */ React.createElement("section", {
@@ -3312,6 +3328,8 @@ function apply(ctx) {
     const timeline = runTimeline(run);
     const failed = failedStep(run);
     const stoppedAt = failed ? titleCase(failed.stepId) : "";
+    const filter = run.status === "skipped" ? run.steps?.find((step) => step.status === "skipped") : undefined;
+    const skippedAt = filter ? titleCase(filter.stepId) : "";
     const help = run.error ? errorHelp(run.error, agent, failed) : undefined;
     const started = runStarted(run.startedAt);
     const recordedIds = receipts.map((step) => step.stepId);
@@ -3347,7 +3365,9 @@ function apply(ctx) {
       "aria-hidden": "true"
     }, reached, " of ", ids.length), run.status === "failed" && !expanded && /* @__PURE__ */ React.createElement("span", {
       className: "workflow-empty"
-    }, stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"))), /* @__PURE__ */ React.createElement("td", {
+    }, stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"), skippedAt && /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-empty"
+    }, `Skipped at ${skippedAt}`))), /* @__PURE__ */ React.createElement("td", {
       className: "workflow-run-took"
     }, run.completedAt && formatDuration(Date.parse(run.completedAt) - Date.parse(run.startedAt))), /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement(Button, {
       "aria-controls": expanded ? detailId : undefined,

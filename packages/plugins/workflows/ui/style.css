@@ -829,6 +829,9 @@
   .workflow-run-bars > [data-status="failed"] {
     background: var(--destructive);
   }
+  .workflow-run-bars > [data-status="skipped"] {
+    background: var(--muted-foreground);
+  }
   .workflow-run-bars > [data-status="running"] {
     background: #3b82f6;
   }
