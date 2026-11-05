@@ -36,9 +36,16 @@ export function OllamaProviderModelFields({
       fieldId="ollama-models"
       modelsError={modelsError}
       onCustomModelsChange={onCustomModelsChange}
-      renderBrowse={({ addedIds, multiSelect, onAddMany, onSelect }) => (
+      renderBrowse={({
+        addedIds,
+        addedModels,
+        multiSelect,
+        onAddMany,
+        onSelect,
+      }) => (
         <RemoteModelsBrowseList
           addedIds={addedIds}
+          addedModels={addedModels}
           apiKey={apiKey}
           baseUrl={baseUrl}
           browseLabel="Ollama"

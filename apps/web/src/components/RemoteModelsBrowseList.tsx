@@ -18,6 +18,8 @@ const EMPTY_ROWS: RemoteModelRow[] = [];
 
 interface RemoteModelsBrowseListProps {
   addedIds?: ReadonlySet<string>;
+  /** Saved models the endpoint may not list; they still show as Added. */
+  addedModels?: Array<{ id: string; name?: string }>;
   apiKey?: string;
   baseUrl?: string;
   browseLabel?: string;
@@ -28,6 +30,23 @@ interface RemoteModelsBrowseListProps {
   onSelect: RemoteBrowseSelectHandler;
   provider?: "ollama" | "openai_compatible" | "netra";
   providerId?: string;
+}
+
+function withSavedModels(
+  rows: RemoteModelRow[],
+  saved: Array<{ id: string; name?: string }> | undefined
+): RemoteModelRow[] {
+  const listed = new Set(rows.map((row) => row.id));
+
+  const missing = (saved ?? []).flatMap((model) => {
+    const id = model.id.trim();
+
+    return id && !listed.has(id)
+      ? [{ id, name: model.name?.trim() || id }]
+      : [];
+  });
+
+  return missing.length > 0 ? [...missing, ...rows] : rows;
 }
 
 function browseStatus(
@@ -56,6 +75,7 @@ function browseStatus(
 
 export function RemoteModelsBrowseList({
   addedIds,
+  addedModels,
   onSelect,
   className,
   providerId,
@@ -169,7 +189,7 @@ export function RemoteModelsBrowseList({
         onRefresh: () => void refetch(),
         refreshDisabled: isFetching,
       }}
-      rows={data ?? EMPTY_ROWS}
+      rows={withSavedModels(data ?? EMPTY_ROWS, addedModels)}
       status={({ filteredCount }) =>
         browseStatus(
           { canFetch, error: browseError, loading: isLoading || isFetching },

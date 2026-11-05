@@ -174,7 +174,7 @@ describe("provider model management", () => {
       ).toHaveLength(0);
       await act(async () => card.saveCompatible());
       expect(updates).toEqual([]);
-      expect(card!.dialogError).not.toBeNull();
+      expect(card!.editFieldErrors.models).not.toBeNull();
       await act(async () =>
         card.handleManageModelsChange([{ id: "replacement" }])
       );

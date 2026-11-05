@@ -223,9 +223,14 @@ function ReplaceKeyForm({
           {instance.label}
         </DialogTitle>
       </DialogHeader>
-      <label className="font-medium text-sm" htmlFor="replace-api-key">
-        {instance.hasApiKey ? "New API key" : "API key"}
-      </label>
+      <div className="flex items-center justify-between gap-2">
+        <label className="font-medium text-sm" htmlFor="replace-api-key">
+          {instance.hasApiKey ? "New API key" : "API key"}
+        </label>
+        {instance.secretSource === "settings" ? (
+          <span className="text-muted-foreground text-xs">Key saved</span>
+        ) : null}
+      </div>
       <InputGroup>
         <InputGroupInput
           aria-invalid={dialogError != null}
@@ -457,6 +462,7 @@ export function ProviderCompatibleEditDialog({
   onSave,
   title,
   wireApi,
+  fieldErrors,
 }: {
   open: boolean;
   busy: boolean;
@@ -479,6 +485,11 @@ export function ProviderCompatibleEditDialog({
   onSave: () => void;
   title: string;
   wireApi?: WireApi;
+  fieldErrors?: {
+    baseUrl: string | null;
+    displayName: string | null;
+    models: string | null;
+  };
 }) {
   return (
     <ProviderModelsDialogShell
@@ -492,16 +503,16 @@ export function ProviderCompatibleEditDialog({
       <CustomProviderFields
         apiKey={apiKey}
         baseUrl={editBaseUrl}
-        baseUrlError={null}
+        baseUrlError={fieldErrors?.baseUrl ?? null}
         browseLabel={browseLabel}
         browseSource={browseSource}
         customModels={manageModels}
         disabled={busy}
         displayName={editLabel}
-        displayNameError={null}
+        displayNameError={fieldErrors?.displayName ?? null}
         hideIdentity={hideIdentity}
         hostMode={hostMode}
-        modelsError={null}
+        modelsError={fieldErrors?.models ?? null}
         onBaseUrlChange={onBaseUrlChange}
         onCustomModelsChange={onCustomModelsChange}
         onDisplayNameChange={onDisplayNameChange}

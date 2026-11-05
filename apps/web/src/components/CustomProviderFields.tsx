@@ -234,10 +234,17 @@ export function CustomProviderFields({
                 : models
             )
           }
-          renderBrowse={({ addedIds, multiSelect, onAddMany, onSelect }) =>
+          renderBrowse={({
+            addedIds,
+            addedModels,
+            multiSelect,
+            onAddMany,
+            onSelect,
+          }) =>
             browseSource === "remote" ? (
               <RemoteModelsBrowseList
                 addedIds={addedIds}
+                addedModels={addedModels}
                 apiKey={apiKey}
                 baseUrl={baseUrl}
                 browseLabel={sentenceBrowseLabel(resolvedBrowseLabel)}

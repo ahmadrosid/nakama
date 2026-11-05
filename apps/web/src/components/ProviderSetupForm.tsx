@@ -224,7 +224,9 @@ function ProviderSetupApiKeyField({
       label={
         apiKeyOptional && !hostedCustomEndpoint
           ? "API key (optional)"
-          : "API key"
+          : hostedCustomEndpoint && form.displayName.trim()
+            ? `API key for ${form.displayName.trim()}`
+            : "API key"
       }
     >
       <InputGroup>

@@ -283,6 +283,7 @@ function ProviderInstanceCardDialogs({
           dialogError={card.dialogError}
           editBaseUrl={card.editBaseUrl}
           editLabel={card.editLabel}
+          fieldErrors={card.editFieldErrors}
           hideIdentity={card.providerType === "netra"}
           hostMode={instance.hostMode ?? undefined}
           manageModels={card.editManageModels}

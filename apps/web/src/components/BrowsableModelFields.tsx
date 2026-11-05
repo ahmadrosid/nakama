@@ -21,6 +21,7 @@ interface BrowsableModelFieldsProps<T> {
   onCustomModelsChange: (models: ModelListRow[]) => void;
   renderBrowse: (context: {
     addedIds: ReadonlySet<string>;
+    addedModels: ModelListRow[];
     multiSelect: boolean;
     onAddMany: (rows: T[]) => void;
     onSelect: (row: T) => void;
@@ -110,6 +111,7 @@ export function BrowsableModelFields<T>({
         <div className="space-y-2">
           {renderBrowse({
             addedIds,
+            addedModels: customModels,
             multiSelect: true,
             onAddMany: handleAddMany,
             onSelect: handleBrowseSelect,

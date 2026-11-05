@@ -81,6 +81,14 @@ export function useProviderInstanceCard({
   const [showApiKey, setShowApiKey] = useState(false);
   const [editLabel, setEditLabel] = useState("");
   const [editBaseUrl, setEditBaseUrl] = useState("");
+
+  // Edit marks the field at fault, as Add does.
+  const [editFieldErrors, setEditFieldErrors] = useState<{
+    baseUrl: string | null;
+    displayName: string | null;
+    models: string | null;
+  }>({ baseUrl: null, displayName: null, models: null });
+
   const [editWireApi, setEditWireApi] = useState<WireApi>("chat");
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
 
@@ -122,6 +130,7 @@ export function useProviderInstanceCard({
 
   const openEdit = () => {
     setDialogError(null);
+    setEditFieldErrors({ baseUrl: null, displayName: null, models: null });
     setEditLabel(instance.label);
     setEditBaseUrl(
       instance.baseUrl ??
@@ -222,7 +231,11 @@ export function useProviderInstanceCard({
     const modelsError = validateCustomModelsInput(manageModels);
 
     if (displayNameError || baseUrlError || modelsError) {
-      setDialogError(displayNameError ?? baseUrlError ?? modelsError);
+      setEditFieldErrors({
+        baseUrl: baseUrlError,
+        displayName: displayNameError,
+        models: modelsError,
+      });
 
       return;
     }
@@ -277,6 +290,7 @@ export function useProviderInstanceCard({
 
   const handleManageModelsChange = (rows: ModelListRow[]) => {
     setManageModels(rows);
+    setEditFieldErrors((current) => ({ ...current, models: null }));
 
     if (dialogError) {
       setDialogError(null);
@@ -290,6 +304,7 @@ export function useProviderInstanceCard({
     deleteOpen,
     dialogError,
     editBaseUrl,
+    editFieldErrors,
     editLabel,
     editManageModels: manageModels,
     editOpen,
@@ -317,8 +332,14 @@ export function useProviderInstanceCard({
     saveManageModels,
     setApiKey,
     setDeleteOpen,
-    setEditBaseUrl,
-    setEditLabel,
+    setEditBaseUrl: (value: string) => {
+      setEditBaseUrl(value);
+      setEditFieldErrors((current) => ({ ...current, baseUrl: null }));
+    },
+    setEditLabel: (value: string) => {
+      setEditLabel(value);
+      setEditFieldErrors((current) => ({ ...current, displayName: null }));
+    },
     setEditOpen,
     setEditWireApi,
     setManageModels,

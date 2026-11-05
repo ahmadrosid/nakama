@@ -45,8 +45,9 @@ export function ProviderSelect({
   const configured = configuredTypes ?? EMPTY_CONFIGURED_TYPES;
 
   const selectedLabel = useMemo(() => {
+    // As a value it names what is shown, not the action that opened it.
     if (value === "__browse__") {
-      return BROWSE_OPTION.label;
+      return "Free models";
     }
 
     return (
