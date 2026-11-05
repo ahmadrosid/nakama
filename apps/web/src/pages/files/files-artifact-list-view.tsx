@@ -37,23 +37,23 @@ export function FileEntriesLayout({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card p-2">
+    <div className="overflow-x-auto rounded-xl border border-border bg-card">
       <table className="w-full table-fixed text-left text-sm">
-        <thead className="bg-muted/40 text-muted-foreground">
+        <thead className="border-border border-b bg-muted/30 text-muted-foreground text-xs">
           <tr>
-            <th className="rounded-l-lg px-3 py-2.5 font-normal" scope="col">
+            <th className="px-4 py-2 font-medium" scope="col">
               Name
             </th>
             {compact ? null : (
               <>
                 <th
-                  className="hidden w-28 px-3 py-2.5 font-normal md:table-cell"
+                  className="hidden w-28 px-4 py-2 font-medium md:table-cell"
                   scope="col"
                 >
                   Type
                 </th>
                 <th
-                  className="hidden w-24 px-3 py-2.5 font-normal sm:table-cell"
+                  className="hidden w-24 px-4 py-2 font-medium sm:table-cell"
                   scope="col"
                 >
                   Size
@@ -62,7 +62,7 @@ export function FileEntriesLayout({
             )}
             {showCreatedBy ? (
               <th
-                className="hidden w-40 px-3 py-2.5 font-normal lg:table-cell"
+                className="hidden w-40 px-4 py-2 font-medium lg:table-cell"
                 scope="col"
               >
                 Created by
@@ -71,15 +71,15 @@ export function FileEntriesLayout({
             <th
               className={
                 compact
-                  ? "w-28 rounded-r-lg px-3 py-2.5 font-normal"
-                  : "hidden w-36 px-3 py-2.5 font-normal lg:table-cell"
+                  ? "w-28 px-4 py-2 font-medium"
+                  : "hidden w-36 px-4 py-2 font-medium lg:table-cell"
               }
               scope="col"
             >
               Modified
             </th>
             {compact ? null : (
-              <th className="w-24 rounded-r-lg" scope="col">
+              <th className="w-24" scope="col">
                 <span className="sr-only">Actions</span>
               </th>
             )}
@@ -142,21 +142,21 @@ export function FileEntry({
           icon={icon}
           onOpen={onOpen}
         />
-        <td className="hidden truncate px-3 py-3 text-muted-foreground md:table-cell">
+        <td className="hidden truncate px-4 py-3 text-muted-foreground md:table-cell">
           {type}
         </td>
-        <td className="hidden px-3 py-3 text-muted-foreground tabular-nums sm:table-cell">
+        <td className="hidden px-4 py-3 text-muted-foreground tabular-nums sm:table-cell">
           {directory ? "—" : formatBytes(sizeBytes)}
         </td>
         {creatorLabel === undefined ? null : (
-          <td className="hidden truncate px-3 py-3 text-muted-foreground lg:table-cell">
+          <td className="hidden truncate px-4 py-3 text-muted-foreground lg:table-cell">
             {creatorLabel ?? "—"}
           </td>
         )}
-        <td className="hidden px-3 py-3 text-muted-foreground tabular-nums lg:table-cell">
+        <td className="hidden px-4 py-3 text-muted-foreground tabular-nums lg:table-cell">
           {modified}
         </td>
-        <td className="px-2">{controls}</td>
+        <td className="px-4">{controls}</td>
       </tr>
     );
   }
@@ -233,7 +233,7 @@ export function CompactFileEntry({
         icon={entryIcon({ directory, filename, mimeType, viewMode: "list" })}
         onOpen={onOpen}
       />
-      <td className="px-3 py-3 text-muted-foreground tabular-nums">
+      <td className="px-4 py-3 text-muted-foreground tabular-nums">
         {modifiedLabel(updatedAt)}
       </td>
     </tr>
@@ -254,7 +254,7 @@ function FileNameCell({
   return (
     <td className="p-0">
       <button
-        className="flex min-h-12 w-full items-center gap-3 rounded-md px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onOpen}
         title={filename}
         type="button"

@@ -132,7 +132,7 @@ export function VisionSettingsCard() {
         }}
         value={selectionValue}
       >
-        <SelectTrigger aria-label="Image parsing model" className="h-9 w-full">
+        <SelectTrigger aria-label="Image parsing model" className="h-8 w-full">
           <SelectValue className="truncate" placeholder="Select vision model">
             {selection
               ? profileModelLabel(selection, visionModelGroups, {

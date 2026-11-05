@@ -10,14 +10,14 @@ import {
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   type ChannelOwner,
+  containsPairingCode,
   hasActiveHandshakeCode,
   looksLikePairingCode,
-  pairingCodesMatch,
 } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
   isTeamsUserAuthorized,
-  regenerateTeamsHandshake,
+  spendExposedTeamsHandshake,
   type TeamsConfigFile,
   verifyAndPairTeamsUser,
 } from "@nakama/core/teams-config";
@@ -80,6 +80,10 @@ const CHANNEL_MESSAGE_PREFIX =
 // Pairing codes stay out of channels: anyone reading could use the code first.
 const LINK_IN_PERSONAL_CHAT_REPLY =
   "I can't answer you yet. Link your account first: open a personal chat with me and send the pairing code from Connections → Teams there.";
+
+// True also when the spend failed: making a new code replaces the posted one.
+const CODE_EXPOSED_REPLY =
+  "Everyone in this channel can read that pairing code. Make a new one in Connections → Teams and send it to me in a personal chat.";
 
 const THREAD_SESSION_PREFIX = "teams-thread:";
 
@@ -184,6 +188,13 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     const existing = sessionStore.get(sessionKey);
 
     if (existing) {
+      // Kept in memory only: the next save writes it. The thread cap drops the
+      // sessions used longest ago, not the ones made first.
+      sessionStore.set(sessionKey, {
+        ...existing,
+        updatedAt: new Date().toISOString(),
+      });
+
       const hot = sessionStore.getHotSession<RemoteChatSession>(sessionKey);
 
       if (hot) {
@@ -219,7 +230,11 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       updatedAt: new Date().toISOString(),
     });
     sessionStore.setHotSession(sessionKey, session);
-    sessionStore.dropOldest(THREAD_SESSION_PREFIX, MAX_THREAD_SESSIONS);
+
+    if (sessionKey.startsWith(THREAD_SESSION_PREFIX)) {
+      sessionStore.dropOldest(THREAD_SESSION_PREFIX, MAX_THREAD_SESSIONS);
+    }
+
     await sessionStore.save();
 
     return session;
@@ -394,6 +409,39 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     }
   }
 
+  /**
+   * True when the message carried the live code, also when the spend failed:
+   * the message is still turned away, so the code never reaches the agent.
+   * A failed spend leaves the code live, so that is logged, not hidden.
+   */
+  async function spendExposedCode(
+    text: string,
+    config: TeamsConfigFile
+  ): Promise<boolean> {
+    // Most messages carry no code, so they skip the pairing lock.
+    if (
+      !(
+        config.handshakeCode &&
+        hasActiveHandshakeCode(config) &&
+        containsPairingCode(text, config.handshakeCode)
+      )
+    ) {
+      return false;
+    }
+
+    try {
+      // False when the code was spent or replaced since the config was read.
+      await spendExposedTeamsHandshake(text, owner);
+    } catch (error) {
+      console.error(
+        "[teams] could not spend a pairing code posted in a channel:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+
+    return true;
+  }
+
   return async function handle(activity: TeamsActivity): Promise<void> {
     if (!isServedMessage(activity)) {
       return;
@@ -442,17 +490,21 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     const text = activity.text.trim();
     const command = parseCommand(text);
 
+    // Everyone in the channel read the code, so it no longer pairs anyone,
+    // whoever posted it. It never reaches the agent, which could repeat it.
+    if (!isPersonal(activity) && (await spendExposedCode(text, config))) {
+      await send(
+        activity.conversationId,
+        allows(config, activity)
+          ? CODE_EXPOSED_REPLY
+          : LINK_IN_PERSONAL_CHAT_REPLY
+      );
+
+      return;
+    }
+
     if (!allows(config, activity)) {
       if (!isPersonal(activity)) {
-        // Everyone in the channel read the code, so it no longer pairs anyone.
-        if (
-          config.handshakeCode !== null &&
-          hasActiveHandshakeCode(config) &&
-          pairingCodesMatch(text, config.handshakeCode)
-        ) {
-          await regenerateTeamsHandshake(owner);
-        }
-
         await send(activity.conversationId, LINK_IN_PERSONAL_CHAT_REPLY);
 
         return;

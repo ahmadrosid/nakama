@@ -15,7 +15,7 @@ function FilesViewModeToggle({
   return (
     <div
       aria-label="View mode"
-      className="flex shrink-0 items-center rounded-md border border-border/60 p-0.5"
+      className="flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-border/60 p-0.5"
       role="group"
     >
       <Tooltip>
@@ -87,7 +87,7 @@ export function FilesToolbar({
             viewMode={viewMode}
           />
         ) : null}
-        <Button onClick={onRefresh} size="sm" type="button" variant="outline">
+        <Button onClick={onRefresh} size="lg" type="button" variant="outline">
           {isFetching ? (
             <Spinner className="size-4" />
           ) : (

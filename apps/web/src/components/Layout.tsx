@@ -75,7 +75,6 @@ export function Layout() {
           >
             <AppShellHeader
               hideDesktop={
-                shell.pathname === PAGE_PATHS.profiles ||
                 shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) ||
                 // A group chat takes the full desktop column, like agent chat.
                 groupRouteFromPath(shell.pathname) !== null
@@ -219,8 +218,8 @@ function appShellMainClassName(page: PageId, pathname: string): string {
   return cn(
     "min-h-0 flex-1",
     flush
-      ? "flex flex-col overflow-hidden"
-      : "overflow-y-auto overflow-x-hidden",
+      ? "flex flex-col overflow-hidden sm:[scrollbar-gutter:stable]"
+      : "overflow-y-auto overflow-x-hidden sm:[scrollbar-gutter:stable]",
     flush || skillDetail ? null : "p-4 sm:p-6"
   );
 }
@@ -256,7 +255,7 @@ function AppShellHeader({
   return (
     <header
       className={cn(
-        "app-shell-header gap-2 bg-card px-3 sm:gap-4 sm:px-6",
+        "app-shell-header gap-2 bg-background px-3 sm:gap-4 sm:px-6",
         // Standalone on iOS the shell owns the status bar, so the bar grows by
         // the top inset and paints its own background under the notch.
         "h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]",
@@ -284,7 +283,7 @@ function AppShellHeader({
         </Button>
       )}
       {hideTitle ? null : (
-        <h1 className="min-w-0 truncate font-normal text-base text-foreground tracking-tight">
+        <h1 className="min-w-0 truncate font-semibold text-[15px] text-foreground tracking-tight">
           {label}
         </h1>
       )}

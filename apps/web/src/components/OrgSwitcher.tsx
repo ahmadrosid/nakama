@@ -83,7 +83,7 @@ function OrgSwitcherTrigger({
         "font-normal hover:bg-sidebar-accent/60 motion-reduce:transition-none",
         collapsed
           ? "sidebar-nav-link sidebar-nav-link--collapsed p-0"
-          : "h-auto w-full min-w-0 justify-start gap-2 px-2 py-1.5 text-left",
+          : "h-auto w-full min-w-0 justify-start gap-2 py-1.5 pr-2 pl-[3px] text-left",
         className
       )}
       title={collapsed ? label : undefined}

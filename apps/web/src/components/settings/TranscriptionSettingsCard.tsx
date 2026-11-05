@@ -153,7 +153,7 @@ export function TranscriptionSettingsCard({
       >
         <SelectTrigger
           aria-label="Audio transcription model"
-          className="h-9 w-full"
+          className="h-8 w-full"
         >
           <SelectValue
             className="truncate"

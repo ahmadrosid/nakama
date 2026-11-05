@@ -98,22 +98,18 @@ export function SettingsPage() {
         <SettingsSection title="General">
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <p className="font-medium text-foreground text-sm">
-                  Appearance
-                </p>
+              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <p className="text-foreground text-sm">Appearance</p>
                 <ThemeToggle />
               </div>
 
               <UserContextSettings />
 
               <div
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
                 id="chat-usage-setting"
               >
-                <p className="font-medium text-foreground text-sm">
-                  Token usage in chat
-                </p>
+                <p className="text-foreground text-sm">Token usage in chat</p>
                 <Switch
                   aria-label="Token usage in chat"
                   checked={chatUsage.visible}
@@ -192,10 +188,10 @@ export function TimezoneSettingsRow() {
   return (
     <div
       aria-busy={saveTimezoneMutation.isPending || undefined}
-      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+      className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
     >
       <div className="min-w-0 space-y-0.5">
-        <p className="font-medium text-foreground text-sm">Timezone</p>
+        <p className="text-foreground text-sm">Timezone</p>
         {error ? (
           <p className="text-destructive text-xs" role="alert">
             {error}
@@ -301,7 +297,7 @@ function SettingsSection({
   return (
     <section aria-labelledby={headingId} className="space-y-3">
       <h2
-        className="px-4 font-medium text-muted-foreground text-xs uppercase tracking-wide"
+        className="type-section-title font-medium text-muted-foreground"
         id={headingId}
       >
         {title}
@@ -330,27 +326,29 @@ export function LlmProvidersPage() {
         onAddOpenChange={setAddProviderOpen}
         onFormError={setFormError}
       />
-      <Card className="w-full shadow-none">
-        <CardContent className="divide-y divide-border p-0">
-          <div id="image-parsing">
-            <VisionSettingsCard />
-          </div>
-          <div id="transcription">
-            <TranscriptionSettingsCard
-              onAddProvider={() => setAddProviderOpen(true)}
-            />
-          </div>
-          <div id="image-generation">
-            <ImageGenerationSettingsCard />
-          </div>
-          <div id="web-search">
-            <WebSearchSettingsCard />
-          </div>
-          <div id="browser-runtime">
-            <BrowserRuntimeSettingsCard />
-          </div>
-        </CardContent>
-      </Card>
+      <SettingsSection title="Defaults">
+        <Card className="w-full shadow-none">
+          <CardContent className="divide-y divide-border p-0">
+            <div id="image-parsing">
+              <VisionSettingsCard />
+            </div>
+            <div id="transcription">
+              <TranscriptionSettingsCard
+                onAddProvider={() => setAddProviderOpen(true)}
+              />
+            </div>
+            <div id="image-generation">
+              <ImageGenerationSettingsCard />
+            </div>
+            <div id="web-search">
+              <WebSearchSettingsCard />
+            </div>
+            <div id="browser-runtime">
+              <BrowserRuntimeSettingsCard />
+            </div>
+          </CardContent>
+        </Card>
+      </SettingsSection>
     </div>
   );
 }

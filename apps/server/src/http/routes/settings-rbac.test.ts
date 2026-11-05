@@ -709,8 +709,10 @@ describe("profile detail and history reads follow the chat list visibility", () 
   async function seedProfilesFixture() {
     const db = createInMemoryDatabaseAdapter();
 
+    const agent = new AgentService(null, null, db);
+
     const { app, authService } = createMinimalHonoApp({
-      agent: new AgentService(null, null, db),
+      agent,
       databaseAdapter: db,
     });
 
@@ -796,7 +798,7 @@ describe("profile detail and history reads follow the chat list visibility", () 
       PROFILES_ORG_ID
     );
 
-    return { app, member };
+    return { agent, app, db, member };
   }
 
   test("a member reads the detail of a shared agent", async () => {
@@ -837,20 +839,22 @@ describe("profile detail and history reads follow the chat list visibility", () 
     expect(response.status).toBe(200);
   });
 
-  test("a member cannot read another member's private agent", async () => {
+  test("a hidden agent and an unknown id get the same answer", async () => {
     const { app, member } = await seedProfilesFixture();
 
-    const response = await callRoute(app, member, {
+    const hidden = await callRoute(app, member, {
       method: "GET",
       path: "/v1/profiles/private_agent",
     });
 
-    expect(response.status).toBe(403);
+    const unknown = await callRoute(app, member, {
+      method: "GET",
+      path: "/v1/profiles/does_not_exist",
+    });
 
-    // SAFETY: This test controls the fixture shape at this boundary.
-    const body = (await response.json()) as { error: string };
-
-    expect(body.error).toBe("Forbidden");
+    expect(hidden.status).toBe(403);
+    expect(unknown.status).toBe(hidden.status);
+    expect(await unknown.json()).toEqual(await hidden.json());
   });
 
   test("a member cannot read Super Nakama's detail", async () => {
@@ -864,23 +868,93 @@ describe("profile detail and history reads follow the chat list visibility", () 
     expect(response.status).toBe(403);
   });
 
-  test("a member cannot probe an unknown profile id", async () => {
-    const { app, member } = await seedProfilesFixture();
+  test("raw MCP errors go only to admins, the prompt only to owners and admins", async () => {
+    const { app, db, member } = await seedProfilesFixture();
+    const now = new Date().toISOString();
 
-    const response = await callRoute(app, member, {
-      method: "GET",
-      path: "/v1/profiles/does_not_exist",
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: { url: "https://mcp.example.test" },
+      createdAt: now,
+      enabled: true,
+      id: "mcp_broken",
+      lastError: "fetch failed: https://mcp.example.test/v1?key=raw",
+      name: "Broken MCP",
+      orgId: PROFILES_ORG_ID,
+      status: "error",
+      transport: "http",
+      updatedAt: now,
+    });
+    await db.assignMcpServerToProfile("shared_agent", "mcp_broken");
+
+    const owner = await loginUserSession(
+      app,
+      "other@profile.test",
+      PASSWORD,
+      PROFILES_ORG_ID
+    );
+
+    const admin = await loginUserSession(
+      app,
+      "owner@profile.test",
+      PASSWORD,
+      PROFILES_ORG_ID
+    );
+
+    type DetailBody = {
+      profile: {
+        mcpServers: Array<{ lastError: string | null; status: string }>;
+        systemPrompt: string;
+      };
+    };
+
+    const read = async (session: typeof member) => {
+      const response = await callRoute(app, session, {
+        method: "GET",
+        path: "/v1/profiles/shared_agent",
+      });
+
+      expect(response.status).toBe(200);
+
+      // SAFETY: This test controls the fixture shape at this boundary.
+      return ((await response.json()) as DetailBody).profile;
+    };
+
+    const memberView = await read(member);
+
+    expect(memberView.mcpServers).toEqual([
+      expect.objectContaining({ lastError: null, status: "error" }),
+    ]);
+    expect(memberView.systemPrompt).toBe("");
+
+    const ownerView = await read(owner);
+
+    expect(ownerView.mcpServers).toEqual([
+      expect.objectContaining({ lastError: null, status: "error" }),
+    ]);
+    expect(ownerView.systemPrompt).toBe("You are helpful.");
+
+    const adminView = await read(admin);
+
+    expect(adminView.mcpServers[0]?.lastError).toContain("fetch failed");
+    expect(adminView.systemPrompt).toBe("You are helpful.");
+
+    // Routes that answer with the updated detail use the same rule.
+    const update = await callRoute(app, owner, {
+      body: { name: "Shared Agent 2" },
+      method: "PUT",
+      path: "/v1/profiles/shared_agent",
     });
 
-    expect(response.status).toBe(403);
+    expect(update.status).toBe(200);
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    const body = (await response.json()) as { error: string };
+    const updated = (await update.json()) as DetailBody;
 
-    expect(body.error).toBe("Forbidden");
+    expect(updated.profile.mcpServers[0]?.lastError).toBeNull();
   });
 
-  test("a member reads the change history of a shared agent", async () => {
+  test("a member cannot read the change history of a shared agent", async () => {
     const { app, member } = await seedProfilesFixture();
 
     const response = await callRoute(app, member, {
@@ -888,34 +962,30 @@ describe("profile detail and history reads follow the chat list visibility", () 
       path: "/v1/profiles/shared_agent/history",
     });
 
-    expect(response.status).toBe(200);
-
-    // SAFETY: This test controls the fixture shape at this boundary.
-    const body = (await response.json()) as { events: unknown[] };
-
-    expect(body.events).toEqual([]);
+    expect(response.status).toBe(403);
   });
 
-  test("a member cannot read the change history of another member's private agent", async () => {
+  test("a member reads the change history of their own agent", async () => {
     const { app, member } = await seedProfilesFixture();
 
     const response = await callRoute(app, member, {
       method: "GET",
-      path: "/v1/profiles/private_agent/history",
+      path: "/v1/profiles/member_agent/history",
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
   });
 
-  test("a member cannot change sharing on someone else's agent", async () => {
-    const { app, member } = await seedProfilesFixture();
+  test("a failed profile lookup is not reported as Forbidden", async () => {
+    const { app, agent, member } = await seedProfilesFixture();
+
+    agent.getProfileAccess = () => Promise.reject(new Error("database down"));
 
     const response = await callRoute(app, member, {
-      body: { sharedWithTeam: true },
-      method: "PUT",
-      path: "/v1/profiles/private_agent",
+      method: "GET",
+      path: "/v1/profiles/shared_agent",
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(500);
   });
 });

@@ -70,7 +70,7 @@ export function OrgLlmQuotaCard() {
 
   return (
     <section className="space-y-3">
-      <h2 className="font-normal text-muted-foreground/55 text-sm">
+      <h2 className="font-medium text-muted-foreground text-sm">
         LLM monthly quota
       </h2>
       <Card className="w-full overflow-hidden shadow-none">
