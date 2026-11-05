@@ -426,6 +426,34 @@ function ComposioCatalogErrorState({
   );
 }
 
+/** Composio has no managed OAuth app for this toolkit (for example Google Forms). */
+export function needsComposioCustomAuth(message: string | null | undefined) {
+  return message?.includes("Auth_Config_DefaultAuthConfigNotFound") ?? false;
+}
+
+export function ComposioCustomAuthSteps({ name }: { name: string }) {
+  return (
+    <>
+      <ol className="list-decimal space-y-2 pl-5 text-sm">
+        <li>Open the Composio project for this API key.</li>
+        <li>
+          Create a custom auth config for {name}. Enter the credentials that
+          Composio requests.
+        </li>
+        <li>Return here and try Connect again.</li>
+      </ol>
+      <a
+        className="text-sm underline underline-offset-3"
+        href="https://next.docs.composio.dev/docs/auth-configuration/custom-auth-configs"
+        rel="noreferrer"
+        target="_blank"
+      >
+        View setup guide
+      </a>
+    </>
+  );
+}
+
 function ComposioConnectionsReady({
   bordered,
   embedded,
@@ -442,9 +470,7 @@ function ComposioConnectionsReady({
     message: string;
   } | null>(null);
 
-  const needsCustomAuthConfig = connectError?.message.includes(
-    "Auth_Config_DefaultAuthConfigNotFound"
-  );
+  const needsCustomAuthConfig = needsComposioCustomAuth(connectError?.message);
 
   const data = state.toolkitsQuery.data;
 
@@ -536,22 +562,7 @@ function ComposioConnectionsReady({
               <DialogDescription>
                 Composio has no managed credentials for {toolkitName}.
               </DialogDescription>
-              <ol className="list-decimal space-y-2 pl-5 text-sm">
-                <li>Open the Composio project for this API key.</li>
-                <li>
-                  Create a custom auth config for {toolkitName}. Enter the
-                  credentials that Composio requests.
-                </li>
-                <li>Return here and try Connect again.</li>
-              </ol>
-              <a
-                className="text-sm underline underline-offset-3"
-                href="https://next.docs.composio.dev/docs/auth-configuration/custom-auth-configs"
-                rel="noreferrer"
-                target="_blank"
-              >
-                View setup guide
-              </a>
+              <ComposioCustomAuthSteps name={toolkitName ?? ""} />
             </>
           ) : (
             <DialogDescription>{connectError?.message}</DialogDescription>

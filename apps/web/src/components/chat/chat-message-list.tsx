@@ -40,6 +40,10 @@ import {
   ConversationStickinessProvider,
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  ComposioCustomAuthSteps,
+  needsComposioCustomAuth,
+} from "@/components/ComposioConnectionsCard";
 import { ComposioToolkitLogo } from "@/components/ComposioToolkitLogo";
 import {
   AgentQuestionnaireAnswers,
@@ -1049,11 +1053,46 @@ function ComposioConnectCard({
         )}
       </div>
       {connected || !ready || !(blockedReason || error) ? null : (
-        <p className="text-muted-foreground text-xs" role="status">
-          {error ?? blockedReason}
-        </p>
+        <ComposioConnectCardStatus
+          blockedReason={blockedReason}
+          error={error}
+          isOrgAdmin={isOrgAdmin}
+          name={name}
+        />
       )}
     </div>
+  );
+}
+
+function ComposioConnectCardStatus({
+  blockedReason,
+  error,
+  isOrgAdmin,
+  name,
+}: {
+  blockedReason: string | null;
+  error: string | null;
+  isOrgAdmin: boolean;
+  name: string;
+}) {
+  // Composio has no shared OAuth app for this toolkit. Only an admin can fix it.
+  if (needsComposioCustomAuth(error)) {
+    return isOrgAdmin ? (
+      <div className="flex flex-col gap-2" role="status">
+        <p className="text-sm">{name} needs a custom auth config</p>
+        <ComposioCustomAuthSteps name={name} />
+      </div>
+    ) : (
+      <p className="text-muted-foreground text-xs" role="status">
+        Ask an org admin to add a custom auth config for {name} in Composio.
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-muted-foreground text-xs" role="status">
+      {error ?? blockedReason}
+    </p>
   );
 }
 
