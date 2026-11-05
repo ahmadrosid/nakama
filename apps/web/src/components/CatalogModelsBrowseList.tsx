@@ -264,7 +264,9 @@ export function CatalogModelsBrowseList<
           onRefresh={onRefresh}
           refreshDisabled={refreshDisabled}
           status={
-            multiSelect && status == null && addedIds?.size ? (
+            multiSelect &&
+            (status == null || status instanceof Function) &&
+            addedIds?.size ? (
               <>
                 {resolvedStatus} · {addedIds.size} in your list
               </>

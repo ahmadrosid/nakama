@@ -52,8 +52,7 @@ function withSavedModels(
 function browseStatus(
   state: { canFetch: boolean; error: Error | null; loading: boolean },
   count: number,
-  label: string,
-  addedCount: number
+  label: string
 ): string {
   if (!state.canFetch) {
     return `Browse models from ${label}`;
@@ -68,9 +67,8 @@ function browseStatus(
     return `Models from ${label}`;
   }
 
-  const found = `${count} model${count === 1 ? "" : "s"} from ${label}`;
-
-  return addedCount > 0 ? `${found} · ${addedCount} in your list` : found;
+  // The shared list adds "· N in your list".
+  return `${count} model${count === 1 ? "" : "s"} from ${label}`;
 }
 
 export function RemoteModelsBrowseList({
@@ -194,8 +192,7 @@ export function RemoteModelsBrowseList({
         browseStatus(
           { canFetch, error: browseError, loading: isLoading || isFetching },
           filteredCount,
-          browseLabel,
-          addedIds?.size ?? 0
+          browseLabel
         )
       }
     />
