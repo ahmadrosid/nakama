@@ -1,5 +1,6 @@
 import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
+import { Switch } from "@nakama/ui/switch";
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import {
   BrowseModelRowButton,
@@ -124,16 +125,16 @@ function CatalogBrowseToolbar({
       />
       {toolbarTrailing}
       {showDeprecatedFilter ? (
-        <label className="flex h-8 cursor-pointer items-center gap-2 text-foreground text-sm">
-          <input
+        <span className="flex h-8 items-center gap-2 text-foreground text-sm">
+          <Switch
+            aria-label="Hide deprecated"
             checked={hideDeprecated}
-            className="size-4 rounded border-input"
             disabled={toolbarDisabled}
-            onChange={(event) => onHideDeprecatedChange(event.target.checked)}
-            type="checkbox"
+            onCheckedChange={onHideDeprecatedChange}
+            size="sm"
           />
           Hide deprecated
-        </label>
+        </span>
       ) : null}
     </>
   );

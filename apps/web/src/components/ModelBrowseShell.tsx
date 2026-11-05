@@ -102,7 +102,11 @@ export function ModelBrowseShell({
             <Spinner className="size-4 text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="px-3 py-8 text-center text-destructive text-sm">
+          // The list is a helper: its error is status, not a form error.
+          <div
+            className="px-3 py-8 text-center text-muted-foreground text-sm"
+            role="status"
+          >
             {formatError(error)}
           </div>
         ) : isEmpty ? (

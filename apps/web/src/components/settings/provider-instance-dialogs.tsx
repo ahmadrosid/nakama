@@ -600,6 +600,7 @@ export function ProviderRemoveDialog({
   label,
   isDefault = false,
   isSole,
+  nextDefaultLabel,
   busy,
   onOpenChange,
   onConfirm,
@@ -609,6 +610,7 @@ export function ProviderRemoveDialog({
   label: string;
   isDefault?: boolean;
   isSole: boolean;
+  nextDefaultLabel?: string;
   busy: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
@@ -628,7 +630,9 @@ export function ProviderRemoveDialog({
           <DialogTitle>Remove provider?</DialogTitle>
           <DialogDescription>
             {isSole ? "This is your only LLM provider. " : null}
-            {isDefault && !isSole ? "This is your default provider. " : null}
+            {isDefault && !isSole
+              ? `This is your default provider. ${nextDefaultLabel ?? "Another provider"} becomes the default. `
+              : null}
             Models using {label} will stop working. This cannot be undone.
           </DialogDescription>
         </DialogHeader>

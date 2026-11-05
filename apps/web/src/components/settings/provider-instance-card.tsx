@@ -276,12 +276,14 @@ function ProviderInstanceCardDialogs({
   isDefault,
   isSole,
   canManage,
+  nextDefaultLabel,
 }: {
   card: ReturnType<typeof useProviderInstanceCard>;
   instance: ProviderInstanceSummary;
   isDefault: boolean;
   isSole: boolean;
   canManage: boolean;
+  nextDefaultLabel?: string;
 }) {
   const { data: modelsResponse } = useModelsQuery();
   const { data: vision } = useVisionSettings();
@@ -325,6 +327,7 @@ function ProviderInstanceCardDialogs({
         isDefault={isDefault}
         isSole={isSole}
         label={instance.label}
+        nextDefaultLabel={nextDefaultLabel}
         onConfirm={() => void card.handleDelete()}
         onOpenChange={card.setDeleteOpen}
         open={card.deleteOpen}
@@ -389,6 +392,7 @@ export function ProviderInstanceCard({
   onError,
   isDefault = false,
   isSole = false,
+  nextDefaultLabel,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -404,6 +408,7 @@ export function ProviderInstanceCard({
   onError: (error: string | null) => void;
   isDefault?: boolean;
   isSole?: boolean;
+  nextDefaultLabel?: string;
 }) {
   const card = useProviderInstanceCard({
     catalog,
@@ -430,6 +435,7 @@ export function ProviderInstanceCard({
         instance={instance}
         isDefault={isDefault}
         isSole={isSole}
+        nextDefaultLabel={nextDefaultLabel}
       />
     </>
   );

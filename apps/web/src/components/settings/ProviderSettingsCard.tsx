@@ -104,6 +104,10 @@ export function ProviderSettingsCard({
                   }
                   isSole={providers.length === 1}
                   key={instance.id}
+                  // The server makes the first other provider the default.
+                  nextDefaultLabel={
+                    providers.find((other) => other.id !== instance.id)?.label
+                  }
                   onDelete={async (providerId) => {
                     await deleteProviderMutation.mutateAsync(providerId);
                     toast("Provider removed.");
