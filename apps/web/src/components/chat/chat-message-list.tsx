@@ -1,4 +1,5 @@
 import { hasActiveAgentQuestionnaire } from "@nakama/core/agent-questionnaire";
+import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   AgentQuestionAnswer,
   AgentQuestionnaire,
@@ -887,7 +888,8 @@ function describeComposioApp(
   toolkits: ListComposioToolkitsResponse | undefined,
   toolkitSlug: string,
   displayName: string,
-  access: { canManage: boolean; isOrgAdmin: boolean; onAgent: boolean }
+  access: { canManage: boolean; isOrgAdmin: boolean; onAgent: boolean },
+  agent: { error: Error | null; loaded: boolean }
 ) {
   const catalogItem = toolkits?.catalog.find(
     (item) => item.slug === toolkitSlug
@@ -913,6 +915,18 @@ function describeComposioApp(
     blockedReason = `Ask the agent owner to add ${name}.`;
   }
 
+  // A member on a shared agent cannot read it (403); they cannot manage it.
+  const agentForbidden =
+    agent.error instanceof NakamaApiError && agent.error.status === 403;
+
+  const ready = Boolean(toolkits && (agent.loaded || agentForbidden));
+
+  let notice: string | null = ready ? blockedReason : null;
+
+  if (agent.error && !agentForbidden) {
+    notice = formatError(agent.error);
+  }
+
   return {
     blockedReason,
     // The agent can use the app only when it is on the agent too.
@@ -920,6 +934,8 @@ function describeComposioApp(
       access.onAgent && isComposioToolkitConnected(toolkits, toolkitSlug),
     logoUrl: catalogItem?.logoUrl,
     name,
+    notice,
+    ready,
   };
 }
 
@@ -954,7 +970,7 @@ function ComposioConnectCard({
     refetchOnWindowFocus: true,
   });
 
-  const { data: profile } = useProfileQuery(profileId);
+  const { data: profile, error: profileError } = useProfileQuery(profileId);
   const [pending, setPending] = useState(false);
 
   const [error, setError] = useState<{
@@ -974,14 +990,14 @@ function ComposioConnectCard({
     agentApps?.assignments.some((item) => item.toolkitSlug === toolkitSlug) ??
     onAgentAtCall;
 
-  const ready = Boolean(toolkits && (!profileId || profile));
-
-  const { blockedReason, connected, logoUrl, name } = describeComposioApp(
-    toolkits,
-    toolkitSlug,
-    displayName,
-    { canManage, isOrgAdmin, onAgent }
-  );
+  const { blockedReason, connected, logoUrl, name, notice, ready } =
+    describeComposioApp(
+      toolkits,
+      toolkitSlug,
+      displayName,
+      { canManage, isOrgAdmin, onAgent },
+      { error: profileError, loaded: !profileId || Boolean(profile) }
+    );
 
   async function connect() {
     if (!(toolkits && ready)) {
@@ -1061,12 +1077,12 @@ function ComposioConnectCard({
           </Button>
         )}
       </div>
-      {connected || !ready || !(blockedReason || error) ? null : (
+      {connected || !(error || notice) ? null : (
         <ComposioConnectCardStatus
-          blockedReason={blockedReason}
           error={error}
           isOrgAdmin={isOrgAdmin}
           name={name}
+          notice={notice}
         />
       )}
     </div>
@@ -1075,15 +1091,15 @@ function ComposioConnectCard({
 
 /** Kept apart from the card so the card stays under the complexity limit. */
 function ComposioConnectCardStatus({
-  blockedReason,
   error,
   isOrgAdmin,
   name,
+  notice,
 }: {
-  blockedReason: string | null;
   error: { customAuth: boolean; message: string } | null;
   isOrgAdmin: boolean;
   name: string;
+  notice: string | null;
 }) {
   // Composio has no shared OAuth app for this toolkit. Only an admin can fix it.
   if (error?.customAuth) {
@@ -1101,7 +1117,7 @@ function ComposioConnectCardStatus({
 
   return (
     <p className="text-muted-foreground text-xs" role="status">
-      {error?.message ?? blockedReason}
+      {error?.message ?? notice}
     </p>
   );
 }

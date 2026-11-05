@@ -296,7 +296,7 @@ In Docker, Bash runs inside the Nakama container with the server process's OS pe
 
 ### Remote bash backend
 
-Use this when org admins are not the operator but profiles still need a shell, or when the host cannot run a sandbox itself. Bash then runs in a sandbox service you operate, not in the Nakama container, so bash commands cannot reach `config.ini`, other profiles' files, or the server network. Python skill tools written by members still run on the Nakama server.
+Use this when org admins are not the operator but profiles still need a shell, or when the host cannot run a sandbox itself. Bash then runs in a sandbox service you operate, not in the Nakama container, so bash commands cannot reach `config.ini`, other profiles' files, or the server network. Code that would run on the Nakama server for a tenant is turned off too, so it cannot reach those files either.
 
 ```bash
 NAKAMA_BASH_BACKEND=remote
@@ -310,6 +310,8 @@ What changes for profiles:
 
 - `/workspace` in the sandbox starts empty. It does not share files with `read_file`, `write_file`, or `edit_file`, which still use the profile workspace on the Nakama server.
 - `codingAgent` runs are refused. Use `NAKAMA_BASH_BACKEND=host` for the [coding agent](/coding-agent).
+- Custom tools (JavaScript and Python) are refused. So are tool modules and `scripts:` in profile skills, shared skills, and skills an org admin installed, even after an admin reviews the code. Only global skills, which ship with Nakama or which you install on the server, still run on the server.
+- The `<skill>_run_python` tool is not offered, because it runs code the model writes on the server.
 - `NAKAMA_TENANT_BASH=0` still turns bash off for both backends.
 - Skills that run through `bash` run in the sandbox. Install their CLIs there (for example `agent-browser`). Skill scripts in the profile workspace are not in `/workspace`, and files a skill writes there (such as `screenshot artifacts/<file>.png`) stay in the sandbox, so `save_artifact` and channel delivery cannot find them.
 - Bash from the [CLI](/cli) still runs on the Nakama server, in the directory where the CLI was launched.

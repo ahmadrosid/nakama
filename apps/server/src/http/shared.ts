@@ -302,7 +302,8 @@ export async function authenticateRequest(
 
   await databaseAdapter.updateBrowserSessionLastUsedAt(
     session.id,
-    new Date().toISOString()
+    new Date().toISOString(),
+    session.userAgent ? null : request.headers.get("user-agent")
   );
 
   return {
@@ -423,6 +424,7 @@ export async function createBrowserSessionResponse(
     lastUsedAt: now,
     revokedAt: null,
     sessionTokenHash: authService.hashToken(session.sessionToken),
+    userAgent: options.request.headers.get("user-agent"),
     userId: user.id,
   };
 

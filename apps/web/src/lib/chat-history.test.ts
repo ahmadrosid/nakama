@@ -6,6 +6,7 @@ import { extractTurnArtifacts } from "./chat-artifacts";
 import {
   type ChatListItem,
   chatMessagesToListItems,
+  describeDevice,
   formatSessionRelativeTime,
   formatSessionTimestamp,
   isEditableUserMessage,
@@ -644,5 +645,30 @@ describe("isEditableUserMessage", () => {
         })
       )
     ).toBe(false);
+  });
+});
+
+describe("describeDevice", () => {
+  test("names the browser and OS so two sessions can be told apart", () => {
+    expect(
+      describeDevice(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+      )
+    ).toBe("Chrome on macOS");
+    expect(
+      describeDevice(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+      )
+    ).toBe("Safari on iOS");
+    expect(
+      describeDevice(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0"
+      )
+    ).toBe("Edge on Windows");
+  });
+
+  test("falls back when the User-Agent is missing or unknown", () => {
+    expect(describeDevice(null)).toBe("Unknown browser");
+    expect(describeDevice("curl/8.7.1")).toBe("Unknown browser");
   });
 });

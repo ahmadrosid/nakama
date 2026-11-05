@@ -55,38 +55,44 @@ async function waitFor(check: () => boolean) {
   expect(check()).toBe(true);
 }
 
-async function clickConnect(role: "admin" | "member") {
-  const spies = [
-    spyOn(client, "listComposioToolkits").mockResolvedValue({
-      catalog: [
-        {
-          description: null,
-          logoUrl: null,
-          name: "Google Forms",
-          slug: "googleforms",
-        },
-      ],
-      catalogError: null,
-      composioAvailable: true,
-      composioReachable: true,
-      configured: true,
-      orgToolkits: [
-        {
-          cachedTools: [],
-          displayName: "Google Forms",
-          id: "tk-1",
-          lastError: null,
-          status: "enabled",
-          toolkitSlug: "googleforms",
-          updatedAt: "",
-        },
-      ],
-      userConnections: [],
-    }),
-    spyOn(client, "connectComposioToolkit").mockRejectedValue(NO_MANAGED_AUTH),
-    spyOn(window, "open").mockReturnValue(null),
-  ];
+function mockToolkits() {
+  return spyOn(client, "listComposioToolkits").mockResolvedValue({
+    catalog: [
+      {
+        description: null,
+        logoUrl: null,
+        name: "Google Forms",
+        slug: "googleforms",
+      },
+    ],
+    catalogError: null,
+    composioAvailable: true,
+    composioReachable: true,
+    configured: true,
+    orgToolkits: [
+      {
+        cachedTools: [],
+        displayName: "Google Forms",
+        id: "tk-1",
+        lastError: null,
+        status: "enabled",
+        toolkitSlug: "googleforms",
+        updatedAt: "",
+      },
+    ],
+    userConnections: [],
+  });
+}
 
+async function renderCard({
+  onAgent,
+  profileId,
+  role,
+}: {
+  onAgent: boolean;
+  profileId?: string;
+  role: "admin" | "member";
+}) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -94,15 +100,15 @@ async function clickConnect(role: "admin" | "member") {
   cleanups.push(async () => {
     await act(async () => root.unmount());
     container.remove();
-
-    for (const spy of spies) {
-      spy.mockRestore();
-    }
   });
 
   await act(async () => {
     root.render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
         <MemoryRouter>
           <ThemeProvider>
             <AuthContext.Provider value={authFor(role)}>
@@ -120,7 +126,7 @@ async function clickConnect(role: "admin" | "member") {
                       toolCallId: "call-1",
                       toolResult: {
                         displayName: "Googleforms",
-                        onAgent: true,
+                        onAgent,
                         toolkitSlug: "googleforms",
                         type: "composio_connect",
                       },
@@ -131,6 +137,7 @@ async function clickConnect(role: "admin" | "member") {
                       role: "assistant",
                     },
                   ]}
+                  profileId={profileId}
                   sessionId="s1"
                 />
               </VirtuosoMockContext.Provider>
@@ -141,20 +148,60 @@ async function clickConnect(role: "admin" | "member") {
     );
   });
 
-  const findConnect = () =>
-    [...container.querySelectorAll("button")].find(
-      (item) => item.textContent === "Connect"
-    );
+  return {
+    connect: () =>
+      [...container.querySelectorAll("button")].find(
+        (item) => item.textContent === "Connect"
+      ),
+    container,
+    status: () => container.querySelector('[role="status"]'),
+  };
+}
 
-  await waitFor(() => findConnect()?.disabled === false);
+function restoreLater(spies: Array<{ mockRestore: () => void }>) {
+  cleanups.push(async () => {
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+  });
+}
+
+async function clickConnect(role: "admin" | "member") {
+  restoreLater([
+    mockToolkits(),
+    spyOn(client, "connectComposioToolkit").mockRejectedValue(NO_MANAGED_AUTH),
+    spyOn(window, "open").mockReturnValue(null),
+  ]);
+
+  const card = await renderCard({ onAgent: true, role });
+
+  await waitFor(() => card.connect()?.disabled === false);
 
   await act(async () => {
-    findConnect()?.click();
+    card.connect()?.click();
   });
 
-  await waitFor(() => container.querySelector('[role="status"]') !== null);
+  await waitFor(() => card.status() !== null);
 
-  return container;
+  return card.container;
+}
+
+/** A member opens a chat with a shared agent they cannot read. */
+async function renderSharedAgentCard(onAgent: boolean) {
+  const getProfile = spyOn(client, "getProfile").mockRejectedValue(
+    new NakamaApiError("Forbidden", 403, "/v1/profiles/p-shared")
+  );
+  restoreLater([mockToolkits(), getProfile]);
+
+  const card = await renderCard({
+    onAgent,
+    profileId: "p-shared",
+    role: "member",
+  });
+
+  await waitFor(() => getProfile.mock.calls.length === 1);
+
+  return card;
 }
 
 test("an admin sees custom auth steps", async () => {
@@ -180,4 +227,18 @@ test("a member gets guidance but not the admin setup steps", async () => {
   ).toBe(false);
   expect(status?.textContent).not.toBe(NO_MANAGED_AUTH.message);
   expect(status?.textContent?.trim()).not.toBe("");
+});
+
+test("a member can connect an app that is on a shared agent", async () => {
+  const card = await renderSharedAgentCard(true);
+
+  await waitFor(() => card.connect()?.disabled === false);
+  expect(card.status()).toBeNull();
+});
+
+test("a member sees why an app not on a shared agent is blocked", async () => {
+  const card = await renderSharedAgentCard(false);
+
+  await waitFor(() => Boolean(card.status()?.textContent?.trim()));
+  expect(card.connect()?.disabled).toBe(true);
 });
