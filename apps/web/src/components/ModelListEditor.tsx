@@ -181,7 +181,7 @@ export function ModelListEditor({
                       onClick={() => toggleDetails(rowKey)}
                       size="sm"
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                     >
                       {showPricing ? "Price and context" : "Context"}
                     </Button>

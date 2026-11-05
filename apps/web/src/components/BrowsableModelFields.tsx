@@ -98,7 +98,7 @@ export function BrowsableModelFields<T>({
     <FormField
       density={density}
       footer={
-        modelsError && !showBrowse ? (
+        modelsError ? (
           <p className="text-destructive text-sm" role="alert">
             {modelsError}
           </p>

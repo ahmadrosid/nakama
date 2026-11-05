@@ -425,10 +425,14 @@ export function useProviderSetupForm(
       }
 
       if (nextOpenRouterModelsError) {
+        focusModelsField();
+
         return;
       }
 
       if (nextShortlistModelsError) {
+        focusModelsField();
+
         return;
       }
 
@@ -453,6 +457,8 @@ export function useProviderSetupForm(
       }
 
       if (nextModelsError) {
+        focusModelsField();
+
         return;
       }
 
@@ -558,13 +564,14 @@ export function useProviderSetupForm(
       } catch (err) {
         const message = formatError(err);
 
+        // Focus the key only when the key is the problem; the form error
+        // shows by the submit button.
         if (trimmedKey && /API key/i.test(message)) {
           setApiKeyError(message);
+          document.getElementById("api-key")?.focus();
         } else {
           setFormError(message);
         }
-
-        document.getElementById("api-key")?.focus();
       } finally {
         setBusy(false);
       }
@@ -640,4 +647,13 @@ export function useProviderSetupForm(
     wireApi,
     xaiOAuth,
   };
+}
+
+// The models field has no single input, so focus its first control.
+function focusModelsField() {
+  const label = document.querySelector('label[for$="-models"]');
+  const field = label?.parentElement?.parentElement;
+
+  field?.scrollIntoView({ block: "center" });
+  field?.querySelector<HTMLElement>("input, button")?.focus();
 }
