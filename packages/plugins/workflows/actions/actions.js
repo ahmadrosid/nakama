@@ -372,6 +372,12 @@ class WorkflowRunner {
     try {
       const output = await this.executeWorkflow(orgId, workflow, run.id, runtimeInput);
       const completedRun = await this.workflowService.completeRun(run.id, workflowId, { output });
+      if (completedRun.status === "failed") {
+        return {
+          error: completedRun.error ?? "Workflow run failed.",
+          runId: run.id
+        };
+      }
       return { output: completedRun.output ?? output, runId: run.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -674,7 +680,14 @@ class WorkflowService {
       completedAt: new Date().toISOString(),
       status: result.error ? "failed" : "completed"
     };
-    this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?").run(JSON.stringify(run), id);
+    const { changes } = this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ? AND lease_until IS NOT NULL").run(JSON.stringify(run), id);
+    if (!changes) {
+      const stored = this.db.query("SELECT data FROM runs WHERE id = ?").get(id);
+      if (!stored) {
+        throw new Error("Workflow run not found.");
+      }
+      return { ...JSON.parse(stored.data), steps: this.steps(id) };
+    }
     return { ...run, steps: this.steps(id) };
   }
   importLegacy(workflows) {

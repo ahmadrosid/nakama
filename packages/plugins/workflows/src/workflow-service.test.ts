@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./actions";
 import { parseWorkflowRecord } from "./workflow-ops";
+import { WorkflowRunner } from "./workflow-runner";
 import { WorkflowService } from "./workflow-service";
 
 test("save action finishes updating before closing its database", async () => {
@@ -195,6 +196,47 @@ test("create and update reject malformed tool inputs without persisting changes"
       kind: "tool",
       tool: "web_fetch",
     });
+  } finally {
+    service.close();
+  }
+});
+
+test("a run that expires mid-run stays failed when the runner finishes late", async () => {
+  const service = new WorkflowService(":memory:", "org_a");
+  service.db.exec(
+    await readFile(
+      new URL("../migrations/001-workflows.sql", import.meta.url),
+      "utf8"
+    )
+  );
+
+  try {
+    const workflow = await service.create(
+      {
+        name: "Slow",
+        steps: [{ id: "summary", kind: "summarize", prompt: "Summarize" }],
+      },
+      "profile",
+      new Set()
+    );
+
+    const runner = new WorkflowRunner(service, {
+      executeTool: async () => ({}),
+      runWorkflowSummarize: async () => {
+        service.db.query("UPDATE runs SET lease_until = ?").run(Date.now() - 1);
+        await service.listRuns(workflow.id);
+
+        return "late output";
+      },
+    });
+
+    const result = await runner.run(workflow.id);
+    const [stored] = await service.listRuns(workflow.id);
+
+    expect(result.error).toBeDefined();
+    expect(result.output).toBeUndefined();
+    expect(stored?.status).toBe("failed");
+    expect(stored?.output).toBeNull();
   } finally {
     service.close();
   }

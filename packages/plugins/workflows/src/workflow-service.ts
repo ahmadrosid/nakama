@@ -311,9 +311,24 @@ export class WorkflowService {
       status: result.error ? "failed" : "completed",
     };
 
-    this.db
-      .query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ?")
+    // A run without a lease is already finished (for example expired); keep that result.
+    const { changes } = this.db
+      .query(
+        "UPDATE runs SET data = ?, lease_until = NULL WHERE id = ? AND lease_until IS NOT NULL"
+      )
       .run(JSON.stringify(run), id);
+
+    if (!changes) {
+      const stored = this.db
+        .query<{ data: string }, [string]>("SELECT data FROM runs WHERE id = ?")
+        .get(id);
+
+      if (!stored) {
+        throw new Error("Workflow run not found.");
+      }
+
+      return { ...JSON.parse(stored.data), steps: this.steps(id) };
+    }
 
     return { ...run, steps: this.steps(id) };
   }
