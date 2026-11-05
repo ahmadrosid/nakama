@@ -77,6 +77,50 @@ const WORKER_DIST_SCRIPTS = new Map(
 
 const VALID_WORKERS = [...WORKER_SCRIPTS.keys()];
 
+const PM2_PROCESS_ENV_KEYS = new Set([
+  "automation",
+  "autostart",
+  "autorestart",
+  "args",
+  "axm_actions",
+  "axm_dynamic",
+  "axm_monitor",
+  "axm_options",
+  "command",
+  "created_at",
+  "env",
+  "exec_interpreter",
+  "exec_mode",
+  "exit_code",
+  "filter_env",
+  "instances",
+  "instance_var",
+  "kill_retry_time",
+  "merge_logs",
+  "MODULE_DEBUG",
+  "name",
+  "node_args",
+  "pm_err_log_path",
+  "pm_exec_path",
+  "pm_out_log_path",
+  "pm_pid_path",
+  "pmx",
+  "pmx_module",
+  "prev_restart_delay",
+  "restart_time",
+  "status",
+  "stop_exit_codes",
+  "treekill",
+  "unstable_restart",
+  "unstable_restarts",
+  "username",
+  "versioning",
+  "vizion",
+  "vizion_runing",
+  "watch",
+  "windowsHide",
+]);
+
 /** One pm2 process runs the WhatsApp number of every agent connection. */
 const WHATSAPP_HOST_PROCESS = "whatsapp-host";
 
@@ -89,16 +133,29 @@ function isWhatsAppHostChannel(channel: ChannelOwner, owner: ChannelOwner) {
  * A "shutdown" message lets the worker clean up before pm2 escalates.
  *
  * pm2 copies the server's environment into every worker. `filter_env` keeps
- * the same secrets the bash tool drops out of channel and plugin workers.
+ * secrets out and prevents a PM2-managed server's identity from replacing the
+ * worker process when it starts.
  */
 function pm2StartOptions(): Pick<
   WorkerStartOptions,
   "filter_env" | "shutdown_with_message"
 > {
+  const pm2IdentityKeys =
+    process.env.pm_id === undefined
+      ? []
+      : Object.keys(process.env).filter(
+          (key) => key.startsWith("pm_") || PM2_PROCESS_ENV_KEYS.has(key)
+        );
+
   const options: Pick<
     WorkerStartOptions,
     "filter_env" | "shutdown_with_message"
-  > = { filter_env: Object.keys(process.env).filter(isSecretEnvKey) };
+  > = {
+    filter_env: [
+      ...Object.keys(process.env).filter(isSecretEnvKey),
+      ...pm2IdentityKeys,
+    ],
+  };
 
   if (process.platform === "win32") {
     options.shutdown_with_message = true;

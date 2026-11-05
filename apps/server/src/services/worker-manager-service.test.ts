@@ -216,6 +216,71 @@ describe("WorkerManagerService", () => {
       }
     });
 
+    test("filters PM2 identity variables only when the server runs under PM2", async () => {
+      const identity = {
+        args: "run dev:web",
+        exec_mode: "fork_mode",
+        name: "nakama",
+        pm_cwd: projectRoot,
+        pm_exec_path: "/usr/local/bin/bun",
+        pm_id: "17",
+        pm_uptime: "1762225200000",
+        status: "online",
+      };
+
+      const previous = new Map(
+        [...Object.keys(identity), "cwd"].map((key) => [key, process.env[key]])
+      );
+
+      try {
+        Object.assign(process.env, identity);
+
+        const pm2Mock = createMockPm2();
+        const pm2Service = new WorkerManagerService(projectRoot, pm2Mock);
+
+        await pm2Service.startWorker("telegram");
+
+        // SAFETY: startWorker completes the mock's single start call.
+        const pm2Options = (pm2Mock.start as ReturnType<typeof mock>).mock
+          .calls[0][0];
+
+        const pm2App = prepareAppConf({ cwd: projectRoot }, { ...pm2Options });
+
+        expect(
+          Object.keys(identity).filter((key) => key in pm2App.env)
+        ).toEqual([]);
+
+        delete process.env.pm_id;
+        process.env.name = "local-worker";
+        process.env.cwd = projectRoot;
+
+        const localMock = createMockPm2();
+        const localService = new WorkerManagerService(projectRoot, localMock);
+
+        await localService.startWorker("telegram");
+
+        // SAFETY: startWorker completes the mock's single start call.
+        const localOptions = (localMock.start as ReturnType<typeof mock>).mock
+          .calls[0][0];
+
+        const localApp = prepareAppConf(
+          { cwd: projectRoot },
+          { ...localOptions }
+        );
+
+        expect(localApp.env.name).toBe("local-worker");
+        expect(localApp.env.cwd).toBe(projectRoot);
+      } finally {
+        for (const [key, value] of previous) {
+          if (value === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = value;
+          }
+        }
+      }
+    });
+
     test("rejects an unscoped whatsapp worker when org accounts exist", async () => {
       await saveWhatsAppConfig({ profileId: "well-test" }, "org_a");
       await saveWhatsAppConfig({ profileId: "finance" }, "org_b");

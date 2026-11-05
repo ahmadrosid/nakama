@@ -78,6 +78,26 @@ Or start the server alone:
 bun run dev:server
 ```
 
+### Run with PM2
+
+For a bare host, install PM2 and copy the example config:
+
+```bash
+bun add --global pm2
+cp ecosystem.config.js.example ecosystem.config.js
+```
+
+Edit `cwd`, `script`, and `NAKAMA_WEB_PUBLIC_URL` in `ecosystem.config.js`, then
+start Nakama and set it to start after a reboot:
+
+```bash
+pm2 start ecosystem.config.js
+pm2 startup
+pm2 save
+```
+
+Run the startup command that PM2 prints to enable the system service.
+
 ### Docker
 
 You can also run Nakama with Docker. It runs as one container and needs about
