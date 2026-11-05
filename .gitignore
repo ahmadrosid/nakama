@@ -48,3 +48,4 @@ tmp-repro-setup-auth.mjs
 nakama-secrets.env
 .idea
 ecosystem.config.js
+ecosystem.config.cjs

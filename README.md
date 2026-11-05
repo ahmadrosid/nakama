@@ -80,23 +80,29 @@ bun run dev:server
 
 ### Run with PM2
 
-For a bare host, install PM2 and copy the example config:
+For a bare host, you need [Bun](https://bun.sh) and [Node.js](https://nodejs.org) 22.12 or later. PM2 and the web build run on Node.
 
-```bash
-bun add --global pm2
-cp ecosystem.config.js.example ecosystem.config.js
-```
+1. Install PM2, build Nakama, and copy the example config:
 
-Edit `cwd`, `script`, and `NAKAMA_WEB_PUBLIC_URL` in `ecosystem.config.js`, then
-start Nakama and set it to start after a reboot:
+   ```bash
+   npm install --global pm2
+   bun install
+   bun run build
+   cp ecosystem.config.cjs.example ecosystem.config.cjs
+   ```
 
-```bash
-pm2 start ecosystem.config.js
-pm2 startup
-pm2 save
-```
+2. In `ecosystem.config.cjs`, set `cwd`, `script`, `NAKAMA_SECRETS_KEY`, and `NAKAMA_WEB_PUBLIC_URL`. Keep a copy of `NAKAMA_SECRETS_KEY`: secrets saved in Settings need it, and backups do not include it.
+3. Start Nakama and set it to start after a reboot:
 
-Run the startup command that PM2 prints to enable the system service.
+   ```bash
+   pm2 start ecosystem.config.cjs
+   pm2 startup
+   pm2 save
+   ```
+
+4. Run the startup command that PM2 prints to enable the system service.
+
+The dashboard and API listen on `http://127.0.0.1:4310`. Put an HTTPS proxy in front for `NAKAMA_WEB_PUBLIC_URL`. After an update, run `bun run build` again, then `pm2 restart nakama`.
 
 ### Docker
 

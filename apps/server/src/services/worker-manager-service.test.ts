@@ -216,60 +216,67 @@ describe("WorkerManagerService", () => {
       }
     });
 
-    test("filters PM2 identity variables only when the server runs under PM2", async () => {
-      const identity = {
-        args: "run dev:web",
+    test("keeps PM2 process keys out of the worker env", async () => {
+      const pm2Keys = {
+        _km_monitored: "true",
+        args: "run start",
+        cron_restart: "0 4 * * *",
+        cwd: "/srv/nakama",
         exec_mode: "fork_mode",
+        kill_timeout: "3000",
+        km_link: "false",
+        max_restarts: "10",
         name: "nakama",
-        pm_cwd: projectRoot,
+        namespace: "default",
+        pm_cwd: "/srv/nakama",
         pm_exec_path: "/usr/local/bin/bun",
         pm_id: "17",
-        pm_uptime: "1762225200000",
         status: "online",
+        uid: "1000",
+        updateEnv: "true",
       };
 
+      const operatorEnv = { app_env: "prod", db_name: "nakama" };
+
       const previous = new Map(
-        [...Object.keys(identity), "cwd"].map((key) => [key, process.env[key]])
+        [...Object.keys(pm2Keys), ...Object.keys(operatorEnv), "PWD"].map(
+          (key) => [key, process.env[key]]
+        )
       );
 
-      try {
-        Object.assign(process.env, identity);
-
-        const pm2Mock = createMockPm2();
-        const pm2Service = new WorkerManagerService(projectRoot, pm2Mock);
-
-        await pm2Service.startWorker("telegram");
-
-        // SAFETY: startWorker completes the mock's single start call.
-        const pm2Options = (pm2Mock.start as ReturnType<typeof mock>).mock
-          .calls[0][0];
-
-        const pm2App = prepareAppConf({ cwd: projectRoot }, { ...pm2Options });
-
-        expect(
-          Object.keys(identity).filter((key) => key in pm2App.env)
-        ).toEqual([]);
-
-        delete process.env.pm_id;
-        process.env.name = "local-worker";
-        process.env.cwd = projectRoot;
-
-        const localMock = createMockPm2();
-        const localService = new WorkerManagerService(projectRoot, localMock);
-
-        await localService.startWorker("telegram");
-
-        // SAFETY: startWorker completes the mock's single start call.
-        const localOptions = (localMock.start as ReturnType<typeof mock>).mock
-          .calls[0][0];
-
-        const localApp = prepareAppConf(
-          { cwd: projectRoot },
-          { ...localOptions }
+      async function startedEnv() {
+        const pm2 = createMockPm2();
+        await new WorkerManagerService(projectRoot, pm2).startWorker(
+          "telegram"
         );
 
-        expect(localApp.env.name).toBe("local-worker");
-        expect(localApp.env.cwd).toBe(projectRoot);
+        // SAFETY: startWorker completes the mock's single start call.
+        const options = (pm2.start as ReturnType<typeof mock>).mock.calls[0][0];
+
+        return prepareAppConf({ cwd: projectRoot }, { ...options }).env;
+      }
+
+      try {
+        Object.assign(process.env, pm2Keys, operatorEnv);
+        process.env.PWD = "/srv/previous-worker";
+
+        const underPm2 = await startedEnv();
+
+        expect(Object.keys(pm2Keys).filter((key) => key in underPm2)).toEqual(
+          []
+        );
+        expect(underPm2.db_name).toBe("nakama");
+        expect(underPm2.app_env).toBe("prod");
+        expect(underPm2.PWD).toBe(projectRoot);
+
+        delete process.env.pm_id;
+        process.env.PWD = "/srv/previous-worker";
+
+        const local = await startedEnv();
+
+        expect(Object.keys(pm2Keys).filter((key) => key in local)).toEqual([]);
+        expect(local.db_name).toBe("nakama");
+        expect(local.PWD).toBe(projectRoot);
       } finally {
         for (const [key, value] of previous) {
           if (value === undefined) {
