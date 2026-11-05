@@ -1,7 +1,6 @@
 import type {
   ConfigureProviderRequest,
   CreateProviderRequest,
-  CustomModelEntry,
   OllamaHostMode,
   ProviderModelOption,
   WireApi,
@@ -153,56 +152,6 @@ export function firstAvailableProviderOption(
   );
 
   return next?.id ?? "openai_compatible";
-}
-
-/** OpenCode Zen free catalog — not OpenCode Go (`/zen/go`). */
-export function isOpenCodeZenBaseUrl(
-  baseUrl: string | null | undefined
-): boolean {
-  const trimmed = baseUrl?.trim();
-
-  if (!trimmed) {
-    return false;
-  }
-
-  try {
-    const url = new URL(trimmed);
-
-    if (url.hostname.toLowerCase() !== "opencode.ai") {
-      return false;
-    }
-
-    const path = url.pathname.toLowerCase();
-
-    return /\/zen(\/|$)/.test(path) && !/\/zen\/go(\/|$)/.test(path);
-  } catch {
-    const normalized = trimmed.toLowerCase();
-
-    return (
-      normalized.includes("opencode.ai/zen") &&
-      !normalized.includes("opencode.ai/zen/go")
-    );
-  }
-}
-
-export function hasOpenCodeZenProvider(
-  providers: ReadonlyArray<{
-    type: string;
-    baseUrl?: string | null;
-    label?: string | null;
-  }>
-): boolean {
-  return providers.some((provider) => {
-    if (provider.type !== "openai_compatible") {
-      return false;
-    }
-
-    if (isOpenCodeZenBaseUrl(provider.baseUrl)) {
-      return true;
-    }
-
-    return provider.label?.trim().toLowerCase() === "opencode zen";
-  });
 }
 
 export function apiKeyPlaceholder(provider: SelectedProvider): string {
@@ -552,31 +501,6 @@ export function modelsFromOpenRouterRows(
   }
 
   return models;
-}
-
-export function appendOpenRouterModelRow(
-  rows: CustomModelEntry[],
-  modelId: string,
-  modelName: string,
-  extra?: Partial<CustomModelEntry>
-): CustomModelEntry[] {
-  // Spread rather than copying known keys, so anything the browse row carries
-  // (pricing, context window) survives instead of being silently dropped.
-  const base: CustomModelEntry[] = [];
-
-  for (const { default: _wasDefault, ...row } of rows) {
-    if (!row.id.trim()) {
-      continue;
-    }
-
-    base.push({ ...row, name: row.name ?? row.id });
-  }
-
-  if (base.some((row) => row.id === modelId)) {
-    return base.map((row) => ({ ...row, default: row.id === modelId }));
-  }
-
-  return [...base, { ...extra, default: true, id: modelId, name: modelName }];
 }
 
 export function resolveOpenRouterSetupModel(

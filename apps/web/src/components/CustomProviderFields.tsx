@@ -11,7 +11,6 @@ import {
 import type { ReactNode } from "react";
 import { BrowsableModelFields } from "@/components/BrowsableModelFields";
 import type { ModelListRow } from "@/components/ModelListEditor";
-import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { RemoteModelsBrowseList } from "@/components/RemoteModelsBrowseList";
 import { validateBaseUrlInput } from "@/lib/models";
 
@@ -20,11 +19,6 @@ interface CustomProviderFieldsProps {
   baseUrl: string;
   baseUrlError?: string | null;
   browseLabel?: string;
-  /**
-   * `remote` fetches models from the provider endpoint via /v1/models/discover.
-   * `models.dev` browses the public models.dev catalog (setup helper for custom endpoints).
-   */
-  browseSource?: "remote" | "models.dev";
   customModels: ModelListRow[];
   density?: "default" | "compact";
   disabled?: boolean;
@@ -151,7 +145,6 @@ export function CustomProviderFields({
   displayNameError,
   baseUrlError,
   modelsError,
-  browseSource = "remote",
   remoteProvider = "openai_compatible",
   providerInstanceId,
   hostMode,
@@ -168,7 +161,6 @@ export function CustomProviderFields({
   const resolvedBrowseLabel = browseLabel ?? defaultBrowseLabel(remoteProvider);
 
   const canBrowse =
-    browseSource !== "remote" ||
     remoteProvider === "netra" ||
     Boolean(providerInstanceId) ||
     validateBaseUrlInput(baseUrl) === null;
@@ -240,35 +232,22 @@ export function CustomProviderFields({
             multiSelect,
             onAddMany,
             onSelect,
-          }) =>
-            browseSource === "remote" ? (
-              <RemoteModelsBrowseList
-                addedIds={addedIds}
-                addedModels={addedModels}
-                apiKey={apiKey}
-                baseUrl={baseUrl}
-                browseLabel={sentenceBrowseLabel(resolvedBrowseLabel)}
-                className="h-72 rounded-md border border-border"
-                hostMode={hostMode}
-                multiSelect={multiSelect}
-                onAddMany={onAddMany}
-                onSelect={onSelect}
-                provider={remoteProvider}
-                providerId={providerInstanceId}
-              />
-            ) : (
-              <ModelsBrowseList
-                className="h-72 rounded-md border border-border"
-                onSelect={(_provider, modelId, row) =>
-                  onSelect({
-                    id: modelId,
-                    name: row.modelName,
-                    supportsVision: row.vision,
-                  })
-                }
-              />
-            )
-          }
+          }) => (
+            <RemoteModelsBrowseList
+              addedIds={addedIds}
+              addedModels={addedModels}
+              apiKey={apiKey}
+              baseUrl={baseUrl}
+              browseLabel={sentenceBrowseLabel(resolvedBrowseLabel)}
+              className="h-72 rounded-md border border-border"
+              hostMode={hostMode}
+              multiSelect={multiSelect}
+              onAddMany={onAddMany}
+              onSelect={onSelect}
+              provider={remoteProvider}
+              providerId={providerInstanceId}
+            />
+          )}
           showThinking
           showVision
           toModelRow={(row: ModelListRow) => row}

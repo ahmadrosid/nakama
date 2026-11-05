@@ -21,26 +21,20 @@ import {
 } from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ChatgptSignInPanel,
   XaiSignInPanel,
 } from "@/components/ChatgptSignInPanel";
 import { CustomProviderFields } from "@/components/CustomProviderFields";
-import { ModelsBrowseList } from "@/components/ModelsBrowseList";
 import { OllamaProviderModelFields } from "@/components/OllamaProviderModelFields";
 import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ProviderSelect } from "@/components/ProviderSelect";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
-import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
-import {
-  apiKeyPlaceholder,
-  isLocalBaseUrl,
-  type SelectedProvider,
-} from "@/lib/models";
+import { apiKeyPlaceholder, isLocalBaseUrl } from "@/lib/models";
 
 interface ProviderSetupFormProps {
   density?: "default" | "compact";
@@ -62,13 +56,6 @@ export function ProviderSetupForm({
   onSuccess,
 }: ProviderSetupFormProps) {
   const form = useProviderSetupForm({ onSuccess });
-  const [isBrowsing, setIsBrowsing] = useState(false);
-
-  const [pickedFromCatalog, setPickedFromCatalog] = useState<{
-    model: string;
-    provider: string;
-  } | null>(null);
-
   const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
 
   const apiKeyOptional =
@@ -86,16 +73,6 @@ export function ProviderSetupForm({
 
   const formSpacing = density === "compact" ? "space-y-4" : "space-y-5";
 
-  function handleBrowseSelect(
-    provider: SelectedProvider,
-    modelId: string,
-    row: ModelsDevRow
-  ) {
-    form.handleBrowseSelect(provider, modelId, row);
-    setIsBrowsing(false);
-    setPickedFromCatalog({ model: row.modelName, provider: row.providerName });
-  }
-
   return (
     <form
       className={`min-w-0 ${formSpacing}`}
@@ -110,86 +87,25 @@ export function ProviderSetupForm({
       ) : null}
 
       <FormField density={density} id="provider" label="Provider">
-        {pickedFromCatalog && !isBrowsing ? (
-          <PickedFreeModel
-            model={pickedFromCatalog.model}
-            onChange={() => setIsBrowsing(true)}
-            provider={pickedFromCatalog.provider}
-          />
-        ) : (
-          <ProviderSelect
-            configuredTypes={form.configuredTypes}
-            disabled={form.busy}
-            id="provider"
-            onValueChange={(nextValue) => {
-              if (nextValue === "__browse__") {
-                setIsBrowsing(true);
-
-                return;
-              }
-
-              setIsBrowsing(false);
-              setPickedFromCatalog(null);
-              form.handleProviderSelect(nextValue);
-            }}
-            value={isBrowsing ? "__browse__" : form.selectedProvider}
-          />
-        )}
+        <ProviderSelect
+          configuredTypes={form.configuredTypes}
+          disabled={form.busy}
+          id="provider"
+          onValueChange={form.handleProviderSelect}
+          value={form.selectedProvider}
+        />
       </FormField>
 
-      {isBrowsing ? (
-        <>
-          <ModelsBrowseList
-            className="h-72 rounded-md border border-border"
-            configuredTypes={form.configuredTypes}
-            initialCostFilter="free"
-            onSelect={handleBrowseSelect}
-            openCodeZenConfigured={form.openCodeZenConfigured}
-          />
-          {onCancel ? (
-            <ProviderSetupActions
-              busy={form.busy}
-              onCancel={onCancel}
-              primary={false}
-              submitLabel={submitLabel}
-            />
-          ) : null}
-        </>
-      ) : (
-        <ProviderSetupDetails
-          apiKeyOptional={apiKeyOptional}
-          canConnect={canConnect}
-          density={density}
-          form={form}
-          onCancel={onCancel}
-          showModelPicker={showModelPicker}
-          submitLabel={submitLabel}
-        />
-      )}
+      <ProviderSetupDetails
+        apiKeyOptional={apiKeyOptional}
+        canConnect={canConnect}
+        density={density}
+        form={form}
+        onCancel={onCancel}
+        showModelPicker={showModelPicker}
+        submitLabel={submitLabel}
+      />
     </form>
-  );
-}
-
-// A free model from the catalog stands in for the provider it runs on.
-function PickedFreeModel({
-  model,
-  provider,
-  onChange,
-}: {
-  model: string;
-  provider: string;
-  onChange: () => void;
-}) {
-  return (
-    <div className="flex h-9 items-center justify-between gap-3 rounded-lg border border-input px-3 text-sm">
-      <span className="min-w-0 truncate">
-        <span className="font-medium">{model}</span>
-        <span className="text-muted-foreground"> from {provider}</span>
-      </span>
-      <Button onClick={onChange} size="sm" type="button" variant="ghost">
-        Change
-      </Button>
-    </div>
   );
 }
 

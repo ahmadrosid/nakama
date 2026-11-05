@@ -10,13 +10,11 @@ import { createClientId, syncRowKeys } from "@/lib/client-id";
 export interface ModelListRow extends CustomModelEntry {}
 
 interface ModelListEditorProps {
-  browseDisabled?: boolean;
-  browseLabel?: string;
+  browse?: { disabled?: boolean; label: string; onClick: () => void };
   disabled?: boolean;
   /** Saved IDs from a provider catalog are fixed; only new rows take an ID. */
   lockSavedIds?: boolean;
   models: ModelListRow[];
-  onBrowse?: () => void;
   onChange: (models: ModelListRow[]) => void;
   showPricing?: boolean;
   showThinking?: boolean;
@@ -45,9 +43,7 @@ export function ModelListEditor({
   showThinking = false,
   showVision = false,
   visionDefaultOn = false,
-  onBrowse,
-  browseDisabled = false,
-  browseLabel = "Browse models.dev",
+  browse,
   lockSavedIds = false,
   onChange,
 }: ModelListEditorProps) {
@@ -280,15 +276,15 @@ export function ModelListEditor({
           Add model by ID
         </Button>
 
-        {onBrowse ? (
+        {browse ? (
           <Button
-            disabled={disabled || browseDisabled}
-            onClick={onBrowse}
+            disabled={disabled || browse.disabled}
+            onClick={browse.onClick}
             size="sm"
             type="button"
             variant="secondary"
           >
-            {browseLabel}
+            {browse.label}
           </Button>
         ) : null}
       </div>

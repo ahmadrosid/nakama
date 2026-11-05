@@ -448,7 +448,6 @@ export function ProviderCompatibleEditDialog({
   editBaseUrl,
   manageModels,
   apiKey = "",
-  browseSource = "remote",
   remoteProvider = "openai_compatible",
   providerInstanceId,
   hostMode,
@@ -471,7 +470,6 @@ export function ProviderCompatibleEditDialog({
   editBaseUrl: string;
   manageModels: ModelListRow[];
   apiKey?: string;
-  browseSource?: "remote" | "models.dev";
   remoteProvider?: "ollama" | "openai_compatible" | "netra";
   hideIdentity?: boolean;
   providerInstanceId?: string;
@@ -505,7 +503,6 @@ export function ProviderCompatibleEditDialog({
         baseUrl={editBaseUrl}
         baseUrlError={fieldErrors?.baseUrl ?? null}
         browseLabel={browseLabel}
-        browseSource={browseSource}
         customModels={manageModels}
         disabled={busy}
         displayName={editLabel}

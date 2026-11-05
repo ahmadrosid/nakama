@@ -16,17 +16,14 @@ import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
-import type { ModelsDevRow } from "@/hooks/use-models-dev";
 import { formatError } from "@/lib/client";
 import {
-  appendOpenRouterModelRow,
   buildCreateProviderRequest,
   defaultModelForProvider,
   defaultOllamaSetupBaseUrl,
   filterModelsByProvider,
   firstAvailableProviderOption,
   getModelDisplayName,
-  hasOpenCodeZenProvider,
   isProviderTypeAlreadyConfigured,
   isShortlistCapabilityProvider,
   modelsFromCustomRows,
@@ -75,11 +72,6 @@ export function useProviderSetupForm(
     return types;
   }, [providersResponse?.providers]);
 
-  const openCodeZenConfigured = useMemo(
-    () => hasOpenCodeZenProvider(providersResponse?.providers ?? []),
-    [providersResponse?.providers]
-  );
-
   const [selectedProvider, setSelectedProvider] =
     useState<SelectedProvider>("openai");
 
@@ -108,7 +100,6 @@ export function useProviderSetupForm(
   const [baseUrl, setBaseUrl] = useState("");
   const [wireApi, setWireApi] = useState<WireApi>("chat");
   const [customModels, setCustomModels] = useState<ModelListRow[]>([]);
-  const [extraModels, setExtraModels] = useState<ProviderModelOption[]>([]);
 
   const [subscriptionModels, setSubscriptionModels] = useState<
     ProviderModelOption[]
@@ -170,22 +161,13 @@ export function useProviderSetupForm(
       return subscriptionModels;
     }
 
-    const catalogModels = filterModelsByProvider(catalog, selectedProvider);
-    const catalogIds = new Set(catalogModels.map((model) => model.id));
-
-    const extras = extraModels.filter(
-      (model) =>
-        model.provider === selectedProvider && !catalogIds.has(model.id)
-    );
-
-    return [...catalogModels, ...extras];
+    return filterModelsByProvider(catalog, selectedProvider);
   }, [
     catalog,
     selectedProvider,
     customModels,
     openRouterModels,
     shortlistModels,
-    extraModels,
     subscriptionModels,
   ]);
 
@@ -253,6 +235,7 @@ export function useProviderSetupForm(
       }
 
       setSelectedProvider(provider);
+      // The last provider's model never fits the new one.
       setSelectedModel("");
       setFormError(null);
       setApiKeyError(null);
@@ -322,106 +305,6 @@ export function useProviderSetupForm(
       );
     },
     [selectedProvider]
-  );
-
-  const selectOpenRouterModel = useCallback(
-    (modelId: string, modelName: string, extra?: Partial<CustomModelEntry>) => {
-      setOpenRouterModels((current) =>
-        appendOpenRouterModelRow(current, modelId, modelName, extra)
-      );
-      setSelectedModel(modelId);
-      setOpenRouterModelsError(null);
-    },
-    []
-  );
-
-  const handleBrowseSelect = useCallback(
-    (provider: SelectedProvider, modelId: string, row: ModelsDevRow) => {
-      if (isProviderTypeAlreadyConfigured(provider, configuredTypes)) {
-        return;
-      }
-
-      if (row.isZen && openCodeZenConfigured) {
-        return;
-      }
-
-      const browsedContext =
-        row.context > 0 ? { contextWindow: row.context } : {};
-
-      handleProviderSelect(provider);
-
-      if (provider === "openrouter") {
-        selectOpenRouterModel(modelId, row.modelName, {
-          supportsThinking: row.reasoning,
-          supportsVision: row.vision,
-          ...browsedContext,
-        });
-      } else if (provider === "openai_compatible") {
-        setDisplayName(row.providerName);
-        setBaseUrl(row.apiUrl.replace(/\/$/, ""));
-        setCustomModels([
-          {
-            id: modelId,
-            name: row.modelName,
-            supportsThinking: row.reasoning,
-            supportsVision: row.vision,
-            ...browsedContext,
-          },
-        ]);
-        setSelectedModel(modelId);
-      } else if (provider === "opencode_go") {
-        setExtraModels((current) => {
-          if (
-            current.some(
-              (model) => model.provider === provider && model.id === modelId
-            )
-          ) {
-            return current;
-          }
-
-          return [
-            ...current,
-            {
-              id: modelId,
-              name: row.modelName,
-              provider,
-              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
-              ...(row.context > 0 ? { contextWindow: row.context } : {}),
-            },
-          ];
-        });
-        setSelectedModel(modelId);
-      } else {
-        setExtraModels((current) => {
-          if (
-            current.some(
-              (model) => model.provider === provider && model.id === modelId
-            )
-          ) {
-            return current;
-          }
-
-          return [
-            ...current,
-            {
-              id: modelId,
-              name: row.modelName,
-              provider,
-              // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
-              ...(row.context > 0 ? { contextWindow: row.context } : {}),
-            },
-          ];
-        });
-        setSelectedModel(modelId);
-        setBaseUrl(row.apiUrl.replace(/\/$/, ""));
-      }
-    },
-    [
-      configuredTypes,
-      openCodeZenConfigured,
-      handleProviderSelect,
-      selectOpenRouterModel,
-    ]
   );
 
   const { onSuccess } = options;
@@ -730,7 +613,6 @@ export function useProviderSetupForm(
     handleBaseUrlBlur,
     handleBaseUrlChange,
     handleBaseUrlRequired,
-    handleBrowseSelect,
     handleCustomModelsChange,
     handleDisplayNameChange,
     handleOllamaHostModeChange,
@@ -741,7 +623,6 @@ export function useProviderSetupForm(
     handleSubscriptionModelsChange,
     modelsError,
     ollamaHostMode,
-    openCodeZenConfigured,
     openRouterModels,
     openRouterModelsError,
     openRouterRouting,

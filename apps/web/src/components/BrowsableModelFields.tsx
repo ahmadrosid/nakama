@@ -145,13 +145,14 @@ export function BrowsableModelFields<T>({
         </div>
       ) : (
         <ModelListEditor
-          browseDisabled={!(canBrowse || onBrowseBlocked)}
-          browseLabel={browseLabel}
+          browse={{
+            disabled: !(canBrowse || onBrowseBlocked),
+            label: browseLabel,
+            onClick: () =>
+              canBrowse ? setIsBrowsing(true) : onBrowseBlocked?.(),
+          }}
           disabled={disabled}
           models={customModels}
-          onBrowse={() =>
-            canBrowse ? setIsBrowsing(true) : onBrowseBlocked?.()
-          }
           onChange={onCustomModelsChange}
           showPricing={showPricing}
           showThinking={showThinking}

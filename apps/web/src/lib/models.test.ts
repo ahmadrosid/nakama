@@ -2,15 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderName } from "@nakama/core";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
-  appendOpenRouterModelRow,
   buildCreateProviderRequest,
   effectiveProfileModelSelection,
   encodeModelSelection,
   filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
-  hasOpenCodeZenProvider,
   isLocalBaseUrl,
-  isOpenCodeZenBaseUrl,
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
@@ -355,51 +352,6 @@ describe("effectiveProfileModelSelection", () => {
   });
 });
 
-describe("isOpenCodeZenBaseUrl", () => {
-  test("matches Zen v1 and rejects OpenCode Go", () => {
-    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/v1")).toBe(true);
-    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/v1/")).toBe(true);
-    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/go/v1")).toBe(false);
-    expect(isOpenCodeZenBaseUrl("https://api.openai.com/v1")).toBe(false);
-  });
-});
-
-describe("hasOpenCodeZenProvider", () => {
-  test("detects Zen by base URL or label on openai_compatible", () => {
-    expect(
-      hasOpenCodeZenProvider([
-        {
-          baseUrl: "https://opencode.ai/zen/v1",
-          label: "OpenCode Zen",
-          type: "openai_compatible",
-        },
-      ])
-    ).toBe(true);
-
-    expect(
-      hasOpenCodeZenProvider([
-        {
-          baseUrl: "https://localhost:11434/v1",
-          label: "Ollama",
-          type: "openai_compatible",
-        },
-      ])
-    ).toBe(false);
-
-    expect(
-      hasOpenCodeZenProvider([
-        { baseUrl: null, label: "OpenCode Zen", type: "openai_compatible" },
-      ])
-    ).toBe(true);
-
-    expect(
-      hasOpenCodeZenProvider([
-        { baseUrl: "https://opencode.ai/zen/go/v1", type: "opencode_go" },
-      ])
-    ).toBe(false);
-  });
-});
-
 describe("validateCustomModelsInput", () => {
   test("requires both $/1M rates or neither", () => {
     expect(
@@ -421,45 +373,6 @@ describe("validateCustomModelsInput", () => {
       validateCustomModelsInput([{ id: "m" }, { id: " m " }])
     ).not.toBeNull();
     expect(validateCustomModelsInput([{ id: "m" }, { id: "n" }])).toBeNull();
-  });
-});
-
-describe("appendOpenRouterModelRow", () => {
-  test("keeps the context window the browse row carried", () => {
-    expect(
-      appendOpenRouterModelRow(
-        [],
-        "anthropic/claude-sonnet-4-6",
-        "Sonnet 4.6",
-        {
-          contextWindow: 1_000_000,
-        }
-      )
-    ).toEqual([
-      {
-        contextWindow: 1_000_000,
-        default: true,
-        id: "anthropic/claude-sonnet-4-6",
-        name: "Sonnet 4.6",
-      },
-    ]);
-  });
-
-  test("preserves existing rows and moves the default to the picked model", () => {
-    expect(
-      appendOpenRouterModelRow(
-        [
-          { contextWindow: 32_000, default: true, id: "a/one", name: "One" },
-          { id: "a/two" },
-          { id: "   " },
-        ],
-        "a/two",
-        "Two"
-      )
-    ).toEqual([
-      { contextWindow: 32_000, default: false, id: "a/one", name: "One" },
-      { default: true, id: "a/two", name: "a/two" },
-    ]);
   });
 });
 
