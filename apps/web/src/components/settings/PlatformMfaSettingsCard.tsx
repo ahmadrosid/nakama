@@ -9,15 +9,13 @@ import {
 } from "@nakama/ui/dropdown-menu";
 import { Switch } from "@nakama/ui/switch";
 import { ArrowDown01Icon } from "hugeicons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { client, formatError } from "@/lib/client";
 
 const roles: Array<{ label: string; value: OrgRole }> = [
   { label: "Admins", value: "admin" },
   { label: "Members", value: "member" },
 ];
-
-type PendingConfirm = "disable" | "require" | null;
 
 type PolicyUpdate = {
   enabled?: boolean;
@@ -39,7 +37,18 @@ const CONFIRMS = {
       "Users in the selected roles must set up an authenticator before they can use Nakama.",
     title: "Require MFA to sign in?",
   },
+  roles: {
+    confirmLabel: "Require",
+    description:
+      "Users in the added roles must set up an authenticator before they can use Nakama.",
+    title: "Require MFA for more roles?",
+  },
 } as const;
+
+type PendingConfirm = {
+  input: PolicyUpdate;
+  kind: keyof typeof CONFIRMS;
+} | null;
 
 function RolesPicker({
   disabled,
@@ -121,24 +130,50 @@ export function PlatformMfaSettingsCard() {
     return () => window.clearTimeout(timeout);
   }, [savedHint]);
 
-  async function update(input: PolicyUpdate) {
-    setBusy(true);
+  // Saves run one at a time, in order. Controls stay enabled so keyboard
+  // focus is not lost, and a change made during a save waits its turn.
+  const saveQueue = useRef<Promise<void> | null>(null);
+  const queuedSaves = useRef(0);
+
+  function update(input: PolicyUpdate): Promise<void> {
     setError(null);
     setSavedHint(null);
+    setBusy(true);
+    // Show the change now, so the next change builds on it.
+    setPolicy((current) => (current ? { ...current, ...input } : current));
+    queuedSaves.current += 1;
 
-    try {
-      setPolicy(await client.updateMfaPolicy(input));
-      setSavedHint("Saved");
-    } catch (err) {
-      setError(formatError(err));
-    } finally {
-      setBusy(false);
-    }
+    const run = (saveQueue.current ?? Promise.resolve()).then(async () => {
+      try {
+        const saved = await client.updateMfaPolicy(input);
+
+        // An older response must not undo a change still in the queue.
+        if (queuedSaves.current === 1) {
+          setPolicy(saved);
+          setSavedHint("Saved");
+        }
+      } catch (err) {
+        setError(formatError(err));
+
+        // Show what the server has, not the change that failed.
+        try {
+          setPolicy(await client.getMfaPolicy());
+        } catch {
+          // The save error above is already shown.
+        }
+      } finally {
+        queuedSaves.current -= 1;
+
+        if (queuedSaves.current === 0) {
+          setBusy(false);
+        }
+      }
+    });
+
+    saveQueue.current = run;
+
+    return run;
   }
-
-  // Controls stay enabled while a save runs, so keyboard focus is not lost;
-  // a second change waits for the first.
-  const ready = policy !== null && !busy;
 
   return (
     <Card aria-busy={busy || undefined} className="w-full shadow-none">
@@ -162,14 +197,13 @@ export function PlatformMfaSettingsCard() {
             checked={policy?.enabled === true}
             disabled={policy === null}
             onCheckedChange={(enabled) => {
-              if (!ready) {
-                return;
-              }
-
               if (enabled) {
                 void update({ enabled, required: policy?.required });
               } else {
-                setPendingConfirm("disable");
+                setPendingConfirm({
+                  input: { enabled: false, required: false },
+                  kind: "disable",
+                });
               }
             }}
           />
@@ -183,12 +217,8 @@ export function PlatformMfaSettingsCard() {
             checked={policy?.required === true}
             disabled={policy?.enabled !== true}
             onCheckedChange={(required) => {
-              if (!ready) {
-                return;
-              }
-
               if (required) {
-                setPendingConfirm("require");
+                setPendingConfirm({ input: { required }, kind: "require" });
               } else {
                 void update({ required });
               }
@@ -210,7 +240,16 @@ export function PlatformMfaSettingsCard() {
               disabled={policy === null}
               enforcedRoles={policy.enforcedRoles}
               onChange={(enforcedRoles) => {
-                if (ready) {
+                // Adding a role while Require is on locks those users out.
+                const added =
+                  enforcedRoles.length > policy.enforcedRoles.length;
+
+                if (policy.required && added) {
+                  setPendingConfirm({
+                    input: { enforcedRoles },
+                    kind: "roles",
+                  });
+                } else {
                   void update({ enforcedRoles });
                 }
               }}
@@ -225,15 +264,9 @@ export function PlatformMfaSettingsCard() {
       </CardContent>
       {pendingConfirm ? (
         <ConfirmDialog
-          {...CONFIRMS[pendingConfirm]}
+          {...CONFIRMS[pendingConfirm.kind]}
           onClose={() => setPendingConfirm(null)}
-          onConfirm={() =>
-            update(
-              pendingConfirm === "disable"
-                ? { enabled: false, required: false }
-                : { required: true }
-            )
-          }
+          onConfirm={() => update(pendingConfirm.input)}
         />
       ) : null}
     </Card>

@@ -88,3 +88,48 @@ test("roles can be picked before sign-in requires MFA", async () => {
   await waitFor(() => card.update.mock.calls.length > 0);
   expect(card.update).toHaveBeenCalledWith({ required: true });
 });
+
+test("adding a role while sign-in requires MFA waits for the confirm", async () => {
+  const card = await renderCard({ ...ENABLED, required: true });
+
+  await card.click(() => card.control("Required for: Admins"));
+
+  const members = () =>
+    [
+      ...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'),
+    ].find((item) => item.textContent?.trim() === "Members");
+
+  await waitFor(() => members() !== undefined);
+  await card.click(members);
+  expect(card.update).not.toHaveBeenCalled();
+
+  await card.click(() => card.button("Require"));
+  await waitFor(() => card.update.mock.calls.length > 0);
+  expect(card.update).toHaveBeenCalledWith({
+    enforcedRoles: ["admin", "member"],
+  });
+});
+
+test("a change made during a save is saved after it", async () => {
+  const card = await renderCard({ ...ENABLED, enabled: false });
+  let finishFirst: () => void = () => undefined;
+
+  card.update.mockImplementationOnce(
+    (input) =>
+      new Promise((resolve) => {
+        finishFirst = () => resolve({ ...ENABLED, ...input });
+      })
+  );
+
+  await card.click(() => card.control("MFA for all users"));
+  await card.click(() => card.control("Require for sign-in"));
+  await card.click(() => card.button("Require"));
+  expect(card.update).toHaveBeenCalledTimes(1);
+
+  await act(async () => finishFirst());
+  await waitFor(() => card.update.mock.calls.length > 1);
+  expect(card.update.mock.calls.map(([input]) => input)).toEqual([
+    { enabled: true, required: false },
+    { required: true },
+  ]);
+});

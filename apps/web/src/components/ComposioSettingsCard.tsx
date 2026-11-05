@@ -84,7 +84,8 @@ function useComposioSettingsForm() {
   async function save() {
     const trimmed = apiKey.trim();
 
-    if (!trimmed) {
+    // Enter and the submit button both land here; one save at a time.
+    if (!trimmed || saveMutation.isPending) {
       return;
     }
 
@@ -204,7 +205,11 @@ function ComposioKeyEditor({
             Cancel
           </Button>
         ) : null}
-        <Button aria-disabled={!canSave || undefined} size="sm" type="submit">
+        <Button
+          aria-disabled={!canSave || form.savePending || undefined}
+          size="sm"
+          type="submit"
+        >
           {form.savePending ? <Spinner className="size-4" /> : "Save key"}
         </Button>
       </form>

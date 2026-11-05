@@ -173,7 +173,10 @@ export function WebPublicUrlSettingsRow() {
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              handleSave();
+
+              if (isDirty && !saveMutation.isPending) {
+                handleSave();
+              }
             }
           }}
           placeholder="https://nakama.example.com"
