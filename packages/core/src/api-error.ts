@@ -3,6 +3,7 @@ import type { ApiErrorResponse, ProfileRef } from "./contract";
 import { LLM_FETCH_TIMEOUT_MS } from "./fetch-idle";
 
 const ApiErrorPayloadSchema = z.object({
+  code: z.string().optional(),
   error: z.json().optional(),
   message: z.json().optional(),
   totpEnabled: z.boolean().optional(),
@@ -11,6 +12,7 @@ const ApiErrorPayloadSchema = z.object({
 const ErrorMessageSchema = z.object({ message: z.string() });
 
 export class NakamaApiError extends Error {
+  readonly code?: string;
   readonly status: number;
   readonly path?: string;
   readonly profiles?: ProfileRef[];
@@ -21,10 +23,11 @@ export class NakamaApiError extends Error {
     status: number,
     path?: string,
     profiles?: ProfileRef[],
-    options?: Pick<ApiErrorResponse, "totpEnabled">
+    options?: Pick<ApiErrorResponse, "code" | "totpEnabled">
   ) {
     super(message);
     this.name = "NakamaApiError";
+    this.code = options?.code;
     this.status = status;
     this.path = path;
     this.profiles = profiles;
@@ -49,6 +52,7 @@ export class ProviderStreamInterruptedError extends NakamaApiError {
 }
 
 export async function readApiErrorDetails(response: Response): Promise<{
+  code?: string;
   message: string;
   totpEnabled?: boolean;
 }> {
@@ -81,6 +85,7 @@ export async function readApiErrorDetails(response: Response): Promise<{
 
       if (message) {
         return {
+          code: payload.data.code,
           message,
           totpEnabled: payload.data.totpEnabled,
         };
