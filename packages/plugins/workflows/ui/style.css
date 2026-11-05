@@ -210,10 +210,9 @@
     border-radius: 16px;
   }
   .workflow-connector {
-    width: 1px;
-    height: 20px;
+    display: block;
     margin-inline: auto;
-    background: var(--border);
+    color: var(--muted-foreground);
   }
   .workflow-add-actions {
     justify-content: center;
@@ -1029,21 +1028,6 @@
   .workflow-app-badge[data-tint="4"] {
     color: #be185d;
     background: #fdf2f8;
-  }
-  .workflow-connector {
-    position: relative;
-    height: 28px;
-  }
-  .workflow-connector::after {
-    position: absolute;
-    bottom: 4px;
-    left: -3px;
-    width: 6px;
-    height: 6px;
-    content: "";
-    border-right: 1.5px solid var(--muted-foreground);
-    border-bottom: 1.5px solid var(--muted-foreground);
-    transform: rotate(45deg);
   }
 }
 

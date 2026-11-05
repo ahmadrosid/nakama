@@ -211,10 +211,9 @@ var style_default = `[data-plugin-id="workflows"] {
     border-radius: 16px;
   }
   .workflow-connector {
-    width: 1px;
-    height: 20px;
+    display: block;
     margin-inline: auto;
-    background: var(--border);
+    color: var(--muted-foreground);
   }
   .workflow-add-actions {
     justify-content: center;
@@ -1030,21 +1029,6 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-app-badge[data-tint="4"] {
     color: #be185d;
     background: #fdf2f8;
-  }
-  .workflow-connector {
-    position: relative;
-    height: 28px;
-  }
-  .workflow-connector::after {
-    position: absolute;
-    bottom: 4px;
-    left: -3px;
-    width: 6px;
-    height: 6px;
-    content: "";
-    border-right: 1.5px solid var(--muted-foreground);
-    border-bottom: 1.5px solid var(--muted-foreground);
-    transform: rotate(45deg);
   }
 }
 
@@ -2811,10 +2795,20 @@ function apply(ctx) {
       }, "Move later"), /* @__PURE__ */ React.createElement(DropdownMenuItem, {
         onClick: () => setSteps((current) => current.filter((entry) => entry.key !== step.key)),
         variant: "destructive"
-      }, "Delete step"))))), index < steps.length && /* @__PURE__ */ React.createElement("div", {
+      }, "Delete step"))))), index < steps.length && /* @__PURE__ */ React.createElement("svg", {
         "aria-hidden": "true",
-        className: "workflow-connector"
-      }));
+        className: "workflow-connector",
+        fill: "none",
+        height: "32",
+        stroke: "currentColor",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        strokeWidth: 1.5,
+        viewBox: "0 0 16 32",
+        width: "16"
+      }, /* @__PURE__ */ React.createElement("path", {
+        d: "M8 4v22M3 21l5 5 5-5"
+      })));
     })), /* @__PURE__ */ React.createElement("div", {
       className: "workflow-add-actions"
     }, /* @__PURE__ */ React.createElement(Button, {

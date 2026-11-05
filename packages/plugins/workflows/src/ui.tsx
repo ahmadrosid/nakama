@@ -2211,10 +2211,20 @@ export function apply(ctx: Context) {
                           </DropdownMenu>
                         </div>
                         {index < steps.length && (
-                          <div
+                          <svg
                             aria-hidden="true"
                             className="workflow-connector"
-                          />
+                            fill="none"
+                            height="32"
+                            stroke="currentColor"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            viewBox="0 0 16 32"
+                            width="16"
+                          >
+                            <path d="M8 4v22M3 21l5 5 5-5" />
+                          </svg>
                         )}
                       </li>
                     );
