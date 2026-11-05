@@ -1,20 +1,25 @@
 ---
 title: "Image generation"
-description: "Let an agent generate images with OpenAI gpt-image-2, where the files land, and what it costs."
+description: "Let an agent generate images with a ChatGPT subscription or OpenAI gpt-image-2, where the files land, and what it costs."
 ---
 
 An agent with the `generate_image` tool can produce an image from a text prompt. The result is saved as a PNG artifact and shows up in chat like any other attachment.
 
 ## Setup
 
-Two things are required.
+**With a ChatGPT subscription, there is nothing to set up.** When a ChatGPT (Plus/Pro) provider is signed in and no image model is picked, agents make images through that subscription. You do not need an OpenAI API key. The **Image generation model** card shows **ChatGPT (default)**.
 
-1. **An AI-image provider.** Image generation runs against the OpenAI Images API contract, served by an `openai` provider or an **OpenAI-compatible** provider with a base URL (that is, a self-hosted backend). Nakama uses your default provider when it matches, otherwise the first eligible provider configured. The key comes from that provider, or from `OPENAI_API_KEY`.
-2. **A model, set in AI Providers.** Pick **Image generation model** in the same card group as the vision and transcription models. The choices are `gpt-image-2` against an OpenAI provider, or any model of an OpenAI-compatible provider, stored as `<providerId>::<modelId>`. See [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription).
+To use a different image backend, pick a model in **Settings → AI Providers → Image generation model**:
 
-Until a model is set, the tool refuses with `Configure an image generation model in Settings before generating images.` The card shows **Not configured** in that state, and **No image provider** when the provider is the missing half.
+- `gpt-image-2` on an OpenAI provider. The key comes from that provider, or from `OPENAI_API_KEY`.
+- A model of an **OpenAI-compatible** provider with a base URL, for example a self-hosted backend. See [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription).
+- A specific ChatGPT model, instead of the default one.
 
-Assign the `generate_image` tool to a profile the same way as any other builtin. See [Builtin tools](/builtin-tools).
+To turn image generation off, pick **Off**. Agents then say that image generation is turned off.
+
+With no ChatGPT signed in and no model picked, the card shows **Not configured**, and the tool asks for a model. The card shows **No image provider** when no provider can make images.
+
+New agents get the `generate_image` tool. Agents that existed before get it one time, when the server starts after the update. To stop one agent from making images, remove the tool in **Agent → Tools**. It stays removed. See [Builtin tools](/builtin-tools).
 
 ## Using it
 
@@ -50,7 +55,8 @@ Every generation records usage through the same token pricing bridge as chat, so
 
 ## Limits
 
-- `gpt-image-2` on an OpenAI provider, or a model of an OpenAI-compatible provider with a base URL that speaks the OpenAI Images API (see [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription)). There is no Stability or Replicate path.
+- A ChatGPT subscription, `gpt-image-2` on an OpenAI provider, or a model of an OpenAI-compatible provider with a base URL that speaks the OpenAI Images API (see [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription)). There is no Stability or Replicate path.
+- On a ChatGPT subscription, the size is a request. ChatGPT picks the final size, and the agent gets the size that came back.
 - No image editing or variations. Generation from a prompt only.
 - No streaming or progress. A generation is one tool call that returns when the image is ready. A provider that has not answered completely within 180 seconds fails with a timeout error, and stopping the chat aborts the request.
 - One PNG per call, up to 5 MB, with `1024x1024`, `1024x1536`, `1536x1024`, or `auto` output size.
