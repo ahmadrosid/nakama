@@ -102,7 +102,7 @@ export function FilesPage() {
         presentation="overlay"
       >
         <FilePinsContext.Provider value={pins.controls}>
-          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 p-4 [scrollbar-gutter:stable] sm:p-6">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6 sm:[scrollbar-gutter:stable]">
             {canViewFiles ? (
               <div className="mx-auto max-w-3xl space-y-4">
                 <nav

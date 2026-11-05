@@ -241,7 +241,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
   return (
     <div
-      className="mx-auto flex w-full max-w-2xl flex-col gap-8"
+      className="mx-auto flex w-full max-w-3xl flex-col gap-8"
       id="profile-detail-panel-profile"
     >
       <ProfileConfigIdentitySection state={state} />

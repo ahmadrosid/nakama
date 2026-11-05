@@ -148,7 +148,7 @@ export function RecentChatContextMenu({
 
 function RecentChatActions(props: RecentChatMenuProps) {
   return (
-    <div className="flex shrink-0 items-center p-1.5">
+    <div className="flex shrink-0 items-center px-1.5">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={

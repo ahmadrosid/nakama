@@ -43,7 +43,7 @@ function Switch({
       className={cn(
         "relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
         dimensions.track,
-        checked ? "bg-primary" : "bg-foreground/15",
+        checked ? "bg-primary" : "bg-foreground/45",
         className
       )}
       disabled={disabled}

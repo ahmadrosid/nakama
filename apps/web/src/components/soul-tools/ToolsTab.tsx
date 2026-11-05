@@ -113,14 +113,14 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
     <div className={cn("min-w-0 space-y-8", embedded && "p-4 sm:p-5")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="type-body text-pretty text-muted-foreground text-sm tabular-nums">
+          <p className="type-body text-pretty text-muted-foreground text-xs tabular-nums">
             {tools.length === 0
               ? "No tools registered yet"
               : `${tools.length} registered · ${customTools.length} custom · ${builtinTools.length} built-in`}
           </p>
         </div>
 
-        <Button onClick={goToCreateTool} size="sm" type="button">
+        <Button onClick={goToCreateTool} type="button">
           <Add01Icon aria-hidden className="size-4" data-icon="inline-start" />
           Create tool
         </Button>
@@ -129,7 +129,7 @@ export function ToolsTab({ embedded = false }: { embedded?: boolean } = {}) {
       {tools.length === 0 ? (
         <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center text-muted-foreground text-sm">
           <p>No tools yet. Ask Super Nakama to create one.</p>
-          <Button onClick={goToCreateTool} size="sm" type="button">
+          <Button onClick={goToCreateTool} type="button">
             <Add01Icon
               aria-hidden
               className="size-4"

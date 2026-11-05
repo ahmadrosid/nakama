@@ -182,7 +182,7 @@ export function McpServersSection({
     >
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="type-body text-muted-foreground text-sm">
+          <p className="type-body text-muted-foreground text-xs">
             {servers.length === 0
               ? "No MCP servers registered yet"
               : `${servers.length} registered`}
@@ -190,7 +190,7 @@ export function McpServersSection({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button onClick={onAddServer} size="sm" type="button">
+          <Button onClick={onAddServer} type="button">
             <Add01Icon aria-hidden className="size-4" />
             Add server
           </Button>

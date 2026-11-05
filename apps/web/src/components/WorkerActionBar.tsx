@@ -192,13 +192,7 @@ function StartAction({
 
 function ViewLogsButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button
-      className="ml-auto"
-      onClick={onClick}
-      size="sm"
-      type="button"
-      variant="outline"
-    >
+    <Button onClick={onClick} size="sm" type="button" variant="outline">
       <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
       View logs
     </Button>

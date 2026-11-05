@@ -31,7 +31,7 @@ export function ChatCognitoControl({
                 "size-8 rounded-full transition-colors",
                 cognito
                   ? "bg-foreground text-background hover:bg-foreground/90 hover:text-background"
-                  : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "bg-muted text-foreground/80 hover:bg-muted hover:text-foreground"
               )}
               disabled={disabled}
               id="chat-cognito-toggle"

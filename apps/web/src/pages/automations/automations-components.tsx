@@ -824,7 +824,7 @@ export function AutomationExample({
 
   return (
     <form
-      className="flex w-full max-w-2xl flex-col gap-5 text-left"
+      className="flex w-full max-w-3xl flex-col gap-5 text-left"
       onSubmit={(event) => {
         event.preventDefault();
 

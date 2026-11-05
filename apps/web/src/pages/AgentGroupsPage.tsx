@@ -144,7 +144,7 @@ function FloatingExample() {
       <p className="absolute right-14 bottom-20 flex -rotate-2 items-center gap-2.5 rounded-full bg-foreground px-4 py-2.5 text-background text-sm shadow-md">
         <span className="size-2 rounded-full bg-primary" />
         Writer is working
-        <span className="ml-1 flex items-center gap-1.5 rounded-lg bg-background/15 px-2.5 py-1 text-xs">
+        <span className="ml-1 flex items-center gap-1.5 rounded-full bg-background/15 px-2.5 py-1 text-xs">
           <StopIcon className="size-3" />
           Stop
         </span>
@@ -232,10 +232,10 @@ function GroupsEmptyState({ onCreate }: { onCreate: () => void }) {
           <h2 className="text-balance font-bold text-2xl tracking-tight">
             Your agents, working as a team
           </h2>
-          <p className="text-balance text-lg text-muted-foreground">
+          <p className="text-balance text-base text-muted-foreground">
             Give a group one brief. Ask one with @name, or everyone with @all.
           </p>
-          <Button id="btn-new-group" onClick={onCreate} size="lg">
+          <Button id="btn-new-group" onClick={onCreate}>
             <PlusSignIcon className="size-4" />
             New group
           </Button>

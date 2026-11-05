@@ -164,6 +164,7 @@
 
   html.dark {
     color-scheme: dark;
+    scrollbar-color: oklch(0.38 0 0) transparent;
   }
 
   code,
@@ -892,7 +893,7 @@
   }
 
   .scope-badge-custom {
-    @apply bg-amber-500/10 text-amber-800 dark:text-amber-200;
+    @apply border border-border bg-background text-foreground;
   }
 
   .chat-markdown {
@@ -1367,7 +1368,7 @@
   --accent: #27272a;
   --accent-foreground: #fafafa;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: #303036;
+  --border: #38383f;
   --input: #27272a;
   --ring: #f59e0b;
   --chart-1: oklch(0.87 0 0);
