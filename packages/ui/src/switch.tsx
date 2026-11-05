@@ -43,7 +43,7 @@ function Switch({
       className={cn(
         "relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
         dimensions.track,
-        checked ? "bg-primary" : "bg-foreground/45",
+        checked ? "bg-primary" : "border-foreground/45 bg-background",
         className
       )}
       disabled={disabled}
@@ -55,9 +55,11 @@ function Switch({
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none block rounded-full bg-background shadow-sm transition-transform",
+          "pointer-events-none block rounded-full shadow-sm transition-transform",
           dimensions.thumb,
-          checked ? dimensions.on : dimensions.off
+          checked
+            ? `${dimensions.on} bg-background`
+            : `${dimensions.off} bg-foreground/55`
         )}
       />
     </button>

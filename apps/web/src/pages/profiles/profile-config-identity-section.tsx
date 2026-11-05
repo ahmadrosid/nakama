@@ -188,7 +188,7 @@ export function ProfileSystemPromptCard({ state }: { state: IdentityState }) {
         containerClassName="gap-3"
         dialogDescription="Instructions sent to the model at the start of each chat."
         disabled={busy || !canManageProfile}
-        editButtonClassName="h-8 rounded-lg border border-border bg-background px-3 font-medium text-foreground/80 after:hidden hover:bg-background hover:text-foreground"
+        editButtonClassName="h-8 rounded-lg border border-border bg-background px-3 font-medium text-foreground/80 text-sm after:hidden hover:bg-background hover:text-foreground"
         htmlFor="profile-prompt"
         label="System prompt"
         labelClassName="font-semibold text-foreground text-sm"
@@ -327,7 +327,7 @@ function ProfileModelField({
     <Popover onOpenChange={setModelPickerOpen} open={modelPickerOpen}>
       <PopoverTrigger
         aria-label="Select model"
-        className="flex h-8 min-w-0 cursor-pointer items-center gap-1.5 rounded-lg bg-muted px-3 font-medium text-foreground/80 text-xs outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-8 min-w-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-muted px-3 font-medium text-foreground/80 text-xs outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled || providerModelGroups.length === 0}
         id="profile-model"
       >
@@ -422,7 +422,7 @@ function ProfileChatAgentField({
     >
       <SelectTrigger
         aria-label="Chat agent"
-        className="h-8 w-auto gap-1.5 rounded-lg border-0 bg-muted px-3 font-medium text-foreground/80 text-xs shadow-none hover:text-foreground dark:bg-muted"
+        className="h-8 w-auto gap-1.5 rounded-lg border border-border bg-muted px-3 font-medium text-foreground/80 text-xs shadow-none hover:text-foreground dark:bg-muted"
         id="profile-chat-agent"
       >
         <SelectValue placeholder="Nakama">

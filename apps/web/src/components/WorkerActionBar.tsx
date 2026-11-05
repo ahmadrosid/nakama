@@ -106,7 +106,7 @@ function Pm2Unavailable({
   return (
     <span
       className={cn(
-        "max-w-xs truncate text-muted-foreground text-xs",
+        "max-w-xs truncate text-amber-800 text-xs dark:text-amber-300",
         className
       )}
       title={error}
@@ -352,11 +352,11 @@ export function WorkerViewLogsButton({
   return (
     <>
       <Button
-        className={cn("text-muted-foreground", className)}
+        className={className}
         onClick={() => setLogDrawerOpen(true)}
         size="sm"
         type="button"
-        variant="ghost"
+        variant="outline"
       >
         <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
         View logs

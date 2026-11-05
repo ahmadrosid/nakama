@@ -396,7 +396,7 @@ function PluginToolGroup({
         <summary className="cursor-pointer rounded-md px-4 py-3 text-sm marker:text-muted-foreground hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
           <span className="ml-2 inline-flex items-center gap-2 align-middle">
             <Icon aria-hidden className="size-4" />
-            <span>{label}</span>
+            <span className="font-medium font-mono text-[13px]">{label}</span>
             <span className="text-muted-foreground text-xs tabular-nums">
               {tools.length} {tools.length === 1 ? "tool" : "tools"}
             </span>
@@ -429,7 +429,22 @@ function ToolListItem({
 
   const summary = (
     <div className="min-w-0">
-      <p className="font-medium text-foreground text-sm">{tool.name}</p>
+      <p className="flex flex-wrap items-center gap-2">
+        <span className="font-medium font-mono text-[13px] text-foreground">
+          {tool.name}
+        </span>
+        {isPluginOwned(tool) ? (
+          <span className="scope-badge scope-badge-custom">
+            {tool.pluginId}
+          </span>
+        ) : deletable ? (
+          <span className="scope-badge scope-badge-custom">custom</span>
+        ) : (
+          <span className="scope-badge bg-muted text-muted-foreground">
+            built-in
+          </span>
+        )}
+      </p>
       <p className="mt-0.5 line-clamp-2 text-pretty text-muted-foreground text-xs leading-relaxed">
         {tool.description}
       </p>
@@ -454,17 +469,6 @@ function ToolListItem({
       )}
 
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-        {isPluginOwned(tool) ? (
-          <span className="scope-badge scope-badge-custom">
-            {tool.pluginId}
-          </span>
-        ) : deletable ? (
-          <span className="scope-badge scope-badge-custom">custom</span>
-        ) : (
-          <span className="scope-badge bg-muted text-muted-foreground">
-            built-in
-          </span>
-        )}
         {tool.pluginId ? (
           <Button
             render={<Link to={pluginManagementPath()} />}

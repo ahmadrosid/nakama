@@ -158,7 +158,7 @@ export function BrowserRuntimeSettingsCard() {
   return (
     <div className="space-y-3 px-4 py-3" id="browser-runtime-settings">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-medium text-foreground text-sm">Browser runtime</p>
+        <p className="text-foreground text-sm">Browser runtime</p>
         <div className="w-full min-w-0 sm:w-56">
           <Select
             disabled={form.pending}

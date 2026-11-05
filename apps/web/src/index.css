@@ -889,11 +889,11 @@
   }
 
   .scope-badge-active {
-    @apply bg-emerald-500/10 text-emerald-700 dark:text-emerald-300;
+    @apply bg-emerald-500/10 text-emerald-800 dark:text-emerald-300;
   }
 
   .scope-badge-custom {
-    @apply bg-muted text-foreground;
+    @apply bg-muted text-muted-foreground;
   }
 
   .chat-markdown {

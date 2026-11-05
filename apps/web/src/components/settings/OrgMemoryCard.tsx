@@ -68,6 +68,7 @@ function OrgMemoryTabButton({
   return (
     <Button
       aria-selected={active}
+      className={active ? undefined : "text-muted-foreground"}
       onClick={onClick}
       role="tab"
       size="sm"

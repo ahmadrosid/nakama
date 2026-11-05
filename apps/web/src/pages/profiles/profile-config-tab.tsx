@@ -90,7 +90,7 @@ function ProfilePromptPanel({
             ) : null}
             <button
               aria-haspopup="dialog"
-              className="ml-auto flex h-8 items-center gap-1 rounded-md pr-4 text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              className="ml-auto flex h-8 items-center gap-1 rounded-md pr-4 text-amber-800 text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring dark:text-primary"
               onClick={() => setHistoryOpen(true)}
               type="button"
             >
@@ -545,7 +545,7 @@ function ProfileFooterActions({
   const fullRow = new Set(regular.length % 2 === 1 ? [regular.at(-1)] : []);
 
   return (
-    <footer className="grid w-0 min-w-full grid-cols-2 gap-2">
+    <footer className="grid w-0 min-w-full grid-cols-2 gap-2.5">
       {actions.map((action) => {
         const { Icon, destructive, disabled, label, onClick } = action;
 

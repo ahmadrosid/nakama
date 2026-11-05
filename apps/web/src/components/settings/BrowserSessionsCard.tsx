@@ -46,9 +46,7 @@ export function BrowserSessionsCard() {
       <CardContent className="divide-y divide-border p-0">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0 space-y-0.5">
-            <p className="font-semibold text-foreground text-sm">
-              Active sessions
-            </p>
+            <p className="text-foreground text-sm">Active sessions</p>
             {error ? (
               <p className="text-destructive text-xs" role="status">
                 {error}
