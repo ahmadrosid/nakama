@@ -95,6 +95,9 @@ export function useProviderInstanceCard({
   const [openRouterRouting, setOpenRouterRouting] =
     useState<OpenRouterRoutingSettings>({});
 
+  // What the dialog showed when it opened, to tell if the user changed it.
+  const [openedSnapshot, setOpenedSnapshot] = useState("");
+
   // SAFETY: Provider instance summaries use the selected-provider contract.
   const providerType = instance.type as SelectedProvider;
   const isXaiOAuth = providerType === "xai_oauth";
@@ -123,25 +126,33 @@ export function useProviderInstanceCard({
     setDialogError(null);
     setOpenRouterRouting(instance.openRouterRouting ?? {});
 
-    setManageModels(seedManageModelRows(instance.customModels, instanceModels));
-
+    const rows = seedManageModelRows(instance.customModels, instanceModels);
+    setManageModels(rows);
+    setOpenedSnapshot(
+      editSnapshot(rows, "", "", "chat", instance.openRouterRouting ?? {})
+    );
     setManageOpen(true);
   };
 
   const openEdit = () => {
+    const baseUrl =
+      instance.baseUrl ??
+      (isOllama
+        ? defaultOllamaSetupBaseUrl(instance.hostMode ?? "local")
+        : isDiscovery
+          ? (defaultDiscoveryBaseUrl(providerType) ?? "")
+          : "");
+
+    const wireApi = instance.wireApi ?? "chat";
+    const rows = seedManageModelRows(instance.customModels, instanceModels);
+
     setDialogError(null);
     setEditFieldErrors({ baseUrl: null, displayName: null, models: null });
     setEditLabel(instance.label);
-    setEditBaseUrl(
-      instance.baseUrl ??
-        (isOllama
-          ? defaultOllamaSetupBaseUrl(instance.hostMode ?? "local")
-          : isDiscovery
-            ? (defaultDiscoveryBaseUrl(providerType) ?? "")
-            : "")
-    );
-    setEditWireApi(instance.wireApi ?? "chat");
-    setManageModels(seedManageModelRows(instance.customModels, instanceModels));
+    setEditBaseUrl(baseUrl);
+    setEditWireApi(wireApi);
+    setManageModels(rows);
+    setOpenedSnapshot(editSnapshot(rows, instance.label, baseUrl, wireApi, {}));
     setEditOpen(true);
   };
 
@@ -297,12 +308,23 @@ export function useProviderInstanceCard({
     }
   };
 
+  const dirty =
+    (manageOpen || editOpen) &&
+    editSnapshot(
+      manageModels,
+      editOpen ? editLabel : "",
+      editOpen ? editBaseUrl : "",
+      editOpen ? editWireApi : "chat",
+      editOpen ? {} : openRouterRouting
+    ) !== openedSnapshot;
+
   return {
     apiKey,
     busy,
     catalogModelsForType,
     deleteOpen,
     dialogError,
+    dirty,
     editBaseUrl,
     editFieldErrors,
     editLabel,
@@ -349,4 +371,14 @@ export function useProviderInstanceCard({
     setShowApiKey,
     showApiKey,
   };
+}
+
+function editSnapshot(
+  models: ModelListRow[],
+  label: string,
+  baseUrl: string,
+  wireApi: WireApi,
+  routing: OpenRouterRoutingSettings
+): string {
+  return JSON.stringify({ baseUrl, label, models, routing, wireApi });
 }

@@ -3,6 +3,7 @@ import type { ProviderInstanceSummary } from "@nakama/core/contract";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
+  ProviderManageModelsDialog,
   ProviderRemoveDialog,
   ProviderReplaceKeyDialog,
 } from "./provider-instance-dialogs";
@@ -117,4 +118,42 @@ test("submitting the key form saves the key", async () => {
 
   await act(async () => form?.requestSubmit());
   expect(saves).toBe(1);
+});
+
+test("closing Manage with edits asks before it drops them", async () => {
+  const changes: boolean[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () =>
+    root!.render(
+      <ProviderManageModelsDialog
+        busy={false}
+        dialogError={null}
+        dirty
+        onOpenChange={(open) => changes.push(open)}
+        onSave={() => undefined}
+        open
+        title="Manage DeepSeek"
+      >
+        <p>models</p>
+      </ProviderManageModelsDialog>
+    )
+  );
+
+  const button = (label: RegExp) =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (candidate) => label.test(candidate.textContent ?? "")
+    );
+
+  await act(async () => button(/^Cancel$/)!.click());
+  expect(changes).toEqual([]);
+
+  await act(async () => button(/^Keep editing$/)!.click());
+  expect(changes).toEqual([]);
+
+  await act(async () => button(/^Cancel$/)!.click());
+  await act(async () => button(/^Discard$/)!.click());
+  expect(changes).toEqual([false]);
 });

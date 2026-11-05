@@ -393,10 +393,34 @@ export function ProviderReconnectDialog<T>({
   );
 }
 
+function DiscardChangesConfirm({
+  onDiscard,
+  onKeep,
+}: {
+  onDiscard: () => void;
+  onKeep: () => void;
+}) {
+  return (
+    <div
+      className="flex w-full flex-wrap items-center justify-end gap-2"
+      role="alert"
+    >
+      <p className="mr-auto font-medium text-sm">Discard your changes?</p>
+      <Button autoFocus onClick={onKeep} type="button" variant="outline">
+        Keep editing
+      </Button>
+      <Button onClick={onDiscard} type="button" variant="destructive">
+        Discard
+      </Button>
+    </div>
+  );
+}
+
 function ProviderModelsDialogShell({
   open,
   busy,
   dialogError,
+  dirty = false,
   title,
   onOpenChange,
   onSave,
@@ -405,6 +429,7 @@ function ProviderModelsDialogShell({
   open: boolean;
   busy: boolean;
   dialogError: string | null;
+  dirty?: boolean;
   title: string;
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
@@ -412,10 +437,37 @@ function ProviderModelsDialogShell({
 }) {
   // Open on the title, not inside a model ID a stray key press would change.
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  // Cancel, Escape and the close button ask first when there are edits.
+  const requestClose = () => {
+    if (dirty) {
+      setConfirmingDiscard(true);
+
+      return;
+    }
+
+    onOpenChange(false);
+  };
 
   return (
     // A click outside must not drop unsaved model edits.
-    <Dialog disablePointerDismissal onOpenChange={onOpenChange} open={open}>
+    <Dialog
+      disablePointerDismissal
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          onOpenChange(true);
+        } else {
+          requestClose();
+        }
+      }}
+      onOpenChangeComplete={(nextOpen) => {
+        if (!nextOpen) {
+          setConfirmingDiscard(false);
+        }
+      }}
+      open={open}
+    >
       <DialogContent
         className="w-[min(96vw,56rem)] scroll-pb-24 grid-cols-1 sm:max-w-4xl"
         initialFocus={titleRef}
@@ -432,17 +484,26 @@ function ProviderModelsDialogShell({
           </p>
         ) : null}
         <DialogFooter className="sticky -bottom-4 z-10 bg-muted">
-          <Button
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button disabled={busy} onClick={onSave} type="button">
-            Save
-          </Button>
+          {confirmingDiscard ? (
+            <DiscardChangesConfirm
+              onDiscard={() => onOpenChange(false)}
+              onKeep={() => setConfirmingDiscard(false)}
+            />
+          ) : (
+            <>
+              <Button
+                disabled={busy}
+                onClick={requestClose}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button disabled={busy} onClick={onSave} type="button">
+                Save
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -471,10 +532,12 @@ export function ProviderCompatibleEditDialog({
   title,
   wireApi,
   fieldErrors,
+  dirty,
 }: {
   open: boolean;
   busy: boolean;
   dialogError: string | null;
+  dirty?: boolean;
   editLabel: string;
   editBaseUrl: string;
   manageModels: ModelListRow[];
@@ -502,6 +565,7 @@ export function ProviderCompatibleEditDialog({
     <ProviderModelsDialogShell
       busy={busy}
       dialogError={dialogError}
+      dirty={dirty}
       onOpenChange={onOpenChange}
       onSave={onSave}
       open={open}
@@ -605,6 +669,7 @@ export function ProviderManageModelsDialog({
   open,
   busy,
   dialogError,
+  dirty,
   onOpenChange,
   onSave,
   children,
@@ -613,6 +678,7 @@ export function ProviderManageModelsDialog({
   open: boolean;
   busy: boolean;
   dialogError: string | null;
+  dirty?: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
   children: ReactNode;
@@ -622,6 +688,7 @@ export function ProviderManageModelsDialog({
     <ProviderModelsDialogShell
       busy={busy}
       dialogError={dialogError}
+      dirty={dirty}
       onOpenChange={onOpenChange}
       onSave={onSave}
       open={open}

@@ -510,11 +510,18 @@ export function resolveOpenRouterSetupModel(
   const trimmed = selectedModel.trim();
   const valid = rows.filter((row) => row.id.trim());
 
+  // The row the user marked as default wins over the catalog pick.
+  const flagged = valid.find((row) => row.default)?.id;
+
+  if (flagged) {
+    return flagged;
+  }
+
   if (trimmed && valid.some((row) => row.id === trimmed)) {
     return trimmed;
   }
 
-  return valid.find((row) => row.default)?.id ?? valid[0]?.id ?? "";
+  return valid[0]?.id ?? "";
 }
 
 function validateCustomOpenRouterModel(model: string): string | null {

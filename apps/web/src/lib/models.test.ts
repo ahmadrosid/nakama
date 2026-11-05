@@ -11,6 +11,7 @@ import {
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
+  resolveOpenRouterSetupModel,
   validateCustomModelsInput,
 } from "./models";
 
@@ -381,5 +382,22 @@ describe("isLocalBaseUrl", () => {
     expect(isLocalBaseUrl("http://localhost:11434/v1")).toBe(true);
     expect(isLocalBaseUrl("http://192.168.1.4:8000/v1")).toBe(true);
     expect(isLocalBaseUrl("https://apihub.agnes-ai.com/v1")).toBe(false);
+  });
+});
+
+describe("resolveOpenRouterSetupModel", () => {
+  test("the row marked default wins over the catalog pick", () => {
+    expect(
+      resolveOpenRouterSetupModel(
+        [{ id: "a/one" }, { default: true, id: "a/two" }],
+        "a/one"
+      )
+    ).toBe("a/two");
+  });
+
+  test("with no row marked, the catalog pick stays", () => {
+    expect(
+      resolveOpenRouterSetupModel([{ id: "a/one" }, { id: "a/two" }], "a/two")
+    ).toBe("a/two");
   });
 });

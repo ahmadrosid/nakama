@@ -338,6 +338,7 @@ function ProviderInstanceCardDialogs({
           browseLabel={card.isOllama ? "Ollama" : undefined}
           busy={card.busy}
           dialogError={card.dialogError}
+          dirty={card.dirty}
           editBaseUrl={card.editBaseUrl}
           editLabel={card.editLabel}
           fieldErrors={card.editFieldErrors}
@@ -366,6 +367,7 @@ function ProviderInstanceCardDialogs({
         <ProviderManageModelsDialog
           busy={card.busy}
           dialogError={card.isCompatibleLike ? card.dialogError : null}
+          dirty={card.dirty}
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}

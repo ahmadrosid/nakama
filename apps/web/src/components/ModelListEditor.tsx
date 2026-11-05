@@ -3,7 +3,7 @@ import { Button } from "@nakama/ui/button";
 import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import { Switch } from "@nakama/ui/switch";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { modelListRowVisionEnabled } from "@/components/model-list-editor.shared";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 
@@ -86,6 +86,23 @@ export function ModelListEditor({
   };
 
   const seenIds = new Set<string>();
+  const defaultGroup = useId();
+
+  // With no row marked, the first model with an ID is the default.
+  const flaggedDefault = models.findIndex(
+    (row) => row.default && row.id.trim()
+  );
+
+  const defaultIndex =
+    flaggedDefault === -1
+      ? models.findIndex((row) => row.id.trim())
+      : flaggedDefault;
+
+  const setDefault = (index: number) => {
+    onChange(
+      models.map((row, rowIndex) => ({ ...row, default: rowIndex === index }))
+    );
+  };
 
   return (
     <div className="min-w-0 space-y-2">
@@ -143,6 +160,17 @@ export function ModelListEditor({
                     />
                   </InputGroup>
                   <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-xs">
+                      <input
+                        checked={index === defaultIndex}
+                        className="size-3.5 accent-primary"
+                        disabled={disabled || id === ""}
+                        name={defaultGroup}
+                        onChange={() => setDefault(index)}
+                        type="radio"
+                      />
+                      Default
+                    </label>
                     {showThinking ? (
                       <span className="flex items-center gap-1.5 text-xs">
                         <Switch
