@@ -66,7 +66,7 @@ Screenshots: `gh pr edit <number> --attach <image-path>` uploads and embeds it i
 
 ## Browser automation
 
-Prefer role and text locators. Add `data-testid` only when labels collide. For PR motion video, use `.agents/skills/browser-video-proof/SKILL.md`.
+Prefer role and text locators. Add `data-testid` only when labels collide.
 
 ## Docker
 
