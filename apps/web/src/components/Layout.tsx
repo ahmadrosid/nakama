@@ -68,7 +68,6 @@ export function Layout() {
           >
             <AppShellHeader
               hideDesktop={
-                shell.pathname === PAGE_PATHS.profiles ||
                 shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) ||
                 // A group chat takes the full desktop column, like agent chat.
                 groupRouteFromPath(shell.pathname) !== null

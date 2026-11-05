@@ -691,6 +691,12 @@
 
   .sidebar-chat-title-clip {
     container-type: inline-size;
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+
+  .group:hover .sidebar-chat-title-clip,
+  .group:focus-within .sidebar-chat-title-clip {
+    mask-image: none;
   }
 
   .sidebar-chat-title {

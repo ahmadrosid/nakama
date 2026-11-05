@@ -98,7 +98,7 @@ export function SettingsPage() {
         <SettingsSection title="General">
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <p className="font-medium text-foreground text-sm">
                   Appearance
                 </p>
@@ -108,7 +108,7 @@ export function SettingsPage() {
               <UserContextSettings />
 
               <div
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
                 id="chat-usage-setting"
               >
                 <p className="font-medium text-foreground text-sm">
@@ -192,7 +192,7 @@ export function TimezoneSettingsRow() {
   return (
     <div
       aria-busy={saveTimezoneMutation.isPending || undefined}
-      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+      className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
     >
       <div className="min-w-0 space-y-0.5">
         <p className="font-medium text-foreground text-sm">Timezone</p>

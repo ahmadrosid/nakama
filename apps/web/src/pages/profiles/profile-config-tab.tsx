@@ -59,7 +59,7 @@ import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 const sectionTabClass =
-  "flex-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-center sm:flex-none font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
+  "-mb-px shrink-0 whitespace-nowrap border-transparent border-b-2 py-3 text-center text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:border-foreground data-[active]:font-medium data-[active]:text-foreground";
 
 function ProfilePromptPanel({
   state,
@@ -241,7 +241,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
   return (
     <div
-      className="mx-auto flex w-fit max-w-3xl flex-col gap-8"
+      className="mx-auto flex w-full max-w-2xl flex-col gap-8"
       id="profile-detail-panel-profile"
     >
       <ProfileConfigIdentitySection state={state} />
@@ -255,7 +255,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       >
         <Tabs.List
           aria-label="Agent sections"
-          className="mx-auto flex w-full max-w-full gap-1 overflow-x-auto rounded-xl bg-muted p-1 sm:w-fit"
+          className="no-scrollbar flex w-full max-w-full gap-6 overflow-x-auto border-border border-b sm:justify-center"
         >
           {sections.map((item) => (
             <ProfileSectionTab key={item.value} {...item} />

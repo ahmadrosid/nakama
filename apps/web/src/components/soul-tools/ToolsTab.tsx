@@ -34,7 +34,7 @@ import {
 } from "@/lib/navigation";
 import { findSuperNakamaProfile } from "@/lib/profiles";
 
-const toolSearchThreshold = 4;
+const toolSearchThreshold = 10;
 
 function isDeletableTool(tool: ToolDetail): boolean {
   return !(isProtectedToolId(tool.id) || isPluginOwned(tool));
