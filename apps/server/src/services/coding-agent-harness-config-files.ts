@@ -57,19 +57,21 @@ export async function writeCodexConfigToml(
 
   const baseUrl = routing.baseUrl ?? "";
 
+  // JSON string escapes are valid TOML basic-string escapes, so a `\` or `"`
+  // in the model or URL cannot end the string early.
   const contents = [
     'model_provider = "nakama"',
     "",
     "[model_providers.nakama]",
     'name = "Nakama"',
-    `base_url = "${baseUrl}"`,
+    `base_url = ${JSON.stringify(baseUrl)}`,
     `wire_api = "responses"`,
     "",
     'env_key = "NAKAMA_HARNESS_API_KEY"',
     "",
     "[profiles.nakama]",
     'model_provider = "nakama"',
-    `model = "${model.replace(/"/g, '\\"')}"`,
+    `model = ${JSON.stringify(model)}`,
     "",
   ].join("\n");
 

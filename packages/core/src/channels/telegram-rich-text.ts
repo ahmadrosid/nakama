@@ -9,11 +9,19 @@ export function renderTelegramRichText(text: string): string {
   const tokens = createTokenStore(text);
   let result = convertMarkdownTables(text.trim());
 
-  result = result.replace(/```[^\n`]*\n?([\s\S]*?)```/g, (_, code: string) =>
-    tokens.add(
-      `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
-    )
-  );
+  result = splitCodeFences(result)
+    .map((part, index) => {
+      if (index % 2 === 0) {
+        return part;
+      }
+
+      const code = part.slice(3, -3).replace(/^[^\n`]*\n?/, "");
+
+      return tokens.add(
+        `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
+      );
+    })
+    .join("");
   result = result.replace(/`([^`\n]+)`/g, (_, code: string) =>
     tokens.add(`<code>${escapeTelegramHtml(code)}</code>`)
   );
@@ -135,12 +143,64 @@ function renderBlockquotes(text: string, tokens: TokenStore): string {
   });
 }
 
-const TABLE_SEPARATOR_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+/** `|---|:--:|` row: each cell is dashes with optional alignment colons. */
+function isTableSeparator(line: string): boolean {
+  let row = line.trim();
+
+  if (row.startsWith("|")) {
+    row = row.slice(1);
+  }
+
+  if (row.endsWith("|")) {
+    row = row.slice(0, -1);
+  }
+
+  return row.split("|").every((cell) => /^:?-+:?$/.test(cell.trim()));
+}
+
+/**
+ * Split text on closed ``` fences: odd parts are whole fences.
+ * A scan instead of a lazy regex, so an unclosed fence stays linear.
+ */
+function splitCodeFences(text: string): string[] {
+  const parts: string[] = [];
+  let cursor = 0;
+
+  for (;;) {
+    const open = text.indexOf("```", cursor);
+
+    if (open === -1) {
+      break;
+    }
+
+    let bodyStart = open + 3;
+
+    while (
+      bodyStart < text.length &&
+      text[bodyStart] !== "\n" &&
+      text[bodyStart] !== "`"
+    ) {
+      bodyStart++;
+    }
+
+    const close = text.indexOf("```", bodyStart);
+
+    if (close === -1) {
+      break;
+    }
+
+    parts.push(text.slice(cursor, open), text.slice(open, close + 3));
+    cursor = close + 3;
+  }
+
+  parts.push(text.slice(cursor));
+
+  return parts;
+}
 
 /** Convert pipe tables outside code fences. Safe to run twice. */
 function convertMarkdownTables(text: string): string {
-  return text
-    .split(/(```[^\n`]*\n?[\s\S]*?```)/)
+  return splitCodeFences(text)
     .map((part, index) =>
       index % 2 === 1 ? part : convertTablesToBullets(part)
     )
@@ -162,7 +222,7 @@ function convertTablesToBullets(text: string): string {
       !(
         isTableRow(header, pipeLed) &&
         separator?.includes("|") &&
-        TABLE_SEPARATOR_RE.test(separator)
+        isTableSeparator(separator)
       )
     ) {
       out.push(header);
@@ -301,8 +361,22 @@ function trimFenceNewlines(text: string): string {
   return text.replace(/^\n/, "").replace(/\n$/, "");
 }
 
+/** Drop everything from each `<` to its `>`, so no tag can be rebuilt. */
 function stripTags(html: string): string {
-  return html.replace(/<[^>]+>/g, "");
+  let out = "";
+  let inTag = false;
+
+  for (const char of html) {
+    if (char === "<") {
+      inTag = true;
+    } else if (char === ">") {
+      inTag = false;
+    } else if (!inTag) {
+      out += char;
+    }
+  }
+
+  return out;
 }
 
 function escapeTelegramHtml(text: string): string {

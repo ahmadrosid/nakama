@@ -563,13 +563,59 @@ export async function fetchRemoteImage(
   return { bytes, contentType };
 }
 
+/**
+ * Drop `<!-- … -->` comments with a scan, not a lazy regex, so an unclosed
+ * comment stays linear. Like a browser, an unclosed comment runs to the end.
+ * Repeat while a removal joins the pieces into a new `<!--`.
+ */
+function stripHtmlComments(html: string): string {
+  let text = html;
+
+  while (text.includes("<!--")) {
+    let out = "";
+    let cursor = 0;
+
+    for (;;) {
+      const open = text.indexOf("<!--", cursor);
+
+      if (open === -1) {
+        out += text.slice(cursor);
+        break;
+      }
+
+      out += text.slice(cursor, open);
+      const close = text.indexOf("-->", open + 4);
+
+      if (close === -1) {
+        break;
+      }
+
+      cursor = close + 3;
+    }
+
+    text = out;
+  }
+
+  return text;
+}
+
 export async function convertHtmlToMarkdown(html: string): Promise<string> {
-  const removeCommentNoise = (value: string) =>
-    value.replace(/<!--(?:\[--|\]--|\[|\])?-->/g, "");
+  const removeCommentNoise = (value: string) => {
+    let current = value;
+    let previous: string;
+
+    // Repeat until stable, so a removal cannot join a new marker.
+    do {
+      previous = current;
+      current = previous.replace(/<!--(?:\[--|\]--|\[|\])?-->/g, "");
+    } while (current !== previous);
+
+    return current;
+  };
 
   // Strip whole comments before parsing: Word's conditional comments
   // (`<!--[if gte mso 9]>…<![endif]-->`) otherwise survive as visible text.
-  const cleanedHtml = html.replace(/<!--[\s\S]*?-->/g, "");
+  const cleanedHtml = stripHtmlComments(html);
 
   const markdown = NodeHtmlMarkdown.translate(cleanedHtml, {
     bulletMarker: "-",

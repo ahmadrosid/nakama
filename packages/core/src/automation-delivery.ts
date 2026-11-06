@@ -17,7 +17,7 @@ import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
 import { loadTelegramConfigFile } from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 const AutomationDeliveryInputSchema = z.object({
   channel: z.string(),

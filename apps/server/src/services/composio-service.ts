@@ -1,4 +1,4 @@
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 import {
   COMPOSIO_CUSTOM_AUTH_REQUIRED,
   type ComposioCatalogToolkitSummary,
@@ -38,8 +38,10 @@ import {
   isComposioDefaultAuthConfigMissing,
 } from "./composio-api-client";
 
+// HKDF, not a bare hash, to turn the API key into an AES key. Nothing reads
+// `sessionIdEnc` back, so rows written with the old key need no migration.
 function deriveKey(secret: string): Buffer {
-  return createHash("sha256").update(`nakama-composio:${secret}`).digest();
+  return Buffer.from(hkdfSync("sha256", secret, "", "nakama-composio", 32));
 }
 
 function encryptComposioSecret(plaintext: string, secret: string): string {
@@ -1725,6 +1727,8 @@ function extractMeetDriveIds(value: unknown): string[] {
           "base64"
         ).toString("utf8");
 
+        // Picks which text to scan for Drive ids, not a host trust check.
+        // codeql[js/incomplete-url-substring-sanitization]
         if (decoded.includes("drive.google.com")) {
           text = decoded;
         }

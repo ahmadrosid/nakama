@@ -10,6 +10,7 @@ import {
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "@nakama/core/discovery-providers";
+import { isOllamaCloudBaseUrl } from "@nakama/core/ollama-provider-config";
 import { toast } from "@nakama/ui/toast";
 import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
@@ -310,9 +311,7 @@ export function useProviderInstanceCard({
     }
 
     if (isOllama) {
-      request.hostMode = editBaseUrl.toLowerCase().includes("ollama.com")
-        ? "cloud"
-        : "local";
+      request.hostMode = isOllamaCloudBaseUrl(editBaseUrl) ? "cloud" : "local";
     }
 
     if (!isOllama && providerType !== "netra") {

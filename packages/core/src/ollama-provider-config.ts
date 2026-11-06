@@ -36,13 +36,20 @@ export function resolveOllamaHostMode(instance: {
     return instance.hostMode;
   }
 
-  const base = instance.baseUrl?.trim().toLowerCase() ?? "";
+  return isOllamaCloudBaseUrl(instance.baseUrl) ? "cloud" : "local";
+}
 
-  if (base.includes("ollama.com")) {
-    return "cloud";
+/** True when the URL host is `ollama.com` or one of its subdomains. */
+export function isOllamaCloudBaseUrl(baseUrl: string | undefined): boolean {
+  const trimmed = baseUrl?.trim();
+
+  if (!(trimmed && URL.canParse(trimmed))) {
+    return false;
   }
 
-  return "local";
+  const host = new URL(trimmed).hostname.toLowerCase();
+
+  return host === "ollama.com" || host.endsWith(".ollama.com");
 }
 
 export function ollamaRequiresApiKey(hostMode: OllamaHostMode): boolean {

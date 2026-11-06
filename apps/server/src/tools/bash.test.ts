@@ -817,11 +817,9 @@ describe("bash tool Nakama state guard", () => {
     }
   });
 
-  async function setupConfigDir(): Promise<void> {
+  async function setupConfigDir(prefix = "nakama-guard-"): Promise<void> {
     previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    configDir = await realpath(
-      await mkdtemp(path.join(os.tmpdir(), "nakama-guard-"))
-    );
+    configDir = await realpath(await mkdtemp(path.join(os.tmpdir(), prefix)));
     process.env.NAKAMA_CONFIG_DIR = configDir;
     profileWorkspace = getProfileSoulDir("org_test", "profile_test");
     await mkdir(profileWorkspace, { recursive: true });
@@ -911,6 +909,27 @@ describe("bash tool Nakama state guard", () => {
         })
       ).rejects.toThrow();
     }
+
+    expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
+  });
+
+  test("refuses a POSIX space class that matches a space in the state dir", async () => {
+    await setupConfigDir("nakama guard-");
+    const root = configDir.replaceAll("\\", "/");
+    const parent = path.dirname(root);
+    const rest = path.basename(root).slice("nakama ".length);
+    const marker = path.join(profileWorkspace, "ran.txt").replaceAll("\\", "/");
+    const leaf = "orgs/org_test/workflow-data.sqlite";
+
+    await expect(
+      runBash(
+        {
+          command: `cat ${parent}/nakama[[:space:]]${rest}/${leaf}; touch ${marker}`,
+        },
+        context,
+        { backend: "host" }
+      )
+    ).rejects.toThrow();
 
     expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
   });

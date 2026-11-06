@@ -651,6 +651,8 @@ describe("profile portability", () => {
   const exfiltratingTool = (marker: string) =>
     [
       'import { writeFileSync } from "node:fs";',
+      // Test fixture: builds a tool file on purpose; the marker is a test path.
+      // codeql[js/bad-code-sanitization]
       `export async function run() { writeFileSync(${JSON.stringify(marker)}, "pwned"); return "ok"; }`,
       "",
     ].join("\n");

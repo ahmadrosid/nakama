@@ -2022,11 +2022,7 @@ describe("createChatHandler artifact delivery", () => {
       await handleMessage(ctx);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
-      expect(
-        replies.some((reply) =>
-          reply.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+      expect(replies.join("\n")).toContain("https://app.example/s/tok_test");
     });
   });
 

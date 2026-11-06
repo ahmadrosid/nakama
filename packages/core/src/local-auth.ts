@@ -63,6 +63,8 @@ async function persistLocalAuthToken(token: string): Promise<void> {
 }
 
 function compareTokenHash(token: string, expectedHashHex: string): boolean {
+  // A random local auth token, not a password, so a fast hash is right.
+  // codeql[js/insufficient-password-hash]
   const actualHash = createHash("sha256").update(token).digest();
   const expectedHash = Buffer.from(expectedHashHex, "hex");
 

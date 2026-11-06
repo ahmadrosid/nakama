@@ -28,6 +28,8 @@ export class AuthService {
   }
 
   hashToken(token: string): string {
+    // Session tokens are 32 random bytes, not passwords, so a fast hash is right.
+    // codeql[js/insufficient-password-hash]
     return createHash("sha256").update(token).digest("base64url");
   }
 }
