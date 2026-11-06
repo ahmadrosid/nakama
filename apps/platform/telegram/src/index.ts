@@ -17,7 +17,7 @@ import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { getTelegramConfigDir } from "@nakama/core/telegram-config";
 import { createTelegramWorkerHeartbeat } from "@nakama/core/telegram-worker";
 import { TelegramAuthStore } from "./auth-store";
-import { createBot } from "./bot";
+import { createBot, runTelegramBot } from "./bot";
 import { loadTelegramIdentities, type TelegramBridgeConfig } from "./config";
 
 installErrorHandlers("worker:telegram");
@@ -26,7 +26,7 @@ void installErrorTrackingSink();
 
 type StartedIdentity = {
   clearHeartbeat: () => Promise<void>;
-  stop: () => void;
+  stop: () => Promise<void>;
   writeHeartbeat: () => Promise<void>;
 };
 
@@ -190,26 +190,29 @@ async function startIdentity(
   const writeHeartbeat = () =>
     heartbeat.write({ pid: process.pid, updatedAt: new Date().toISOString() });
 
+  try {
+    await writeHeartbeat();
+  } catch (error) {
+    await heartbeat.clear();
+    throw error;
+  }
+
+  const polling = runTelegramBot(bot);
+
   started.push({
     clearHeartbeat: heartbeat.clear,
-    stop: () => bot.stop(),
+    stop: polling.stop,
     writeHeartbeat,
   });
-
-  await writeHeartbeat();
 
   const authConfig = authStore.getConfig();
   console.log(
     `${label}: profile ${config.profileId} · paired ${authConfig?.pairedUserIds.length ?? 0} · pending handshake ${authConfig?.handshakeCode ? "yes" : "no"}`
   );
 
-  return {
-    running: bot.start({
-      onStart: (info) => {
-        console.log(`Bot @${info.username} is listening for ${label}.`);
-      },
-    }),
-  };
+  console.log(`Bot @${bot.botInfo.username} is listening for ${label}.`);
+
+  return { running: polling.running };
 }
 
 async function stopAll(): Promise<void> {
@@ -219,10 +222,12 @@ async function stopAll(): Promise<void> {
   }
 
   await Promise.all(
-    started.map((identity) => {
-      identity.stop();
-
-      return identity.clearHeartbeat();
+    started.map(async (identity) => {
+      try {
+        await identity.stop();
+      } finally {
+        await identity.clearHeartbeat();
+      }
     })
   );
 }

@@ -122,6 +122,11 @@ export interface ChatHandlerDeps {
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
+  return (ctx: Context) =>
+    createScopedChatHandler({ ...deps, client: deps.client.forOrg(null) })(ctx);
+}
+
+function createScopedChatHandler(deps: ChatHandlerDeps) {
   const {
     client,
     config,
