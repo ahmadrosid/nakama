@@ -20,7 +20,7 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ### Fixed
 
-- Telegram automation deliveries render Markdown as HTML instead of showing raw markers like `*PORTING*` ([#2300])
+- Telegram automation deliveries render Markdown as HTML instead of showing raw markers like `*PORTING*` ([#2300]) *(in review)*
 - Member-authored skill code stays inert until an admin reviews its exact files, and its subprocess no longer inherits the deployment config dir ([#1270]) *(in review)*
 
 ## [0.4.10] - 2026-09-08

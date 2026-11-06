@@ -25,6 +25,10 @@ export function renderTelegramRichText(text: string): string {
   result = result.replace(/`([^`\n]+)`/g, (_, code: string) =>
     tokens.add(`<code>${escapeTelegramHtml(code)}</code>`)
   );
+  // Backslash escapes stay literal, so a name like `__weekly__` keeps its underscores.
+  result = result.replace(ESCAPED_MARKDOWN_RE, (_, char: string) =>
+    tokens.add(escapeTelegramHtml(char))
+  );
   result = result.replace(
     /\[([^\]\n]+)\]\((https?:\/\/[^\s()]+)\)/g,
     (_, label: string, url: string) =>
@@ -57,6 +61,16 @@ export function renderTelegramPlainText(text: string): string {
   );
 
   return decodeTelegramHtml(stripTags(html));
+}
+
+/** Characters that start Markdown formatting in the Telegram subset. */
+const MARKDOWN_SPECIAL_RE = /[\\`*_{}[\]()#+\-.!~|>]/g;
+
+const ESCAPED_MARKDOWN_RE = /\\([\\`*_{}[\]()#+\-.!~|>])/g;
+
+/** Escape literal text so `renderTelegramRichText` keeps it as written. */
+export function escapeTelegramMarkdown(text: string): string {
+  return text.replace(MARKDOWN_SPECIAL_RE, "\\$&");
 }
 
 /**

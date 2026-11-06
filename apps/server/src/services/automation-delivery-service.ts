@@ -15,6 +15,7 @@ import {
   shouldDeliverForRun,
   truncateForChannel,
 } from "@nakama/core";
+import { escapeTelegramMarkdown } from "@nakama/core/telegram-rich-text";
 import type { AutomationService } from "./automation-service";
 
 export interface AutomationDeliveryServiceOptions {
@@ -72,8 +73,15 @@ export class AutomationDeliveryService {
 
     const completedAt = run.completedAt ?? new Date().toISOString();
 
+    // A failed run carries an error (a stack trace or a path), not Markdown, so
+    // it goes out as plain text. A finished run keeps the escaped name literal.
+    const telegramRichText =
+      delivery.channel === "telegram" && run.status !== "failed";
+
     const formatted = formatAutomationDeliveryMessage({
-      automationName: automation.name,
+      automationName: telegramRichText
+        ? escapeTelegramMarkdown(automation.name)
+        : automation.name,
       body,
       completedAt,
       status: run.status,
@@ -98,13 +106,18 @@ export class AutomationDeliveryService {
         to,
       });
     } else if (delivery.channel === "telegram") {
-      result = await this.telegram.send({
+      const input: Parameters<TelegramOutboundAdapter["send"]>[0] = {
         chatIds: delivery.chatId ? [delivery.chatId] : undefined,
         orgId: automation.orgId,
-        parseMode: "HTML",
         profileId: automation.profileId,
         text: formatted.text,
-      });
+      };
+
+      if (telegramRichText) {
+        input.parseMode = "HTML";
+      }
+
+      result = await this.telegram.send(input);
     } else if (delivery.channel === "discord") {
       result = await this.discord.send({
         channelId: delivery.channelId,

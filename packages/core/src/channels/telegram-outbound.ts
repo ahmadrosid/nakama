@@ -1,6 +1,7 @@
 import { loadTelegramConfigFile } from "../telegram-config";
 import { splitTelegramChunks } from "./message-format";
 import {
+  renderTelegramPlainText,
   renderTelegramRichText,
   splitTelegramRichChunks,
 } from "./telegram-rich-text";
@@ -58,16 +59,22 @@ export function createTelegramOutboundAdapter(
           return { error: "Message text is empty.", ok: false };
         }
 
+        const url = `https://api.telegram.org/bot${token}/sendMessage`;
+
+        const post = (payload: TelegramMessagePayload) =>
+          fetchImpl(url, {
+            body: JSON.stringify(payload),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          });
+
         for (const chatId of chatIds) {
           for (const chunk of chunks) {
-            const text =
-              input.parseMode === "HTML"
-                ? renderTelegramRichText(chunk)
-                : chunk;
+            const html = input.parseMode === "HTML";
 
             const payload: TelegramMessagePayload = {
               chat_id: chatId,
-              text,
+              text: html ? renderTelegramRichText(chunk) : chunk,
             };
 
             if (input.parseMode) {
@@ -78,14 +85,22 @@ export function createTelegramOutboundAdapter(
               payload.message_thread_id = input.topicId;
             }
 
-            const response = await fetchImpl(
-              `https://api.telegram.org/bot${token}/sendMessage`,
-              {
-                body: JSON.stringify(payload),
-                headers: { "Content-Type": "application/json" },
-                method: "POST",
+            let response = await post(payload);
+
+            // Telegram rejects unsupported HTML with 400: resend this chunk as
+            // plain text so the delivery still reaches the chat.
+            if (html && response.status === 400) {
+              const plainPayload: TelegramMessagePayload = {
+                chat_id: chatId,
+                text: renderTelegramPlainText(chunk),
+              };
+
+              if (input.topicId) {
+                plainPayload.message_thread_id = input.topicId;
               }
-            );
+
+              response = await post(plainPayload);
+            }
 
             if (!response.ok) {
               const body = await response.text();

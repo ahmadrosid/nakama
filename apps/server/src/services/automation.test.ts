@@ -27,6 +27,34 @@ import {
   hasAutomationEmailDeliveryPath,
 } from "./mcp-email-delivery";
 
+/** Writes a Telegram bot config under a temp config dir for the test body. */
+async function withTelegramConfig(
+  owner: { orgId: string; profileId: string },
+  run: () => Promise<void>
+): Promise<void> {
+  const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-tg-"));
+  const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+  process.env.NAKAMA_CONFIG_DIR = configDir;
+
+  try {
+    await mkdir(getTelegramConfigDir(owner), { recursive: true });
+    await writeFile(
+      getTelegramConfigPath(owner),
+      "bot_token=test-token\npaired_user_ids=111\n",
+      "utf8"
+    );
+    await run();
+  } finally {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
+    await rm(configDir, { force: true, recursive: true });
+  }
+}
+
 async function assignComposeioGmailSender(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,
   profileId: string,
@@ -1325,18 +1353,7 @@ describe("AutomationRunner", () => {
     });
 
     const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
-    const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-tg-"));
-    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    try {
-      await mkdir(getTelegramConfigDir(owner), { recursive: true });
-      await writeFile(
-        getTelegramConfigPath(owner),
-        "bot_token=test-token\npaired_user_ids=111\n",
-        "utf8"
-      );
-
+    await withTelegramConfig(owner, async () => {
       const now = new Date().toISOString();
       await db.upsertAutomation({
         createdAt: now,
@@ -1396,31 +1413,12 @@ describe("AutomationRunner", () => {
       const delivered = sentTexts.join("\n");
       expect(delivered).not.toContain("(truncated)");
       expect(delivered).toContain(lines.at(-1) ?? "");
-    } finally {
-      if (previousConfigDir === undefined) {
-        delete process.env.NAKAMA_CONFIG_DIR;
-      } else {
-        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
-      }
-
-      await rm(configDir, { force: true, recursive: true });
-    }
+    });
   });
 
   test("renders markdown in telegram delivery", async () => {
     const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
-    const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-tg-"));
-    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-
-    try {
-      await mkdir(getTelegramConfigDir(owner), { recursive: true });
-      await writeFile(
-        getTelegramConfigPath(owner),
-        "bot_token=test-token\npaired_user_ids=111\n",
-        "utf8"
-      );
-
+    await withTelegramConfig(owner, async () => {
       const payloads: Array<{ parse_mode?: string; text: string }> = [];
 
       const deliveryService = new AutomationDeliveryService(
@@ -1470,15 +1468,184 @@ describe("AutomationRunner", () => {
       expect(payloads[0]?.text).toContain("<b>Released</b>");
       expect(payloads[0]?.text).toContain("<code>code</code>");
       expect(payloads[0]?.text).not.toContain("*PORTING*");
-    } finally {
-      if (previousConfigDir === undefined) {
-        delete process.env.NAKAMA_CONFIG_DIR;
-      } else {
-        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
-      }
+    });
+  });
 
-      await rm(configDir, { force: true, recursive: true });
-    }
+  test("falls back to plain text when Telegram rejects the HTML", async () => {
+    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+    await withTelegramConfig(owner, async () => {
+      const payloads: Array<{ parse_mode?: string; text: string }> = [];
+      let deliveryStatus: string | undefined;
+
+      const deliveryService = new AutomationDeliveryService(
+        // SAFETY: This test double supplies only the method `deliver` calls.
+        {
+          updateRunDelivery: async (
+            _runId: string,
+            _automationId: string,
+            result: { deliveryStatus: string }
+          ) => {
+            deliveryStatus = result.deliveryStatus;
+          },
+        } as never,
+        {
+          telegram: createTelegramOutboundAdapter({
+            fetchImpl: asTestFetch(async (_input, init) => {
+              const payload = z
+                .object({ parse_mode: z.string().optional(), text: z.string() })
+                .parse(JSON.parse(String(init?.body)));
+
+              payloads.push(payload);
+
+              return payload.parse_mode === "HTML"
+                ? new Response("Bad Request: can't parse entities", {
+                    status: 400,
+                  })
+                : new Response("ok", { status: 200 });
+            }),
+          }),
+        }
+      );
+
+      await deliveryService.deliver(
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          delivery: { channel: "telegram" },
+          id: "automation_delivery_rejected_html",
+          name: "Digest",
+          orgId: ORG_ID,
+          profileId: PROFILE_ID,
+        } as never,
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          completedAt: new Date().toISOString(),
+          id: "run_rejected_html",
+          output: "**Released** with *PORTING*",
+          status: "completed",
+        } as never
+      );
+
+      expect(deliveryStatus).toBe("sent");
+      expect(payloads).toHaveLength(2);
+      expect(payloads[0]?.parse_mode).toBe("HTML");
+      expect(payloads[1]?.parse_mode).toBeUndefined();
+      expect(payloads[1]?.text).not.toContain("<b>");
+      expect(payloads[1]?.text).toContain("PORTING");
+    });
+  });
+
+  test("does not render a failed run as markdown", async () => {
+    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+    await withTelegramConfig(owner, async () => {
+      const payloads: Array<{ parse_mode?: string; text: string }> = [];
+
+      const deliveryService = new AutomationDeliveryService(
+        // SAFETY: This test double supplies only the method `deliver` calls.
+        {
+          updateRunDelivery: async () => undefined,
+        } as never,
+        {
+          telegram: createTelegramOutboundAdapter({
+            fetchImpl: asTestFetch(async (_input, init) => {
+              payloads.push(
+                z
+                  .object({
+                    parse_mode: z.string().optional(),
+                    text: z.string(),
+                  })
+                  .parse(JSON.parse(String(init?.body)))
+              );
+
+              return new Response("ok", { status: 200 });
+            }),
+          }),
+        }
+      );
+
+      await deliveryService.deliver(
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          delivery: { channel: "telegram", notifyOn: "failure" },
+          id: "automation_delivery_failed_plain",
+          name: "__weekly__ digest",
+          orgId: ORG_ID,
+          profileId: PROFILE_ID,
+        } as never,
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          completedAt: new Date().toISOString(),
+          error: "AttributeError in __init__ for *glob*",
+          id: "run_failed_plain",
+          status: "failed",
+        } as never
+      );
+
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0]?.parse_mode).toBeUndefined();
+      expect(payloads[0]?.text).toContain(
+        "AttributeError in __init__ for *glob*"
+      );
+      expect(payloads[0]?.text).toContain(
+        "[Nakama] __weekly__ digest — failed"
+      );
+    });
+  });
+
+  test("keeps an automation name literal in the telegram header", async () => {
+    const owner = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+    await withTelegramConfig(owner, async () => {
+      const payloads: Array<{ parse_mode?: string; text: string }> = [];
+
+      const deliveryService = new AutomationDeliveryService(
+        // SAFETY: This test double supplies only the method `deliver` calls.
+        {
+          updateRunDelivery: async () => undefined,
+        } as never,
+        {
+          telegram: createTelegramOutboundAdapter({
+            fetchImpl: asTestFetch(async (_input, init) => {
+              payloads.push(
+                z
+                  .object({
+                    parse_mode: z.string().optional(),
+                    text: z.string(),
+                  })
+                  .parse(JSON.parse(String(init?.body)))
+              );
+
+              return new Response("ok", { status: 200 });
+            }),
+          }),
+        }
+      );
+
+      await deliveryService.deliver(
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          delivery: { channel: "telegram" },
+          id: "automation_delivery_header",
+          name: "__weekly__ digest",
+          orgId: ORG_ID,
+          profileId: PROFILE_ID,
+        } as never,
+        // SAFETY: This test double supplies only the fields `deliver` reads.
+        {
+          completedAt: new Date().toISOString(),
+          id: "run_header",
+          output: "Done",
+          status: "completed",
+        } as never
+      );
+
+      expect(payloads[0]?.parse_mode).toBe("HTML");
+      expect(payloads[0]?.text).toContain(
+        "[Nakama] __weekly__ digest — completed"
+      );
+      expect(payloads[0]?.text).not.toContain("<b>weekly</b>");
+    });
   });
 
   test("records discord delivery status after successful runs", async () => {
