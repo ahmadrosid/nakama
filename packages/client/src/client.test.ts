@@ -1464,6 +1464,33 @@ test("artifact download budget stops declared and chunked oversize bodies", asyn
   ).toBe("1234");
 });
 
+test("attachment previews keep org scope and bound bytes", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+
+      return new Response("1234", {
+        headers: { "Content-Type": "text/markdown" },
+      });
+    },
+  }).forOrg("org-preview");
+
+  const blob = await client.readAttachmentContent("a/b", {
+    maxBytes: 4,
+  });
+
+  expect(await blob.text()).toBe("1234");
+  expect(blob.type).toBe("text/markdown");
+  expect(requests[0].headers.get("X-Org-Id")).toBe("org-preview");
+  expect(new URL(requests[0].url).searchParams.get("preview")).toBe("1");
+  await expect(
+    client.readAttachmentContent("id", { maxBytes: 3 })
+  ).rejects.toThrow();
+  expect(await (await client.readAttachmentContent("id")).text()).toBe("1234");
+});
+
 test("artifact download cancellation aborts a pending body read and forwards the signal", async () => {
   const controller = new AbortController();
   let cancelled = false;

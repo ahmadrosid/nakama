@@ -15,6 +15,92 @@ setupTestConfigDir("nakama-sessions-org-scope-test-");
 
 const PASSWORD = "password123";
 
+test("Word attachment preview keeps the existing access checks", async () => {
+  const { app, databaseAdapter, victimSessionId } = await createScenario();
+
+  const saved = await createAttachmentSaver(databaseAdapter, {
+    channel: "web",
+    orgId: VICTIM_ORG,
+    profileId: "profile_victim",
+    sessionId: victimSessionId,
+  })({
+    bytes: Buffer.from(
+      "<w:document><w:body><w:p><w:t>Preview text</w:t></w:p></w:body></w:document>"
+    ),
+    filename: "notes.docx",
+    kind: "document",
+    mediaType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+
+  const owner = await loginUserSession(
+    app,
+    "victim@example.com",
+    PASSWORD,
+    VICTIM_ORG
+  );
+
+  const attacker = await loginUserSession(
+    app,
+    "attacker@example.com",
+    PASSWORD,
+    ATTACKER_ORG
+  );
+
+  const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content?preview=1`;
+
+  const response = await app.fetch(
+    new Request(url, { headers: owner.headers() })
+  );
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Content-Type")).toContain("wordprocessingml");
+  expect(await response.text()).toContain("Preview text");
+  expect(
+    (await app.fetch(new Request(url, { headers: attacker.headers() }))).status
+  ).toBe(404);
+});
+
+test("attachment previews refuse oversize files while original downloads remain available", async () => {
+  const { app, databaseAdapter, victimSessionId } = await createScenario();
+  const bytes = Buffer.alloc(8 * 1024 * 1024 + 1);
+
+  const saved = await createAttachmentSaver(databaseAdapter, {
+    channel: "web",
+    orgId: VICTIM_ORG,
+    profileId: "profile_victim",
+    sessionId: victimSessionId,
+  })({
+    bytes,
+    filename: "large.pdf",
+    kind: "document",
+    mediaType: "application/pdf",
+  });
+
+  const owner = await loginUserSession(
+    app,
+    "victim@example.com",
+    PASSWORD,
+    VICTIM_ORG
+  );
+
+  const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
+  expect(
+    (
+      await app.fetch(
+        new Request(`${url}?preview=1`, { headers: owner.headers() })
+      )
+    ).status
+  ).toBe(413);
+
+  const original = await app.fetch(
+    new Request(url, { headers: owner.headers() })
+  );
+
+  expect(original.status).toBe(200);
+  expect((await original.arrayBuffer()).byteLength).toBe(bytes.byteLength);
+});
+
 const ATTACKER_ORG = "org_attacker";
 
 const VICTIM_ORG = "org_victim";

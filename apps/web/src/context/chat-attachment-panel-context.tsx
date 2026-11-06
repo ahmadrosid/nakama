@@ -134,7 +134,7 @@ function ChatPanelColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 shrink-0 flex-col max-sm:w-full max-sm:flex-1",
+        "flex min-h-0 shrink-0 flex-col max-md:w-full max-md:flex-1",
         "[&>aside+aside]:border-t [&>aside]:min-h-0 [&>aside]:flex-1 [&>aside]:overflow-hidden",
         sized &&
           "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:w-full! [&>aside]:max-w-none",

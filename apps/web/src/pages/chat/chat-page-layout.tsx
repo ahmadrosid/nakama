@@ -313,7 +313,7 @@ export function ChatPageColumn({
           : "flex-1 px-3 sm:px-6",
         // No room for two columns on a phone, so an open panel takes over.
         attachmentPanel.isOpen &&
-          "max-sm:pointer-events-none max-sm:w-0 max-sm:flex-none max-sm:overflow-hidden max-sm:px-0 max-sm:opacity-0",
+          "max-md:pointer-events-none max-md:w-0 max-md:flex-none max-md:overflow-hidden max-md:px-0 max-md:opacity-0",
         centered && "justify-center"
       )}
     >

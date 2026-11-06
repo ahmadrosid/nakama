@@ -2813,7 +2813,8 @@ export class AgentService {
   async readChatAttachment(
     orgId: string,
     attachmentId: string,
-    access: ChatProfileAccess
+    access: ChatProfileAccess,
+    options: { preview?: boolean } = {}
   ): Promise<LoadedAttachmentBytes | null> {
     const record = await this.db.getAttachment(attachmentId);
 
@@ -2839,6 +2840,13 @@ export class AgentService {
     }
 
     await this.assertSessionOwner(sessionRecord, access);
+
+    if (options.preview && record.sizeBytes > 8 * 1024 * 1024) {
+      throw new NakamaApiError(
+        "This file exceeds the 8 MB preview limit. Download it instead.",
+        413
+      );
+    }
 
     return createAttachmentLoader(this.db, {
       orgId,

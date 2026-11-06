@@ -508,7 +508,10 @@ function ArtifactSpreadsheetPreview({
     <div className="flex min-h-0 flex-1 flex-col">
       <SpreadsheetGrid
         editable={false}
-        rows={parseSpreadsheetText(filename, content)}
+        rows={parseSpreadsheetText(filename, content, {
+          columns: 50,
+          rows: 500,
+        })}
       />
     </div>
   );

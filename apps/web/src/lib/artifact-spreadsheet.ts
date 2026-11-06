@@ -12,7 +12,8 @@ function delimiterForFilename(filename: string): string {
 
 function parseDelimitedSpreadsheet(
   content: string,
-  delimiter: string
+  delimiter: string,
+  limits?: { rows: number; columns: number }
 ): SpreadsheetRows {
   const rows: SpreadsheetRows = [];
   let row: string[] = [];
@@ -42,14 +43,25 @@ function parseDelimitedSpreadsheet(
     }
 
     if (char === delimiter) {
-      row.push(cell);
+      if (row.length < (limits?.columns ?? Number.POSITIVE_INFINITY)) {
+        row.push(cell);
+      }
+
       cell = "";
       continue;
     }
 
     if (char === "\n") {
-      row.push(cell);
+      if (row.length < (limits?.columns ?? Number.POSITIVE_INFINITY)) {
+        row.push(cell);
+      }
+
       rows.push(row);
+
+      if (rows.length >= (limits?.rows ?? Number.POSITIVE_INFINITY)) {
+        return rows;
+      }
+
       row = [];
       cell = "";
       continue;
@@ -63,7 +75,10 @@ function parseDelimitedSpreadsheet(
   }
 
   if (cell || row.length > 0) {
-    row.push(cell);
+    if (row.length < (limits?.columns ?? Number.POSITIVE_INFINITY)) {
+      row.push(cell);
+    }
+
     rows.push(row);
   }
 
@@ -93,10 +108,11 @@ function serializeDelimitedSpreadsheet(
 
 export function parseSpreadsheetText(
   filename: string,
-  content: string
+  content: string,
+  limits?: { rows: number; columns: number }
 ): SpreadsheetRows {
   return normalizeSpreadsheetRows(
-    parseDelimitedSpreadsheet(content, delimiterForFilename(filename))
+    parseDelimitedSpreadsheet(content, delimiterForFilename(filename), limits)
   );
 }
 
@@ -120,13 +136,6 @@ function normalizeSpreadsheetRows(rows: SpreadsheetRows): SpreadsheetRows {
   return normalized.length > 0 ? normalized : [[""]];
 }
 
-// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- The spreadsheet editor imports this public helper.
-export function normalizeSpreadsheetShape(
-  rows: SpreadsheetRows
-): SpreadsheetRows {
-  return normalizeSpreadsheetRows(rows);
-}
-
 /** 0 → A, 25 → Z, 26 → AA */
 export function columnIndexToLetter(index: number): string {
   let n = index + 1;
@@ -139,4 +148,12 @@ export function columnIndexToLetter(index: number): string {
   }
 
   return result;
+}
+
+export function isXlsxFile(filename: string, mimeType = ""): boolean {
+  return (
+    /\.xlsx$/i.test(filename) ||
+    mimeType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
 }
