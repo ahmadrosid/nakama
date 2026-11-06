@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
-import { ModelUsageContext } from "@/components/ModelListEditor";
+import { ModelUsageContext } from "@/components/model-list-editor.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import {

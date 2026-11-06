@@ -1,11 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import {
-  ModelListEditor,
-  type ModelListRow,
-  ModelUsageContext,
-} from "./ModelListEditor";
+import { ModelListEditor, type ModelListRow } from "./ModelListEditor";
+import { ModelUsageContext } from "./model-list-editor.shared";
 
 let root: Root | null = null;
 

@@ -3,16 +3,14 @@ import { Button } from "@nakama/ui/button";
 import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import { Switch } from "@nakama/ui/switch";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
-import { createContext, useContext, useId, useRef, useState } from "react";
-import { modelListRowVisionEnabled } from "@/components/model-list-editor.shared";
+import { useContext, useId, useRef, useState } from "react";
+import {
+  ModelUsageContext,
+  modelListRowVisionEnabled,
+} from "@/components/model-list-editor.shared";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 
 export interface ModelListRow extends CustomModelEntry {}
-
-/** Model ID → the Defaults settings that use it, set by the Manage dialog. */
-export const ModelUsageContext = createContext<
-  Readonly<Record<string, readonly string[]>>
->({});
 
 interface ModelListEditorProps {
   browse?: { disabled?: boolean; label: string; onClick: () => void };
