@@ -75,6 +75,24 @@ describe("OpenRouter routing validation", () => {
       applyProviderInstanceUpdate(instance, { openRouterRouting })
     ).not.toHaveProperty("openRouterRouting");
   });
+
+  test("keeps the model list picked when a catalog provider is created", () => {
+    const instance = buildProviderInstanceFromCreateRequest(
+      {
+        customModels: [
+          { id: "deepseek-v4-pro", name: "V4 Pro" },
+          { default: true, id: "deepseek-v4-flash", name: "V4 Flash" },
+        ],
+        type: "deepseek",
+      },
+      []
+    );
+
+    expect(instance.customModels?.map((model) => model.id)).toEqual([
+      "deepseek-v4-pro",
+      "deepseek-v4-flash",
+    ]);
+  });
 });
 
 describe("resolveProfileProviderSelection", () => {

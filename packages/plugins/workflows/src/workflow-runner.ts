@@ -1,8 +1,13 @@
-import type { StoredWorkflow, WorkflowStep } from "@nakama/core/contract";
+import type {
+  StoredWorkflow,
+  WorkflowRunStatus,
+  WorkflowStep,
+} from "@nakama/core/contract";
 import {
   buildReceiptBag,
   executeAssert,
   executeCompare,
+  parseAgentReply,
   parseWorkflowRecord,
   parseWorkflowValue,
   resolveTemplateString,
@@ -16,13 +21,22 @@ type WorkflowRunResult = {
   error?: string;
   output?: string;
   runId?: string;
+  /** Set when the workflow is off and no run was made. */
   skipped?: boolean;
+  status?: Exclude<WorkflowRunStatus, "running">;
 };
 
 type DataStepResult = {
   error?: string;
   input: WorkflowValue;
   output: WorkflowValue;
+};
+
+type StepContext = {
+  orgId: string;
+  profileId: string;
+  runId: string;
+  workflowId: string;
 };
 
 export interface WorkflowHost {
@@ -87,33 +101,44 @@ export class WorkflowRunner {
       const completedRun = await this.workflowService.completeRun(
         run.id,
         workflowId,
-        { output }
+        output === null ? { skipped: true } : { output }
       );
 
+      // An expired run stays failed even when the runner finishes late.
       if (completedRun.status === "failed") {
         return {
           error: completedRun.error ?? "Workflow run failed.",
           runId: run.id,
+          status: "failed",
         };
       }
 
-      return { output: completedRun.output ?? output, runId: run.id };
+      if (output === null) {
+        return { runId: run.id, status: "skipped" };
+      }
+
+      return {
+        output: completedRun.output ?? output,
+        runId: run.id,
+        status: "completed",
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.completeRun(run.id, workflowId, {
         error: message,
       });
 
-      return { error: message, runId: run.id };
+      return { error: message, runId: run.id, status: "failed" };
     }
   }
 
+  /** Returns the summary, or null when a filter step skipped the run. */
   private async executeWorkflow(
     orgId: string,
     workflow: StoredWorkflow,
     runId: string,
     runtimeInput: WorkflowRecord
-  ): Promise<string> {
+  ): Promise<string | null> {
     const stepOutputs: WorkflowRecord = {};
     const bag = () => buildReceiptBag(runtimeInput, stepOutputs);
 
@@ -132,17 +157,28 @@ export class WorkflowRunner {
 
       try {
         const result = await this.executeDataStep(step, bag(), {
+          orgId,
           profileId: workflow.profileId,
           runId,
           workflowId: workflow.id,
         });
 
+        // A filter check that is false ends the run as skipped, not failed.
+        const filtered =
+          Boolean(result.error) &&
+          (step.kind === "compare" || step.kind === "assert") &&
+          step.onFail === "skip";
+
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
-          error: result.error,
+          error: filtered ? undefined : result.error,
           input: result.input,
           output: result.output,
-          status: result.error ? "failed" : "completed",
+          status: filtered ? "skipped" : result.error ? "failed" : "completed",
         });
+
+        if (filtered) {
+          return null;
+        }
 
         if (result.error) {
           failure = result.error;
@@ -205,11 +241,7 @@ export class WorkflowRunner {
   async executeDataStep(
     step: WorkflowStep,
     bag: WorkflowBag,
-    context: {
-      profileId: string;
-      runId: string;
-      workflowId: string;
-    }
+    context: StepContext
   ): Promise<DataStepResult> {
     if (step.kind === "tool") {
       const input = parseWorkflowRecord(
@@ -273,6 +305,36 @@ export class WorkflowRunner {
       }
 
       return { input, output: result };
+    }
+
+    if (step.kind === "agent") {
+      const prompt = [
+        resolveTemplateString(step.prompt, bag),
+        "",
+        "Reply with only one JSON object and no other text. Use exactly these keys:",
+        ...Object.entries(step.fields).map(
+          ([key, note]) => `- ${key}: ${note}`
+        ),
+      ].join("\n");
+
+      const reply = await this.agentService.runWorkflowSummarize(
+        context.orgId,
+        context.profileId,
+        prompt,
+        bag
+      );
+
+      const input = { fields: step.fields, prompt };
+
+      try {
+        return { input, output: parseAgentReply(reply, step.fields, step.id) };
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          input,
+          output: reply,
+        };
+      }
     }
 
     if (step.kind === "template") {

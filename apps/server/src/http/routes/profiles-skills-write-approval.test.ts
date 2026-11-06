@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../../services/agent-service";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -17,6 +18,11 @@ function createApp() {
   return {
     ...createMinimalHonoApp({
       agent: {
+        getProfileAccess: (orgId: string, profileId: string) =>
+          new AgentService(null, null, databaseAdapter).getProfileAccess(
+            orgId,
+            profileId
+          ),
         updateProfile: (
           orgId: string,
           profileId: string,

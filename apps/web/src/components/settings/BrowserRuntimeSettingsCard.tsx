@@ -158,8 +158,8 @@ export function BrowserRuntimeSettingsCard() {
   return (
     <div className="space-y-3 px-4 py-3" id="browser-runtime-settings">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-medium text-foreground text-sm">Browser runtime</p>
-        <div className="w-full min-w-0 sm:w-56">
+        <p className="text-foreground text-sm">Browser runtime</p>
+        <div className="w-full min-w-0 sm:w-80">
           <Select
             disabled={form.pending}
             onValueChange={form.select}
@@ -167,17 +167,13 @@ export function BrowserRuntimeSettingsCard() {
           >
             <SelectTrigger
               aria-label="Browser runtime"
-              className="h-9 w-full"
+              className="h-8 w-full"
               id="browser-runtime-provider"
             >
-              <SelectValue>
-                {kernel ? "Kernel" : "Local Chrome (default)"}
-              </SelectValue>
+              <SelectValue>{kernel ? "Kernel" : "Local Chrome"}</SelectValue>
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value={LOCAL_VALUE}>
-                Local Chrome (default)
-              </SelectItem>
+              <SelectItem value={LOCAL_VALUE}>Local Chrome</SelectItem>
               <SelectItem value={KERNEL_VALUE}>Kernel</SelectItem>
             </SelectContent>
           </Select>

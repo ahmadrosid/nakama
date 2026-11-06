@@ -101,7 +101,7 @@ interface MessagePatch {
   attachments?: { content: string; contentType: string }[];
   conversation?: { conversationType: string; id: string; tenantId: string };
   entities?: {
-    mentioned: { id: string; name: string };
+    mentioned?: { id: string; name: string };
     text?: string;
     type: "mention";
   }[];
@@ -288,6 +288,30 @@ describe("teams app channel mentions", () => {
 
     expect(activity?.mentionsBot).toBe(true);
     expect(activity?.text).toBe("summarise this thread");
+  });
+
+  test("an activity that cannot be read holds no turn slot", async () => {
+    // A mention without `mentioned` makes the SDK's mention check throw.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await post(
+        `act_broken_${attempt}`,
+        signToken(claims()),
+        undefined,
+        {
+          conversation,
+          entities: [{ type: "mention" }],
+        }
+      );
+
+      expect(response.status).toBeGreaterThanOrEqual(500);
+    }
+
+    // The same thread has room for four turns, so a leaked slot per bad
+    // activity would refuse this one.
+    expect(
+      (await deliver("act_after_broken", { entities: [mentionOf("bot")] }))
+        ?.mentionsBot
+    ).toBe(true);
   });
 
   test("a mention of someone else is not a mention of the bot", async () => {

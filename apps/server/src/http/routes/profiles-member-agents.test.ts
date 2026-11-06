@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "../../services/agent-service";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -28,6 +29,11 @@ async function setup() {
         profileService.deleteProfile(orgId, profileId),
       getProfile: (orgId: string, profileId: string) =>
         profileService.getProfile(orgId, profileId),
+      getProfileAccess: (orgId: string, profileId: string) =>
+        new AgentService(null, null, databaseAdapter).getProfileAccess(
+          orgId,
+          profileId
+        ),
       listProfiles: (orgId: string) => profileService.listProfiles(orgId),
       updateProfile: (
         orgId: string,

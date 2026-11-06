@@ -156,8 +156,10 @@ var WORKFLOW_STEP_KINDS = [
   "compare",
   "assert",
   "template",
+  "agent",
   "summarize"
 ];
+var AGENT_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 var WORKFLOW_COMPARE_OPS = ["eq", "near", "contains"];
 function validateWorkflowSteps(steps, allowedTools) {
   if (steps.length === 0) {
@@ -165,6 +167,7 @@ function validateWorkflowSteps(steps, allowedTools) {
   }
   const seenStepIds = new Set;
   const priorStepIds = new Set;
+  const agentFields = new Map;
   let summarizeCount = 0;
   for (const [index, step] of steps.entries()) {
     const record = asStepRecord(step, index);
@@ -176,7 +179,7 @@ function validateWorkflowSteps(steps, allowedTools) {
     seenStepIds.add(id);
     if (kind === "summarize") {
       if (index !== steps.length - 1) {
-        throw new Error("Summarize step must be the last step. Use a tool for intermediate extraction or analysis.");
+        throw new Error("Summarize step must be the last step. Use an agent step for analysis in the middle of a workflow.");
       }
       summarizeCount += 1;
       readRequiredStepString(record, "prompt", `Summarize step ${id}`, {
@@ -208,8 +211,18 @@ function validateWorkflowSteps(steps, allowedTools) {
         throw new Error(`Compare step ${id} is missing right.`);
       }
     }
+    if (kind === "agent") {
+      readRequiredStepString(record, "prompt", `Agent step ${id}`);
+      agentFields.set(id, readAgentFields(record.fields, id));
+    }
     if (kind === "assert") {
       readRequiredStepString(record, "path", `Assert step ${id}`);
+    }
+    if (record.onFail !== undefined) {
+      const isCheck = kind === "compare" || kind === "assert";
+      if (!(isCheck && (record.onFail === "fail" || record.onFail === "skip"))) {
+        throw new Error(isCheck ? `Step ${id} has invalid onFail: ${String(record.onFail)}. Use fail | skip.` : `Step ${id} cannot use onFail. Only compare and assert steps can.`);
+      }
     }
     if (kind === "template") {
       readRequiredStepString(record, "template", `Template step ${id}`, {
@@ -218,7 +231,7 @@ function validateWorkflowSteps(steps, allowedTools) {
     }
     const refs = collectTemplateRefs(record);
     for (const ref of refs) {
-      validateTemplateRef(ref, priorStepIds, id);
+      validateTemplateRef(ref, priorStepIds, id, agentFields);
     }
     priorStepIds.add(id);
   }
@@ -276,7 +289,40 @@ function readRequiredStepString(step, key, prefix, options) {
   }
   throw new Error(`${prefix} is missing ${options?.label ?? key}.`);
 }
-function validateTemplateRef(ref, priorStepIds, currentStepId) {
+function readAgentFields(value, id) {
+  if (!isWorkflowRecord(value) || Object.keys(value).length === 0) {
+    throw new Error(`Agent step ${id} requires fields: an object of output keys, e.g. { "decision": "act | ignore" }.`);
+  }
+  for (const [key, note] of Object.entries(value)) {
+    if (!AGENT_FIELD_PATTERN.test(key)) {
+      throw new Error(`Agent step ${id} has invalid field name: ${key}. Use letters, digits, and _.`);
+    }
+    if (readString(note) === null) {
+      throw new Error(`Agent step ${id} field ${key} must describe its value as text.`);
+    }
+  }
+  return new Set(Object.keys(value));
+}
+function parseAgentReply(reply, fields, stepId) {
+  const start = reply.indexOf("{");
+  const end = reply.lastIndexOf("}");
+  let parsed;
+  try {
+    parsed = start === -1 ? undefined : JSON.parse(reply.slice(start, end + 1));
+  } catch {
+    parsed = undefined;
+  }
+  if (!isWorkflowRecord(parsed)) {
+    throw new Error(`Agent step ${stepId} did not reply with a JSON object.`);
+  }
+  const record = parsed;
+  const missing = Object.keys(fields).find((key) => record[key] === undefined);
+  if (missing) {
+    throw new Error(`Agent step ${stepId} reply is missing field: ${missing}`);
+  }
+  return Object.fromEntries(Object.keys(fields).map((key) => [key, record[key]]));
+}
+function validateTemplateRef(ref, priorStepIds, currentStepId, agentFields) {
   if (ref.startsWith("input.")) {
     return;
   }
@@ -290,6 +336,11 @@ function validateTemplateRef(ref, priorStepIds, currentStepId) {
     }
     if (!priorStepIds.has(stepId)) {
       throw new Error(`Step ${currentStepId} references unknown step in template: ${ref}`);
+    }
+    const field = ref.split(".")[2];
+    const declared = agentFields.get(stepId);
+    if (field && declared && !declared.has(field)) {
+      throw new Error(`Step ${currentStepId} references ${ref}, but agent step ${stepId} declares only: ${[...declared].join(", ")}`);
     }
     return;
   }
@@ -371,20 +422,28 @@ class WorkflowRunner {
     const run = await this.workflowService.createRun(workflowId, runtimeInput);
     try {
       const output = await this.executeWorkflow(orgId, workflow, run.id, runtimeInput);
-      const completedRun = await this.workflowService.completeRun(run.id, workflowId, { output });
+      const completedRun = await this.workflowService.completeRun(run.id, workflowId, output === null ? { skipped: true } : { output });
       if (completedRun.status === "failed") {
         return {
           error: completedRun.error ?? "Workflow run failed.",
-          runId: run.id
+          runId: run.id,
+          status: "failed"
         };
       }
-      return { output: completedRun.output ?? output, runId: run.id };
+      if (output === null) {
+        return { runId: run.id, status: "skipped" };
+      }
+      return {
+        output: completedRun.output ?? output,
+        runId: run.id,
+        status: "completed"
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.completeRun(run.id, workflowId, {
         error: message
       });
-      return { error: message, runId: run.id };
+      return { error: message, runId: run.id, status: "failed" };
     }
   }
   async executeWorkflow(orgId, workflow, runId, runtimeInput) {
@@ -398,16 +457,21 @@ class WorkflowRunner {
       const stepRecord = await this.workflowService.createRunStep(runId, step, position);
       try {
         const result = await this.executeDataStep(step, bag(), {
+          orgId,
           profileId: workflow.profileId,
           runId,
           workflowId: workflow.id
         });
+        const filtered = Boolean(result.error) && (step.kind === "compare" || step.kind === "assert") && step.onFail === "skip";
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
-          error: result.error,
+          error: filtered ? undefined : result.error,
           input: result.input,
           output: result.output,
-          status: result.error ? "failed" : "completed"
+          status: filtered ? "skipped" : result.error ? "failed" : "completed"
         });
+        if (filtered) {
+          return null;
+        }
         if (result.error) {
           failure = result.error;
         } else {
@@ -488,6 +552,26 @@ class WorkflowRunner {
         };
       }
       return { input, output: result };
+    }
+    if (step.kind === "agent") {
+      const prompt = [
+        resolveTemplateString(step.prompt, bag),
+        "",
+        "Reply with only one JSON object and no other text. Use exactly these keys:",
+        ...Object.entries(step.fields).map(([key, note]) => `- ${key}: ${note}`)
+      ].join(`
+`);
+      const reply = await this.agentService.runWorkflowSummarize(context.orgId, context.profileId, prompt, bag);
+      const input = { fields: step.fields, prompt };
+      try {
+        return { input, output: parseAgentReply(reply, step.fields, step.id) };
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          input,
+          output: reply
+        };
+      }
     }
     if (step.kind === "template") {
       const output = resolveTemplateString(step.template, bag);
@@ -674,11 +758,12 @@ class WorkflowService {
     if (!row) {
       throw new Error("Workflow run not found.");
     }
+    const { skipped, ...fields } = result;
     const run = {
       ...JSON.parse(row.data),
-      ...result,
+      ...fields,
       completedAt: new Date().toISOString(),
-      status: result.error ? "failed" : "completed"
+      status: result.error ? "failed" : skipped ? "skipped" : "completed"
     };
     const { changes } = this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ? AND lease_until IS NOT NULL").run(JSON.stringify(run), id);
     if (!changes) {
@@ -798,7 +883,7 @@ async function run(input, context) {
         const index = steps.findIndex((entry) => entry.id === input.stepId);
         const step = steps[index];
         if (!step || step.kind === "summarize") {
-          throw new Error("Choose a tool, compare, assert, or template step.");
+          throw new Error("Choose a tool, compare, assert, template, or agent step.");
         }
         const earlier = steps.slice(0, index);
         const tools = await host({ agentId, op: "tools" });
@@ -816,6 +901,7 @@ async function run(input, context) {
           parseWorkflowValue(receipt.output)
         ]));
         const result = await runner.executeDataStep(step, buildReceiptBag(input.input ?? parseWorkflowRecord(latest?.input ?? {}), outputs), {
+          orgId: context.orgId,
           profileId: agentId,
           runId: `test_${crypto.randomUUID()}`,
           workflowId: existing?.id ?? "draft"
@@ -861,7 +947,7 @@ async function run(input, context) {
         ...result,
         name: existing.name,
         run: completed,
-        status: result.error ? "failed" : "completed",
+        status: result.status,
         workflowId: existing.id
       };
     }

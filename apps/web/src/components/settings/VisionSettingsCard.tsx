@@ -1,11 +1,6 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
+import { SettingsModelSelect } from "@/components/settings/settings-model-select";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   useModelsQuery,
@@ -92,7 +87,8 @@ export function VisionSettingsCard() {
       }
       title="Image parsing model"
     >
-      <Select
+      <SettingsModelSelect
+        ariaLabel="Image parsing model"
         disabled={saveVisionMutation.isPending || visionUnavailable}
         onValueChange={(value) => {
           if (!value) {
@@ -115,6 +111,9 @@ export function VisionSettingsCard() {
           setSelection(model ?? "");
           setSavedHint(null);
 
+          // A change can be undone from the toast.
+          const previous = visionSettings?.model ?? null;
+
           saveVisionMutation.mutate(model, {
             onError: (error) => {
               setSelection(visionSettings?.model ?? "");
@@ -122,6 +121,18 @@ export function VisionSettingsCard() {
             },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
+
+              if (previous !== (saved.model ?? null)) {
+                toast("Image parsing model changed.", 8000, {
+                  label: "Undo",
+                  onClick: () =>
+                    saveVisionMutation.mutate(previous, {
+                      onSuccess: (restored) =>
+                        setSelection(restored.model ?? ""),
+                    }),
+                });
+              }
+
               setSavedHint(
                 saved.model
                   ? `Saved · ${profileModelLabel(saved.model, visionModelGroups)}`
@@ -130,36 +141,42 @@ export function VisionSettingsCard() {
             },
           });
         }}
+        options={[
+          { label: "None", value: CLEAR_VISION_MODEL_VALUE },
+          ...visionModelGroups.flatMap((group) =>
+            group.models.map((model) => ({
+              label: `${model.name} · ${group.providerLabel}`,
+              value: encodeModelSelection(group.providerId, model.id),
+            }))
+          ),
+          // Models that cannot read images show why they are not a choice.
+          ...providerModelGroups.flatMap((group) =>
+            group.models
+              .filter(
+                (model) =>
+                  resolveModelVisionSupport(
+                    encodeModelSelection(group.providerId, model.id),
+                    providerModelGroups
+                  ) !== true
+              )
+              .map((model) => ({
+                disabled: true,
+                label: `${model.name} · ${group.providerLabel} · cannot read images`,
+                value: `no-vision:${encodeModelSelection(group.providerId, model.id)}`,
+              }))
+          ),
+        ]}
+        triggerLabel={
+          selection
+            ? profileModelLabel(selection, visionModelGroups, {
+                withProvider: true,
+              })
+            : visionUnavailable
+              ? "No vision providers"
+              : "None"
+        }
         value={selectionValue}
-      >
-        <SelectTrigger aria-label="Image parsing model" className="h-9 w-full">
-          <SelectValue placeholder="Select vision model">
-            {selection
-              ? profileModelLabel(selection, visionModelGroups)
-              : visionUnavailable
-                ? "No vision providers"
-                : "Not configured"}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent
-          alignItemWithTrigger={false}
-          className="w-max min-w-72 max-w-[min(24rem,92vw)]"
-        >
-          <SelectItem value={CLEAR_VISION_MODEL_VALUE}>
-            Not configured
-          </SelectItem>
-          {visionModelGroups.flatMap((group) =>
-            group.models.map((model) => (
-              <SelectItem
-                key={`${group.providerId}:${model.id}`}
-                value={encodeModelSelection(group.providerId, model.id)}
-              >
-                {group.providerLabel}: {model.name}
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
+      />
     </SettingsModelTile>
   );
 }

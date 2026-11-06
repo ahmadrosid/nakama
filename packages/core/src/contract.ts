@@ -1422,9 +1422,13 @@ export type WorkflowStepKind =
   | "compare"
   | "assert"
   | "template"
+  | "agent"
   | "summarize";
 
 export type WorkflowCompareOp = "eq" | "near" | "contains";
+
+/** What a false compare or assert does: fail the run (default) or end it as skipped. */
+export type WorkflowCheckOnFail = "fail" | "skip";
 
 export interface WorkflowToolStep {
   id: string;
@@ -1437,6 +1441,7 @@ export interface WorkflowCompareStep {
   id: string;
   kind: "compare";
   left: unknown;
+  onFail?: WorkflowCheckOnFail;
   op: WorkflowCompareOp;
   right: unknown;
   tolerance?: number;
@@ -1446,6 +1451,7 @@ export interface WorkflowAssertStep {
   expected: unknown;
   id: string;
   kind: "assert";
+  onFail?: WorkflowCheckOnFail;
   path: string;
 }
 
@@ -1453,6 +1459,14 @@ export interface WorkflowTemplateStep {
   id: string;
   kind: "template";
   template: string;
+}
+
+export interface WorkflowAgentStep {
+  /** Output keys, each with a short note on what the agent puts there. */
+  fields: Record<string, string>;
+  id: string;
+  kind: "agent";
+  prompt: string;
 }
 
 export interface WorkflowSummarizeStep {
@@ -1466,6 +1480,7 @@ export type WorkflowStep =
   | WorkflowCompareStep
   | WorkflowAssertStep
   | WorkflowTemplateStep
+  | WorkflowAgentStep
   | WorkflowSummarizeStep;
 
 export interface WorkflowDefinition {
@@ -1485,7 +1500,7 @@ export interface StoredWorkflow extends WorkflowDefinition {
   updatedAt: string;
 }
 
-export type WorkflowRunStatus = "running" | "completed" | "failed";
+export type WorkflowRunStatus = "running" | "completed" | "failed" | "skipped";
 
 export type WorkflowRunStepStatus =
   | "pending"
@@ -2105,6 +2120,8 @@ export interface OpenRouterRoutingSettings {
 }
 
 export interface ProviderInstanceSummary {
+  /** The last 4 characters of the saved key, for admins only. */
+  apiKeyEnding?: string;
   baseUrl?: string | null;
   createdAt: string;
   customModels?: CustomModelEntry[];
@@ -2161,6 +2178,11 @@ export interface UpdateProviderRequest {
 
 export interface UpdateProviderResponse {
   provider: ProviderInstanceSummary;
+}
+
+/** What a live check of the saved key found. */
+export interface CheckProviderResponse {
+  status: "ok" | "rejected" | "needs-key" | "unreachable" | "unchecked";
 }
 
 export interface DeleteProviderResponse {

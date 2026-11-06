@@ -29,7 +29,6 @@ function WebPublicUrlActions({
         <Button
           disabled={pending}
           onClick={onUseCurrent}
-          size="sm"
           type="button"
           variant="outline"
         >
@@ -125,7 +124,7 @@ export function WebPublicUrlSettingsRow() {
     return (
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div className="space-y-0.5">
-          <p className="font-medium text-foreground text-sm">Public web URL</p>
+          <p className="text-foreground text-sm">Public web URL</p>
           <p className="text-muted-foreground text-xs">Loading…</p>
         </div>
         <Spinner className="size-4 text-muted-foreground" />
@@ -137,7 +136,7 @@ export function WebPublicUrlSettingsRow() {
     <div className="space-y-2 px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <label
-          className="min-w-0 text-balance font-medium text-foreground text-sm"
+          className="min-w-0 text-balance text-foreground text-sm"
           htmlFor="web-public-url"
         >
           Public web URL

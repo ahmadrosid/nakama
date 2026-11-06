@@ -258,7 +258,9 @@ function GroupHeader({
     <>
       <header className="@container -mx-6 flex h-12 shrink-0 items-center gap-2 border-border border-b px-4 max-sm:hidden">
         <div className="flex h-7 min-w-0 flex-1 items-center gap-2 px-2.5">
-          <h1 className="truncate font-medium text-sm">{group.name}</h1>
+          <h1 className="truncate font-semibold text-[15px] tracking-tight">
+            {group.name}
+          </h1>
           <div className="flex @max-md:hidden shrink-0 -space-x-1.5">
             {members.slice(0, 4).map((member) => (
               <ProfileAvatar

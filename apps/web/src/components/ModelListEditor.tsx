@@ -3,17 +3,19 @@ import { Button } from "@nakama/ui/button";
 import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import { Switch } from "@nakama/ui/switch";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
-import { useRef } from "react";
-import { modelListRowVisionEnabled } from "@/components/model-list-editor.shared";
+import { useContext, useId, useRef, useState } from "react";
+import {
+  ModelUsageContext,
+  modelListRowVisionEnabled,
+} from "@/components/model-list-editor.shared";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 
 export interface ModelListRow extends CustomModelEntry {}
 
 interface ModelListEditorProps {
-  browseLabel?: string;
+  browse?: { disabled?: boolean; label: string; onClick: () => void };
   disabled?: boolean;
   models: ModelListRow[];
-  onBrowse?: () => void;
   onChange: (models: ModelListRow[]) => void;
   showPricing?: boolean;
   showThinking?: boolean;
@@ -21,8 +23,18 @@ interface ModelListEditorProps {
   visionDefaultOn?: boolean;
 }
 
+const PRICE_FIELDS = [
+  { field: "inputPerMillionUsd", label: "Input $/1M tokens" },
+  { field: "cachedInputPerMillionUsd", label: "Cached input $/1M tokens" },
+  { field: "outputPerMillionUsd", label: "Output $/1M tokens" },
+] as const;
+
 function emptyRow(): ModelListRow {
   return { id: "", name: "" };
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  return value === "" ? undefined : Number(value);
 }
 
 export function ModelListEditor({
@@ -32,11 +44,20 @@ export function ModelListEditor({
   showThinking = false,
   showVision = false,
   visionDefaultOn = false,
-  onBrowse,
-  browseLabel = "Browse models.dev",
+  browse,
   onChange,
 }: ModelListEditorProps) {
   const rowKeysRef = useRef<string[]>([]);
+
+  // IDs saved before this edit; a row typed now stays editable.
+  const [savedIds] = useState<ReadonlySet<string>>(
+    () => new Set(models.map((model) => model.id.trim()))
+  );
+
+  const [openDetails, setOpenDetails] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+
   // Keep React keys available on the first paint (avoids undefined keys + useEffect).
   syncRowKeys(rowKeysRef.current, models.length);
 
@@ -53,174 +74,156 @@ export function ModelListEditor({
     onChange(models.filter((_, rowIndex) => rowIndex !== index));
   };
 
+  const toggleDetails = (rowKey: string) => {
+    setOpenDetails((current) => {
+      const next = new Set(current);
+
+      if (next.has(rowKey)) {
+        next.delete(rowKey);
+      } else {
+        next.add(rowKey);
+      }
+
+      return next;
+    });
+  };
+
+  const seenIds = new Set<string>();
+  const defaultGroup = useId();
+  const usage = useContext(ModelUsageContext);
+
+  // A long list gets a search; short lists do not need one.
+  const [query, setQuery] = useState("");
+  const needle = models.length > 10 ? query.trim().toLowerCase() : "";
+
+  // With no row marked, the first model with an ID is the default.
+  const flaggedDefault = models.findIndex(
+    (row) => row.default && row.id.trim()
+  );
+
+  const defaultIndex =
+    flaggedDefault === -1
+      ? models.findIndex((row) => row.id.trim())
+      : flaggedDefault;
+
+  const setDefault = (index: number) => {
+    onChange(
+      models.map((row, rowIndex) => ({ ...row, default: rowIndex === index }))
+    );
+  };
+
   return (
     <div className="min-w-0 space-y-2">
+      {models.length > 10 ? (
+        <InputGroup>
+          <InputGroupInput
+            aria-label="Search saved models"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search saved models…"
+            value={query}
+          />
+        </InputGroup>
+      ) : null}
       {models.length > 0 ? (
-        <div className="max-w-full overflow-x-auto rounded-lg border border-border">
-          <table
-            className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[58rem]" : "min-w-[46rem]"}`}
-          >
-            <thead className="border-border border-b bg-muted/30 text-muted-foreground">
-              <tr>
-                <th className="px-2 py-2 font-medium">Model ID</th>
-                <th className="px-2 py-2 font-medium">Display name</th>
-                {showThinking ? (
-                  <th className="px-2 py-2 font-medium">Reasoning</th>
-                ) : null}
-                {showVision ? (
-                  <th className="px-2 py-2 font-medium">Vision</th>
-                ) : null}
-                {showPricing ? (
-                  <>
-                    <th className="px-2 py-2 font-medium">$/1M in</th>
-                    <th className="px-2 py-2 font-medium">$/1M cached</th>
-                    <th className="px-2 py-2 font-medium">$/1M out</th>
-                  </>
-                ) : null}
-                <th className="px-2 py-2 font-medium">Context</th>
-                <th aria-label="Actions" className="w-10 px-2 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {models.map((row, index) => (
-                <tr
-                  className="border-border/60 border-b last:border-0"
-                  key={rowKeysRef.current[index]}
-                >
-                  <td className="px-2 py-1.5">
-                    <InputGroup>
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {models.map((row, index) => {
+            const rowKey = rowKeysRef.current[index]!;
+            const id = row.id.trim();
+            const duplicate = id !== "" && seenIds.has(id);
+            seenIds.add(id);
+            const label = id || "new model";
+            const detailsOpen = openDetails.has(rowKey);
+            const detailsId = `model-details-${rowKey}`;
+
+            if (
+              needle &&
+              !`${row.id} ${row.name ?? ""}`.toLowerCase().includes(needle)
+            ) {
+              return null;
+            }
+
+            const usedBy = usage[id];
+
+            // Saved IDs are fixed; only new rows take an ID.
+            const idLocked = id !== "" && savedIds.has(id);
+
+            return (
+              <li className="space-y-2 p-2" key={rowKey}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {idLocked ? (
+                    <p
+                      className="basis-full truncate px-1 text-muted-foreground text-xs"
+                      title={row.id}
+                    >
+                      <span className="font-mono">{row.id}</span>
+                      {usedBy?.length ? (
+                        <span> · Used by {usedBy.join(", ")}</span>
+                      ) : null}
+                    </p>
+                  ) : (
+                    <InputGroup className="min-w-0 basis-full">
                       <InputGroupInput
+                        aria-invalid={duplicate}
+                        aria-label={`Model ID ${index + 1}`}
+                        className="font-mono text-xs"
                         disabled={disabled}
                         onChange={(event) =>
                           updateRow(index, { id: event.target.value })
                         }
-                        placeholder="llama3.2"
+                        placeholder="Model ID"
+                        title={row.id}
                         value={row.id}
                       />
                     </InputGroup>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <InputGroup>
-                      <InputGroupInput
-                        disabled={disabled}
-                        onChange={(event) =>
-                          updateRow(index, { name: event.target.value })
-                        }
-                        placeholder="Optional label"
-                        value={row.name ?? ""}
-                      />
-                    </InputGroup>
-                  </td>
-                  {showThinking ? (
-                    <td className="px-2 py-1.5">
-                      <Switch
-                        aria-label={`Reasoning for ${row.id.trim() || "model"}`}
-                        checked={row.supportsThinking === true}
-                        disabled={disabled}
-                        onCheckedChange={(checked) =>
-                          updateRow(index, { supportsThinking: checked })
-                        }
-                        size="sm"
-                      />
-                    </td>
-                  ) : null}
-                  {showVision ? (
-                    <td className="px-2 py-1.5">
-                      <Switch
-                        aria-label={`Vision for ${row.id.trim() || "model"}`}
-                        checked={modelListRowVisionEnabled(
-                          row,
-                          visionDefaultOn
-                        )}
-                        disabled={disabled}
-                        onCheckedChange={(checked) =>
-                          updateRow(index, { supportsVision: checked })
-                        }
-                        size="sm"
-                      />
-                    </td>
-                  ) : null}
-                  {showPricing
-                    ? (
-                        [
-                          "inputPerMillionUsd",
-                          "cachedInputPerMillionUsd",
-                          "outputPerMillionUsd",
-                        ] as const
-                      ).map((field) => (
-                        <td className="px-2 py-1.5" key={field}>
-                          <InputGroup>
-                            <InputGroupInput
-                              aria-label={
-                                field === "cachedInputPerMillionUsd"
-                                  ? `Cached input rate for ${row.id.trim() || "model"}`
-                                  : undefined
-                              }
-                              disabled={disabled}
-                              min={0}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                updateRow(index, {
-                                  [field]:
-                                    value === "" ? undefined : Number(value),
-                                });
-                              }}
-                              placeholder="—"
-                              step="any"
-                              type="number"
-                              value={row[field] ?? ""}
-                            />
-                          </InputGroup>
-                        </td>
-                      ))
-                    : null}
-                  <td className="px-2 py-1.5">
-                    <InputGroup>
-                      <InputGroupInput
-                        disabled={disabled}
-                        min={1}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          updateRow(index, {
-                            contextWindow:
-                              value === "" ? undefined : Number(value),
-                          });
-                        }}
-                        placeholder="auto"
-                        step={1}
-                        type="number"
-                        value={row.contextWindow ?? ""}
-                      />
-                    </InputGroup>
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <Button
-                      aria-label="Remove model"
+                  )}
+                  <InputGroup className="min-w-0 flex-[1_1_12rem]">
+                    <InputGroupInput
+                      aria-label={`Display name for ${label}`}
                       disabled={disabled}
-                      onClick={() => removeRow(index)}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <Delete02Icon className="size-4" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      {models.length > 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Context is the total token window the model accepts. Leave it on auto
-          to use the built-in catalog value, or 128k when the model is unknown.
-        </p>
+                      onChange={(event) =>
+                        updateRow(index, { name: event.target.value })
+                      }
+                      placeholder="Display name"
+                      value={row.name ?? ""}
+                    />
+                  </InputGroup>
+                  <ModelRowControls
+                    canBeDefault={id !== ""}
+                    defaultGroup={defaultGroup}
+                    detailsId={detailsId}
+                    detailsOpen={detailsOpen}
+                    disabled={disabled}
+                    isDefault={index === defaultIndex}
+                    label={label}
+                    onChange={(patch) => updateRow(index, patch)}
+                    onDefault={() => setDefault(index)}
+                    onRemove={() => removeRow(index)}
+                    onToggleDetails={() => toggleDetails(rowKey)}
+                    row={row}
+                    showPricing={showPricing}
+                    showThinking={showThinking}
+                    showVision={showVision}
+                    visionDefaultOn={visionDefaultOn}
+                  />
+                </div>
+                {detailsOpen ? (
+                  <ModelRowDetails
+                    detailsId={detailsId}
+                    disabled={disabled}
+                    onChange={(patch) => updateRow(index, patch)}
+                    row={row}
+                    showPricing={showPricing}
+                  />
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
+          data-models-add=""
           disabled={disabled}
           onClick={() => {
             rowKeysRef.current.push(createClientId());
@@ -231,21 +234,186 @@ export function ModelListEditor({
           variant="outline"
         >
           <Add01Icon className="mr-1 size-4" />
-          Add model
+          Add model by ID
         </Button>
 
-        {onBrowse ? (
+        {browse ? (
           <Button
-            disabled={disabled}
-            onClick={onBrowse}
+            disabled={disabled || browse.disabled}
+            onClick={browse.onClick}
             size="sm"
             type="button"
-            variant="secondary"
+            variant="outline"
           >
-            {browseLabel}
+            {browse.label}
           </Button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function ModelRowControls({
+  canBeDefault,
+  defaultGroup,
+  detailsId,
+  detailsOpen,
+  disabled,
+  isDefault,
+  label,
+  onChange,
+  onDefault,
+  onRemove,
+  onToggleDetails,
+  row,
+  showPricing,
+  showThinking,
+  showVision,
+  visionDefaultOn,
+}: {
+  canBeDefault: boolean;
+  defaultGroup: string;
+  detailsId: string;
+  detailsOpen: boolean;
+  disabled?: boolean;
+  isDefault: boolean;
+  label: string;
+  onChange: (patch: Partial<ModelListRow>) => void;
+  onDefault: () => void;
+  onRemove: () => void;
+  onToggleDetails: () => void;
+  row: ModelListRow;
+  showPricing: boolean;
+  showThinking: boolean;
+  showVision: boolean;
+  visionDefaultOn: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <label className="flex items-center gap-1.5 text-xs">
+        <input
+          checked={isDefault}
+          className="size-3.5 accent-primary"
+          disabled={disabled || !canBeDefault}
+          name={defaultGroup}
+          onChange={onDefault}
+          type="radio"
+        />
+        Default
+      </label>
+      {showThinking ? (
+        <span className="flex items-center gap-1.5 text-xs">
+          <Switch
+            aria-label={`Reasoning for ${label}`}
+            checked={row.supportsThinking === true}
+            disabled={disabled}
+            onCheckedChange={(checked) =>
+              onChange({ supportsThinking: checked })
+            }
+            size="sm"
+          />
+          Reasoning
+        </span>
+      ) : null}
+      {showVision ? (
+        <span className="flex items-center gap-1.5 text-xs">
+          <Switch
+            aria-label={`Vision for ${label}`}
+            checked={modelListRowVisionEnabled(row, visionDefaultOn)}
+            disabled={disabled}
+            onCheckedChange={(checked) => onChange({ supportsVision: checked })}
+            size="sm"
+          />
+          Vision
+        </span>
+      ) : null}
+      <Button
+        aria-controls={detailsId}
+        aria-expanded={detailsOpen}
+        aria-label={`${showPricing ? "Price and context" : "Context"} for ${label}`}
+        disabled={disabled}
+        onClick={onToggleDetails}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <span className="sm:hidden">More</span>
+        <span className="hidden sm:inline">
+          {showPricing ? "Price and context" : "Context"}
+        </span>
+      </Button>
+      <Button
+        aria-label={`Remove ${label}`}
+        disabled={disabled}
+        onClick={onRemove}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <Delete02Icon className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+function ModelRowDetails({
+  detailsId,
+  disabled,
+  onChange,
+  row,
+  showPricing,
+}: {
+  detailsId: string;
+  disabled?: boolean;
+  onChange: (patch: Partial<ModelListRow>) => void;
+  row: ModelListRow;
+  showPricing: boolean;
+}) {
+  return (
+    <div
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
+      id={detailsId}
+    >
+      {showPricing
+        ? PRICE_FIELDS.map(({ field, label: fieldLabel }) => (
+            <label className="space-y-1 text-xs" key={field}>
+              <span className="text-muted-foreground">{fieldLabel}</span>
+              <InputGroup>
+                <InputGroupInput
+                  disabled={disabled}
+                  min={0}
+                  onChange={(event) =>
+                    onChange({
+                      [field]: parseOptionalNumber(event.target.value),
+                    })
+                  }
+                  placeholder="Unknown"
+                  step="any"
+                  type="number"
+                  value={row[field] ?? ""}
+                />
+              </InputGroup>
+            </label>
+          ))
+        : null}
+      <label className="space-y-1 text-xs">
+        <span className="text-muted-foreground">Context window (tokens)</span>
+        <InputGroup>
+          <InputGroupInput
+            disabled={disabled}
+            min={1}
+            onChange={(event) =>
+              onChange({
+                contextWindow: parseOptionalNumber(event.target.value),
+              })
+            }
+            placeholder="Auto"
+            step={1}
+            type="number"
+            value={row.contextWindow ?? ""}
+          />
+        </InputGroup>
+      </label>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type {
   ChatgptOAuthDeviceCompleteRequest,
   ChatgptOAuthDeviceCompleteResponse,
   ChatgptOAuthDeviceStartResponse,
+  CheckProviderResponse,
   CodingHarnessSettingsResponse,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
@@ -376,7 +377,7 @@ export class SystemClient extends NakamaClientCore {
   }
 
   async getExternalModelCatalog(
-    catalogId: "models-dev" | "openrouter" | "cerebras"
+    catalogId: "openrouter" | "cerebras"
   ): Promise<JsonValue> {
     return this.request<JsonValue>(
       `/v1/model-catalogs/${encodeURIComponent(catalogId)}`
@@ -443,7 +444,35 @@ export class SystemClient extends NakamaClientCore {
   ): Promise<UpdateProviderResponse> {
     return this.request<UpdateProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}/secret${action === "use-stored" ? "/use-stored" : ""}`,
-      { method: action === "clear" ? "DELETE" : "POST" }
+      // keepalive: a clear sent while the tab closes must still land.
+      { keepalive: true, method: action === "clear" ? "DELETE" : "POST" }
+    );
+  }
+
+  async checkProviderKey(request: {
+    apiKey: string;
+    baseUrl?: string;
+    type: string;
+  }): Promise<CheckProviderResponse> {
+    return this.request<CheckProviderResponse>("/v1/providers/check-key", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
+  async setDefaultProvider(
+    providerId: string
+  ): Promise<DeleteProviderResponse> {
+    return this.request<DeleteProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/default`,
+      { method: "POST" }
+    );
+  }
+
+  async checkProvider(providerId: string): Promise<CheckProviderResponse> {
+    return this.request<CheckProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/check`,
+      { method: "POST" }
     );
   }
 

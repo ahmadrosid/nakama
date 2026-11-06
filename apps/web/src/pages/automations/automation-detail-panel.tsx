@@ -217,7 +217,7 @@ export function AutomationDetailPanel(state: DetailState) {
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-normal text-muted-foreground/55 text-sm">
+          <h3 className="font-medium text-muted-foreground text-sm">
             Run history
           </h3>
           <p className="type-body text-xs">

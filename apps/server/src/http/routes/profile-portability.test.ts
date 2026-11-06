@@ -4,6 +4,7 @@ import path from "node:path";
 import { getCustomToolsDir, getProfileSoulDir } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
+import { AgentService } from "../../services/agent-service";
 import {
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
@@ -38,6 +39,11 @@ function createApp() {
         ) => profileService.createProfile(orgId, request),
         getProfile: (orgId: string, profileId: string) =>
           profileService.getProfile(orgId, profileId),
+        getProfileAccess: (orgId: string, profileId: string) =>
+          new AgentService(null, null, databaseAdapter).getProfileAccess(
+            orgId,
+            profileId
+          ),
         listProfiles: async (orgId: string) => ({
           profiles: await databaseAdapter.listProfilesForOrg(orgId),
         }),

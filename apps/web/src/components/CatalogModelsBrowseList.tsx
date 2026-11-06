@@ -1,5 +1,5 @@
-import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
+import { Switch } from "@nakama/ui/switch";
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import {
   BrowseModelRowButton,
@@ -21,6 +21,7 @@ interface CatalogModelsBrowseQuery {
 export interface CatalogModelsBrowseListProps<
   T extends { id: string; name: string },
 > {
+  addedIds?: ReadonlySet<string>;
   className?: string;
   emptyMessage?: string;
   filterRows?: (rows: T[], search: string, hideDeprecated: boolean) => T[];
@@ -115,24 +116,46 @@ function CatalogBrowseToolbar({
   return (
     <>
       <Input
-        className="min-w-35 flex-1"
+        className="min-w-35 flex-1 basis-full sm:basis-0"
         disabled={toolbarDisabled}
         onChange={(event) => onSearchChange(event.target.value)}
+        onKeyDown={(event) => {
+          // Escape clears the search before it closes the dialog.
+          if (event.key === "Escape" && search) {
+            event.preventDefault();
+            event.stopPropagation();
+            onSearchChange("");
+          }
+
+          // Down moves into the list.
+          if (event.key === "ArrowDown") {
+            const list = event.currentTarget
+              .closest("[data-model-browse-shell]")
+              ?.querySelector<HTMLButtonElement>(
+                "[data-model-browse-list] button"
+              );
+
+            if (list) {
+              event.preventDefault();
+              list.focus();
+            }
+          }
+        }}
         placeholder="Search model name or ID..."
         value={search}
       />
       {toolbarTrailing}
       {showDeprecatedFilter ? (
-        <label className="flex h-8 cursor-pointer items-center gap-2 text-foreground text-sm">
-          <input
+        <span className="flex h-8 items-center gap-2 text-foreground text-sm">
+          <Switch
+            aria-label="Hide deprecated"
             checked={hideDeprecated}
-            className="size-4 rounded border-input"
             disabled={toolbarDisabled}
-            onChange={(event) => onHideDeprecatedChange(event.target.checked)}
-            type="checkbox"
+            onCheckedChange={onHideDeprecatedChange}
+            size="sm"
           />
           Hide deprecated
-        </label>
+        </span>
       ) : null}
     </>
   );
@@ -170,30 +193,10 @@ function CatalogBrowseStatus({
   );
 }
 
-function CatalogBrowseFooter({
-  selectedCount,
-  onAddMany,
-}: {
-  selectedCount: number;
-  onAddMany: () => void;
-}) {
-  return (
-    <div className="sticky bottom-0 flex shrink-0 justify-end border-border border-t bg-background px-3 py-2">
-      <Button
-        disabled={selectedCount === 0}
-        onClick={onAddMany}
-        size="sm"
-        type="button"
-      >
-        Add {selectedCount} models
-      </Button>
-    </div>
-  );
-}
-
 export function CatalogModelsBrowseList<
   T extends { id: string; name: string },
 >({
+  addedIds,
   rows,
   onSelect,
   className,
@@ -220,18 +223,7 @@ export function CatalogModelsBrowseList<
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [hideDeprecated, setHideDeprecated] = useState(true);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const showDeprecatedFilter = Boolean(isDeprecated);
-
-  const selectedRowIds = useMemo(() => {
-    if (!multiSelect) {
-      return new Set<string>();
-    }
-
-    const rowIds = new Set(rows.map((row) => row.id));
-
-    return new Set([...selectedIds].filter((id) => rowIds.has(id)));
-  }, [multiSelect, rows, selectedIds]);
 
   const filtered = useMemo(
     () =>
@@ -268,44 +260,24 @@ export function CatalogModelsBrowseList<
 
   const toolbarDisabled = !canFetch;
 
+  // A click adds the model at once, so nothing picked can be lost.
   const handleRowSelect = (row: T) => {
-    if (!multiSelect) {
-      onSelect(row);
+    if (multiSelect && onAddMany) {
+      onAddMany([row]);
 
       return;
     }
 
-    setSelectedIds((current) => {
-      const next = new Set(current);
-
-      if (next.has(row.id)) {
-        next.delete(row.id);
-      } else {
-        next.add(row.id);
-      }
-
-      return next;
-    });
-  };
-
-  const handleAddMany = () => {
-    onAddMany?.(rows.filter((row) => selectedRowIds.has(row.id)));
-    setSelectedIds(new Set<string>());
+    onSelect(row);
   };
 
   return (
     <ModelBrowseShell
       className={className}
-      emptyMessage={resolvedEmptyMessage}
-      error={canFetch ? error : null}
-      footer={
-        multiSelect ? (
-          <CatalogBrowseFooter
-            onAddMany={handleAddMany}
-            selectedCount={selectedRowIds.size}
-          />
-        ) : undefined
+      emptyMessage={
+        canFetch ? resolvedEmptyMessage : (idleMessage ?? resolvedEmptyMessage)
       }
+      error={canFetch ? error : null}
       isEmpty={!canFetch || filtered.length === 0}
       isLoading={canFetch && (isLoading || (isFetching && rows.length === 0))}
       status={
@@ -313,7 +285,17 @@ export function CatalogModelsBrowseList<
           isFetching={isFetching}
           onRefresh={onRefresh}
           refreshDisabled={refreshDisabled}
-          status={resolvedStatus}
+          status={
+            multiSelect &&
+            (status == null || status instanceof Function) &&
+            addedIds?.size ? (
+              <>
+                {resolvedStatus} · {addedIds.size} in your list
+              </>
+            ) : (
+              resolvedStatus
+            )
+          }
           toolbarDisabled={toolbarDisabled}
         />
       }
@@ -333,10 +315,12 @@ export function CatalogModelsBrowseList<
         getKey={(row) => row.id}
         renderRow={(row, style) => (
           <BrowseModelRowButton
+            // In a multi-pick list an added row stays clickable to take it out.
+            added={!multiSelect && (addedIds?.has(row.id) ?? false)}
             onSelect={() => handleRowSelect(row)}
             row={toDisplayRow(row)}
             selectable={multiSelect}
-            selected={selectedRowIds.has(row.id)}
+            selected={multiSelect && (addedIds?.has(row.id) ?? false)}
             style={style}
           />
         )}

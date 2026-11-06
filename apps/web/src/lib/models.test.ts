@@ -2,17 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderName } from "@nakama/core";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
-  appendOpenRouterModelRow,
   buildCreateProviderRequest,
   effectiveProfileModelSelection,
   encodeModelSelection,
   filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
-  hasOpenCodeZenProvider,
-  isOpenCodeZenBaseUrl,
+  isLocalBaseUrl,
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
+  resolveOpenRouterSetupModel,
   validateCustomModelsInput,
 } from "./models";
 
@@ -29,6 +28,19 @@ describe("buildCreateProviderRequest", () => {
       "fireworks",
       "ollama",
       "opencode_go",
+      "openai",
+      "anthropic",
+      "gemini",
+      "deepseek",
+      "doubao",
+      "together",
+      "xiaomi",
+      "meta",
+      "vercel_ai_gateway",
+      "mistral",
+      "qwen",
+      "qwen_cn",
+      "perplexity",
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
@@ -213,6 +225,8 @@ describe("resolveModelVisionSupport", () => {
       "openrouter",
       "mistral",
       "ollama",
+      "netra",
+      "groq",
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
@@ -352,51 +366,6 @@ describe("effectiveProfileModelSelection", () => {
   });
 });
 
-describe("isOpenCodeZenBaseUrl", () => {
-  test("matches Zen v1 and rejects OpenCode Go", () => {
-    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/v1")).toBe(true);
-    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/v1/")).toBe(true);
-    expect(isOpenCodeZenBaseUrl("https://opencode.ai/zen/go/v1")).toBe(false);
-    expect(isOpenCodeZenBaseUrl("https://api.openai.com/v1")).toBe(false);
-  });
-});
-
-describe("hasOpenCodeZenProvider", () => {
-  test("detects Zen by base URL or label on openai_compatible", () => {
-    expect(
-      hasOpenCodeZenProvider([
-        {
-          baseUrl: "https://opencode.ai/zen/v1",
-          label: "OpenCode Zen",
-          type: "openai_compatible",
-        },
-      ])
-    ).toBe(true);
-
-    expect(
-      hasOpenCodeZenProvider([
-        {
-          baseUrl: "https://localhost:11434/v1",
-          label: "Ollama",
-          type: "openai_compatible",
-        },
-      ])
-    ).toBe(false);
-
-    expect(
-      hasOpenCodeZenProvider([
-        { baseUrl: null, label: "OpenCode Zen", type: "openai_compatible" },
-      ])
-    ).toBe(true);
-
-    expect(
-      hasOpenCodeZenProvider([
-        { baseUrl: "https://opencode.ai/zen/go/v1", type: "opencode_go" },
-      ])
-    ).toBe(false);
-  });
-});
-
 describe("validateCustomModelsInput", () => {
   test("requires both $/1M rates or neither", () => {
     expect(
@@ -412,43 +381,36 @@ describe("validateCustomModelsInput", () => {
       "Add at least one model."
     );
   });
+
+  test("rejects the same model ID twice", () => {
+    expect(
+      validateCustomModelsInput([{ id: "m" }, { id: " m " }])
+    ).not.toBeNull();
+    expect(validateCustomModelsInput([{ id: "m" }, { id: "n" }])).toBeNull();
+  });
 });
 
-describe("appendOpenRouterModelRow", () => {
-  test("keeps the context window the browse row carried", () => {
+describe("isLocalBaseUrl", () => {
+  test("treats loopback and private hosts as local", () => {
+    expect(isLocalBaseUrl("http://localhost:11434/v1")).toBe(true);
+    expect(isLocalBaseUrl("http://192.168.1.4:8000/v1")).toBe(true);
+    expect(isLocalBaseUrl("https://apihub.agnes-ai.com/v1")).toBe(false);
+  });
+});
+
+describe("resolveOpenRouterSetupModel", () => {
+  test("the row marked default wins over the catalog pick", () => {
     expect(
-      appendOpenRouterModelRow(
-        [],
-        "anthropic/claude-sonnet-4-6",
-        "Sonnet 4.6",
-        {
-          contextWindow: 1_000_000,
-        }
+      resolveOpenRouterSetupModel(
+        [{ id: "a/one" }, { default: true, id: "a/two" }],
+        "a/one"
       )
-    ).toEqual([
-      {
-        contextWindow: 1_000_000,
-        default: true,
-        id: "anthropic/claude-sonnet-4-6",
-        name: "Sonnet 4.6",
-      },
-    ]);
+    ).toBe("a/two");
   });
 
-  test("preserves existing rows and moves the default to the picked model", () => {
+  test("with no row marked, the catalog pick stays", () => {
     expect(
-      appendOpenRouterModelRow(
-        [
-          { contextWindow: 32_000, default: true, id: "a/one", name: "One" },
-          { id: "a/two" },
-          { id: "   " },
-        ],
-        "a/two",
-        "Two"
-      )
-    ).toEqual([
-      { contextWindow: 32_000, default: false, id: "a/one", name: "One" },
-      { default: true, id: "a/two", name: "a/two" },
-    ]);
+      resolveOpenRouterSetupModel([{ id: "a/one" }, { id: "a/two" }], "a/two")
+    ).toBe("a/two");
   });
 });

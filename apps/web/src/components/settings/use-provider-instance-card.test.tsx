@@ -166,17 +166,15 @@ describe("provider model management", () => {
       await act(async () => card.openEdit());
       await act(async () =>
         container
-          .querySelector<HTMLButtonElement>(
-            'button[aria-label="Remove model"]'
-          )!
+          .querySelector<HTMLButtonElement>('button[aria-label^="Remove "]')!
           .click()
       );
       expect(
-        container.querySelectorAll('input[placeholder="llama3.2"]')
+        container.querySelectorAll('input[aria-label^="Model ID"]')
       ).toHaveLength(0);
       await act(async () => card.saveCompatible());
       expect(updates).toEqual([]);
-      expect(card!.dialogError).not.toBeNull();
+      expect(card!.editFieldErrors.models).not.toBeNull();
       await act(async () =>
         card.handleManageModelsChange([{ id: "replacement" }])
       );

@@ -1,11 +1,6 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
+import { SettingsModelSelect } from "@/components/settings/settings-model-select";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   useImageGenerationSettings,
@@ -93,7 +88,7 @@ function imageGenerationChoices(
   // With nothing saved, the server makes images with a connected ChatGPT.
   const chatgptAvailable = chatgptGroups.length > 0;
   const providerAvailable = chatgptAvailable || labelGroups.length > 0;
-  const unsetLabel = chatgptAvailable ? "ChatGPT (default)" : "Not configured";
+  const unsetLabel = chatgptAvailable ? "Automatic · ChatGPT" : "None";
 
   const chatgptGroupOf = (model: string) =>
     chatgptGroups.find((group) => model.startsWith(`${group.providerId}::`));
@@ -206,9 +201,10 @@ export function ImageGenerationSettingsCard() {
           </>
         ) : undefined
       }
-      title="Image generation"
+      title="Image generation model"
     >
-      <Select
+      <SettingsModelSelect
+        ariaLabel="Image generation model"
         disabled={saveImageGenerationMutation.isPending || !providerAvailable}
         onValueChange={(value) => {
           if (!value) {
@@ -222,6 +218,9 @@ export function ImageGenerationSettingsCard() {
           setSelection(model ?? "");
           setSavedHint(null);
 
+          // A change can be undone from the toast.
+          const previous = imageGenerationSettings?.model ?? null;
+
           saveImageGenerationMutation.mutate(model, {
             onError: (error) => {
               setSelection(imageGenerationSettings?.model ?? "");
@@ -229,28 +228,26 @@ export function ImageGenerationSettingsCard() {
             },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
+
+              if (previous !== (saved.model ?? null)) {
+                toast("Image generation model changed.", 8000, {
+                  label: "Undo",
+                  onClick: () =>
+                    saveImageGenerationMutation.mutate(previous, {
+                      onSuccess: (restored) =>
+                        setSelection(restored.model ?? ""),
+                    }),
+                });
+              }
+
               setSavedHint(`Saved · ${labelOf(saved.model)}`);
             },
           });
         }}
+        options={choices}
+        triggerLabel={labelOf(selection)}
         value={selection || CLEAR_IMAGE_GENERATION_MODEL_VALUE}
-      >
-        <SelectTrigger aria-label="Image generation" className="h-9 w-full">
-          <SelectValue placeholder="Select image generation model">
-            {labelOf(selection)}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent
-          alignItemWithTrigger={false}
-          className="w-max min-w-72 max-w-[min(24rem,92vw)]"
-        >
-          {choices.map((choice) => (
-            <SelectItem key={choice.value} value={choice.value}>
-              {choice.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      />
     </SettingsModelTile>
   );
 }

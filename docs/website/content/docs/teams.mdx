@@ -1,0 +1,158 @@
+---
+title: "Microsoft Teams"
+description: "Connect an agent to Microsoft Teams with Azure bot setup, personal-chat pairing, channel mentions, and commands."
+---
+
+Connect an agent to Microsoft Teams so people can ask it questions where they already work. Personal chats keep a private conversation with the bot. In a team channel, an authorized person can mention the bot and get a reply in the same thread.
+
+Each connection belongs to one Nakama agent and organization. Teams users must pair or be on that connection's allowed-user list before they can use the agent.
+
+## Before you start
+
+You need:
+
+- An organization admin or platform admin account in Nakama, and an agent with a working model.
+- A Microsoft 365 tenant with Teams, permission to register an application in Microsoft Entra ID, and an Azure subscription that can create an Azure Bot resource.
+- Permission to install a custom Teams app. Your Teams admin may need to enable uploads or approve the app.
+- A public HTTPS address for Nakama, with a valid certificate that Microsoft can reach.
+
+This connection uses the Microsoft public cloud and one tenant. Do not use a government-cloud bot or a multi-tenant registration for this setup.
+
+## Step 1: Make Nakama reachable
+
+Teams sends messages to your server. Unlike Slack's outbound connection, a private or localhost-only Nakama address cannot receive Teams messages.
+
+1. Put Nakama behind an HTTPS reverse proxy. For Docker, forward the public HTTPS address to Nakama on port `4310`. See [Deployment hardening](/deployment-hardening) or [Coolify](/coolify).
+2. Set `NAKAMA_WEB_PUBLIC_URL` in the server environment to that address, for example `https://nakama.example.com`, and restart Nakama. For Docker Compose, set it on the Nakama service and recreate the container.
+3. Sign in to Nakama and open **Agent → your agent → Channels → Microsoft Teams**.
+4. Copy the **Messaging endpoint** shown there. It includes this agent's identifier; use the complete value in Azure.
+
+The example address above is a placeholder. Do not use the dashboard address alone, a localhost address, or the generic `/api/messages` endpoint from Microsoft's samples. The endpoint shown by Nakama is the one for this connection.
+
+The reverse proxy must allow Microsoft to POST to that endpoint without a separate proxy login. Keep HTTPS enabled; the bot checks Microsoft's authentication token. You do not need to expose a separate worker port.
+
+For a local trial, a public HTTPS tunnel can forward to Nakama. Set `NAKAMA_WEB_PUBLIC_URL` to the tunnel address, restart Nakama, and update Azure whenever the tunnel address changes.
+
+## Step 2: Register the bot identity
+
+In the [Azure portal](https://portal.azure.com/):
+
+1. Open **Microsoft Entra ID → App registrations → New registration**. Name the app and select **Accounts in this organizational directory only**. Register it.
+2. On **Overview**, copy **Application (client) ID** and **Directory (tenant) ID**.
+3. Open **Certificates & secrets → Client secrets → New client secret**. Copy the secret's **Value** when it is shown. Nakama needs the value, not the secret ID. Keep its expiry date so you can replace it before it expires.
+
+These three values go into Nakama as **Client ID**, **Tenant ID**, and **Client secret**. Keep the secret private.
+
+See Microsoft's [app registration](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) and [client secret](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials) guides for these screens.
+
+## Step 3: Create the Azure Bot
+
+1. In Azure, create an **Azure Bot** resource in your subscription and resource group. Choose a bot name and pricing tier.
+2. Select **Single Tenant** and **Use existing app registration**. Use the client ID and tenant ID from Step 2.
+3. After creation, open **Settings → Configuration**. Set **Messaging endpoint** to the full value copied from Nakama in Step 1, then save.
+4. Open **Settings → Channels**, add **Microsoft Teams**, select the public-cloud option, accept the terms, and apply.
+
+Nakama runs the bot on your server; the Azure Bot resource connects it to Teams. Microsoft's [Azure configuration guide](https://learn.microsoft.com/en-us/microsoftteams/platform/teams-sdk/teams/azure-configuration) and [Teams channel setup](https://learn.microsoft.com/en-us/azure/bot-service/channel-connect-teams) show these screens.
+
+## Step 4: Save and start the connection
+
+As a Nakama organization admin or platform admin, open **Agent → your agent → Channels → Microsoft Teams**:
+
+1. Paste **Tenant ID**, **Client ID**, and **Client secret** from Step 2.
+2. Leave **Allowed users** empty if you plan to use pairing.
+3. Click **Save**. Nakama checks the credentials with Microsoft before saving them.
+4. Under **Bridge worker**, click **Start**. Confirm that it is listening, and check the worker logs if it stops.
+
+When editing an existing connection, a blank **Client secret** field keeps the saved secret. A changed client ID or tenant ID clears existing pairings and conversation bindings, so users must link again.
+
+## Step 5: Install the app in Teams
+
+An Azure Bot registration alone is not the Teams app your users install.
+
+1. Open the [Developer Portal for Teams](https://dev.teams.microsoft.com/) and create an app. Fill in its basic information, descriptions, developer details, website, privacy and terms URLs, and icons as the portal requires.
+2. Under **App features → Bot**, select the existing bot or enter its client ID from Step 2. Enable **Personal** for pairing and direct chat, and **Team** if you want channel mentions. Leave group chat, calling, video, and file support off.
+3. Validate the app package and resolve its errors. Download the app package ZIP.
+4. In Teams, open **Apps → Manage your apps → Upload an app → Upload a custom app**, choose the ZIP, then **Add**. Open the personal chat with the bot.
+5. To use channel mentions, also add the app to the team where it should answer.
+
+This text-chat setup does not need Microsoft Graph permissions to read all channel messages, or an SSO configuration. It only acts on channel messages that mention the bot. Do not add broad permissions from an unrelated SSO or read-all-messages example.
+
+If custom upload is not available, ask your Teams admin to allow or distribute the app for your organization. See Microsoft's [custom app installation guide](https://learn.microsoft.com/en-us/microsoftteams/platform/concepts/deploy-and-publish/apps-upload).
+
+## Step 6: Pair each person
+
+1. In Nakama, open the agent's **Microsoft Teams** settings and click **Generate code** under **Pairing**.
+2. Give the code privately to the person who will use the bot.
+3. That person opens a **personal chat** with the bot in Teams and sends the code as the message.
+4. After the bot confirms the link, send a question. The **linked** count in Nakama increases.
+
+Each code works once and expires after 10 minutes. Generate another code for each person. The person must belong to the configured Microsoft tenant. Pairing authorizes the Teams account for this agent; it does not create a Nakama dashboard account or grant an organization role.
+
+Never post a pairing code in a channel. If a channel mention contains the live code, Nakama spends it without linking anyone and asks for a new code to be sent privately. Group chats do not pair users.
+
+### Optional: Allow specific people without pairing
+
+An admin can enter Microsoft Entra user **Object IDs** in **Allowed users**, separated by commas, and click **Save**. Find the ID under **Microsoft Entra ID → Users → the user → Overview**. Use the person's object ID in this tenant, not an email address, display name, or the bot's client ID.
+
+Paired users and allowed users can both chat. An unlinked person's normal personal-chat message is ignored until they pair or are added to the list.
+
+## Channel conversations
+
+After pairing in a personal chat, mention the bot in a team channel, for example **@Nakama summarize these notes**. It answers in that thread.
+
+- Mention the bot on every message you want it to read, including follow-ups. Other thread messages are not sent to the agent.
+- Each thread and sender has a separate Nakama conversation. One person's commands do not clear or stop another person's conversation in the same thread.
+- Replies are visible to everyone who can read that channel. Use a personal chat for private information.
+- An unlinked person who mentions the bot is directed to pair in a personal chat.
+
+## Commands
+
+Use `!`, since `/` opens Teams' own command menu. Commands require a paired or allowed account. In a channel, mention the bot before the command, for example **@Nakama !new**.
+
+| Command | What it does |
+| --- | --- |
+| `!help` | Show the commands and mention rules |
+| `!new` | Stop the current reply and start a fresh conversation |
+| `!clear` | Stop the current reply and clear this conversation's history |
+| `!stop` | Stop the current reply and cancel waiting messages for this conversation |
+| `!status` | Show server and model status in a personal chat; a channel request redirects you there |
+
+`!new` and `!clear` affect the Nakama conversation. They do not remove messages already posted in Teams.
+
+## Current limits
+
+Teams supports text messages and replies. Files, images, voice, meetings, and group chats are not handled by this connection. Replies are sent when the turn finishes; long replies are split into messages of up to 6,000 characters.
+
+Only messages from the saved tenant are accepted. One Teams bot can belong to only one Nakama agent connection. Use a separate bot registration for another agent or deployment.
+
+## Troubleshooting
+
+### Save fails with a credential error
+
+Check that the IDs come from the same app registration and tenant. Paste the client secret's **Value**, not its ID, and replace an expired secret. Confirm the server can reach Microsoft's sign-in service. Save the new secret and restart the worker if it is stopped.
+
+### The worker is listening, but Teams gets no reply
+
+Check the full **Messaging endpoint** in Azure against Nakama, public HTTPS reachability, and the proxy's access rules. A listening worker alone does not prove Microsoft can reach it. Confirm that the Azure Bot has the Teams channel enabled and that the installed app uses the same bot client ID. Then check that the sender has paired or is allowed.
+
+### The endpoint is missing or reports that the connection is not running
+
+Set `NAKAMA_WEB_PUBLIC_URL` to a public HTTPS address, restart Nakama, and reload the settings page. Save the connection and start its **Bridge worker**. If you changed the hostname, agent, or tunnel address, copy the new endpoint into Azure too.
+
+### The pairing code does not work
+
+Generate a new code and send it by itself in the bot's personal chat from the configured tenant. A code that expired, was used, was replaced, or was exposed in a channel cannot pair another account. A code-shaped message from an already linked person does not link a second person.
+
+### Personal chat works, but channel mentions do not
+
+Add the app to the team, enable its **Team** bot scope, and update the installed app package if the scope changed. Mention the bot user on each message. Group chats are not supported, and the agent cannot read unmentioned messages in the thread.
+
+### Teams says the worker is busy
+
+The connection allows up to 16 activities running or waiting across chats, with at most four in one conversation. Wait for work to finish, then send the message again. At that limit, even a stop command may be refused.
+
+## Next steps
+
+- [Profiles](/profiles): configure the agent and its tools
+- [Deployment hardening](/deployment-hardening): protect the public server
+- [Slack](/slack): connect a workspace without a public inbound endpoint

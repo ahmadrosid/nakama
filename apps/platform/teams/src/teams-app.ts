@@ -152,11 +152,14 @@ export async function startTeamsApp(
       throw new Error("The Teams worker is busy; refused an activity.");
     }
 
+    // Read before a slot is taken: a throw here must not hold one forever.
+    const teamsActivity = toTeamsActivity(activity);
+
     running += 1;
     perConversation.set(conversationId, waiting + 1);
 
     deps
-      .onActivity(toTeamsActivity(activity))
+      .onActivity(teamsActivity)
       .catch((error: Error) => {
         console.error("[teams] turn failed:", error.message);
       })

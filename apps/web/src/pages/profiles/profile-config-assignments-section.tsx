@@ -30,7 +30,7 @@ function ProfileCapabilityTabs({
   return (
     <Tabs.List
       aria-label="Profile capabilities"
-      className="no-scrollbar flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-xl bg-muted p-[3px]"
+      className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto"
     >
       {[
         { label: "Tools", value: "tools" },
@@ -46,7 +46,7 @@ function ProfileCapabilityTabs({
           : []),
       ].map(({ value, label }) => (
         <Tabs.Tab
-          className="shrink-0 rounded-lg px-3.5 py-1.5 font-medium text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm"
+          className="shrink-0 rounded-lg px-3 py-1.5 font-medium text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:bg-muted data-[active]:text-foreground"
           key={value}
           value={value}
         >

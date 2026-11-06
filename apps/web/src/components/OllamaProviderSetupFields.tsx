@@ -3,6 +3,7 @@ import {
   OLLAMA_CLOUD_DEFAULT_BASE_URL,
   OLLAMA_LOCAL_DEFAULT_BASE_URL,
 } from "@nakama/core/ollama-provider-config";
+import { Button } from "@nakama/ui/button";
 import { FormField } from "@nakama/ui/form-field";
 import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import {
@@ -12,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import { useState } from "react";
 
 interface OllamaProviderSetupFieldsProps {
   baseUrl: string;
@@ -22,6 +24,12 @@ interface OllamaProviderSetupFieldsProps {
   hostMode: OllamaHostMode;
   onBaseUrlChange: (baseUrl: string) => void;
   onHostModeChange: (hostMode: OllamaHostMode) => void;
+}
+
+function defaultBaseUrl(hostMode: OllamaHostMode): string {
+  return hostMode === "cloud"
+    ? OLLAMA_CLOUD_DEFAULT_BASE_URL
+    : OLLAMA_LOCAL_DEFAULT_BASE_URL;
 }
 
 export function OllamaProviderSetupFields({
@@ -37,60 +45,78 @@ export function OllamaProviderSetupFields({
   const hostModeId = `${fieldIdPrefix}-host-mode`;
   const baseUrlId = `${fieldIdPrefix}-base-url`;
 
+  // The host choice sets the address; the field opens only for another one.
+  const [editingAddress, setEditingAddress] = useState(
+    () => baseUrl.trim() !== "" && baseUrl.trim() !== defaultBaseUrl(hostMode)
+  );
+
+  const showAddressField = editingAddress || baseUrlError != null;
+
   return (
     <div className="space-y-4">
-      <FormField density={density} id={hostModeId} label="Host">
+      <FormField density={density} id={hostModeId} label="Where Ollama runs">
         <Select
           disabled={disabled}
           onValueChange={(value) => {
             const nextMode = value === "cloud" ? "cloud" : "local";
             onHostModeChange(nextMode);
-            onBaseUrlChange(
-              nextMode === "cloud"
-                ? OLLAMA_CLOUD_DEFAULT_BASE_URL
-                : OLLAMA_LOCAL_DEFAULT_BASE_URL
-            );
+            onBaseUrlChange(defaultBaseUrl(nextMode));
+            setEditingAddress(false);
           }}
           value={hostMode}
         >
           <SelectTrigger className="w-full" id={hostModeId}>
-            <SelectValue />
+            <SelectValue>
+              {hostMode === "cloud" ? "Ollama Cloud" : "This computer"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="local">Local (localhost:11434)</SelectItem>
+            <SelectItem value="local">This computer</SelectItem>
             <SelectItem value="cloud">Ollama Cloud</SelectItem>
           </SelectContent>
         </Select>
       </FormField>
 
-      <FormField
-        density={density}
-        footer={
-          baseUrlError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {baseUrlError}
-            </p>
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              OpenAI-compatible endpoint. Local defaults to{" "}
-              <span className="font-mono">{OLLAMA_LOCAL_DEFAULT_BASE_URL}</span>
-              .
-            </p>
-          )
-        }
-        id={baseUrlId}
-        label="Base URL"
-      >
-        <InputGroup>
-          <InputGroupInput
-            aria-invalid={baseUrlError != null}
+      {showAddressField ? (
+        <FormField
+          density={density}
+          footer={
+            baseUrlError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {baseUrlError}
+              </p>
+            ) : null
+          }
+          id={baseUrlId}
+          label="Address"
+        >
+          <InputGroup>
+            <InputGroupInput
+              aria-invalid={baseUrlError != null}
+              disabled={disabled}
+              id={baseUrlId}
+              inputMode="url"
+              onChange={(event) => onBaseUrlChange(event.target.value)}
+              value={baseUrl}
+            />
+          </InputGroup>
+        </FormField>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span className="min-w-0 truncate font-mono text-muted-foreground text-xs">
+            {baseUrl}
+          </span>
+          <Button
             disabled={disabled}
-            id={baseUrlId}
-            onChange={(event) => onBaseUrlChange(event.target.value)}
-            value={baseUrl}
-          />
-        </InputGroup>
-      </FormField>
+            onClick={() => setEditingAddress(true)}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Change address
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

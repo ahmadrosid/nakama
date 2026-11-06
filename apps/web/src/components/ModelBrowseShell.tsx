@@ -10,10 +10,12 @@ import { cn } from "@nakama/ui/utils";
 import {
   type CSSProperties,
   Fragment,
+  type KeyboardEvent,
   type ReactNode,
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { formatError } from "@/lib/client";
 
@@ -82,14 +84,31 @@ export function ModelBrowseShell({
   footer?: ReactNode;
   children: ReactNode;
 }) {
-  return (
-    <div className={cn("flex flex-col", className)}>
-      <div className="flex flex-wrap items-center gap-2 border-border border-b px-3 py-2">
-        {toolbar}
-      </div>
+  const phone = usePhoneWidth();
 
-      <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
-        {status}
+  // Only a list needs the fixed height: a spinner, error or empty state stays
+  // small, so the manual add stays in view.
+  const collapsed = isLoading || Boolean(error) || isEmpty;
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col",
+        className,
+        // On a phone the dialog's own scroll is the only one.
+        (collapsed || phone) && "h-auto"
+      )}
+      data-model-browse-shell=""
+    >
+      {/* On a phone the dialog scrolls; search and status stay in view. */}
+      <div className="max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-background">
+        <div className="flex flex-wrap items-center gap-2 border-border border-b px-3 py-2">
+          {toolbar}
+        </div>
+
+        <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
+          {status}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1">
@@ -98,8 +117,12 @@ export function ModelBrowseShell({
             <Spinner className="size-4 text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="px-3 py-8 text-center text-destructive text-sm">
-            Failed to load: {formatError(error)}
+          // The list is a helper: its error is status, not a form error.
+          <div
+            className="px-3 py-8 text-center text-muted-foreground text-sm"
+            role="status"
+          >
+            {formatError(error)}
           </div>
         ) : isEmpty ? (
           <div className="px-3 py-8 text-center text-muted-foreground text-sm">
@@ -124,13 +147,19 @@ export function VirtualModelBrowseList<T>({
   renderRow: (row: T, style: CSSProperties) => ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const phone = usePhoneWidth();
+  const [phoneLimit, setPhoneLimit] = useState(PHONE_PAGE_SIZE);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const [prevRows, setPrevRows] = useState(rows);
+  // A new list (a search, another source) starts at the top; the same rows
+  // in a new array, as after an add, keep the place.
+  const rowsKey = rows.map(getKey).join("\n");
+  const [prevRowsKey, setPrevRowsKey] = useState(rowsKey);
 
-  if (prevRows !== rows) {
-    setPrevRows(rows);
+  if (prevRowsKey !== rowsKey) {
+    setPrevRowsKey(rowsKey);
     setScrollTop(0);
+    setPhoneLimit(PHONE_PAGE_SIZE);
   }
 
   useLayoutEffect(() => {
@@ -157,7 +186,7 @@ export function VirtualModelBrowseList<T>({
     }
 
     element.scrollTop = 0;
-  }, [rows]);
+  }, [rowsKey]);
 
   const totalHeight = rows.length * MODEL_ROW_HEIGHT;
   const visibleCount = Math.ceil(viewportHeight / MODEL_ROW_HEIGHT);
@@ -174,9 +203,38 @@ export function VirtualModelBrowseList<T>({
 
   const visibleRows = rows.slice(startIndex, endIndex);
 
+  // On a phone rows render in the dialog's own scroll, 50 at a time, so a
+  // long catalog cannot freeze a small device.
+  if (phone) {
+    return (
+      <div data-model-browse-list="" onKeyDown={moveBetweenRows}>
+        {rows.slice(0, phoneLimit).map((row) => (
+          <Fragment key={getKey(row)}>
+            {renderRow(row, {
+              height: MODEL_ROW_HEIGHT,
+              position: "relative",
+            })}
+          </Fragment>
+        ))}
+        {rows.length > phoneLimit ? (
+          <button
+            className="w-full px-3 py-2 text-left text-sm underline underline-offset-2"
+            onClick={() => setPhoneLimit((limit) => limit + PHONE_PAGE_SIZE)}
+            type="button"
+          >
+            Show {Math.min(PHONE_PAGE_SIZE, rows.length - phoneLimit)} more of{" "}
+            {rows.length - phoneLimit}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className="h-full overflow-y-auto"
+      data-model-browse-list=""
+      onKeyDown={moveBetweenRows}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       ref={scrollRef}
     >
@@ -194,46 +252,109 @@ export function VirtualModelBrowseList<T>({
   );
 }
 
+const PHONE_QUERY = "(max-width: 639px)";
+
+const PHONE_PAGE_SIZE = 50;
+
+// Follows the window across the phone width, for example on rotate.
+export function usePhoneWidth(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia?.(PHONE_QUERY);
+      query?.addEventListener("change", onChange);
+
+      return () => query?.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia?.(PHONE_QUERY).matches === true,
+    () => false
+  );
+}
+
+// Up and Down move between rows, as in the chat picker, so a long list does
+// not take one Tab per row.
+function moveBetweenRows(event: KeyboardEvent<HTMLDivElement>) {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+    return;
+  }
+
+  const rows = [...event.currentTarget.querySelectorAll("button")];
+  let index = -1;
+
+  for (const [position, row] of rows.entries()) {
+    if (row === document.activeElement) {
+      index = position;
+    }
+  }
+
+  const next = rows[index + (event.key === "ArrowDown" ? 1 : -1)];
+
+  if (index === -1 || !next) {
+    return;
+  }
+
+  event.preventDefault();
+  next.focus();
+  next.scrollIntoView({ block: "nearest" });
+}
+
 const BADGE_TONES: Record<BrowseModelBadgeTone, string> = {
   amber: "bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30",
   emerald: "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30",
 };
 
+function BrowseRowCheckMark({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input font-bold text-2xs",
+        checked && "border-emerald-500 bg-emerald-500 text-white"
+      )}
+    >
+      {checked ? "✓" : null}
+    </span>
+  );
+}
+
 export function BrowseModelRowButton({
   row,
   onSelect,
+  added = false,
   selectable = false,
   selected = false,
   style,
 }: {
   row: BrowseModelRowDisplay;
   onSelect: () => void;
+  added?: boolean;
   selectable?: boolean;
   selected?: boolean;
   style: CSSProperties;
 }) {
+  const checked = selected || added;
+
   return (
     <button
-      aria-pressed={selectable ? selected : undefined}
-      className="absolute top-0 left-0 flex w-full cursor-pointer items-start gap-2.5 border-border border-b px-3 py-2 text-left transition-colors hover:bg-muted"
+      aria-pressed={selectable ? checked : undefined}
+      className={cn(
+        "absolute top-0 left-0 flex w-full items-start gap-2.5 border-border border-b px-3 py-2 text-left transition-colors",
+        added ? "cursor-default opacity-60" : "cursor-pointer hover:bg-muted"
+      )}
+      disabled={added}
       onClick={onSelect}
       style={style}
+      title={added ? "Already in your list. Remove it there." : undefined}
       type="button"
     >
-      {selectable ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-input font-bold text-2xs",
-            selected && "border-emerald-500 bg-emerald-500 text-white"
-          )}
-        >
-          {selected ? "✓" : null}
-        </span>
-      ) : null}
+      {selectable ? <BrowseRowCheckMark checked={checked} /> : null}
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium text-foreground text-sm leading-tight">
           {row.name}
+          {added ? (
+            <span className="ml-2 font-normal text-muted-foreground text-xs">
+              Added
+            </span>
+          ) : null}
         </div>
         <div className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">
           {row.id}
@@ -263,8 +384,9 @@ export function BrowseModelRowButton({
             </span>
           ) : null}
         </div>
+        {/* On a phone the name gets the room; the tags show from sm up. */}
         {(row.capabilities?.length ?? 0) > 0 ? (
-          <div className="flex gap-1">
+          <div className="hidden gap-1 sm:flex">
             {row.capabilities!.map((capability) => (
               <span
                 className="rounded bg-muted px-1 py-0.5 text-2xs"
