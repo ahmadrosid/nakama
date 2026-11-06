@@ -8,6 +8,7 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   StreamChatHandlers,
+  ThinkingEffort,
   WireApi,
 } from "@nakama/core";
 import {
@@ -274,7 +275,7 @@ function buildThinkingBody(
   OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
   "reasoning_effort"
 > & {
-  reasoning?: { effort?: "low" | "medium" | "high"; enabled?: boolean };
+  reasoning?: { effort?: ThinkingEffort; enabled?: boolean };
 } {
   if (options.netra) {
     return thinking?.enabled
