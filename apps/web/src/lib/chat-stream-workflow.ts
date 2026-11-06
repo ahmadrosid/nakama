@@ -345,6 +345,10 @@ function formatWorkflowStepMeta(
     return null;
   }
 
+  if (receipt.status === "skipped") {
+    return "Skipped";
+  }
+
   if (receipt.error?.trim()) {
     return truncateDisplay(receipt.error, 48);
   }

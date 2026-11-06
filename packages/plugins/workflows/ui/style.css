@@ -268,6 +268,9 @@
     color: var(--destructive);
     background: color-mix(in srgb, var(--destructive) 14%, var(--background));
   }
+  .workflow-step-mark[data-status="skipped"] {
+    color: var(--muted-foreground);
+  }
   .workflow-step-failure {
     display: grid;
     gap: 12px;
@@ -1240,6 +1243,9 @@
   }
   .workflow-try-status[data-status="completed"] {
     color: #15803d;
+  }
+  .workflow-try-status[data-status="skipped"] {
+    color: var(--muted-foreground);
   }
   .workflow-try-status[data-status="failed"] {
     color: var(--destructive);

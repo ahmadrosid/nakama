@@ -269,6 +269,9 @@ var style_default = `[data-plugin-id="workflows"] {
     color: var(--destructive);
     background: color-mix(in srgb, var(--destructive) 14%, var(--background));
   }
+  .workflow-step-mark[data-status="skipped"] {
+    color: var(--muted-foreground);
+  }
   .workflow-step-failure {
     display: grid;
     gap: 12px;
@@ -1242,6 +1245,9 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-try-status[data-status="completed"] {
     color: #15803d;
   }
+  .workflow-try-status[data-status="skipped"] {
+    color: var(--muted-foreground);
+  }
   .workflow-try-status[data-status="failed"] {
     color: var(--destructive);
   }
@@ -1841,6 +1847,9 @@ function compareFailure(step) {
   }
   return op === "eq" ? `${left} should equal ${right}.` : "";
 }
+function skipReason(step) {
+  return step.kind === "assert" ? checkFailure(step) : compareFailure(step);
+}
 function failedStep(run) {
   return run.steps?.find((step) => step.status === "failed");
 }
@@ -2162,6 +2171,7 @@ function apply(ctx) {
       download: "M12 4v11M7 10l5 5 5-5M5 20h14",
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
+      minus: "M6 12h12",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       pencil: "M4 20h4L19 9l-4-4L4 16v4ZM13 7l4 4",
       play: "m8 5 11 7-11 7V5Z",
@@ -2257,7 +2267,7 @@ function apply(ctx) {
       const detail = definition?.kind === "tool" ? definition.tool : definition?.kind === "summarize" ? definition.prompt : definition?.kind === "template" ? definition.template : step.kind;
       const output = receipt?.output === undefined ? undefined : parseWorkflowValue(receipt.output);
       const content = isWorkflowRecord(output) ? readWorkflowString(output.content) : null;
-      const meta = receipt?.error ?? (content === null ? stepStatus === "completed" ? step.kind === "summarize" ? "Written" : "Done" : stepStatus : `${content.trim().split(/\s+/).filter(Boolean).length} words`);
+      const meta = receipt?.error ?? (content === null ? stepStatus === "completed" ? step.kind === "summarize" ? "Written" : "Done" : stepStatusLabels.get(stepStatus) ?? stepStatus : `${content.trim().split(/\s+/).filter(Boolean).length} words`);
       return /* @__PURE__ */ React.createElement("li", {
         "data-status": stepStatus,
         key: step.id
@@ -2909,6 +2919,8 @@ function apply(ctx) {
         kind: "check"
       }), timing.status === "failed" && /* @__PURE__ */ React.createElement(Icon, {
         kind: "close"
+      }), timing.status === "skipped" && /* @__PURE__ */ React.createElement(Icon, {
+        kind: "minus"
       }))), /* @__PURE__ */ React.createElement(DropdownMenu, null, /* @__PURE__ */ React.createElement(DropdownMenuTrigger, {
         disabled: busy,
         render: /* @__PURE__ */ React.createElement(Button, {
@@ -3069,10 +3081,10 @@ function apply(ctx) {
       checked: selectedStep.fields.onFail === "skip",
       disabled: busy,
       onCheckedChange: (checked) => updateStep(selectedStep.key, {
-        fields: {
+        fields: checked ? {
           ...selectedStep.fields,
-          onFail: checked ? "skip" : ""
-        }
+          onFail: "skip"
+        } : Object.fromEntries(Object.entries(selectedStep.fields).filter(([key]) => key !== "onFail"))
       })
     }), "Skip the run when false") : field === "op" ? /* @__PURE__ */ React.createElement(Choice, {
       disabled: busy,
@@ -3117,6 +3129,7 @@ function apply(ctx) {
     }), panelTab === "test" && (() => {
       const receipt = runs[0]?.steps?.find((step) => step.stepId === (selectedStep?.id ?? summaryStep?.id ?? "summary"));
       const attempt = selectedStep && tried?.key === selectedStep.key ? tried.result : null;
+      const skips = Boolean(selectedStep && attempt?.error && attempt.output !== undefined && selectedStep.fields.onFail === "skip");
       return /* @__PURE__ */ React.createElement("div", {
         className: "workflow-step-fields"
       }, selectedStep && /* @__PURE__ */ React.createElement("section", {
@@ -3130,10 +3143,14 @@ function apply(ctx) {
         kind: "play"
       }), busy ? "Trying…" : "Try this step"), attempt && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", {
         className: "workflow-try-status",
-        "data-status": attempt.error ? "failed" : "completed"
-      }, attempt.error ? "Stopped" : "Worked", " in", " ", formatDuration(attempt.durationMs)), /* @__PURE__ */ React.createElement(StepReceipt, {
+        "data-status": skips ? "skipped" : attempt.error ? "failed" : "completed"
+      }, skips ? "Skipped" : attempt.error ? "Stopped" : "Worked", " ", "in ", formatDuration(attempt.durationMs), skips && selectedStep && `. ${skipReason({
+        input: attempt.input,
+        kind: selectedStep.kind,
+        output: attempt.output
+      })}`), /* @__PURE__ */ React.createElement(StepReceipt, {
         receipt: {
-          error: attempt.error ? readableError(attempt.error) : null,
+          error: attempt.error && !skips ? readableError(attempt.error) : null,
           input: attempt.input,
           output: attempt.output
         }
@@ -3330,6 +3347,7 @@ function apply(ctx) {
     const stoppedAt = failed ? titleCase(failed.stepId) : "";
     const filter = run.status === "skipped" ? run.steps?.find((step) => step.status === "skipped") : undefined;
     const skippedAt = filter ? titleCase(filter.stepId) : "";
+    const skippedWhy = filter ? skipReason(filter) : "";
     const help = run.error ? errorHelp(run.error, agent, failed) : undefined;
     const started = runStarted(run.startedAt);
     const recordedIds = receipts.map((step) => step.stepId);
@@ -3395,7 +3413,7 @@ function apply(ctx) {
       "data-missing-tool": help.missingTool
     }, /* @__PURE__ */ React.createElement("strong", null, stoppedAt ? `${stoppedAt} failed` : "Run failed"), /* @__PURE__ */ React.createElement("span", null, help.text))) : /* @__PURE__ */ React.createElement("p", {
       className: "workflow-empty"
-    }, formatRunTime(run.startedAt)), /* @__PURE__ */ React.createElement("div", {
+    }, skippedWhy ? `Skipped at ${skippedAt}: ${skippedWhy}` : formatRunTime(run.startedAt)), /* @__PURE__ */ React.createElement("div", {
       className: "workflow-run-buttons"
     }, help?.fix && /* @__PURE__ */ React.createElement(Button, {
       render: /* @__PURE__ */ React.createElement("a", {

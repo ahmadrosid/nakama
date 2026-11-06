@@ -124,6 +124,7 @@ export class WorkflowRunner {
     }
   }
 
+  /** Returns the summary, or null when a filter step skipped the run. */
   private async executeWorkflow(
     orgId: string,
     workflow: StoredWorkflow,

@@ -487,7 +487,7 @@ function errorHelp(
 }
 
 /** "input.ok should be true, but it was missing." from a failed check step. */
-function checkFailure(step: WorkflowRunStepRecord) {
+function checkFailure(step: Pick<WorkflowRunStepRecord, "input" | "output">) {
   const input = parseWorkflowValue(step.input);
   const output = parseWorkflowValue(step.output);
 
@@ -513,7 +513,7 @@ function shortValue(value: WorkflowValue | undefined) {
 }
 
 /** '"Stripe <…>" does not contain "github.com".' from a failed compare step. */
-function compareFailure(step: WorkflowRunStepRecord) {
+function compareFailure(step: Pick<WorkflowRunStepRecord, "input" | "output">) {
   const input = parseWorkflowValue(step.input);
   const output = parseWorkflowValue(step.output);
 
@@ -544,6 +544,13 @@ function compareFailure(step: WorkflowRunStepRecord) {
   }
 
   return op === "eq" ? `${left} should equal ${right}.` : "";
+}
+
+/** Why a filter step skipped the run, in plain words. */
+function skipReason(
+  step: Pick<WorkflowRunStepRecord, "input" | "output"> & { kind: string }
+) {
+  return step.kind === "assert" ? checkFailure(step) : compareFailure(step);
 }
 
 /** The step a failed run stopped at. */
@@ -1084,6 +1091,7 @@ export function apply(ctx: Context) {
       | "collapse"
       | "download"
       | "json"
+      | "minus"
       | "rows"
       | "schema"
       | "table"
@@ -1106,6 +1114,7 @@ export function apply(ctx: Context) {
       download: "M12 4v11M7 10l5 5 5-5M5 20h14",
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
+      minus: "M6 12h12",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       pencil: "M4 20h4L19 9l-4-4L4 16v4ZM13 7l4 4",
       play: "m8 5 11 7-11 7V5Z",
@@ -1280,7 +1289,7 @@ export function apply(ctx: Context) {
                   ? step.kind === "summarize"
                     ? "Written"
                     : "Done"
-                  : stepStatus
+                  : (stepStatusLabels.get(stepStatus) ?? stepStatus)
                 : `${content.trim().split(/\s+/).filter(Boolean).length} words`);
 
             return (
@@ -2267,6 +2276,9 @@ export function apply(ctx: Context) {
                                   {timing.status === "failed" && (
                                     <Icon kind="close" />
                                   )}
+                                  {timing.status === "skipped" && (
+                                    <Icon kind="minus" />
+                                  )}
                                 </span>
                               )}
                             </Button>
@@ -2543,10 +2555,18 @@ export function apply(ctx: Context) {
                                   disabled={busy}
                                   onCheckedChange={(checked: boolean) =>
                                     updateStep(selectedStep.key, {
-                                      fields: {
-                                        ...selectedStep.fields,
-                                        onFail: checked ? "skip" : "",
-                                      },
+                                      fields: checked
+                                        ? {
+                                            ...selectedStep.fields,
+                                            onFail: "skip",
+                                          }
+                                        : Object.fromEntries(
+                                            Object.entries(
+                                              selectedStep.fields
+                                            ).filter(
+                                              ([key]) => key !== "onFail"
+                                            )
+                                          ),
                                     })
                                   }
                                 />
@@ -2644,6 +2664,14 @@ export function apply(ctx: Context) {
                           ? tried.result
                           : null;
 
+                      // A false filter check returns its result; a thrown error does not.
+                      const skips = Boolean(
+                        selectedStep &&
+                          attempt?.error &&
+                          attempt.output !== undefined &&
+                          selectedStep.fields.onFail === "skip"
+                      );
+
                       return (
                         <div className="workflow-step-fields">
                           {selectedStep && (
@@ -2662,17 +2690,33 @@ export function apply(ctx: Context) {
                                   <p
                                     className="workflow-try-status"
                                     data-status={
-                                      attempt.error ? "failed" : "completed"
+                                      skips
+                                        ? "skipped"
+                                        : attempt.error
+                                          ? "failed"
+                                          : "completed"
                                     }
                                   >
-                                    {attempt.error ? "Stopped" : "Worked"} in{" "}
-                                    {formatDuration(attempt.durationMs)}
+                                    {skips
+                                      ? "Skipped"
+                                      : attempt.error
+                                        ? "Stopped"
+                                        : "Worked"}{" "}
+                                    in {formatDuration(attempt.durationMs)}
+                                    {skips &&
+                                      selectedStep &&
+                                      `. ${skipReason({
+                                        input: attempt.input,
+                                        kind: selectedStep.kind,
+                                        output: attempt.output,
+                                      })}`}
                                   </p>
                                   <StepReceipt
                                     receipt={{
-                                      error: attempt.error
-                                        ? readableError(attempt.error)
-                                        : null,
+                                      error:
+                                        attempt.error && !skips
+                                          ? readableError(attempt.error)
+                                          : null,
                                       input: attempt.input,
                                       output: attempt.output,
                                     }}
@@ -3015,6 +3059,7 @@ export function apply(ctx: Context) {
         : undefined;
 
     const skippedAt = filter ? titleCase(filter.stepId) : "";
+    const skippedWhy = filter ? skipReason(filter) : "";
     const help = run.error ? errorHelp(run.error, agent, failed) : undefined;
     const started = runStarted(run.startedAt);
 
@@ -3117,7 +3162,9 @@ export function apply(ctx: Context) {
                     </>
                   ) : (
                     <p className="workflow-empty">
-                      {formatRunTime(run.startedAt)}
+                      {skippedWhy
+                        ? `Skipped at ${skippedAt}: ${skippedWhy}`
+                        : formatRunTime(run.startedAt)}
                     </p>
                   )}
                   <div className="workflow-run-buttons">

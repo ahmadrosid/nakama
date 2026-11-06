@@ -417,3 +417,54 @@ test("a filter check ends the run as skipped while a plain check still fails", a
     await rm(dir, { force: true, recursive: true });
   }
 });
+
+test("a filter skip on a run that expired mid-run stays failed", async () => {
+  const service = new WorkflowService(":memory:", "org_a");
+  service.db.exec(
+    await readFile(
+      new URL("../migrations/001-workflows.sql", import.meta.url),
+      "utf8"
+    )
+  );
+
+  try {
+    const workflow = await service.create(
+      {
+        name: "Slow filter",
+        steps: [
+          { id: "fetch", input: {}, kind: "tool", tool: "slow_tool" },
+          {
+            id: "from_github",
+            kind: "compare",
+            left: "stripe.com",
+            onFail: "skip",
+            op: "contains",
+            right: "github.com",
+          },
+          { id: "summary", kind: "summarize", prompt: "Summarize" },
+        ],
+      },
+      "profile",
+      new Set(["slow_tool"])
+    );
+
+    const runner = new WorkflowRunner(service, {
+      executeTool: async () => {
+        service.db.query("UPDATE runs SET lease_until = ?").run(Date.now() - 1);
+        await service.listRuns(workflow.id);
+
+        return { ok: true };
+      },
+      runWorkflowSummarize: async () => "unused",
+    });
+
+    const result = await runner.run(workflow.id);
+    const [stored] = await service.listRuns(workflow.id);
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toBeDefined();
+    expect(stored?.status).toBe("failed");
+  } finally {
+    service.close();
+  }
+});
