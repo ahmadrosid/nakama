@@ -18,6 +18,7 @@ import {
   type UserContextStatusResponse,
 } from "@nakama/core";
 import { isAbortError } from "@nakama/core/channel-active-stream";
+import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
@@ -863,11 +864,11 @@ async function runStickyChat(
         enabled = true;
       } else if (arg === "off") {
         enabled = false;
-      } else if (arg === "low" || arg === "medium" || arg === "high") {
+      } else if (isThinkingEffort(arg)) {
         enabled = true;
         effort = arg;
       } else {
-        writeOutput("Usage: /thinking [on|off|low|medium|high]");
+        writeOutput("Usage: /thinking [on|off|low|medium|high|xhigh|max]");
 
         return "handled";
       }
