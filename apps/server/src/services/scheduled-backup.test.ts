@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import {
   mkdir,
@@ -11,10 +11,12 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NakamaApiError } from "@nakama/core";
 import { decodeArchiveRequestData } from "./data-portability";
 import {
   assertBackupDirOutsideRoot,
   encryptBackup,
+  readBackupError,
   startScheduledBackups,
   writeBackup,
 } from "./scheduled-backup";
@@ -191,5 +193,86 @@ describe("scheduled backups", () => {
     expect(exports).toBe(1);
     expect(await readdir(recent)).toHaveLength(1);
     expect(await readdir(empty)).toHaveLength(1);
+  });
+
+  test("keeps a 409 for Settings until the next good backup", async () => {
+    const dir = await tempDir();
+
+    // With no backup in the dir, the first run starts at once.
+    const run = async (exportZip: () => Promise<Uint8Array>) => {
+      const stop = await startScheduledBackups({ dir, exportZip, key });
+      await Bun.sleep(50);
+      stop();
+    };
+
+    const blocked = new NakamaApiError(
+      "Cannot export a restorable backup: the server cannot read config.ini.",
+      409
+    );
+
+    await run(() => Promise.reject(new Error("disk full")));
+    expect(await readBackupError(dir)).toBeNull();
+
+    await run(() => Promise.reject(blocked));
+    expect(await readBackupError(dir)).toEqual({
+      at: expect.any(String),
+      message: blocked.message,
+    });
+
+    await run(async () => Buffer.from("zip"));
+    expect(await readBackupError(dir)).toBeNull();
+    expect(await readdir(dir)).toHaveLength(1);
+  });
+
+  test("a written backup is not reported as failed when the old 409 cannot be cleared", async () => {
+    const dir = await tempDir();
+    // A folder with content where the error file goes: rm without recursive refuses it
+    await mkdir(join(dir, "scheduled-backup-error.json", "x"), {
+      recursive: true,
+    });
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const stop = await startScheduledBackups({
+        dir,
+        exportZip: async () => Buffer.from("zip"),
+        key,
+      });
+
+      await Bun.sleep(50);
+      stop();
+
+      const logged = errors.mock.calls.map((call) => String(call[0]));
+
+      const failed = logged.filter((line) => line.includes("backup failed"));
+
+      expect(failed).toEqual([]);
+      expect(logged).toHaveLength(1);
+      expect(await readdir(dir)).toHaveLength(2);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  test("logs an error file it cannot read instead of treating it as no 409", async () => {
+    const dir = await tempDir();
+    const file = join(dir, "scheduled-backup-error.json");
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      expect(await readBackupError(dir)).toBeNull();
+      expect(errors).not.toHaveBeenCalled();
+
+      await writeFile(file, "not json");
+      expect(await readBackupError(dir)).toBeNull();
+      expect(errors).toHaveBeenCalledTimes(1);
+
+      await rm(file);
+      await mkdir(file);
+      expect(await readBackupError(dir)).toBeNull();
+      expect(errors).toHaveBeenCalledTimes(2);
+    } finally {
+      errors.mockRestore();
+    }
   });
 });

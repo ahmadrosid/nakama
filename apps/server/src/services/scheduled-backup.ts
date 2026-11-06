@@ -2,13 +2,17 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   mkdir,
   readdir,
+  readFile,
   rename,
+  rm,
   stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
+import { type BackupStatusResponse, NakamaApiError } from "@nakama/core";
 import { comparablePath, resolveWithRealpath } from "@nakama/core/tools/paths";
+import { z } from "zod";
 
 const MAGIC = Buffer.from("NKBK1\n");
 
@@ -17,6 +21,51 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const KEEP = 7;
 
 const NAME = /^nakama-.+\.zip\.enc$/;
+
+// The last 409 of a scheduled backup, for Settings. The next good backup removes it.
+const ERROR_FILE = "scheduled-backup-error.json";
+
+const backupErrorSchema = z.object({ at: z.string(), message: z.string() });
+
+export async function readBackupError(
+  dir: string
+): Promise<BackupStatusResponse["lastError"]> {
+  let raw: string;
+
+  try {
+    raw = await readFile(join(dir, ERROR_FILE), "utf8");
+  } catch (error) {
+    // No file means no recorded 409. Any other read error could hide stopped backups, so log it
+    if (getNodeErrorCode(error) !== "ENOENT") {
+      console.error(
+        `Nakama cannot read ${ERROR_FILE}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    return null;
+  }
+
+  try {
+    const parsed = backupErrorSchema.safeParse(JSON.parse(raw));
+
+    if (parsed.success) {
+      return parsed.data;
+    }
+  } catch {
+    // Not JSON, logged below like a record of the wrong shape
+  }
+
+  console.error(`Nakama cannot read ${ERROR_FILE}: not a backup error record`);
+
+  return null;
+}
+
+async function recordBackupError(dir: string, message: string): Promise<void> {
+  const path = join(dir, ERROR_FILE);
+  const record = { at: new Date().toISOString(), message };
+  await writeFile(`${path}.tmp`, JSON.stringify(record), { mode: 0o600 });
+  await rename(`${path}.tmp`, path);
+}
 
 export function isEncryptedBackup(data: Uint8Array): boolean {
   return Buffer.from(data).subarray(0, MAGIC.length).equals(MAGIC);
@@ -110,10 +159,29 @@ export async function startScheduledBackups(options: {
       try {
         const path = await writeBackup(options);
         console.log(`Nakama backup written to ${path}`);
+
+        // Its own catch: the backup is written, a failed cleanup must not report it as failed
+        try {
+          await rm(join(options.dir, ERROR_FILE), { force: true });
+        } catch (clearError) {
+          console.error(
+            `Nakama cannot clear ${ERROR_FILE}: ${clearError instanceof Error ? clearError.message : String(clearError)}`
+          );
+        }
       } catch (error) {
         console.error(
           `Nakama backup failed: ${error instanceof Error ? error.message : String(error)}`
         );
+
+        if (error instanceof NakamaApiError && error.status === 409) {
+          try {
+            await recordBackupError(options.dir, error.message);
+          } catch (recordError) {
+            console.error(
+              `Nakama cannot record the backup error: ${recordError instanceof Error ? recordError.message : String(recordError)}`
+            );
+          }
+        }
       }
 
       schedule(DAY_MS);
@@ -124,4 +192,18 @@ export async function startScheduledBackups(options: {
   schedule(Math.max(0, last + DAY_MS - Date.now()));
 
   return () => clearTimeout(timer);
+}
+
+function getNodeErrorCode<T>(error: T): string | undefined {
+  if (!(error instanceof Error && "code" in error)) {
+    return;
+  }
+
+  const code = error.code;
+
+  return isString(code) ? code : undefined;
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

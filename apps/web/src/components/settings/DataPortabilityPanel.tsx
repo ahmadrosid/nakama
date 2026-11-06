@@ -3,7 +3,7 @@ import { Button } from "@nakama/ui/button";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import { Alert02Icon, Download04Icon, Upload04Icon } from "hugeicons-react";
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 import { useRef, useState } from "react";
 import {
   DataImportPreview,
@@ -15,6 +15,7 @@ import {
 } from "@/components/data-portability/TransferProgress";
 import {
   canRestoreDataImport,
+  useBackupStatusQuery,
   useExportData,
   usePreviewDataImport,
   useRestoreDataImport,
@@ -53,6 +54,8 @@ export function DataPortabilityPanel() {
   );
 
   const [error, setError] = useState<string | null>(null);
+  const backupStatus = useBackupStatusQuery();
+  const lastBackupError = backupStatus.data?.lastError;
   const exportMutation = useExportData();
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();
@@ -148,6 +151,16 @@ export function DataPortabilityPanel() {
 
   return (
     <div className="min-w-0 divide-y divide-border">
+      {lastBackupError ? (
+        <PanelError>
+          Last scheduled backup failed on{" "}
+          {new Date(lastBackupError.at).toLocaleString()}:{" "}
+          {lastBackupError.message}
+        </PanelError>
+      ) : null}
+      {backupStatus.isError ? (
+        <PanelError>Cannot check the last scheduled backup.</PanelError>
+      ) : null}
       <section className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <p className="text-balance font-medium text-foreground text-sm">
           Download backup
@@ -215,19 +228,24 @@ export function DataPortabilityPanel() {
         ) : null}
       </section>
 
-      {error ? (
-        <div className="px-4 py-3">
-          <div
-            className={cn(
-              "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
-              "border-destructive/30 bg-destructive/10 text-destructive"
-            )}
-          >
-            <Alert02Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
-            <span className="text-pretty">{error}</span>
-          </div>
-        </div>
-      ) : null}
+      {error ? <PanelError>{error}</PanelError> : null}
+    </div>
+  );
+}
+
+function PanelError({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-4 py-3">
+      <div
+        role="alert"
+        className={cn(
+          "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
+          "border-destructive/30 bg-destructive/10 text-destructive"
+        )}
+      >
+        <Alert02Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <span className="text-pretty">{children}</span>
+      </div>
     </div>
   );
 }

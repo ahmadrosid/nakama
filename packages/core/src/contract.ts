@@ -493,6 +493,11 @@ export interface NakamaUpgradeResponse {
   } | null;
 }
 
+export interface BackupStatusResponse {
+  /** The last scheduled backup's 409, until the next good backup. */
+  lastError: { at: string; message: string } | null;
+}
+
 export interface WebPublicUrlSettingsResponse {
   /** Set when NAKAMA_WEB_PUBLIC_URL / NAKAMA_PUBLIC_URL overrides the saved value. */
   envOverride: string | null;
