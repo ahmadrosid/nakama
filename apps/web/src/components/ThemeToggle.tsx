@@ -1,5 +1,5 @@
 import { cn } from "@nakama/ui/utils";
-import { ComputerIcon, MoonIcon, Sun01Icon } from "hugeicons-react";
+import { ComputerIcon, Moon02Icon, Sun01Icon } from "hugeicons-react";
 import { useTheme } from "@/context/use-theme";
 import type { Theme } from "@/lib/theme";
 
@@ -10,7 +10,7 @@ const THEME_OPTIONS: {
 }[] = [
   { icon: ComputerIcon, id: "system", label: "System" },
   { icon: Sun01Icon, id: "light", label: "Light" },
-  { icon: MoonIcon, id: "dark", label: "Dark" },
+  { icon: Moon02Icon, id: "dark", label: "Dark" },
 ];
 
 export function ThemeToggle() {
