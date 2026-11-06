@@ -7,6 +7,7 @@ import {
 } from "./settings-model-select";
 
 const openai = { id: "p-openai", label: "OpenAI" };
+
 const local = { id: "p-local", label: "Local" };
 
 const options: SettingsModelOption[] = [
