@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
@@ -115,6 +116,9 @@ export function VisionSettingsCard() {
           setSelection(model ?? "");
           setSavedHint(null);
 
+          // A change can be undone from the toast.
+          const previous = visionSettings?.model ?? null;
+
           saveVisionMutation.mutate(model, {
             onError: (error) => {
               setSelection(visionSettings?.model ?? "");
@@ -122,6 +126,18 @@ export function VisionSettingsCard() {
             },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
+
+              if (previous !== (saved.model ?? null)) {
+                toast("Image parsing model changed.", 8000, {
+                  label: "Undo",
+                  onClick: () =>
+                    saveVisionMutation.mutate(previous, {
+                      onSuccess: (restored) =>
+                        setSelection(restored.model ?? ""),
+                    }),
+                });
+              }
+
               setSavedHint(
                 saved.model
                   ? `Saved · ${profileModelLabel(saved.model, visionModelGroups)}`
@@ -157,6 +173,26 @@ export function VisionSettingsCard() {
                 {model.name} · {group.providerLabel}
               </SelectItem>
             ))
+          )}
+          {/* Models that cannot read images show why they are not a choice. */}
+          {providerModelGroups.flatMap((group) =>
+            group.models
+              .filter(
+                (model) =>
+                  resolveModelVisionSupport(
+                    encodeModelSelection(group.providerId, model.id),
+                    providerModelGroups
+                  ) !== true
+              )
+              .map((model) => (
+                <SelectItem
+                  disabled
+                  key={`no-vision:${group.providerId}:${model.id}`}
+                  value={`no-vision:${encodeModelSelection(group.providerId, model.id)}`}
+                >
+                  {model.name} · {group.providerLabel} · cannot read images
+                </SelectItem>
+              ))
           )}
         </SelectContent>
       </Select>

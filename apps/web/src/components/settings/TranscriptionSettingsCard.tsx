@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
@@ -134,6 +135,9 @@ export function TranscriptionSettingsCard({
           setSelection(model ?? "");
           setSavedHint(null);
 
+          // A change can be undone from the toast.
+          const previous = transcriptionSettings?.model ?? null;
+
           saveTranscriptionMutation.mutate(model, {
             onError: (error) => {
               setSelection(transcriptionSettings?.model ?? "");
@@ -141,6 +145,18 @@ export function TranscriptionSettingsCard({
             },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
+
+              if (previous !== (saved.model ?? null)) {
+                toast("Audio transcription model changed.", 8000, {
+                  label: "Undo",
+                  onClick: () =>
+                    saveTranscriptionMutation.mutate(previous, {
+                      onSuccess: (restored) =>
+                        setSelection(restored.model ?? ""),
+                    }),
+                });
+              }
+
               setSavedHint(
                 saved.model
                   ? `Saved · ${profileModelLabel(saved.model, transcriptionModelGroups)}`

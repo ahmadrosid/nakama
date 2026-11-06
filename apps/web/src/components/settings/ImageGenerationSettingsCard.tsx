@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
@@ -222,6 +223,9 @@ export function ImageGenerationSettingsCard() {
           setSelection(model ?? "");
           setSavedHint(null);
 
+          // A change can be undone from the toast.
+          const previous = imageGenerationSettings?.model ?? null;
+
           saveImageGenerationMutation.mutate(model, {
             onError: (error) => {
               setSelection(imageGenerationSettings?.model ?? "");
@@ -229,6 +233,18 @@ export function ImageGenerationSettingsCard() {
             },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
+
+              if (previous !== (saved.model ?? null)) {
+                toast("Image generation model changed.", 8000, {
+                  label: "Undo",
+                  onClick: () =>
+                    saveImageGenerationMutation.mutate(previous, {
+                      onSuccess: (restored) =>
+                        setSelection(restored.model ?? ""),
+                    }),
+                });
+              }
+
               setSavedHint(`Saved · ${labelOf(saved.model)}`);
             },
           });
