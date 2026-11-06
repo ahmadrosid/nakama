@@ -205,9 +205,11 @@ function UserContextStatusCopy({
     );
   }
 
-  return isActive ? (
-    <p className="text-muted-foreground text-xs">Set for this org</p>
-  ) : null;
+  return (
+    <p className="text-muted-foreground text-xs">
+      {isActive ? "Set for this org" : "Not set up"}
+    </p>
+  );
 }
 
 /** USER.md row for settings and the setup wizard. Render inside a parent card. */
@@ -231,7 +233,9 @@ export function UserContextSettings() {
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0 space-y-0.5">
           <p className="text-foreground text-sm">Personalisation</p>
-          <UserContextStatusCopy isActive={isActive} loadError={loadError} />
+          {isLoading ? null : (
+            <UserContextStatusCopy isActive={isActive} loadError={loadError} />
+          )}
         </div>
 
         {isLoading ? <Spinner /> : null}
