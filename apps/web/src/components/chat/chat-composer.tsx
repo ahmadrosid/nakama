@@ -1294,6 +1294,8 @@ function shortEffortLabel(effort: string, fullLabel: string): string {
       return "Low";
     case "medium":
       return "Med";
+    case "xhigh":
+      return "X-High";
     default:
       return fullLabel;
   }

@@ -2,16 +2,19 @@ import type {
   ProviderModelOption,
   ThinkingEffort,
 } from "@nakama/core/contract";
+import { clampThinkingEffort } from "@nakama/core/thinking-effort";
 import { useMemo } from "react";
 import { useAcpChatControls } from "@/hooks/use-acp-settings";
 import {
   effectiveProfileModelSelection,
+  findSelectedModel,
   groupModelsByProvider,
   resolveModelThinkingSupport,
 } from "@/lib/models";
 import {
   DEFAULT_THINKING_EFFORT,
   shouldShowThinkingEffort,
+  thinkingEffortOptionsFor,
 } from "@/lib/thinking-settings";
 
 interface ChatComposerControlsInput {
@@ -89,6 +92,11 @@ export function useChatComposerControls({
     [currentModelSelection, providerModelGroups]
   );
 
+  const activeModel = useMemo(
+    () => findSelectedModel(currentModelSelection, providerModelGroups),
+    [currentModelSelection, providerModelGroups]
+  );
+
   const effort = acpEnabled
     ? {
         disabled: busy || readOnlySession || acp.isSaving,
@@ -102,11 +110,14 @@ export function useChatComposerControls({
           thinkingSettingsLoading ||
           saveThinkingPending ||
           readOnlySession,
-        options: undefined,
-        value:
+        options: thinkingEffortOptionsFor(activeModel),
+        // Show what the server will send: Max saved on DeepSeek reads as High on Gemini.
+        value: clampThinkingEffort(
           sessionThinkingEffort ??
-          thinkingSettingsEffort ??
-          DEFAULT_THINKING_EFFORT,
+            thinkingSettingsEffort ??
+            DEFAULT_THINKING_EFFORT,
+          activeModel?.id ?? ""
+        ),
         visible: shouldShowThinkingEffort(activeModelSupportsThinking),
       };
 
