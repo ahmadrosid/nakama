@@ -9,6 +9,7 @@ import { useFireworksDiscoverModels } from "@/hooks/use-fireworks-discover-model
 type FireworksBrowseSelectHandler = (row: CapabilityBrowseRow) => void;
 
 interface FireworksModelsBrowseListProps {
+  addedIds?: ReadonlySet<string>;
   apiKey?: string;
   className?: string;
   multiSelect?: boolean;
@@ -22,6 +23,7 @@ export function FireworksModelsBrowseList({
   className,
   apiKey,
   providerId,
+  addedIds,
   multiSelect,
   onAddMany,
 }: FireworksModelsBrowseListProps) {
@@ -34,6 +36,7 @@ export function FireworksModelsBrowseList({
 
   return (
     <CatalogModelsBrowseList<CapabilityBrowseRow>
+      addedIds={addedIds}
       className={className}
       filterRows={(rows, search, hideDeprecated) =>
         filterCapabilityBrowseRows(rows, { hideDeprecated, search })

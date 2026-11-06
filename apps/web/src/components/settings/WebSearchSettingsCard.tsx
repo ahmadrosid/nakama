@@ -266,7 +266,7 @@ export function WebSearchSettingsCard() {
             </p>
           ) : null}
         </div>
-        <div className="w-full min-w-0 sm:w-56">
+        <div className="w-full min-w-0 sm:w-80">
           <Select
             disabled={form.pending}
             onValueChange={form.selectProvider}
@@ -280,11 +280,11 @@ export function WebSearchSettingsCard() {
               <SelectValue>
                 {PROVIDER_PRESETS.find(
                   (preset) => preset.value === form.provider
-                )?.label ?? "Built-in (default)"}
+                )?.label ?? "Built-in"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value={BUILT_IN_VALUE}>Built-in (default)</SelectItem>
+              <SelectItem value={BUILT_IN_VALUE}>Built-in</SelectItem>
               {PROVIDER_PRESETS.map((preset) => (
                 <SelectItem key={preset.value} value={preset.value}>
                   {preset.label}

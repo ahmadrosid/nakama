@@ -48,6 +48,7 @@ function useCerebrasModels() {
 type CerebrasBrowseSelectHandler = (row: CerebrasModelRow) => void;
 
 interface CerebrasModelsBrowseListProps {
+  addedIds?: ReadonlySet<string>;
   className?: string;
   multiSelect?: boolean;
   onAddMany?: (rows: CerebrasModelRow[]) => void;
@@ -59,6 +60,7 @@ const EMPTY_ROWS: CerebrasModelRow[] = [];
 export function CerebrasModelsBrowseList({
   onSelect,
   className,
+  addedIds,
   multiSelect,
   onAddMany,
 }: CerebrasModelsBrowseListProps) {
@@ -66,6 +68,7 @@ export function CerebrasModelsBrowseList({
 
   return (
     <CatalogModelsBrowseList<CerebrasModelRow>
+      addedIds={addedIds}
       className={className}
       filterRows={(rows, search, hideDeprecated) =>
         filterCapabilityBrowseRows(rows, {

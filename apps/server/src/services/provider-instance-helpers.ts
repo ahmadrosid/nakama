@@ -109,6 +109,25 @@ export function resolveDefaultModelForInstance(
   return getDefaultModel(instance.type, instance.customModels);
 }
 
+// Catalog providers that keep the user's own model list, on create and update.
+const CATALOG_LIST_TYPES: ReadonlySet<string> = new Set([
+  "openai",
+  "chatgpt",
+  "xai_oauth",
+  "anthropic",
+  "gemini",
+  "deepseek",
+  "doubao",
+  "together",
+  "xiaomi",
+  "meta",
+  "vercel_ai_gateway",
+  "mistral",
+  "qwen",
+  "qwen_cn",
+  "perplexity",
+]);
+
 export function buildProviderInstanceFromCreateRequest(
   // apiKey and type are widened here on purpose: request bodies reach this
   // unvalidated, so an absent field has to name itself rather than throw a
@@ -290,23 +309,7 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateCloudflareCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
-    } else if (
-      instance.type === "openai" ||
-      instance.type === "chatgpt" ||
-      instance.type === "xai_oauth" ||
-      instance.type === "anthropic" ||
-      instance.type === "gemini" ||
-      instance.type === "deepseek" ||
-      instance.type === "doubao" ||
-      instance.type === "together" ||
-      instance.type === "xiaomi" ||
-      instance.type === "meta" ||
-      instance.type === "vercel_ai_gateway" ||
-      instance.type === "mistral" ||
-      instance.type === "qwen" ||
-      instance.type === "qwen_cn" ||
-      instance.type === "perplexity"
-    ) {
+    } else if (CATALOG_LIST_TYPES.has(instance.type)) {
       next.customModels = validateCustomModels(request.customModels);
     }
   }
@@ -475,10 +478,13 @@ function buildProviderFieldsFromRequest(
     return { customModels };
   }
 
-  const customModels =
-    type === "cloudflare" && request.customModels?.length
+  const customModels = request.customModels?.length
+    ? type === "cloudflare"
       ? validateCloudflareCustomModels(request.customModels)
-      : undefined;
+      : CATALOG_LIST_TYPES.has(type)
+        ? validateCustomModels(request.customModels)
+        : undefined
+    : undefined;
 
   const rawBaseUrl = request.baseUrl?.trim();
 

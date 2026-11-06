@@ -1,5 +1,11 @@
 import type { CustomModelEntry } from "@nakama/core/contract";
+import { createContext } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
+
+/** Model ID → the Defaults settings that use it, set by the Manage dialog. */
+export const ModelUsageContext = createContext<
+  Readonly<Record<string, readonly string[]>>
+>({});
 
 export function modelListRowVisionEnabled(
   row: Pick<ModelListRow, "supportsVision">,

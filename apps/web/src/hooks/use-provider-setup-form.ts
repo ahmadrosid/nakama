@@ -12,10 +12,13 @@ import type {
 import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
-import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
+import { focusModelsField } from "@/hooks/focus-models-field";
+import { setupCustomModels } from "@/hooks/setup-custom-models";
+import { useApiKeyCheck } from "@/hooks/use-api-key-check";
 import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
+import { useCatalogModelRows } from "@/hooks/use-catalog-model-rows";
 import { formatError } from "@/lib/client";
 import {
   buildCreateProviderRequest,
@@ -176,8 +179,18 @@ export function useProviderSetupForm(
     [ollamaHostMode]
   );
 
+  const {
+    catalogModelRows,
+    catalogRows,
+    handleCatalogModelsChange,
+    setCatalogRows,
+    usesCatalogList,
+  } = useCatalogModelRows(selectedProvider, filteredModels, setModelsError);
+
   useEffect(() => {
     if (filteredModels.length === 0) {
+      setSelectedModel("");
+
       return;
     }
 
@@ -190,12 +203,30 @@ export function useProviderSetupForm(
     });
   }, [selectedProvider, filteredModels]);
 
+  const { keyCheck, runKeyCheck } = useApiKeyCheck(setApiKeyError);
+
   const handleApiKeyBlur = useCallback(() => {
     setApiKeyTouched(true);
-    setApiKeyError(
-      validateApiKeyForProvider(apiKey, selectedProvider, ollamaApiKeyOptions)
+
+    const error = validateApiKeyForProvider(
+      apiKey,
+      selectedProvider,
+      ollamaApiKeyOptions
     );
-  }, [apiKey, selectedProvider, ollamaApiKeyOptions]);
+
+    setApiKeyError(error);
+
+    if (!error && apiKey.trim() && isAuthenticated) {
+      void runKeyCheck(apiKey, selectedProvider, baseUrl);
+    }
+  }, [
+    apiKey,
+    baseUrl,
+    isAuthenticated,
+    runKeyCheck,
+    selectedProvider,
+    ollamaApiKeyOptions,
+  ]);
 
   const handleApiKeyChange = useCallback(
     (value: string) => {
@@ -235,6 +266,16 @@ export function useProviderSetupForm(
       setSelectedProvider(provider);
       // The last provider's model never fits the new one.
       setSelectedModel("");
+      setFormError(null);
+      setApiKeyError(null);
+      setApiKeyTouched(false);
+      setDisplayNameError(null);
+      setBaseUrlError(null);
+      setModelsError(null);
+      // A name or key typed for one provider must not carry to the next one.
+      setDisplayName("");
+      setApiKey("");
+      setCatalogRows(null);
 
       if (provider === "ollama") {
         setOllamaHostMode("local");
@@ -264,9 +305,6 @@ export function useProviderSetupForm(
         provider !== "netra"
       ) {
         setBaseUrl("");
-        setDisplayNameError(null);
-        setBaseUrlError(null);
-        setModelsError(null);
       }
 
       if (provider === "openai_compatible") {
@@ -281,7 +319,7 @@ export function useProviderSetupForm(
         setChatgptOAuth(null);
       }
     },
-    [configuredTypes]
+    [configuredTypes, setCatalogRows]
   );
 
   const handleSubscriptionModelsChange = useCallback(
@@ -322,6 +360,44 @@ export function useProviderSetupForm(
     },
     [apiKey, apiKeyTouched]
   );
+
+  const handleDisplayNameChange = useCallback((value: string) => {
+    setDisplayName(value);
+    setDisplayNameError(null);
+    setFormError(null);
+  }, []);
+
+  const handleBaseUrlChange = useCallback((value: string) => {
+    setBaseUrl(value);
+    setBaseUrlError(null);
+    setFormError(null);
+  }, []);
+
+  const handleBaseUrlBlur = useCallback(() => {
+    if (!baseUrl.trim()) {
+      return;
+    }
+
+    const error = validateBaseUrlInput(baseUrl);
+    setBaseUrlError(error);
+
+    // An empty name takes the host, so most people never type one.
+    if (!(error || displayName.trim())) {
+      setDisplayName(new URL(baseUrl.trim()).hostname);
+      setDisplayNameError(null);
+    }
+  }, [baseUrl, displayName]);
+
+  const handleBaseUrlRequired = useCallback(() => {
+    setBaseUrlError(validateBaseUrlInput(baseUrl));
+    document.getElementById("provider-base-url")?.focus();
+  }, [baseUrl]);
+
+  const handleCustomModelsChange = useCallback((rows: ModelListRow[]) => {
+    setCustomModels(rows);
+    setModelsError(null);
+    setFormError(null);
+  }, []);
 
   const handleOpenRouterModelsChange = useCallback((rows: ModelListRow[]) => {
     setOpenRouterModels(rows);
@@ -371,7 +447,9 @@ export function useProviderSetupForm(
         selectedProvider === "netra" ||
         selectedProvider === "ollama"
           ? validateCustomModelsInput(customModels)
-          : null;
+          : usesCatalogList && catalogRows
+            ? validateCustomModelsInput(catalogRows)
+            : null;
 
       setApiKeyTouched(true);
       setApiKeyError(nextApiKeyError);
@@ -388,10 +466,14 @@ export function useProviderSetupForm(
       }
 
       if (nextOpenRouterModelsError) {
+        focusModelsField();
+
         return;
       }
 
       if (nextShortlistModelsError) {
+        focusModelsField();
+
         return;
       }
 
@@ -416,6 +498,8 @@ export function useProviderSetupForm(
       }
 
       if (nextModelsError) {
+        focusModelsField();
+
         return;
       }
 
@@ -444,7 +528,9 @@ export function useProviderSetupForm(
             ? resolveOpenRouterSetupModel(shortlistModels, selectedModel)
             : selectedProvider === "ollama"
               ? resolveOpenRouterSetupModel(customModels, selectedModel)
-              : selectedModel;
+              : usesCatalogList && catalogRows
+                ? resolveOpenRouterSetupModel(catalogRows, selectedModel)
+                : selectedModel;
 
       setBusy(true);
       setFormError(null);
@@ -460,38 +546,16 @@ export function useProviderSetupForm(
             apiKey: trimmedKey,
             baseUrl: resolvedCloudflareBaseUrl ?? baseUrl,
             chatgptOAuth: chatgptOAuth ?? undefined,
-            customModels:
-              (selectedProvider === "chatgpt" && subscriptionModels.length) ||
-              selectedProvider === "xai_oauth"
-                ? filteredModels.map((entry) => ({
-                    default: entry.id === modelToSave,
-                    id: entry.id,
-                    name: entry.name,
-                    supportsVision: entry.supportsVision !== false,
-                  }))
-                : selectedProvider === "openai_compatible" ||
-                    selectedProvider === "netra" ||
-                    selectedProvider === "ollama"
-                  ? normalizeModelListRows(customModels).map((entry) => ({
-                      ...entry,
-                      default: entry.id === modelToSave,
-                    }))
-                  : selectedProvider === "openrouter"
-                    ? normalizeModelListRows(openRouterModels)
-                    : isShortlistCapabilityProvider(selectedProvider)
-                      ? normalizeModelListRows(shortlistModels)
-                      : selectedProvider === "opencode_go" && modelToSave
-                        ? normalizeModelListRows([
-                            {
-                              default: true,
-                              id: modelToSave,
-                              name: getModelDisplayName(
-                                filteredModels,
-                                modelToSave
-                              ),
-                            },
-                          ])
-                        : undefined,
+            customModels: setupCustomModels({
+              catalogRows: usesCatalogList ? catalogRows : null,
+              customModels,
+              filteredModels,
+              modelToSave,
+              openRouterModels,
+              selectedProvider,
+              shortlistModels,
+              subscriptionCount: subscriptionModels.length,
+            }),
             displayName,
             hostMode:
               selectedProvider === "ollama" ? ollamaHostMode : undefined,
@@ -513,14 +577,23 @@ export function useProviderSetupForm(
         setXaiOAuth(null);
         setChatgptOAuth(null);
         setSubscriptionModels([]);
+        setCatalogRows(null);
         setOpenRouterModels([]);
         setOpenRouterRouting({});
         setShortlistModels([]);
         setCustomModels([]);
         onSuccess?.(result);
       } catch (err) {
-        setFormError(formatError(err));
-        document.getElementById("api-key")?.focus();
+        const message = formatError(err);
+
+        // Focus the key only when the key is the problem; the form error
+        // shows by the submit button.
+        if (trimmedKey && /API key/i.test(message)) {
+          setApiKeyError(message);
+          document.getElementById("api-key")?.focus();
+        } else {
+          setFormError(message);
+        }
       } finally {
         setBusy(false);
       }
@@ -528,6 +601,9 @@ export function useProviderSetupForm(
     [
       apiKey,
       baseUrl,
+      catalogRows,
+      setCatalogRows,
+      usesCatalogList,
       xaiOAuth,
       chatgptOAuth,
       openRouterModels,
@@ -548,6 +624,15 @@ export function useProviderSetupForm(
     ]
   );
 
+  // A typed key, name or picked model is work the user would lose.
+  const dirty =
+    apiKey.trim() !== "" ||
+    displayName.trim() !== "" ||
+    customModels.length > 0 ||
+    catalogRows !== null ||
+    openRouterModels.length > 0 ||
+    shortlistModels.length > 0;
+
   return {
     apiKey,
     apiKeyError,
@@ -555,9 +640,11 @@ export function useProviderSetupForm(
     baseUrlError,
     busy,
     catalog,
+    catalogModelRows,
     chatgptOAuth,
     configuredTypes,
     customModels,
+    dirty,
     displayName,
     displayNameError,
     filteredModels,
@@ -566,12 +653,19 @@ export function useProviderSetupForm(
     formError,
     handleApiKeyBlur,
     handleApiKeyChange,
+    handleBaseUrlBlur,
+    handleBaseUrlChange,
+    handleBaseUrlRequired,
+    handleCatalogModelsChange,
+    handleCustomModelsChange,
+    handleDisplayNameChange,
     handleOllamaHostModeChange,
     handleOpenRouterModelsChange,
     handleProviderSelect,
     handleShortlistModelsChange,
     handleSubmit,
     handleSubscriptionModelsChange,
+    keyCheck,
     modelsError,
     ollamaHostMode,
     openRouterModels,
@@ -579,10 +673,7 @@ export function useProviderSetupForm(
     openRouterRouting,
     selectedModel,
     selectedProvider,
-    setBaseUrl,
     setChatgptOAuth,
-    setCustomModels,
-    setDisplayName,
     setOpenRouterRouting,
     setSelectedModel,
     setShowApiKey,
@@ -591,6 +682,7 @@ export function useProviderSetupForm(
     shortlistModels,
     shortlistModelsError,
     showApiKey,
+    usesCatalogList,
     wireApi,
     xaiOAuth,
   };

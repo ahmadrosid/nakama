@@ -165,23 +165,19 @@ export function CatalogProviderModelFields({
     setIsBrowsing(false);
   };
 
-  const browseFooter = remoteError
-    ? `Could not load models from ${providerLabel}.`
-    : remoteLoading
-      ? `Loading models from ${providerLabel}…`
-      : `Choose which ${providerLabel} models appear in chat for this provider.`;
+  const footerError =
+    modelsError ??
+    (remoteError ? `Could not load models from ${providerLabel}.` : null);
 
   return (
     <FormField
       density={density}
       footer={
-        modelsError ? (
+        footerError ? (
           <p className="text-destructive text-sm" role="alert">
-            {modelsError}
+            {footerError}
           </p>
-        ) : (
-          <p className="text-muted-foreground text-xs">{browseFooter}</p>
-        )
+        ) : null
       }
       id={`${provider}-provider-models`}
       label="Models"
@@ -229,13 +225,14 @@ export function CatalogProviderModelFields({
       ) : (
         <ModelListEditor
           browse={{
-            label: `Browse ${providerLabel}`,
+            label: "Browse models",
             onClick: () => setIsBrowsing(true),
           }}
           disabled={disabled}
           models={customModels}
           onChange={onCustomModelsChange}
           showPricing
+          showThinking
           showVision
           visionDefaultOn={[
             "openai",

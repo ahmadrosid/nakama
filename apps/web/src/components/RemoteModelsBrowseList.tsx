@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { CatalogModelsBrowseList } from "@/components/CatalogModelsBrowseList";
 import { client } from "@/lib/client";
+import { validateBaseUrlInput } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
 export interface RemoteModelRow {
@@ -16,6 +17,9 @@ type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
 const EMPTY_ROWS: RemoteModelRow[] = [];
 
 interface RemoteModelsBrowseListProps {
+  addedIds?: ReadonlySet<string>;
+  /** Saved models the endpoint may not list; they still show as Added. */
+  addedModels?: Array<{ id: string; name?: string }>;
   apiKey?: string;
   baseUrl?: string;
   browseLabel?: string;
@@ -28,7 +32,48 @@ interface RemoteModelsBrowseListProps {
   providerId?: string;
 }
 
+function withSavedModels(
+  rows: RemoteModelRow[],
+  saved: Array<{ id: string; name?: string }> | undefined
+): RemoteModelRow[] {
+  const listed = new Set(rows.map((row) => row.id));
+
+  const missing = (saved ?? []).flatMap((model) => {
+    const id = model.id.trim();
+
+    return id && !listed.has(id)
+      ? [{ id, name: model.name?.trim() || id }]
+      : [];
+  });
+
+  return missing.length > 0 ? [...missing, ...rows] : rows;
+}
+
+function browseStatus(
+  state: { canFetch: boolean; error: Error | null; loading: boolean },
+  count: number,
+  label: string
+): string {
+  if (!state.canFetch) {
+    return `Browse models from ${label}`;
+  }
+
+  if (state.loading) {
+    return `Loading models from ${label}…`;
+  }
+
+  // The error itself shows below; the header keeps naming the source.
+  if (state.error) {
+    return `Models from ${label}`;
+  }
+
+  // The shared list adds "· N in your list".
+  return `Connected · ${count} model${count === 1 ? "" : "s"} from ${label}`;
+}
+
 export function RemoteModelsBrowseList({
+  addedIds,
+  addedModels,
   onSelect,
   className,
   providerId,
@@ -53,7 +98,12 @@ export function RemoteModelsBrowseList({
   }, [apiKey]);
 
   const trimmedBaseUrl = baseUrl?.trim() ?? "";
-  const canFetch = Boolean(providerId?.trim() || trimmedBaseUrl);
+
+  const canFetch = Boolean(
+    providerId?.trim() ||
+      provider === "netra" ||
+      (trimmedBaseUrl && validateBaseUrlInput(trimmedBaseUrl) === null)
+  );
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     enabled: canFetch,
@@ -112,8 +162,17 @@ export function RemoteModelsBrowseList({
     staleTime: 1000 * 30,
   });
 
+  // An endpoint that refuses an empty key needs a key, not a different one.
+  const browseError =
+    error &&
+    !(providerId?.trim() || apiKey.trim()) &&
+    /rejected this API key/i.test(error.message)
+      ? new Error("This endpoint needs an API key. Enter it above.")
+      : error;
+
   return (
     <CatalogModelsBrowseList<RemoteModelRow>
+      addedIds={addedIds}
       className={className}
       emptyMessage={`No models found on ${browseLabel}.`}
       idleMessage="Enter a base URL before browsing models."
@@ -122,17 +181,19 @@ export function RemoteModelsBrowseList({
       onSelect={onSelect}
       query={{
         canFetch,
-        error,
+        error: browseError,
         isFetching,
         isLoading,
         onRefresh: () => void refetch(),
         refreshDisabled: isFetching,
       }}
-      rows={data ?? EMPTY_ROWS}
+      rows={withSavedModels(data ?? EMPTY_ROWS, addedModels)}
       status={({ filteredCount }) =>
-        canFetch
-          ? `${filteredCount} model${filteredCount === 1 ? "" : "s"} from ${browseLabel}`
-          : `Browse models from ${browseLabel}`
+        browseStatus(
+          { canFetch, error: browseError, loading: isLoading || isFetching },
+          filteredCount,
+          browseLabel
+        )
       }
     />
   );

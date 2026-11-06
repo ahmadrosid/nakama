@@ -5,6 +5,7 @@ import type {
   ProviderModelOption,
   WireApi,
 } from "@nakama/core/contract";
+import { isDiscoveryModelProvider } from "@nakama/core/discovery-providers";
 import {
   OLLAMA_CLOUD_DEFAULT_BASE_URL,
   OLLAMA_LOCAL_DEFAULT_BASE_URL,
@@ -220,6 +221,18 @@ export function validateApiKeyForProvider(
   return null;
 }
 
+const LOCAL_HOST_PATTERN =
+  /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|.+\.local)$/i;
+
+/** A hosted endpoint almost always needs a key; a local one often does not. */
+export function isLocalBaseUrl(baseUrl: string): boolean {
+  try {
+    return LOCAL_HOST_PATTERN.test(new URL(baseUrl.trim()).hostname);
+  } catch {
+    return true;
+  }
+}
+
 export function validateDisplayNameInput(displayName: string): string | null {
   const trimmed = displayName.trim();
 
@@ -250,6 +263,27 @@ export function validateBaseUrlInput(baseUrl: string): string | null {
   return null;
 }
 
+function findDuplicateModelIds(models: Array<{ id: string }>): Set<string> {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  for (const model of models) {
+    const id = model.id.trim();
+
+    if (!id) {
+      continue;
+    }
+
+    if (seen.has(id)) {
+      duplicates.add(id);
+    }
+
+    seen.add(id);
+  }
+
+  return duplicates;
+}
+
 export function validateCustomModelsInput(
   models: Array<{
     id: string;
@@ -261,6 +295,12 @@ export function validateCustomModelsInput(
 
   if (valid.length === 0) {
     return "Add at least one model.";
+  }
+
+  const duplicateId = findDuplicateModelIds(valid).values().next().value;
+
+  if (duplicateId) {
+    return `Model ID "${duplicateId}" is in the list two times. Remove one.`;
   }
 
   for (const row of valid) {
@@ -470,11 +510,18 @@ export function resolveOpenRouterSetupModel(
   const trimmed = selectedModel.trim();
   const valid = rows.filter((row) => row.id.trim());
 
+  // The row the user marked as default wins over the catalog pick.
+  const flagged = valid.find((row) => row.default)?.id;
+
+  if (flagged) {
+    return flagged;
+  }
+
   if (trimmed && valid.some((row) => row.id === trimmed)) {
     return trimmed;
   }
 
-  return valid.find((row) => row.default)?.id ?? valid[0]?.id ?? "";
+  return valid[0]?.id ?? "";
 }
 
 function validateCustomOpenRouterModel(model: string): string | null {
@@ -527,6 +574,20 @@ export function buildCreateProviderRequest(options: {
       "fireworks",
       "ollama",
       "opencode_go",
+      // Catalog providers keep a list the user changed in Add.
+      "openai",
+      "anthropic",
+      "gemini",
+      "deepseek",
+      "doubao",
+      "together",
+      "xiaomi",
+      "meta",
+      "vercel_ai_gateway",
+      "mistral",
+      "qwen",
+      "qwen_cn",
+      "perplexity",
     ].includes(options.provider) &&
       options.customModels?.length)
       ? options.customModels
@@ -697,7 +758,8 @@ export function knownModelSelection(
 
 export function profileModelLabel(
   modelId: string | null,
-  groups: ReturnType<typeof groupModelsByProvider>
+  groups: ReturnType<typeof groupModelsByProvider>,
+  options: { withProvider?: boolean } = {}
 ): string {
   if (!modelId) {
     return "Select model";
@@ -714,7 +776,10 @@ export function profileModelLabel(
     const match = group?.models.find((model) => model.id === resolvedModelId);
 
     if (match) {
-      return match.name;
+      // Match the menu items, which name the provider too.
+      return options.withProvider && group
+        ? `${match.name} · ${group.providerLabel}`
+        : match.name;
     }
   }
 
@@ -850,6 +915,7 @@ export function resolveModelVisionSupport(
   }
 
   if (
+    (model.provider !== "acp" && isDiscoveryModelProvider(model.provider)) ||
     model.provider === "openai_compatible" ||
     model.provider === "opencode_go" ||
     model.provider === "deepseek" ||

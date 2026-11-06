@@ -2110,6 +2110,8 @@ export interface OpenRouterRoutingSettings {
 }
 
 export interface ProviderInstanceSummary {
+  /** The last 4 characters of the saved key, for admins only. */
+  apiKeyEnding?: string;
   baseUrl?: string | null;
   createdAt: string;
   customModels?: CustomModelEntry[];
@@ -2166,6 +2168,11 @@ export interface UpdateProviderRequest {
 
 export interface UpdateProviderResponse {
   provider: ProviderInstanceSummary;
+}
+
+/** What a live check of the saved key found. */
+export interface CheckProviderResponse {
+  status: "ok" | "rejected" | "needs-key" | "unreachable" | "unchecked";
 }
 
 export interface DeleteProviderResponse {
