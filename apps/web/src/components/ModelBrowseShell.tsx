@@ -89,7 +89,12 @@ export function ModelBrowseShell({
 
   return (
     <div
-      className={cn("flex flex-col", className, collapsed && "h-auto")}
+      className={cn(
+        "flex flex-col",
+        className,
+        // On a phone the dialog's own scroll is the only one.
+        (collapsed || isPhoneWidth()) && "h-auto"
+      )}
       data-model-browse-shell=""
     >
       {/* On a phone the dialog scrolls; search and status stay in view. */}
@@ -189,6 +194,22 @@ export function VirtualModelBrowseList<T>({
 
   const visibleRows = rows.slice(startIndex, endIndex);
 
+  // On a phone every row renders in the dialog's own scroll; no inner box.
+  if (isPhoneWidth()) {
+    return (
+      <div data-model-browse-list="" onKeyDown={moveBetweenRows}>
+        {rows.map((row) => (
+          <Fragment key={getKey(row)}>
+            {renderRow(row, {
+              height: MODEL_ROW_HEIGHT,
+              position: "relative",
+            })}
+          </Fragment>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       className="h-full overflow-y-auto"
@@ -208,6 +229,13 @@ export function VirtualModelBrowseList<T>({
         ))}
       </div>
     </div>
+  );
+}
+
+function isPhoneWidth(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(max-width: 639px)").matches === true
   );
 }
 
