@@ -2,6 +2,7 @@ import { Button } from "@nakama/ui/button";
 import { FormField } from "@nakama/ui/form-field";
 import { Add01Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
+import { usePhoneWidth } from "@/components/ModelBrowseShell";
 import {
   ModelListEditor,
   type ModelListRow,
@@ -51,6 +52,7 @@ export function BrowsableModelFields<T>({
   renderBrowse,
 }: BrowsableModelFieldsProps<T>) {
   const [isBrowsing, setIsBrowsing] = useState(false);
+  const phone = usePhoneWidth();
   const [keptModel, setKeptModel] = useState<string | null>(null);
   const showBrowse = canBrowse && (isBrowsing || customModels.length === 0);
 
@@ -127,6 +129,36 @@ export function BrowsableModelFields<T>({
     setIsBrowsing(true);
   };
 
+  const browseActions = (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Button
+        data-models-add=""
+        disabled={disabled}
+        onClick={() => {
+          onCustomModelsChange([...customModels, { id: "", name: "" }]);
+          setIsBrowsing(false);
+        }}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <Add01Icon className="mr-1 size-4" />
+        Add model by ID
+      </Button>
+      {customModels.length > 0 ? (
+        <Button
+          disabled={disabled}
+          onClick={() => setIsBrowsing(false)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Back to list
+        </Button>
+      ) : null}
+    </div>
+  );
+
   return (
     <FormField
       density={density}
@@ -146,6 +178,9 @@ export function BrowsableModelFields<T>({
     >
       {showBrowse ? (
         <div className="flex flex-col gap-2">
+          {/* On a phone the list is long; its actions come first, in the
+              DOM too, so Tab order matches what you see. */}
+          {phone ? browseActions : null}
           {renderBrowse({
             addedIds,
             addedModels: customModels,
@@ -153,34 +188,7 @@ export function BrowsableModelFields<T>({
             onAddMany: handleAddMany,
             onSelect: handleBrowseSelect,
           })}
-          {/* On a phone the list is long; its actions come first. */}
-          <div className="flex flex-wrap items-center justify-between gap-2 max-sm:order-first">
-            <Button
-              data-models-add=""
-              disabled={disabled}
-              onClick={() => {
-                onCustomModelsChange([...customModels, { id: "", name: "" }]);
-                setIsBrowsing(false);
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Add01Icon className="mr-1 size-4" />
-              Add model by ID
-            </Button>
-            {customModels.length > 0 ? (
-              <Button
-                disabled={disabled}
-                onClick={() => setIsBrowsing(false)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Back to list
-              </Button>
-            ) : null}
-          </div>
+          {phone ? null : browseActions}
         </div>
       ) : (
         <ModelListEditor

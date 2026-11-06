@@ -151,10 +151,13 @@ export function VirtualModelBrowseList<T>({
   const [phoneLimit, setPhoneLimit] = useState(PHONE_PAGE_SIZE);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const [prevRows, setPrevRows] = useState(rows);
+  // A new list (a search, another source) starts at the top; the same rows
+  // in a new array, as after an add, keep the place.
+  const rowsKey = rows.map(getKey).join("\n");
+  const [prevRowsKey, setPrevRowsKey] = useState(rowsKey);
 
-  if (prevRows !== rows) {
-    setPrevRows(rows);
+  if (prevRowsKey !== rowsKey) {
+    setPrevRowsKey(rowsKey);
     setScrollTop(0);
     setPhoneLimit(PHONE_PAGE_SIZE);
   }
@@ -183,7 +186,7 @@ export function VirtualModelBrowseList<T>({
     }
 
     element.scrollTop = 0;
-  }, [rows]);
+  }, [rowsKey]);
 
   const totalHeight = rows.length * MODEL_ROW_HEIGHT;
   const visibleCount = Math.ceil(viewportHeight / MODEL_ROW_HEIGHT);
@@ -254,7 +257,7 @@ const PHONE_QUERY = "(max-width: 639px)";
 const PHONE_PAGE_SIZE = 50;
 
 // Follows the window across the phone width, for example on rotate.
-function usePhoneWidth(): boolean {
+export function usePhoneWidth(): boolean {
   return useSyncExternalStore(
     (onChange) => {
       const query = window.matchMedia?.(PHONE_QUERY);
