@@ -20,7 +20,7 @@
   <a href="https://netra.sh">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="assets/netra-logo-white.svg" />
-      <img src="assets/netra-logo.svg" alt="Netra" height="48" />
+      <img src="assets/netra-logo.svg" alt="Netra" height="28" />
     </picture>
   </a><br />
   <sub>Thanks for supporting Nakama and the open source community.</sub>
