@@ -4,8 +4,16 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { TableCell, TableRow } from "@nakama/ui/table";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import {
+  Delete02Icon,
+  Key01Icon,
+  RefreshIcon,
+  Settings02Icon,
+  StarIcon,
+} from "hugeicons-react";
+import { type ComponentType, useEffect, useMemo, useRef } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { ModelUsageContext } from "@/components/model-list-editor.shared";
@@ -40,27 +48,33 @@ import { queryKeys } from "@/lib/query-keys";
 
 function ProviderActionButton({
   label,
+  icon: Icon,
   disabled,
   destructive,
   onClick,
 }: {
   label: string;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   disabled?: boolean;
   destructive?: boolean;
   onClick: () => void;
 }) {
   return (
     <Button
+      aria-label={label}
       className={
-        destructive ? "text-destructive hover:text-destructive" : undefined
+        destructive
+          ? "text-destructive hover:text-destructive"
+          : "text-muted-foreground hover:text-foreground"
       }
       disabled={disabled}
       onClick={onClick}
-      size="sm"
+      size="icon"
+      title={label}
       type="button"
       variant="ghost"
     >
-      {label}
+      <Icon aria-hidden className="size-4" />
     </Button>
   );
 }
@@ -112,11 +126,62 @@ function providerKeyActionLabel(
   return hasApiKey ? "Update key" : "Add key";
 }
 
-function ProviderCheckStatus({
-  enabled,
+function providerAuthLabel(
+  card: ReturnType<typeof useProviderInstanceCard>,
+  instance: ProviderInstanceSummary
+): string {
+  if (instance.secretSource === "environment") {
+    return `Env ${instance.secretEnvName}`;
+  }
+
+  if (card.isChatgpt || card.isXaiOAuth) {
+    return "Sign-in";
+  }
+
+  return instance.hasApiKey ? "API key" : "None";
+}
+
+function providerCheckWarning(
+  status: string | undefined,
+  label: string
+): string | null {
+  switch (status) {
+    case "error":
+      return "Could not check";
+    case "rejected":
+      return "Key rejected";
+    case "needs-key":
+      return "Needs a key";
+    case "unreachable":
+      return `Cannot reach ${label}`;
+    default:
+      return null;
+  }
+}
+
+function ProviderConnectedBadge({ ok }: { ok: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 ${
+        ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`size-2 rounded-full ${ok ? "bg-emerald-500" : "bg-destructive"}`}
+      />
+      {ok ? "Connected" : "Not connected"}
+    </span>
+  );
+}
+
+function ProviderStatus({
+  checkable,
+  connected,
   instance,
 }: {
-  enabled: boolean;
+  checkable: boolean;
+  connected: boolean;
   instance: ProviderInstanceSummary;
 }) {
   // A live check, so a key the provider stopped taking shows here and not
@@ -128,31 +193,24 @@ function ProviderCheckStatus({
     refetch: checkAgain,
   } = useQuery({
     // Local and custom endpoints can be checked without a key.
-    enabled,
+    enabled: checkable,
     queryFn: () => client.checkProvider(instance.id),
     queryKey: queryKeys.providerCheck(instance.id),
     staleTime: 10 * 60_000,
   });
 
-  const warning = isError
-    ? "Could not check"
-    : check?.status === "rejected"
-      ? "Key rejected"
-      : check?.status === "needs-key"
-        ? "Needs a key"
-        : check?.status === "unreachable"
-          ? `Cannot reach ${instance.label}`
-          : null;
+  const status = isError ? "error" : check?.status;
+  const warning = providerCheckWarning(status, instance.label);
 
   if (!warning) {
-    return null;
+    return <ProviderConnectedBadge ok={connected || status === "ok"} />;
   }
 
   return (
-    <>
+    <span className="flex flex-wrap items-center gap-x-2">
       <span
         className={
-          isError || check?.status === "unreachable"
+          status === "error" || status === "unreachable"
             ? "text-amber-700 dark:text-amber-300"
             : "text-destructive"
         }
@@ -168,7 +226,7 @@ function ProviderCheckStatus({
       >
         {checking ? "Checking…" : "Check again"}
       </button>
-    </>
+    </span>
   );
 }
 
@@ -188,7 +246,7 @@ function ProviderInstanceRow({
   onMakeDefault?: () => void;
 }) {
   // A provider just added takes focus, so a keyboard user lands on it.
-  const rowRef = useRef<HTMLLIElement>(null);
+  const rowRef = useRef<HTMLTableRowElement>(null);
 
   useEffect(() => {
     if (autoFocus) {
@@ -203,47 +261,56 @@ function ProviderInstanceRow({
 
   // Compatible providers edit name, URL and models in one dialog.
   const opensEdit = card.isCompatibleLike;
+  const signsIn = card.isChatgpt || card.isXaiOAuth;
 
   return (
-    <li
-      className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 outline-none focus-visible:bg-muted"
+    <TableRow
+      className="outline-none focus-visible:bg-muted"
       ref={rowRef}
       tabIndex={-1}
     >
-      <div className="min-w-0 flex-[1_1_14rem]">
-        <p className="flex min-w-0 items-center gap-2 font-medium text-foreground text-sm">
+      <TableCell className="max-w-64">
+        <p className="flex min-w-0 items-center gap-2 font-medium text-foreground">
           <span className="truncate">{instance.label}</span>
           {isDefault ? (
             <span className="shrink-0 rounded-md border border-border px-1.5 font-normal text-muted-foreground text-xs">
-              Default provider
+              Default
             </span>
           ) : null}
         </p>
-        <p className="flex min-w-0 flex-wrap gap-x-2 text-muted-foreground text-xs">
-          <span>{providerModelCountLabel(instance.modelCount)}</span>
-          {endpoint ? (
-            <span className="min-w-0 truncate font-mono" title={endpoint}>
-              {endpoint}
-            </span>
-          ) : null}
-          {connected ? null : (
-            <span className="text-destructive">Not connected</span>
-          )}
-          <ProviderCheckStatus
-            enabled={connected || card.isCompatibleLike}
-            instance={instance}
-          />
-        </p>
-      </div>
-      <div className="-ml-2 flex flex-wrap items-center gap-0.5 sm:ml-0">
+        {endpoint ? (
+          <p
+            className="truncate font-mono text-muted-foreground text-xs"
+            title={endpoint}
+          >
+            {endpoint}
+          </p>
+        ) : null}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-muted-foreground">
+        {providerAuthLabel(card, instance)}
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        {providerModelCountLabel(instance.modelCount)}
+      </TableCell>
+      <TableCell>
+        <ProviderStatus
+          checkable={connected || card.isCompatibleLike}
+          connected={connected}
+          instance={instance}
+        />
+      </TableCell>
+      <TableCell className="whitespace-nowrap py-1.5 pr-2 text-right">
         {opensEdit || canManage ? (
           <ProviderActionButton
-            label="Manage"
+            icon={Settings02Icon}
+            label={`Manage ${instance.label}`}
             onClick={opensEdit ? card.openEdit : card.openManage}
           />
         ) : null}
         <ProviderActionButton
           disabled={instance.secretSource === "environment"}
+          icon={signsIn ? RefreshIcon : Key01Icon}
           label={
             instance.secretSource === "environment"
               ? `Key from ${instance.secretEnvName}`
@@ -254,18 +321,20 @@ function ProviderInstanceRow({
         {onMakeDefault && !isDefault ? (
           <ProviderActionButton
             disabled={card.busy}
-            label="Make default"
+            icon={StarIcon}
+            label={`Make ${instance.label} default`}
             onClick={onMakeDefault}
           />
         ) : null}
         <ProviderActionButton
           destructive
           disabled={card.busy}
-          label="Remove"
+          icon={Delete02Icon}
+          label={`Remove ${instance.label}`}
           onClick={() => card.setDeleteOpen(true)}
         />
-      </div>
-    </li>
+      </TableCell>
+    </TableRow>
   );
 }
 

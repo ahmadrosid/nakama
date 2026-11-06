@@ -6,6 +6,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@nakama/ui/table";
 import { toast } from "@nakama/ui/toast";
 import { Add01Icon, Alert02Icon } from "hugeicons-react";
 import { useState } from "react";
@@ -74,28 +81,38 @@ export function ProviderSettingsCard({
 
   return (
     <>
-      <Card className="w-full shadow-none">
-        <CardHeader className="border-border border-b px-4 py-3">
+      {isConfigured ? (
+        <section aria-labelledby="providers-heading" className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="min-w-0 font-semibold text-sm leading-snug tracking-normal">
-              Connected providers
-            </CardTitle>
-            {isConfigured ? (
-              <Button
-                onClick={() => setAddOpen(true)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <Add01Icon className="mr-1.5 size-4" />
-                Add provider
-              </Button>
-            ) : null}
+            <h2
+              className="font-semibold text-foreground text-sm"
+              id="providers-heading"
+            >
+              Providers
+            </h2>
+            <Button
+              onClick={() => setAddOpen(true)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Add01Icon className="mr-1.5 size-4" />
+              Add provider
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isConfigured ? (
-            <ul className="divide-y divide-border">
+          <Table aria-labelledby="providers-heading" className="min-w-xl">
+            <TableHeader>
+              <TableRow className="text-xs hover:bg-transparent">
+                <TableHead>Provider</TableHead>
+                <TableHead>Auth</TableHead>
+                <TableHead>Models</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {providers.map((instance) => (
                 <ProviderInstanceCard
                   autoFocus={instance.id === addedProviderId}
@@ -163,35 +180,42 @@ export function ProviderSettingsCard({
                   }}
                 />
               ))}
-            </ul>
-          ) : (
-            <>
-              <div className="flex items-start gap-3 border-border border-b px-4 py-3">
-                <Alert02Icon
-                  aria-hidden="true"
-                  className="mt-0.5 size-5 shrink-0 text-amber-200"
-                />
-                <div className="min-w-0 space-y-0.5">
-                  <p className="font-medium text-amber-100 text-sm">
-                    No provider connected
-                  </p>
-                  <p className="text-amber-200/90 text-xs">
-                    Chat is offline until you add a provider below.
-                  </p>
-                </div>
+            </TableBody>
+          </Table>
+        </section>
+      ) : (
+        <Card className="w-full shadow-none">
+          <CardHeader className="border-border border-b px-4 py-3">
+            <CardTitle className="min-w-0 font-semibold text-sm leading-snug tracking-normal">
+              Connected providers
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="flex items-start gap-3 border-border border-b px-4 py-3">
+              <Alert02Icon
+                aria-hidden="true"
+                className="mt-0.5 size-5 shrink-0 text-amber-200"
+              />
+              <div className="min-w-0 space-y-0.5">
+                <p className="font-medium text-amber-100 text-sm">
+                  No provider connected
+                </p>
+                <p className="text-amber-200/90 text-xs">
+                  Chat is offline until you add a provider below.
+                </p>
               </div>
-              <div className="px-4 py-4">
-                <ProviderSetupForm
-                  onSuccess={() => {
-                    toast("Provider added.");
-                    onFormError(null);
-                  }}
-                />
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+            <div className="px-4 py-4">
+              <ProviderSetupForm
+                onSuccess={() => {
+                  toast("Provider added.");
+                  onFormError(null);
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {displayError ? (
         <p className="text-destructive text-sm" role="alert">

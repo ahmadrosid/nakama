@@ -159,7 +159,7 @@ export function BrowserRuntimeSettingsCard() {
     <div className="space-y-3 px-4 py-3" id="browser-runtime-settings">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-foreground text-sm">Browser runtime</p>
-        <div className="w-full min-w-0 sm:w-80">
+        <div className="grid w-full min-w-0 gap-2 sm:w-[25rem] sm:grid-cols-2">
           <Select
             disabled={form.pending}
             onValueChange={form.select}
@@ -177,6 +177,12 @@ export function BrowserRuntimeSettingsCard() {
               <SelectItem value={KERNEL_VALUE}>Kernel</SelectItem>
             </SelectContent>
           </Select>
+          <span
+            aria-hidden
+            className="hidden h-8 items-center px-2.5 text-muted-foreground text-sm sm:flex"
+          >
+            —
+          </span>
         </div>
       </div>
 
