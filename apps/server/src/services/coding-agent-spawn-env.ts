@@ -1,5 +1,6 @@
 import {
   isSecretEnvKey,
+  normalizeBaseUrl,
   type ProviderName,
   type UserConfig,
 } from "@nakama/core";
@@ -173,7 +174,7 @@ export function mapNakamaProviderToPi(
 
     if (
       defaultUrl &&
-      baseUrl.replace(/\/+$/, "") !== defaultUrl.replace(/\/+$/, "")
+      normalizeBaseUrl(baseUrl) !== normalizeBaseUrl(defaultUrl)
     ) {
       return "nakama";
     }

@@ -4,6 +4,7 @@ import {
   getActiveProviderInstance,
   isChatgptProviderConnected,
   isOllamaCloudInstance,
+  normalizeBaseUrl,
   type ProviderClient,
   type ProviderInstance,
   type ProviderName,
@@ -333,7 +334,9 @@ export function apiKeyCheckRequest(
   instance: ProviderInstance
 ): { url: string; headers: Record<string, string> } | null {
   const apiKey = instance.apiKey.trim();
-  const baseUrlOverride = instance.baseUrl?.trim().replace(/\/+$/, "");
+
+  const baseUrlOverride =
+    instance.baseUrl && normalizeBaseUrl(instance.baseUrl);
 
   if (!apiKey) {
     return null;

@@ -5,6 +5,15 @@ import {
 } from "./telegram-rich-text";
 
 describe("renderTelegramRichText", () => {
+  test("renders a fence and leaves an unclosed fence as text", () => {
+    expect(renderTelegramRichText("```ts\nconst a = 1;\n```")).toBe(
+      "<pre><code>const a = 1;</code></pre>"
+    );
+    expect(renderTelegramRichText(`\`\`\`${"_".repeat(50_000)}`)).toStartWith(
+      "```"
+    );
+  });
+
   test("does not italicize underscores or double-escape query params in links", () => {
     expect(
       renderTelegramRichText("[docs](https://example.com/a_b?x=1&y=2)")

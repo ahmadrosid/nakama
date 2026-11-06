@@ -769,11 +769,9 @@ describe("createChatHandler artifact delivery", () => {
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(1);
       expect(dm.fileSendCalls).toBe(1);
-      expect(
-        dm.sentMessages.some((reply) =>
-          reply.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+      expect(dm.sentMessages.join("\n")).toContain(
+        "https://app.example/s/tok_test"
+      );
     });
   });
 
@@ -851,11 +849,9 @@ describe("createChatHandler artifact delivery", () => {
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(0);
       expect(dm.fileSendCalls).toBe(0);
-      expect(
-        dm.sentMessages.some((reply) =>
-          reply.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+      expect(dm.sentMessages.join("\n")).toContain(
+        "https://app.example/s/tok_test"
+      );
     });
   });
 

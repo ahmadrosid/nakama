@@ -186,7 +186,7 @@ describe("createHonoApp", () => {
 
       expect(response.status).toBe(200);
       const html = await response.text();
-      const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+      const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/i)?.[1];
       const scriptUrl = html.match(/<script src="([^"]+)"/)?.[1];
       expect(inlineScript).toBeDefined();
       expect(scriptUrl).toBeDefined();
@@ -234,7 +234,7 @@ describe("createHonoApp", () => {
       resolve(import.meta.dir, "../../../web/index.html")
     ).text();
 
-    const inlineScript = indexHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    const inlineScript = indexHtml.match(/<script>([\s\S]*?)<\/script>/i)?.[1];
 
     if (!inlineScript) {
       throw new Error("apps/web/index.html no longer inlines a script");

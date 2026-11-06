@@ -1,4 +1,4 @@
-import type { ProviderClient } from "@nakama/core";
+import { normalizeBaseUrl, type ProviderClient } from "@nakama/core";
 import { createAnthropicProvider } from "../anthropic";
 import { createOpenAIProvider } from "../openai";
 
@@ -25,9 +25,9 @@ export function createCommandCodeProvider(
 ): ProviderClient {
   const model = options.model ?? "deepseek/deepseek-v4.1-flash";
 
-  const chatBaseUrl = (
+  const chatBaseUrl = normalizeBaseUrl(
     options.baseUrl?.trim() || DEFAULT_CHAT_BASE_URL
-  ).replace(/\/+$/, "");
+  );
 
   if (model.startsWith(MESSAGES_MODEL_PREFIX)) {
     // Real Claude models keep the Anthropic thinking and web-search options.

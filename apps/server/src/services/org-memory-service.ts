@@ -21,6 +21,7 @@ import {
   type OrgMemoryChangeLogEntry,
   parseOrgMemoryContent,
   rebuildOrgMemoryContent,
+  toHtmlCommentText,
 } from "@nakama/core";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
@@ -504,7 +505,7 @@ export class OrgMemoryService {
 
       if (options.reason?.trim()) {
         appendLines.push(
-          `<!-- reason: ${options.reason.trim().replace(/-->/g, "")} -->`
+          `<!-- reason: ${toHtmlCommentText(options.reason)} -->`
         );
       }
 

@@ -28,6 +28,8 @@ export class AuthService {
   }
 
   hashToken(token: string): string {
+    // Inputs are random server tokens (32 bytes or nanoid(32)), not passwords,
+    // so a fast hash is right. Changing it would void every stored hash.
     return createHash("sha256").update(token).digest("base64url");
   }
 }

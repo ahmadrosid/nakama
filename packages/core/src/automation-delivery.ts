@@ -17,7 +17,9 @@ import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
 import { loadTelegramConfigFile } from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// `local@domain` with no space or second `@`. The domain dot check is a scan:
+// the old `[^\s@]+\.[^\s@]+$` tail was ambiguous and backtracked.
+const EMAIL_ADDRESS = /^[^\s@]+@([^\s@]+)$/;
 
 const AutomationDeliveryInputSchema = z.object({
   channel: z.string(),
@@ -296,7 +298,10 @@ export async function validateAutomationDelivery(
     throw new Error("delivery.to is required when delivery.channel is email.");
   }
 
-  if (!EMAIL_PATTERN.test(to)) {
+  const domain = EMAIL_ADDRESS.exec(to)?.[1] ?? "";
+  const dot = domain.indexOf(".", 1);
+
+  if (dot === -1 || dot === domain.length - 1) {
     throw new Error("delivery.to must be a valid email address.");
   }
 }

@@ -395,10 +395,14 @@ export function stripImagesForCompaction(
   });
 }
 
-export function parseDataUrl(dataUrl: string): ImageAttachment | null {
-  const match = /^data:(?:([^;,]+))?(?:;[^,]*)*;base64,(.+)$/s.exec(
-    dataUrl.trim()
-  );
+/**
+ * `data:<type>[;param]*;base64,<data>`. The header has no comma, so one
+ * `[^,]*` keeps the match linear; the type is the header before its first `;`.
+ */
+function splitBase64DataUrl(
+  dataUrl: string
+): { data: string; mediaType: string | undefined } | null {
+  const match = /^data:([^,]*);base64,(.+)$/s.exec(dataUrl.trim());
 
   if (!match) {
     return null;
@@ -406,7 +410,20 @@ export function parseDataUrl(dataUrl: string): ImageAttachment | null {
 
   return {
     data: match[2]!,
-    mediaType: match[1] ?? "image/png",
+    mediaType: match[1]!.split(";")[0] || undefined,
+  };
+}
+
+export function parseDataUrl(dataUrl: string): ImageAttachment | null {
+  const match = splitBase64DataUrl(dataUrl);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    data: match.data,
+    mediaType: match.mediaType ?? "image/png",
   };
 }
 
@@ -414,18 +431,16 @@ export function parseDocumentDataUrl(
   dataUrl: string,
   filename: string
 ): DocumentAttachment | null {
-  const match = /^data:(?:([^;,]+))?(?:;[^,]*)*;base64,(.+)$/s.exec(
-    dataUrl.trim()
-  );
+  const match = splitBase64DataUrl(dataUrl);
 
   if (!match) {
     return null;
   }
 
-  const mediaType = normalizeDocumentMediaType(match[1] ?? "", filename);
+  const mediaType = normalizeDocumentMediaType(match.mediaType ?? "", filename);
 
   return {
-    data: match[2]!,
+    data: match.data,
     filename,
     mediaType,
   };
