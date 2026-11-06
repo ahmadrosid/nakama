@@ -6,7 +6,7 @@ import {
   createAttachmentReference,
   getMailboxIdentity,
 } from "../mail/attachment-reference";
-import type { MailReader } from "../mail/types";
+import { MAX_EMAIL_BODY_BYTES, type MailReader } from "../mail/types";
 import {
   runExtractDocumentText,
   UNTRUSTED_DOCUMENT_GUIDANCE,
@@ -123,6 +123,35 @@ describe("extract_document_text tool", () => {
       untrustedContent: true,
     });
     expect("text" in result && result.text.toLowerCase()).toContain("dummy");
+  });
+
+  test("reads a stored text file up to the result limit", async () => {
+    const file = Buffer.alloc(5 * 1024 * 1024, "line of notes\n");
+
+    const result = await runExtractDocumentText(
+      { documentRef: "att_notes" },
+      {
+        ...context,
+        loadAttachment: async () => ({
+          bytes: file,
+          filename: "notes.txt",
+          mediaType: "text/plain",
+        }),
+      },
+      {
+        // SAFETY: This test loader uses only the configuration values checked by the tool.
+        loadConfig: async () => ({}) as typeof completeConfig,
+      }
+    );
+
+    expect(result).toMatchObject({ mediaType: "text/plain", truncated: true });
+
+    const text = "text" in result ? result.text : "";
+
+    const body = text.slice(UNTRUSTED_DOCUMENT_GUIDANCE.length + 2, -1);
+
+    expect(body.length).toBe(MAX_EMAIL_BODY_BYTES);
+    expect(file.toString("utf8").startsWith(body)).toBe(true);
   });
 
   test("rejects unsupported document bytes", async () => {

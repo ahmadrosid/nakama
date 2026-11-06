@@ -122,6 +122,14 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   zhipu_cn: new Set<string>(),
 };
 
+export function findDocumentTextParser(
+  mediaType: string
+): DocumentTextParser | undefined {
+  return Object.entries(BUILTIN_DOCUMENT_TEXT_PARSERS).find(
+    ([candidate]) => candidate === mediaType
+  )?.[1];
+}
+
 export function providerSupportsNativeDocument(
   provider: ProviderName,
   mediaType: string
@@ -137,9 +145,7 @@ export async function resolveDocumentPartForProvider(
     return part;
   }
 
-  const parser = Object.entries(BUILTIN_DOCUMENT_TEXT_PARSERS).find(
-    ([mediaType]) => mediaType === part.mediaType
-  )?.[1];
+  const parser = findDocumentTextParser(part.mediaType);
 
   if (parser) {
     const text = await parser({

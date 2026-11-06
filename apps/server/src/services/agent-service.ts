@@ -6714,10 +6714,11 @@ export class AgentService {
 
         return replaceImagePartsWithDescriptions(forVision, descriptions);
       },
-      rehydrateMessagesForProvider: async (messages) => {
+      rehydrateMessagesForProvider: async (messages, rehydrateOptions) => {
         const rehydrated = await rehydrateAttachmentMessages(
           messages,
-          loadAttachment
+          loadAttachment,
+          rehydrateOptions
         );
 
         // Expand /learn only for the provider. History stays raw so skill
