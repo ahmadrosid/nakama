@@ -813,10 +813,11 @@ export function effectiveProfileModelSelection(
     : null;
 }
 
-export function resolveModelThinkingSupport(
+/** The model option a picker selection points at, in its provider first. */
+export function findSelectedModel(
   selection: string | null | undefined,
   groups: ReturnType<typeof groupModelsByProvider>
-): boolean | undefined {
+): ProviderModelOption | undefined {
   if (!selection) {
     return;
   }
@@ -824,29 +825,32 @@ export function resolveModelThinkingSupport(
   const decoded = decodeModelSelection(selection);
   const resolvedModelId = decoded?.modelId ?? selection;
 
-  const findModel = () => {
-    if (decoded && decoded.providerId !== "__unknown__") {
-      const group = groups.find(
-        (entry) => entry.providerId === decoded.providerId
-      );
+  if (decoded && decoded.providerId !== "__unknown__") {
+    const group = groups.find(
+      (entry) => entry.providerId === decoded.providerId
+    );
 
-      const match = group?.models.find((model) => model.id === resolvedModelId);
+    const match = group?.models.find((model) => model.id === resolvedModelId);
 
-      if (match) {
-        return match;
-      }
+    if (match) {
+      return match;
     }
+  }
 
-    for (const group of groups) {
-      const match = group.models.find((model) => model.id === resolvedModelId);
+  for (const group of groups) {
+    const match = group.models.find((model) => model.id === resolvedModelId);
 
-      if (match) {
-        return match;
-      }
+    if (match) {
+      return match;
     }
-  };
+  }
+}
 
-  const model = findModel();
+export function resolveModelThinkingSupport(
+  selection: string | null | undefined,
+  groups: ReturnType<typeof groupModelsByProvider>
+): boolean | undefined {
+  const model = findSelectedModel(selection, groups);
 
   if (!model) {
     return;
