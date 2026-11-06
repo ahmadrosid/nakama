@@ -286,8 +286,12 @@ export async function continueAnthropicUntilDone(
     };
   }
 
+  const effort = thinkingRequest.output_config?.effort;
+
   const requestBase: Omit<MessageCreateParams, "stream"> = {
-    max_tokens: 4096,
+    // Adaptive thinking at xhigh/max would spend the whole 4096 on reasoning.
+    // 16000 stays under the SDK's non-streaming limit (~21333 tokens).
+    max_tokens: effort === "xhigh" || effort === "max" ? 16_000 : 4096,
     messages: apiMessages,
     model: options.model,
     system: options.system,
