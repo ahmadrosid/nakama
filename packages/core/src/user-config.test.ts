@@ -16,6 +16,7 @@ import {
   loadUserConfig,
   loadUserWebPublicUrl,
   normalizeProviderInstanceLabel,
+  parseIniWithSections,
   readChatgptOAuthFromInstance,
   readXaiOAuthFromInstance,
   saveUserConfig,
@@ -285,6 +286,30 @@ created_at=2026-06-15T00:00:00.000Z
     await expect(loadUserWebPublicUrl()).resolves.toBe(
       "https://gateway.devscale.id/v1"
     );
+  });
+});
+
+describe("parseIniWithSections", () => {
+  test("ignores sections that resolve to Object.prototype members", () => {
+    const parsed = parseIniWithSections(
+      [
+        "timezone = UTC",
+        "[__proto__]",
+        "polluted = yes",
+        "[constructor]",
+        "polluted = yes",
+        "[prototype]",
+        "polluted = yes",
+        "[web_search]",
+        "provider = tavily",
+      ].join("\n")
+    );
+
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false);
+    expect(Object.hasOwn(Object, "polluted")).toBe(false);
+    expect(parsed.global).toEqual({ timezone: "UTC" });
+    expect(Object.keys(parsed.sections)).toEqual(["web_search"]);
+    expect(parsed.sections.web_search).toEqual({ provider: "tavily" });
   });
 });
 
