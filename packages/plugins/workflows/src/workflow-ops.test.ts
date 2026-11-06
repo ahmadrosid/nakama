@@ -5,6 +5,7 @@ import {
   executeAssert,
   executeCompare,
   getPathValue,
+  parseAgentReply,
   resolveTemplateString,
   resolveWorkflowValue,
   validateWorkflowSteps,
@@ -251,4 +252,94 @@ test("onFail is only accepted on compare and assert steps", () => {
   expect(
     check({ id: "t", kind: "template", onFail: "skip", template: "hi" })
   ).toThrow();
+});
+
+describe("agent step validation", () => {
+  const classify = {
+    fields: { decision: "act | ignore", type: "security | mention | other" },
+    id: "classify",
+    kind: "agent",
+    prompt: "Classify {{input.subject}}",
+  } satisfies WorkflowStep;
+
+  const summary = {
+    id: "summary",
+    kind: "summarize",
+    prompt: "Done",
+  } satisfies WorkflowStep;
+
+  test("accepts an agent step mid-run with a gate on a declared field", () => {
+    expect(() =>
+      validateWorkflowSteps(
+        [
+          classify,
+          {
+            id: "gate",
+            kind: "compare",
+            left: "{{steps.classify.decision}}",
+            onFail: "skip",
+            op: "eq",
+            right: "act",
+          },
+          summary,
+        ],
+        new Set()
+      )
+    ).not.toThrow();
+  });
+
+  test("rejects a reference to a field the agent step does not declare", () => {
+    expect(() =>
+      validateWorkflowSteps(
+        [
+          classify,
+          {
+            id: "gate",
+            kind: "compare",
+            left: "{{steps.classify.verdict}}",
+            op: "eq",
+            right: "act",
+          },
+          summary,
+        ],
+        new Set()
+      )
+    ).toThrow();
+  });
+
+  test("rejects agent steps without valid fields", () => {
+    const invalid: WorkflowValue[] = [
+      { ...classify, fields: {} },
+      { ...classify, fields: { "bad key": "x" } },
+      { ...classify, fields: { decision: 1 } },
+    ];
+
+    for (const step of invalid) {
+      expect(() =>
+        validateWorkflowSteps(
+          [step, { id: "summary", kind: "summarize", prompt: "Done" }],
+          new Set()
+        )
+      ).toThrow();
+    }
+  });
+});
+
+describe("parseAgentReply", () => {
+  const fields = { decision: "act | ignore" };
+
+  test("reads JSON inside a code fence and keeps only declared fields", () => {
+    expect(
+      parseAgentReply(
+        'Sure:\n```json\n{"decision":"act","extra":1}\n```',
+        fields,
+        "classify"
+      )
+    ).toEqual({ decision: "act" });
+  });
+
+  test("throws when the reply is not JSON or a field is missing", () => {
+    expect(() => parseAgentReply("act", fields, "classify")).toThrow();
+    expect(() => parseAgentReply('{"type":"x"}', fields, "classify")).toThrow();
+  });
 });

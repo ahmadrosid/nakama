@@ -18,9 +18,22 @@ Use `plugin_workflows__create_workflow` with `kind` (never `type`). Last step mu
 - `template` — substitutes values into text only. Writing “extract stories” in a template returns those instructions; it does not call AI, parse content, or produce structured JSON.
 - `compare` / `assert` — deterministic checks on prior receipts. `compare.op` is `eq` | `near` | `contains`. Do not use compare as free-text analysis
 - Filter: set `onFail: "skip"` on a `compare` / `assert` step when a false check is a normal outcome (for example "only continue if the sender contains github.com"). The run then ends as skipped, not failed, and later steps do not run
+- `agent` — asks the bot in the middle of the run and returns named fields. `prompt` takes references; `fields` maps each output key to what goes there. Later steps read `{{steps.<id>.<field>}}`. The run stops if the reply is not JSON or a field is missing.
 - exactly one final `summarize` — turns the receipt bag into prose (no tools). It cannot be an intermediate extraction step or feed a later database step.
 
-For extraction or analysis before a write, use an available tool that actually performs that work. Verify its input and output schema; do not invent a tool or output field. If no suitable tool is assigned, explain the missing capability instead of saving a recipe that cannot fulfill the request.
+Classify, then act:
+
+```json
+[
+  { "id": "github", "kind": "compare", "left": "{{input.from}}", "op": "contains", "right": "github.com", "onFail": "skip" },
+  { "id": "classify", "kind": "agent", "prompt": "Classify this email. Subject: {{input.subject}}", "fields": { "type": "security | mention | other", "decision": "act | ignore" } },
+  { "id": "should_act", "kind": "compare", "left": "{{steps.classify.decision}}", "op": "eq", "right": "act", "onFail": "skip" },
+  { "id": "label", "kind": "tool", "tool": "<label tool>", "input": { "label": "{{steps.classify.type}}" } },
+  { "id": "summary", "kind": "summarize", "prompt": "Say what was done." }
+]
+```
+
+For extraction or analysis before a write, use an `agent` step or an available tool that actually performs that work. Verify its input and output schema; do not invent a tool or output field. If no suitable tool is assigned, explain the missing capability instead of saving a recipe that cannot fulfill the request.
 
 References use the tool's actual output shape: `{{steps.fetch.content}}`, not an assumed `.output` wrapper. Missing references stop the run. Explicit null values are allowed, so check required data with assert/compare steps before writes when applicable.
 

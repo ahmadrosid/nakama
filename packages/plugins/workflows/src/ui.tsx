@@ -104,6 +104,7 @@ const checkFieldHints = new Map([
 ]);
 
 const stepFields = {
+  agent: ["prompt", "fields"],
   assert: ["path", "expected", "onFail"],
   compare: ["left", "op", "right", "tolerance", "onFail"],
   template: ["template"],
@@ -158,7 +159,7 @@ function serializeSteps(steps: StepDraft[]) {
         )
         .map((key) => [
           key,
-          key === "input"
+          key === "input" || key === "fields"
             ? JSON.parse(fields[key] || "{}")
             : ["left", "right", "expected", "tolerance"].includes(key)
               ? parseValue(fields[key] ?? "")
@@ -169,6 +170,7 @@ function serializeSteps(steps: StepDraft[]) {
 }
 
 const kindLabels = new Map([
+  ["agent", "Let the bot decide"],
   ["assert", "Check a rule"],
   ["compare", "Compare"],
   ["summarize", "Ask the bot"],
@@ -177,6 +179,7 @@ const kindLabels = new Map([
 ]);
 
 const newStepFields = new Map<string, Record<string, string>>([
+  ["agent", { fields: '{\n  "decision": "act | ignore"\n}', prompt: "" }],
   ["assert", { expected: "", path: "" }],
   ["compare", { left: "", op: "eq", right: "" }],
   ["database", { input: '{"sql":"","params":[]}', tool: "sqlite" }],
@@ -377,6 +380,11 @@ const builtInActions = [
   },
   { hint: "Stop if a value is wrong", kind: "assert", label: "Check a rule" },
   { hint: "Compare two values", kind: "compare", label: "Compare" },
+  {
+    hint: "Get named answers for later steps",
+    kind: "agent",
+    label: "Let the bot decide",
+  },
 ];
 
 function formatDuration(ms: number) {
@@ -1267,7 +1275,8 @@ export function apply(ctx: Context) {
             const detail =
               definition?.kind === "tool"
                 ? definition.tool
-                : definition?.kind === "summarize"
+                : definition?.kind === "summarize" ||
+                    definition?.kind === "agent"
                   ? definition.prompt
                   : definition?.kind === "template"
                     ? definition.template
@@ -1935,9 +1944,17 @@ export function apply(ctx: Context) {
             ? undefined
             : parseWorkflowValue(receipt.output);
 
+        const declared =
+          step.kind === "agent"
+            ? parseInputRecord(step.fields.fields ?? "")
+            : null;
+
         const fieldsOut = isWorkflowRecord(output)
           ? readableEntries(output)
-          : [];
+          : Object.keys(declared ?? {}).map((key): [string, string] => [
+              key,
+              "",
+            ]);
 
         return {
           label: `Step ${index + 1} · ${titleCase(step.id)}`,
@@ -2595,7 +2612,11 @@ export function apply(ctx: Context) {
                               />
                             ) : (
                               <label key={field}>
-                                {field === "input" ? "Details" : title(field)}
+                                {field === "input"
+                                  ? "Details"
+                                  : field === "fields"
+                                    ? "Answer fields"
+                                    : title(field)}
                                 <Textarea
                                   aria-describedby={
                                     checkFieldHints.has(field)
@@ -2612,7 +2633,12 @@ export function apply(ctx: Context) {
                                     })
                                   }
                                   rows={
-                                    field === "input" || field === "template"
+                                    [
+                                      "input",
+                                      "template",
+                                      "prompt",
+                                      "fields",
+                                    ].includes(field)
                                       ? 8
                                       : 2
                                   }
