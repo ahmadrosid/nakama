@@ -63,6 +63,7 @@ test("a long list can be searched", async () => {
       window.HTMLInputElement.prototype,
       "value"
     )?.set;
+
     setValue?.call(search, "model-10");
     search?.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
