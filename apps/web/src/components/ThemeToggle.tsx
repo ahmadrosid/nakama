@@ -1,88 +1,42 @@
 import { cn } from "@nakama/ui/utils";
+import { ComputerIcon, MoonIcon, Sun01Icon } from "hugeicons-react";
 import { useTheme } from "@/context/use-theme";
 import type { Theme } from "@/lib/theme";
 
-const THEME_OPTIONS: { id: Theme; label: string }[] = [
-  { id: "system", label: "System" },
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
+const THEME_OPTIONS: {
+  icon: typeof Sun01Icon;
+  id: Theme;
+  label: string;
+}[] = [
+  { icon: ComputerIcon, id: "system", label: "System" },
+  { icon: Sun01Icon, id: "light", label: "Light" },
+  { icon: MoonIcon, id: "dark", label: "Dark" },
 ];
-
-/** A small window sketch in fixed colors, so each tile shows its theme in either mode. */
-function ThemePreview({ dark }: { dark: boolean }) {
-  return (
-    <span
-      className={cn(
-        "flex h-full flex-1 flex-col gap-1.5 p-2.5",
-        dark ? "bg-neutral-900" : "bg-white"
-      )}
-    >
-      <span
-        className={cn(
-          "h-1.5 w-3/5 rounded-full",
-          dark ? "bg-neutral-700" : "bg-neutral-200"
-        )}
-      />
-      <span
-        className={cn(
-          "h-1.5 w-4/5 rounded-full",
-          dark ? "bg-neutral-800" : "bg-neutral-100"
-        )}
-      />
-      <span
-        className={cn(
-          "mt-auto h-3.5 w-full rounded",
-          dark ? "bg-neutral-800" : "bg-neutral-100"
-        )}
-      />
-    </span>
-  );
-}
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
       {THEME_OPTIONS.map((option) => {
         const selected = option.id === theme;
+        const Icon = option.icon;
 
         return (
           <button
             aria-pressed={selected}
-            className="group flex min-w-0 flex-col gap-2 rounded-lg text-left outline-none"
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-md px-3 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+              selected
+                ? "bg-background font-medium text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
             key={option.id}
             onClick={() => setTheme(option.id)}
             type="button"
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "flex h-20 overflow-hidden rounded-lg border transition-colors group-focus-visible:ring-3 group-focus-visible:ring-ring/50",
-                selected
-                  ? "border-2 border-primary"
-                  : "border-border group-hover:border-foreground/30"
-              )}
-            >
-              {option.id === "system" ? (
-                <>
-                  <ThemePreview dark={false} />
-                  <ThemePreview dark />
-                </>
-              ) : (
-                <ThemePreview dark={option.id === "dark"} />
-              )}
-            </span>
-            <span
-              className={cn(
-                "text-sm",
-                selected
-                  ? "font-medium text-foreground"
-                  : "text-muted-foreground"
-              )}
-            >
-              {option.label}
-            </span>
+            <Icon aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+            {option.label}
           </button>
         );
       })}
