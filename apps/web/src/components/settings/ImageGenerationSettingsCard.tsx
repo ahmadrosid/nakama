@@ -1,12 +1,6 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
 import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
+import { SettingsModelSelect } from "@/components/settings/settings-model-select";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   useImageGenerationSettings,
@@ -209,7 +203,8 @@ export function ImageGenerationSettingsCard() {
       }
       title="Image generation model"
     >
-      <Select
+      <SettingsModelSelect
+        ariaLabel="Image generation model"
         disabled={saveImageGenerationMutation.isPending || !providerAvailable}
         onValueChange={(value) => {
           if (!value) {
@@ -249,27 +244,10 @@ export function ImageGenerationSettingsCard() {
             },
           });
         }}
+        options={choices}
+        triggerLabel={labelOf(selection)}
         value={selection || CLEAR_IMAGE_GENERATION_MODEL_VALUE}
-      >
-        <SelectTrigger
-          aria-label="Image generation model"
-          className="h-8 w-full"
-        >
-          <SelectValue placeholder="Select image generation model">
-            {labelOf(selection)}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent
-          alignItemWithTrigger={false}
-          className="w-max min-w-72 max-w-[min(24rem,92vw)]"
-        >
-          {choices.map((choice) => (
-            <SelectItem key={choice.value} value={choice.value}>
-              {choice.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      />
     </SettingsModelTile>
   );
 }

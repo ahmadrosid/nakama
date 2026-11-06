@@ -1,12 +1,6 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
 import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
+import { SettingsModelSelect } from "@/components/settings/settings-model-select";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   useModelsQuery,
@@ -93,7 +87,8 @@ export function VisionSettingsCard() {
       }
       title="Image parsing model"
     >
-      <Select
+      <SettingsModelSelect
+        ariaLabel="Image parsing model"
         disabled={saveVisionMutation.isPending || visionUnavailable}
         onValueChange={(value) => {
           if (!value) {
@@ -146,36 +141,16 @@ export function VisionSettingsCard() {
             },
           });
         }}
-        value={selectionValue}
-      >
-        <SelectTrigger aria-label="Image parsing model" className="h-8 w-full">
-          <SelectValue className="truncate" placeholder="Select vision model">
-            {selection
-              ? profileModelLabel(selection, visionModelGroups, {
-                  withProvider: true,
-                })
-              : visionUnavailable
-                ? "No vision providers"
-                : "None"}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent
-          alignItemWithTrigger={false}
-          className="w-max min-w-72 max-w-[min(24rem,92vw)]"
-        >
-          <SelectItem value={CLEAR_VISION_MODEL_VALUE}>None</SelectItem>
-          {visionModelGroups.flatMap((group) =>
-            group.models.map((model) => (
-              <SelectItem
-                key={`${group.providerId}:${model.id}`}
-                value={encodeModelSelection(group.providerId, model.id)}
-              >
-                {model.name} · {group.providerLabel}
-              </SelectItem>
-            ))
-          )}
-          {/* Models that cannot read images show why they are not a choice. */}
-          {providerModelGroups.flatMap((group) =>
+        options={[
+          { label: "None", value: CLEAR_VISION_MODEL_VALUE },
+          ...visionModelGroups.flatMap((group) =>
+            group.models.map((model) => ({
+              label: `${model.name} · ${group.providerLabel}`,
+              value: encodeModelSelection(group.providerId, model.id),
+            }))
+          ),
+          // Models that cannot read images show why they are not a choice.
+          ...providerModelGroups.flatMap((group) =>
             group.models
               .filter(
                 (model) =>
@@ -184,18 +159,24 @@ export function VisionSettingsCard() {
                     providerModelGroups
                   ) !== true
               )
-              .map((model) => (
-                <SelectItem
-                  disabled
-                  key={`no-vision:${group.providerId}:${model.id}`}
-                  value={`no-vision:${encodeModelSelection(group.providerId, model.id)}`}
-                >
-                  {model.name} · {group.providerLabel} · cannot read images
-                </SelectItem>
-              ))
-          )}
-        </SelectContent>
-      </Select>
+              .map((model) => ({
+                disabled: true,
+                label: `${model.name} · ${group.providerLabel} · cannot read images`,
+                value: `no-vision:${encodeModelSelection(group.providerId, model.id)}`,
+              }))
+          ),
+        ]}
+        triggerLabel={
+          selection
+            ? profileModelLabel(selection, visionModelGroups, {
+                withProvider: true,
+              })
+            : visionUnavailable
+              ? "No vision providers"
+              : "None"
+        }
+        value={selectionValue}
+      />
     </SettingsModelTile>
   );
 }

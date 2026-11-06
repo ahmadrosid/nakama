@@ -444,7 +444,8 @@ export class SystemClient extends NakamaClientCore {
   ): Promise<UpdateProviderResponse> {
     return this.request<UpdateProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}/secret${action === "use-stored" ? "/use-stored" : ""}`,
-      { method: action === "clear" ? "DELETE" : "POST" }
+      // keepalive: a clear sent while the tab closes must still land.
+      { keepalive: true, method: action === "clear" ? "DELETE" : "POST" }
     );
   }
 

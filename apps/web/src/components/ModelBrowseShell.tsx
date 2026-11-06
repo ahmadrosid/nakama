@@ -92,12 +92,15 @@ export function ModelBrowseShell({
       className={cn("flex flex-col", className, collapsed && "h-auto")}
       data-model-browse-shell=""
     >
-      <div className="flex flex-wrap items-center gap-2 border-border border-b px-3 py-2">
-        {toolbar}
-      </div>
+      {/* On a phone the dialog scrolls; search and status stay in view. */}
+      <div className="max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-background">
+        <div className="flex flex-wrap items-center gap-2 border-border border-b px-3 py-2">
+          {toolbar}
+        </div>
 
-      <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
-        {status}
+        <div className="border-border border-b px-3 py-1.5 text-muted-foreground text-xs">
+          {status}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1">
