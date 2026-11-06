@@ -602,6 +602,29 @@ describe("OpenAI provider streaming", () => {
     expect(result.content).toBe("Hi");
   });
 
+  test("deepseek sends max as max and lowers xhigh to high", async () => {
+    for (const [effort, sent] of [
+      ["max", "max"],
+      ["xhigh", "high"],
+    ] as const) {
+      mockFetchBodies((_call, body) => {
+        expect(body.thinking).toEqual({ type: "enabled" });
+        expect(body.reasoning_effort).toBe(sent);
+
+        return sseResponse({ content: "Hi" });
+      });
+
+      await deepseekProvider().streamChat(
+        {
+          messages: [{ content: "Say hi", role: "user" }],
+          providerOptions: { thinking: { effort, enabled: true } },
+          system: "You are helpful.",
+        },
+        { onChunk: () => {} }
+      );
+    }
+  });
+
   test("captures reasoning_content from non-streaming deepseek responses", async () => {
     const fetchMock = mock(async () =>
       Response.json({

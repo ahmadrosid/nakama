@@ -592,7 +592,7 @@ export function buildAnthropicThinkingRequest(
 
     return {
       output_config: {
-        effort: normalizeThinkingEffort(providerOptions.thinking.effort),
+        effort: normalizeThinkingEffort(providerOptions.thinking.effort, model),
       },
       // SAFETY: The SDK type omits documented adaptive binding fields for these models.
       thinking: {
@@ -613,7 +613,10 @@ export function buildAnthropicThinkingRequest(
     return providerOptions?.thinking?.enabled
       ? {
           output_config: {
-            effort: normalizeThinkingEffort(providerOptions.thinking.effort),
+            effort: normalizeThinkingEffort(
+              providerOptions.thinking.effort,
+              model
+            ),
           },
           thinking,
         }
@@ -633,7 +636,10 @@ export function buildAnthropicThinkingRequest(
     return { thinking: { budget_tokens: 1024, type: "enabled" } };
   }
 
-  const effort = normalizeThinkingEffort(providerOptions.thinking.effort);
+  const effort = normalizeThinkingEffort(
+    providerOptions.thinking.effort,
+    model
+  );
 
   return {
     output_config: { effort },

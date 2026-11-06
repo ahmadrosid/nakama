@@ -279,7 +279,10 @@ function buildOpenAIReasoningRequest(
   }
 
   return {
-    effort: normalizeThinkingEffort(input.providerOptions.thinking.effort),
+    effort: normalizeThinkingEffort(
+      input.providerOptions.thinking.effort,
+      model
+    ),
     summary: "auto",
   };
 }

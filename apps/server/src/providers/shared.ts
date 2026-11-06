@@ -6,6 +6,10 @@ import type {
   ToolCall,
 } from "@nakama/core";
 import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
+import {
+  clampThinkingEffort,
+  isThinkingEffort,
+} from "@nakama/core/thinking-effort";
 import { z } from "zod";
 
 export type ProviderJsonValue =
@@ -443,14 +447,14 @@ export function readRecord<Value>(value: Value): ProviderJsonRecord {
   return value as ProviderJsonRecord;
 }
 
+/** Defaults a missing effort to medium and lowers it to what `model` accepts. */
 export function normalizeThinkingEffort(
-  effort: ThinkingEffort | undefined
+  effort: ThinkingEffort | undefined,
+  model: string
 ): ThinkingEffort {
-  if (effort === "low" || effort === "medium" || effort === "high") {
-    return effort;
-  }
-
-  return "medium";
+  return isThinkingEffort(effort)
+    ? clampThinkingEffort(effort, model)
+    : "medium";
 }
 
 export function formatHttpErrorBody(

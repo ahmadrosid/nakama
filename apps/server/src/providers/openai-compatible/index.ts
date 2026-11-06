@@ -303,7 +303,7 @@ function buildThinkingBody(
     return {};
   }
 
-  const effort = normalizeThinkingEffort(thinking.effort);
+  const effort = normalizeThinkingEffort(thinking.effort, options.model);
 
   return {
     reasoning: { effort },

@@ -537,7 +537,10 @@ async function buildChatCompletionRequestBody(options: {
   }
 
   if (provider === "deepseek") {
-    const thinkingBody = buildDeepSeekThinkingBody(options.thinking);
+    const thinkingBody = buildDeepSeekThinkingBody(
+      options.thinking,
+      options.model
+    );
 
     if (thinkingBody.thinking) {
       body.thinking = thinkingBody.thinking;
@@ -555,7 +558,7 @@ async function buildChatCompletionRequestBody(options: {
   // Muse Spark rejects "none" and reasons when the field is omitted.
   if (provider === "meta") {
     body.reasoning_effort = options.thinking?.enabled
-      ? normalizeThinkingEffort(options.thinking.effort)
+      ? normalizeThinkingEffort(options.thinking.effort, options.model)
       : "minimal";
   }
 
@@ -569,13 +572,16 @@ async function buildChatCompletionRequestBody(options: {
 
   if (provider === "vercel_ai_gateway" && options.thinking?.enabled) {
     body.reasoning = {
-      effort: normalizeThinkingEffort(options.thinking.effort),
+      effort: normalizeThinkingEffort(options.thinking.effort, options.model),
       enabled: true,
     };
   }
 
   if (provider === "perplexity" && options.thinking?.enabled) {
-    body.reasoning_effort = normalizeThinkingEffort(options.thinking.effort);
+    body.reasoning_effort = normalizeThinkingEffort(
+      options.thinking.effort,
+      options.model
+    );
   }
 
   if (hasTools) {
@@ -623,7 +629,8 @@ function formatPerplexityCitations(
 }
 
 function buildDeepSeekThinkingBody(
-  thinking: ProviderChatOptions["thinking"] | undefined
+  thinking: ProviderChatOptions["thinking"] | undefined,
+  model: string
 ) {
   if (thinking?.enabled === false) {
     return { thinking: { type: "disabled" as const } };
@@ -633,7 +640,7 @@ function buildDeepSeekThinkingBody(
     return {};
   }
 
-  const effort = normalizeThinkingEffort(thinking.effort);
+  const effort = normalizeThinkingEffort(thinking.effort, model);
   // DeepSeek accepts low/high/max; map medium → high for compatibility.
   const reasoningEffort = effort === "medium" ? "high" : effort;
 
