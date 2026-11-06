@@ -98,7 +98,7 @@ export function SettingsPage() {
         <SettingsSection title="General">
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
-              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="space-y-3 px-4 py-3">
                 <p className="text-foreground text-sm">Appearance</p>
                 <ThemeToggle />
               </div>
