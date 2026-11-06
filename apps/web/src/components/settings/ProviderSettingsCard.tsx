@@ -38,6 +38,7 @@ export function ProviderSettingsCard({
 }: ProviderSettingsCardProps) {
   // A new key after each close gives the next Add a fresh form.
   const [addFormKey, setAddFormKey] = useState(0);
+  const [addedProviderId, setAddedProviderId] = useState<string | null>(null);
 
   const {
     data: providersResponse,
@@ -97,6 +98,7 @@ export function ProviderSettingsCard({
             <ul className="divide-y divide-border">
               {providers.map((instance) => (
                 <ProviderInstanceCard
+                  autoFocus={instance.id === addedProviderId}
                   catalog={catalog}
                   instance={instance}
                   isDefault={
@@ -109,11 +111,38 @@ export function ProviderSettingsCard({
                     providers.find((other) => other.id !== instance.id)?.label
                   }
                   onDelete={async (providerId) => {
-                    await deleteProviderMutation.mutateAsync(providerId);
-                    toast("Provider removed.");
+                    const result =
+                      await deleteProviderMutation.mutateAsync(providerId);
+
+                    const nextDefault =
+                      providersResponse?.defaultProviderId === providerId
+                        ? providers.find(
+                            (other) => other.id === result.defaultProviderId
+                          )?.label
+                        : undefined;
+
+                    toast(
+                      nextDefault
+                        ? `Removed ${instance.label}. ${nextDefault} is now the default.`
+                        : `Removed ${instance.label}.`
+                    );
                     onFormError(null);
                   }}
                   onError={onFormError}
+                  onMakeDefault={
+                    providers.length > 1
+                      ? async () => {
+                          try {
+                            await client.setDefaultProvider(instance.id);
+                            await refetchProviders();
+                            toast(`${instance.label} is now the default.`);
+                            onFormError(null);
+                          } catch (error) {
+                            onFormError(formatError(error));
+                          }
+                        }
+                      : undefined
+                  }
                   onManage={async (providerId, action) => {
                     await client.manageProviderSecret(providerId, action);
                     await Promise.all([refetchProviders(), refetchModels()]);
@@ -167,7 +196,8 @@ export function ProviderSettingsCard({
 
       <AddProviderDialog
         key={addFormKey}
-        onAdded={() => {
+        onAdded={(providerId) => {
+          setAddedProviderId(providerId);
           toast("Provider added.");
           onFormError(null);
         }}
@@ -201,13 +231,13 @@ function AddProviderDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdded: () => void;
+  onAdded: (providerId: string) => void;
   onClosed: () => void;
 }) {
   const form = useProviderSetupForm({
-    onSuccess: () => {
+    onSuccess: (result) => {
       onOpenChange(false);
-      onAdded();
+      onAdded(result.provider.id);
     },
   });
 

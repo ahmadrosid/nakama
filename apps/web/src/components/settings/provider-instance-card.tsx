@@ -5,6 +5,7 @@ import type {
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
@@ -175,12 +176,25 @@ function ProviderInstanceRow({
   card,
   canManage,
   isDefault,
+  autoFocus,
+  onMakeDefault,
 }: {
   instance: ProviderInstanceSummary;
   card: ReturnType<typeof useProviderInstanceCard>;
   canManage: boolean;
   isDefault: boolean;
+  autoFocus: boolean;
+  onMakeDefault?: () => void;
 }) {
+  // A provider just added takes focus, so a keyboard user lands on it.
+  const rowRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    if (autoFocus) {
+      rowRef.current?.focus();
+    }
+  }, [autoFocus]);
+
   const endpoint = instance.baseUrl?.trim() || null;
 
   const connected =
@@ -190,7 +204,11 @@ function ProviderInstanceRow({
   const opensEdit = card.isCompatibleLike;
 
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
+    <li
+      className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 outline-none focus-visible:bg-muted"
+      ref={rowRef}
+      tabIndex={-1}
+    >
       <div className="min-w-0 flex-[1_1_14rem]">
         <p className="flex min-w-0 items-center gap-2 font-medium text-foreground text-sm">
           <span className="truncate">{instance.label}</span>
@@ -232,6 +250,13 @@ function ProviderInstanceRow({
           }
           onClick={() => card.setReplaceKeyOpen(true)}
         />
+        {onMakeDefault && !isDefault ? (
+          <ProviderActionButton
+            disabled={card.busy}
+            label="Make default"
+            onClick={onMakeDefault}
+          />
+        ) : null}
         <ProviderActionButton
           destructive
           disabled={card.busy}
@@ -460,6 +485,8 @@ export function ProviderInstanceCard({
   isDefault = false,
   isSole = false,
   nextDefaultLabel,
+  autoFocus = false,
+  onMakeDefault,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -476,6 +503,8 @@ export function ProviderInstanceCard({
   isDefault?: boolean;
   isSole?: boolean;
   nextDefaultLabel?: string;
+  autoFocus?: boolean;
+  onMakeDefault?: () => void;
 }) {
   const card = useProviderInstanceCard({
     catalog,
@@ -491,10 +520,12 @@ export function ProviderInstanceCard({
   return (
     <>
       <ProviderInstanceRow
+        autoFocus={autoFocus}
         canManage={canManage}
         card={card}
         instance={instance}
         isDefault={isDefault}
+        onMakeDefault={onMakeDefault}
       />
       <ProviderInstanceCardDialogs
         canManage={canManage}

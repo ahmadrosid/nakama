@@ -646,6 +646,24 @@ export function registerModelRoutes(
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
+      operationId: "setDefaultProvider",
+      path: "/v1/providers/{providerId}/default",
+      request: { params: providerIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: deleteProviderResponseSchema },
+          },
+          description: "The new default provider",
+        },
+      },
+      summary: "Make a provider the default",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
       operationId: "checkProvider",
       path: "/v1/providers/{providerId}/check",
       request: { params: providerIdParam },
@@ -1900,6 +1918,24 @@ export function registerModelRoutes(
       const message = error instanceof Error ? error.message : String(error);
 
       return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/providers/:providerId/default", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    try {
+      return json<DeleteProviderResponse>(
+        await agent.setDefaultProvider(
+          decodeURIComponent(c.req.param("providerId"))
+        )
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      throw error;
     }
   });
 

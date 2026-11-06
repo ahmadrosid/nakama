@@ -448,6 +448,15 @@ export class SystemClient extends NakamaClientCore {
     );
   }
 
+  async setDefaultProvider(
+    providerId: string
+  ): Promise<DeleteProviderResponse> {
+    return this.request<DeleteProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/default`,
+      { method: "POST" }
+    );
+  }
+
   async checkProvider(providerId: string): Promise<CheckProviderResponse> {
     return this.request<CheckProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}/check`,

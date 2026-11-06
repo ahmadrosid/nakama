@@ -24,7 +24,16 @@ export function Toaster() {
             aria-hidden="true"
             className="mt-0.5 size-5 shrink-0 text-emerald-400"
           />
-          <p className="text-foreground text-sm">{item.message}</p>
+          <p className="flex-1 text-foreground text-sm">{item.message}</p>
+          {item.action ? (
+            <button
+              className="font-medium text-foreground text-sm underline underline-offset-2"
+              onClick={item.action.onClick}
+              type="button"
+            >
+              {item.action.label}
+            </button>
+          ) : null}
         </div>
       ))}
     </div>

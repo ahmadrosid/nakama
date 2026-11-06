@@ -4213,6 +4213,24 @@ export class AgentService {
     });
   }
 
+  /** Makes this provider the one new chats use when nothing else is set. */
+  async setDefaultProvider(
+    providerId: string
+  ): Promise<DeleteProviderResponse> {
+    return providerPublicationLock.withLock("providers", async () => {
+      if (!findProviderInstance(this.userConfig, providerId)) {
+        throw new NakamaApiError("Provider not found.", 404);
+      }
+
+      const config = { ...this.userConfig!, defaultProviderId: providerId };
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+
+      return { defaultProviderId: providerId };
+    });
+  }
+
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
     return providerPublicationLock.withLock("providers", async () => {
       if (!this.userConfig) {
