@@ -398,6 +398,7 @@ export function registerSessionRoutes(
         params: z.object({ attachmentId: z.string() }),
         query: z.object({
           preview: z.enum(["1"]).optional(),
+          render: z.enum(["markdown"]).optional(),
         }),
       },
       responses: {
@@ -683,7 +684,10 @@ export function registerSessionRoutes(
       requireActiveOrgIdFromContext(c),
       c.req.param("attachmentId"),
       getRequestAuth(c),
-      { preview: c.req.query("preview") === "1" }
+      {
+        preview: c.req.query("preview") === "1",
+        render: c.req.query("render") === "markdown" ? "markdown" : undefined,
+      }
     );
 
     if (!attachment) {

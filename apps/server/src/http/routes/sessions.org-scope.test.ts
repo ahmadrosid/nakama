@@ -15,7 +15,7 @@ setupTestConfigDir("nakama-sessions-org-scope-test-");
 
 const PASSWORD = "password123";
 
-test("Word attachment preview keeps the existing access checks", async () => {
+test("Word attachment preview converts large originals and keeps access checks", async () => {
   const { app, databaseAdapter, victimSessionId } = await createScenario();
 
   const saved = await createAttachmentSaver(databaseAdapter, {
@@ -25,7 +25,8 @@ test("Word attachment preview keeps the existing access checks", async () => {
     sessionId: victimSessionId,
   })({
     bytes: Buffer.from(
-      "<w:document><w:body><w:p><w:t>Preview text</w:t></w:p></w:body></w:document>"
+      "<w:document><w:body><w:p><w:t>Preview text</w:t></w:p></w:body></w:document>" +
+        " ".repeat(8 * 1024 * 1024)
     ),
     filename: "notes.docx",
     kind: "document",
@@ -47,18 +48,60 @@ test("Word attachment preview keeps the existing access checks", async () => {
     ATTACKER_ORG
   );
 
-  const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content?preview=1`;
+  const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content?preview=1&render=markdown`;
 
   const response = await app.fetch(
     new Request(url, { headers: owner.headers() })
   );
 
   expect(response.status).toBe(200);
-  expect(response.headers.get("Content-Type")).toContain("wordprocessingml");
+  expect(response.headers.get("Content-Type")).toBe("text/markdown");
   expect(await response.text()).toContain("Preview text");
   expect(
     (await app.fetch(new Request(url, { headers: attacker.headers() }))).status
   ).toBe(404);
+
+  const original = await app.fetch(
+    new Request(url.split("?")[0], { headers: owner.headers() })
+  );
+
+  expect(original.headers.get("Content-Type")).toContain("wordprocessingml");
+  const source = await original.text();
+  expect(source).toContain("<w:document>");
+  expect(source.length).toBeGreaterThan(8 * 1024 * 1024);
+
+  const oversize = await createAttachmentSaver(databaseAdapter, {
+    channel: "web",
+    orgId: VICTIM_ORG,
+    profileId: "profile_victim",
+    sessionId: victimSessionId,
+  })({
+    bytes: Buffer.alloc(8 * 1024 * 1024 + 1, 65),
+    filename: "large-text.docx",
+    kind: "document",
+    mediaType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+
+  const oversizeUrl = `http://localhost:4310/v1/attachments/${oversize.attachmentId}/content`;
+  expect(
+    (
+      await app.fetch(
+        new Request(`${oversizeUrl}?render=markdown&preview=1`, {
+          headers: owner.headers(),
+        })
+      )
+    ).status
+  ).toBe(413);
+  expect(
+    (
+      await app.fetch(
+        new Request(oversizeUrl, {
+          headers: owner.headers(),
+        })
+      )
+    ).status
+  ).toBe(200);
 });
 
 test("attachment previews refuse oversize files while original downloads remain available", async () => {

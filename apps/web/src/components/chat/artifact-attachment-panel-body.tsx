@@ -504,15 +504,23 @@ function ArtifactSpreadsheetPreview({
   content: string;
   filename: string;
 }) {
+  const preview = parseSpreadsheetText(filename, content, {
+    columns: 50,
+    rows: 500,
+  });
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <SpreadsheetGrid
-        editable={false}
-        rows={parseSpreadsheetText(filename, content, {
-          columns: 50,
-          rows: 500,
-        })}
-      />
+      <SpreadsheetGrid editable={false} rows={preview.rows} />
+      {preview.truncated ? (
+        <p
+          className="border-border border-t px-3 py-2 text-muted-foreground text-xs"
+          role="status"
+        >
+          Preview limited to 500 rows and 50 columns. Download the file for all
+          data.
+        </p>
+      ) : null}
     </div>
   );
 }

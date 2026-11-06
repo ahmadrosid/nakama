@@ -14,11 +14,12 @@ function parseDelimitedSpreadsheet(
   content: string,
   delimiter: string,
   limits?: { rows: number; columns: number }
-): SpreadsheetRows {
+) {
   const rows: SpreadsheetRows = [];
   let row: string[] = [];
   let cell = "";
   let quoted = false;
+  let truncated = false;
 
   for (let index = 0; index < content.length; index += 1) {
     const char = content[index];
@@ -47,6 +48,10 @@ function parseDelimitedSpreadsheet(
         row.push(cell);
       }
 
+      if (row.length === limits?.columns) {
+        truncated = true;
+      }
+
       cell = "";
       continue;
     }
@@ -59,7 +64,7 @@ function parseDelimitedSpreadsheet(
       rows.push(row);
 
       if (rows.length >= (limits?.rows ?? Number.POSITIVE_INFINITY)) {
-        return rows;
+        return { rows, truncated: truncated || index + 1 < content.length };
       }
 
       row = [];
@@ -82,7 +87,7 @@ function parseDelimitedSpreadsheet(
     rows.push(row);
   }
 
-  return rows.length > 0 ? rows : [[""]];
+  return { rows: rows.length > 0 ? rows : [[""]], truncated };
 }
 
 function serializeDelimitedSpreadsheet(
@@ -110,10 +115,17 @@ export function parseSpreadsheetText(
   filename: string,
   content: string,
   limits?: { rows: number; columns: number }
-): SpreadsheetRows {
-  return normalizeSpreadsheetRows(
-    parseDelimitedSpreadsheet(content, delimiterForFilename(filename), limits)
+) {
+  const parsed = parseDelimitedSpreadsheet(
+    content,
+    delimiterForFilename(filename),
+    limits
   );
+
+  return {
+    rows: normalizeSpreadsheetRows(parsed.rows),
+    truncated: parsed.truncated,
+  };
 }
 
 export function serializeSpreadsheetText(

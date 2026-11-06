@@ -141,7 +141,7 @@ export function useArtifactPreviewContent({
       return;
     }
 
-    if (artifact.sizeBytes > FILE_PREVIEW_MAX_BYTES) {
+    if (!isWordDocument && artifact.sizeBytes > FILE_PREVIEW_MAX_BYTES) {
       setError(
         "This file exceeds the 8 MB preview limit. Download it instead."
       );

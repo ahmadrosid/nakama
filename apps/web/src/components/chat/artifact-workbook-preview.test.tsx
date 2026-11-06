@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { act, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -96,13 +96,17 @@ test("file card opens its preview and offers a separate download action", async 
 });
 
 test("uploaded Markdown opens read-only with download, fullscreen and close", async () => {
+  const uuid = spyOn(crypto, "randomUUID").mockImplementation(() => {
+    throw new Error("Not available in this context");
+  });
+
   const element = document.createElement("div");
   const root = createRoot(element);
 
   const file = {
     filename: "notes.md",
     mediaType: "text/markdown",
-    url: `data:text/markdown;base64,${btoa("# Read only notes")}`,
+    url: `data:text/markdown;charset=utf-8;base64,${btoa("# Read only notes")}`,
   };
 
   function Harness() {
@@ -201,6 +205,7 @@ test("uploaded Markdown opens read-only with download, fullscreen and close", as
     expect(element.querySelector('[aria-label="File panel"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
+    uuid.mockRestore();
   }
 });
 
@@ -247,6 +252,62 @@ test("switches sheets, shows selected cached values/formulas, and changes zoom w
     expect(
       element.querySelector("input,textarea,[contenteditable=true]")
     ).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+test("cell selection leaves unrelated worksheet rows untouched", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  let reads = 0;
+
+  const stableCell = {
+    get value() {
+      reads++;
+
+      return "Stable";
+    },
+  };
+
+  const sheet = {
+    columns: 2,
+    name: "Performance",
+    rows: [
+      { 0: { value: "First" } },
+      { 0: { value: "Next" } },
+      { 0: stableCell },
+    ],
+    truncated: false,
+  };
+
+  try {
+    await act(async () =>
+      root.render(<WorkbookGrid workbook={{ sheets: [sheet] }} />)
+    );
+    const initialReads = reads;
+    expect(initialReads).toBeGreaterThan(0);
+    await act(async () =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="A2: Next"]')!
+        .click()
+    );
+    expect(element.querySelector("output")?.textContent).toBe("Next");
+    expect(reads).toBe(initialReads);
+    await act(async () =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="A2: Next"]')!
+        .dispatchEvent(
+          new window.KeyboardEvent("keydown", {
+            bubbles: true,
+            key: "ArrowRight",
+          })
+        )
+    );
+    expect(
+      element.querySelector('[aria-label="B2: "]')?.getAttribute("aria-pressed")
+    ).toBe("true");
+    expect(reads).toBe(initialReads);
   } finally {
     await act(async () => root.unmount());
   }

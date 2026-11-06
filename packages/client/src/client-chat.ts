@@ -62,9 +62,23 @@ export class ChatClient extends ProfileFilesClient {
 
   async readAttachmentContent(
     attachmentId: string,
-    options: { maxBytes?: number; signal?: AbortSignal } = {}
+    options: {
+      maxBytes?: number;
+      signal?: AbortSignal;
+      render?: "markdown";
+    } = {}
   ): Promise<Blob> {
-    const suffix = options.maxBytes === undefined ? "" : "?preview=1";
+    const query = new URLSearchParams();
+
+    if (options.maxBytes !== undefined) {
+      query.set("preview", "1");
+    }
+
+    if (options.render) {
+      query.set("render", options.render);
+    }
+
+    const suffix = query.size ? `?${query}` : "";
 
     const response = await this.fetchRaw(
       `/v1/attachments/${encodeURIComponent(attachmentId)}/content${suffix}`,

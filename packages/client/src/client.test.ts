@@ -1479,12 +1479,14 @@ test("attachment previews keep org scope and bound bytes", async () => {
 
   const blob = await client.readAttachmentContent("a/b", {
     maxBytes: 4,
+    render: "markdown",
   });
 
   expect(await blob.text()).toBe("1234");
   expect(blob.type).toBe("text/markdown");
   expect(requests[0].headers.get("X-Org-Id")).toBe("org-preview");
   expect(new URL(requests[0].url).searchParams.get("preview")).toBe("1");
+  expect(new URL(requests[0].url).searchParams.get("render")).toBe("markdown");
   await expect(
     client.readAttachmentContent("id", { maxBytes: 3 })
   ).rejects.toThrow();

@@ -1,4 +1,4 @@
-import { unzipSync } from "fflate";
+import { type Unzipped, unzip } from "fflate";
 
 export const XLSX_PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -62,6 +62,8 @@ function rgb(node: Element | undefined): string | undefined {
     : undefined;
 }
 
+const numberFormatters = new Map<string, Intl.NumberFormat>();
+
 function displayNumber(
   raw: string,
   format: string,
@@ -74,13 +76,56 @@ function displayNumber(
     return raw;
   }
 
-  if (formatId >= 14 && formatId <= 22) {
+  const tokens = format.replace(/"[^"]*"|\\.|\[(?![hms]+\])[^\]]*\]/gi, "");
+  const hasTime = /[hs]/i.test(tokens);
+  const hasDate = /[yd]/i.test(tokens) || (/m/i.test(tokens) && !hasTime);
+
+  if (hasDate || hasTime || (formatId >= 14 && formatId <= 22)) {
     const date = new Date(
       (date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30)) +
         (value + (!date1904 && value > 0 && value < 60 ? 1 : 0)) * 86_400_000
     );
 
-    return Number.isNaN(date.getTime()) ? raw : date.toISOString().slice(0, 10);
+    if (Number.isNaN(date.getTime())) {
+      return raw;
+    }
+
+    const parts: string[] = [];
+
+    if (hasDate) {
+      parts.push(date.toISOString().slice(0, 10));
+    }
+
+    if (hasTime) {
+      const seconds = Math.round((((value % 1) + 1) % 1) * 86_400) % 86_400;
+      const hours = Math.floor(seconds / 3600);
+      const ampm = /am\/pm/i.test(tokens);
+      const elapsed = /\[h+\]/i.test(tokens);
+
+      const hour = elapsed
+        ? Math.floor(value * 24)
+        : ampm
+          ? hours % 12 || 12
+          : hours;
+
+      const minutes = String(Math.floor(seconds / 60) % 60).padStart(2, "0");
+
+      let time = /h/i.test(tokens)
+        ? `${String(hour).padStart(2, "0")}:${minutes}`
+        : minutes;
+
+      if (/s/i.test(tokens)) {
+        time += `:${String(seconds % 60).padStart(2, "0")}`;
+      }
+
+      if (ampm) {
+        time += hours < 12 ? " AM" : " PM";
+      }
+
+      parts.push(time);
+    }
+
+    return parts.join(" ");
   }
 
   if (format === "General" || !format) {
@@ -90,60 +135,27 @@ function displayNumber(
   const precision = Math.min(10, format.match(/\.([0#]+)/)?.[1]?.length ?? 0);
   const percent = format.includes("%");
 
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: precision,
-    minimumFractionDigits: precision,
-    style: percent ? "percent" : "decimal",
-    useGrouping: format.includes(","),
-  }).format(value);
-}
+  const grouping = format.includes(",");
+  const key = `${precision}:${percent}:${grouping}`;
+  let formatter = numberFormatters.get(key);
 
-/** Read paragraphs from a fresh inline DOCX without running embedded content. */
-export function parseDocxPreview(data: ArrayBuffer): string {
-  if (data.byteLength > XLSX_PREVIEW_MAX_BYTES) {
-    throw new Error(
-      "This file exceeds the 8 MB preview limit. Download it instead."
-    );
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: precision,
+      minimumFractionDigits: precision,
+      style: percent ? "percent" : "decimal",
+      useGrouping: grouping,
+    });
+    numberFormatters.set(key, formatter);
   }
 
-  const bytes = new Uint8Array(data);
-
-  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
-    return new TextDecoder("utf-8", { fatal: true }).decode(data);
-  }
-
-  const files = unzipSync(bytes, {
-    filter: (file) => {
-      if (file.name !== "word/document.xml") {
-        return false;
-      }
-
-      if (file.originalSize > 24 * 1024 * 1024) {
-        throw new Error(
-          "The expanded document exceeds the preview limit. Download it instead."
-        );
-      }
-
-      return true;
-    },
-  });
-
-  return nodes(xml(files["word/document.xml"]), "p")
-    .map((paragraph) => {
-      const text = nodes(paragraph, "t")
-        .map((run) => run.textContent ?? "")
-        .join("");
-
-      const style = nodes(paragraph, "pStyle")[0]?.getAttribute("w:val") ?? "";
-      const heading = /^Heading([1-6])$/i.exec(style);
-
-      return heading ? `${"#".repeat(Number(heading[1]))} ${text}` : text;
-    })
-    .join("\n\n");
+  return formatter.format(value);
 }
 
 /** Read cached values only. Formulas, links and macros are never executed. */
-export function parseXlsxPreview(data: ArrayBuffer): WorkbookPreview {
+export async function parseXlsxPreview(
+  data: ArrayBuffer
+): Promise<WorkbookPreview> {
   if (data.byteLength > XLSX_PREVIEW_MAX_BYTES) {
     throw new Error(
       "This workbook exceeds the 8 MB preview limit. Download it to view all data."
@@ -152,26 +164,38 @@ export function parseXlsxPreview(data: ArrayBuffer): WorkbookPreview {
 
   let expandedBytes = 0;
 
-  const files = unzipSync(new Uint8Array(data), {
-    filter: (file) => {
-      if (
-        !/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|styles\.xml|sharedStrings\.xml|worksheets\/[^/]+\.xml)$/.test(
-          file.name
-        )
-      ) {
-        return false;
+  const files = await new Promise<Unzipped>((resolve, reject) => {
+    unzip(
+      new Uint8Array(data),
+      {
+        filter: (file) => {
+          if (
+            !/^xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|styles\.xml|sharedStrings\.xml|worksheets\/[^/]+\.xml)$/.test(
+              file.name
+            )
+          ) {
+            return false;
+          }
+
+          expandedBytes += file.originalSize;
+
+          if (expandedBytes > 24 * 1024 * 1024) {
+            throw new Error(
+              "The expanded workbook exceeds the preview limit. Download it instead."
+            );
+          }
+
+          return true;
+        },
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result);
+        }
       }
-
-      expandedBytes += file.originalSize;
-
-      if (expandedBytes > 24 * 1024 * 1024) {
-        throw new Error(
-          "The expanded workbook exceeds the preview limit. Download it instead."
-        );
-      }
-
-      return true;
-    },
+    );
   });
 
   const workbook = xml(files["xl/workbook.xml"]);
@@ -217,6 +241,18 @@ export function parseXlsxPreview(data: ArrayBuffer): WorkbookPreview {
     [4, "#,##0.00"],
     [9, "0%"],
     [10, "0.00%"],
+    [14, "mm-dd-yy"],
+    [15, "d-mmm-yy"],
+    [16, "d-mmm"],
+    [17, "mmm-yy"],
+    [18, "h:mm AM/PM"],
+    [19, "h:mm:ss AM/PM"],
+    [20, "h:mm"],
+    [21, "h:mm:ss"],
+    [22, "m/d/yy h:mm"],
+    [45, "mm:ss"],
+    [46, "[h]:mm:ss"],
+    [47, "mm:ss.0"],
   ]);
 
   const cellStyles = styles
@@ -231,110 +267,129 @@ export function parseXlsxPreview(data: ArrayBuffer): WorkbookPreview {
     );
   }
 
-  const sheets = definitions.map((definition): WorkbookSheet => {
-    const id =
-      definition.getAttribute("r:id") ??
-      definition.getAttributeNS(
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-        "id"
-      );
+  const sheets = definitions
+    .map((definition): WorkbookSheet | null => {
+      const id =
+        definition.getAttribute("r:id") ??
+        definition.getAttributeNS(
+          "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+          "id"
+        );
 
-    const target = relationships.get(id) ?? "";
+      const target = relationships.get(id) ?? "";
 
-    const filename = target.startsWith("/xl/")
-      ? target.slice(1)
-      : `xl/${target.replace(/^\.\//, "")}`;
+      const filename = target.startsWith("/xl/")
+        ? target.slice(1)
+        : `xl/${target.replace(/^\.\//, "")}`;
 
-    if (!/^xl\/worksheets\/[^/]+\.xml$/.test(filename)) {
-      throw new Error("Unsupported worksheet location.");
-    }
-
-    const source = xml(files[filename]);
-    const rows: WorkbookSheet["rows"] = [];
-    let columns = 1;
-    let truncated = false;
-
-    for (const row of nodes(source, "row")) {
-      const rowIndex = Number(row.getAttribute("r")) - 1;
-
-      if (!Number.isInteger(rowIndex) || rowIndex < 0) {
-        continue;
+      if (/^xl\/chartsheets\/[^/]+\.xml$/.test(filename)) {
+        return null;
       }
 
-      if (rowIndex >= XLSX_PREVIEW_MAX_ROWS) {
-        truncated = true;
-        continue;
+      if (!/^xl\/worksheets\/[^/]+\.xml$/.test(filename)) {
+        throw new Error("Unsupported worksheet location.");
       }
 
-      rows[rowIndex] = {};
+      const source = xml(files[filename]);
+      const rows: WorkbookSheet["rows"] = [];
+      let columns = 1;
+      let truncated = false;
+      let nextRowIndex = 0;
 
-      for (const cell of nodes(row, "c")) {
-        const reference = cell.getAttribute("r") ?? "";
-        const letters = reference.match(/^([A-Z]+)\d+$/)?.[1];
+      for (const row of nodes(source, "row")) {
+        const rowReference = row.getAttribute("r");
 
-        if (!letters) {
+        const rowIndex =
+          rowReference === null ? nextRowIndex : Number(rowReference) - 1;
+
+        if (!Number.isInteger(rowIndex) || rowIndex < 0) {
           continue;
         }
 
-        let index = 0;
+        nextRowIndex = rowIndex + 1;
 
-        for (const letter of letters) {
-          index = index * 26 + letter.charCodeAt(0) - 64;
-        }
-
-        if (index > XLSX_PREVIEW_MAX_COLUMNS) {
+        if (rowIndex >= XLSX_PREVIEW_MAX_ROWS) {
           truncated = true;
           continue;
         }
 
-        columns = Math.max(columns, index);
-        const type = cell.getAttribute("t");
-        const raw = nodes(cell, "v")[0]?.textContent ?? "";
-        const formula = nodes(cell, "f")[0]?.textContent ?? undefined;
-        const style = cellStyles[Number(cell.getAttribute("s") ?? 0)];
-        const font = fonts[Number(style?.getAttribute("fontId") ?? 0)];
-        const fill = fills[Number(style?.getAttribute("fillId") ?? 0)];
-        const formatId = Number(style?.getAttribute("numFmtId") ?? 0);
-        let value = raw;
+        rows[rowIndex] = {};
+        let nextColumnIndex = 1;
 
-        if (type === "s") {
-          value = strings[Number(raw)] ?? "";
-        } else if (type === "inlineStr") {
-          value = nodes(cell, "t")
-            .map((entry) => entry.textContent ?? "")
-            .join("");
-        } else if (type === "b") {
-          value = raw === "1" ? "TRUE" : "FALSE";
-        } else if (!type || type === "n") {
-          value = displayNumber(
-            raw,
-            formats.get(formatId) ?? builtins.get(formatId) ?? "General",
-            formatId,
-            date1904
-          );
+        for (const cell of nodes(row, "c")) {
+          const reference = cell.getAttribute("r");
+          const letters = reference?.match(/^([A-Z]+)\d+$/)?.[1];
+
+          if (reference !== null && !letters) {
+            continue;
+          }
+
+          let index = reference === null ? nextColumnIndex : 0;
+
+          for (const letter of letters ?? "") {
+            index = index * 26 + letter.charCodeAt(0) - 64;
+          }
+
+          nextColumnIndex = index + 1;
+
+          if (index > XLSX_PREVIEW_MAX_COLUMNS) {
+            truncated = true;
+            continue;
+          }
+
+          columns = Math.max(columns, index);
+          const type = cell.getAttribute("t");
+          const raw = nodes(cell, "v")[0]?.textContent ?? "";
+          const formula = nodes(cell, "f")[0]?.textContent ?? undefined;
+          const style = cellStyles[Number(cell.getAttribute("s") ?? 0)];
+          const font = fonts[Number(style?.getAttribute("fontId") ?? 0)];
+          const fill = fills[Number(style?.getAttribute("fillId") ?? 0)];
+          const formatId = Number(style?.getAttribute("numFmtId") ?? 0);
+          let value = raw;
+
+          if (type === "s") {
+            value = strings[Number(raw)] ?? "";
+          } else if (type === "inlineStr") {
+            value = nodes(cell, "t")
+              .map((entry) => entry.textContent ?? "")
+              .join("");
+          } else if (type === "b") {
+            value = raw === "1" ? "TRUE" : "FALSE";
+          } else if (!type || type === "n") {
+            value = displayNumber(
+              raw,
+              formats.get(formatId) ?? builtins.get(formatId) ?? "General",
+              formatId,
+              date1904
+            );
+          }
+
+          rows[rowIndex][index - 1] = {
+            background: fill ? rgb(nodes(fill, "fgColor")[0]) : undefined,
+            bold: font
+              ? nodes(font, "b").some(
+                  (entry) => entry.getAttribute("val") !== "0"
+                )
+              : false,
+            color: font ? rgb(nodes(font, "color")[0]) : undefined,
+            formula: formula ? `=${formula}` : undefined,
+            value: formula && raw === "" ? "Not calculated" : value,
+          };
         }
-
-        rows[rowIndex][index - 1] = {
-          background: fill ? rgb(nodes(fill, "fgColor")[0]) : undefined,
-          bold: font
-            ? nodes(font, "b").some(
-                (entry) => entry.getAttribute("val") !== "0"
-              )
-            : false,
-          color: font ? rgb(nodes(font, "color")[0]) : undefined,
-          formula: formula ? `=${formula}` : undefined,
-          value: formula && raw === "" ? "Not calculated" : value,
-        };
       }
-    }
 
-    return {
-      columns,
-      name: definition.getAttribute("name") ?? "Sheet",
-      rows,
-      truncated,
-    };
-  });
+      return {
+        columns,
+        name: definition.getAttribute("name") ?? "Sheet",
+        rows,
+        truncated,
+      };
+    })
+    .filter((sheet): sheet is WorkbookSheet => sheet !== null);
+
+  if (sheets.length === 0) {
+    throw new Error("This workbook has no worksheets to preview.");
+  }
 
   return { sheets };
 }

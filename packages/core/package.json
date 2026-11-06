@@ -8,6 +8,7 @@
     "./demo-login": "./src/demo-login.ts",
     "./agent-questionnaire": "./src/agent-questionnaire.ts",
     "./artifact-mime": "./src/artifact-mime.ts",
+    "./docx-text": "./src/docx-text.ts",
     "./agent-todo": "./src/agent-todo.ts",
     "./api-error": "./src/api-error.ts",
     "./bridge-api": "./src/bridge-api.ts",

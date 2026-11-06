@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core/api-error";
 import { COMPOSIO_CUSTOM_AUTH_REQUIRED } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { VirtuosoMockContext } from "react-virtuoso";
@@ -86,10 +86,12 @@ function mockToolkits() {
 }
 
 async function renderCard({
+  messages,
   onAgent,
   profileId,
   role,
 }: {
+  messages?: ComponentProps<typeof ChatMessageList>["messages"];
   onAgent: boolean;
   profileId?: string;
   role: "admin" | "member";
@@ -117,27 +119,33 @@ async function renderCard({
                 value={{ itemHeight: 100, viewportHeight: 2000 }}
               >
                 <ChatMessageList
-                  messages={[
-                    { content: "Create a Google Form", id: "u1", role: "user" },
-                    {
-                      content: "",
-                      id: "t1",
-                      role: "tool",
-                      tool: "composio__connect_account",
-                      toolCallId: "call-1",
-                      toolResult: {
-                        displayName: "Googleforms",
-                        onAgent,
-                        toolkitSlug: "googleforms",
-                        type: "composio_connect",
+                  messages={
+                    messages ?? [
+                      {
+                        content: "Create a Google Form",
+                        id: "u1",
+                        role: "user",
                       },
-                    },
-                    {
-                      content: "Connect Google Forms.",
-                      id: "a1",
-                      role: "assistant",
-                    },
-                  ]}
+                      {
+                        content: "",
+                        id: "t1",
+                        role: "tool",
+                        tool: "composio__connect_account",
+                        toolCallId: "call-1",
+                        toolResult: {
+                          displayName: "Googleforms",
+                          onAgent,
+                          toolkitSlug: "googleforms",
+                          type: "composio_connect",
+                        },
+                      },
+                      {
+                        content: "Connect Google Forms.",
+                        id: "a1",
+                        role: "assistant",
+                      },
+                    ]
+                  }
                   profileId={profileId}
                   sessionId="s1"
                 />
@@ -215,6 +223,34 @@ test("an admin sees custom auth steps", async () => {
       link.href.includes("custom-auth-configs")
     )
   ).toBe(true);
+});
+
+test("an image URL keeps its model-generated description visible", async () => {
+  const description = "A red boat beside a pier";
+
+  const card = await renderCard({
+    messages: [
+      {
+        content: "Check this image",
+        id: "image-user",
+        imageAttachments: [
+          {
+            description,
+            mediaType: "image/png",
+            url: "data:image/png;base64,aW1hZ2U=",
+          },
+        ],
+        role: "user",
+      },
+    ],
+    onAgent: true,
+    role: "admin",
+  });
+
+  expect(
+    card.container.querySelector('[aria-label="Preview Image 1"]')
+  ).not.toBeNull();
+  expect(card.container.textContent).toContain(description);
 });
 
 test("a member gets guidance but not the admin setup steps", async () => {

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { strToU8, zipSync } from "fflate";
 import {
-  parseDocxPreview,
   parseXlsxPreview,
   XLSX_PREVIEW_MAX_BYTES,
 } from "./artifact-office-preview";
@@ -23,20 +22,6 @@ function workbookFixture() {
   };
 }
 
-test("inline Word preview reads paragraphs without executing embedded content", () => {
-  const data = bytes({
-    "word/document.xml":
-      '<w:document xmlns:w="urn:test"><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Notes</w:t></w:r></w:p><w:p><w:r><w:t>Read only</w:t></w:r></w:p></w:document>',
-  });
-
-  expect(parseDocxPreview(data)).toBe("# Notes\n\nRead only");
-  expect(() =>
-    parseDocxPreview(
-      bytes({ "word/document.xml": "<!DOCTYPE foo><w:document/>" })
-    )
-  ).toThrow();
-});
-
 function bytes(parts: Record<string, string>) {
   // SAFETY: The fixture or rendered element supplies the fields consumed at this call site.
   return zipSync(
@@ -46,8 +31,8 @@ function bytes(parts: Record<string, string>) {
   ).buffer as ArrayBuffer;
 }
 
-test("reads sheet relationships, rich strings, cached formulas and basic styles", () => {
-  const result = parseXlsxPreview(bytes(workbookFixture()));
+test("reads sheet relationships, rich strings, cached formulas and basic styles", async () => {
+  const result = await parseXlsxPreview(bytes(workbookFixture()));
   expect(result.sheets.map((entry) => entry.name)).toEqual(["Asumsi", "KPI"]);
   expect(result.sheets[0]?.rows[0]?.[1]).toMatchObject({
     background: "#243746",
@@ -66,37 +51,48 @@ test("reads sheet relationships, rich strings, cached formulas and basic styles"
   expect(result.sheets[1]?.rows[2]?.[2]?.value).toBe("Gross billing");
 });
 
-test("bounds sparse rows and columns without allocating huge grids", () => {
+test("bounds sparse rows and columns without allocating huge grids", async () => {
   const fixture = workbookFixture();
   fixture["xl/worksheets/sheet2.xml"] =
     '<worksheet><sheetData><row r="1048576"><c r="XFD1048576"><v>1</v></c></row><row r="1"><c r="ZZ1"><v>1</v></c></row></sheetData></worksheet>';
-  const sheet = parseXlsxPreview(bytes(fixture)).sheets[1]!;
+  const sheet = (await parseXlsxPreview(bytes(fixture))).sheets[1]!;
   expect(sheet.truncated).toBe(true);
   expect(sheet.rows.length).toBe(1);
   expect(sheet.columns).toBe(1);
 });
 
-test("rejects external worksheet links, XML entities, oversized and non-workbook files", () => {
+test("rejects external worksheet links, XML entities, oversized and non-workbook files", async () => {
   const fixture = workbookFixture();
   fixture["xl/_rels/workbook.xml.rels"] =
     '<Relationships><Relationship Id="r1" TargetMode="External" Target="https://example.com/test.xml"/></Relationships>';
-  expect(() => parseXlsxPreview(bytes(fixture))).toThrow();
+  await expect(parseXlsxPreview(bytes(fixture))).rejects.toThrow();
   const entity = workbookFixture();
   entity["xl/sharedStrings.xml"] = "<!DOCTYPE foo><sst/>";
-  expect(() => parseXlsxPreview(bytes(entity))).toThrow();
-  expect(() =>
+  await expect(parseXlsxPreview(bytes(entity))).rejects.toThrow();
+  await expect(
     parseXlsxPreview(new ArrayBuffer(XLSX_PREVIEW_MAX_BYTES + 1))
-  ).toThrow();
-  expect(() => parseXlsxPreview(bytes({ "text.txt": "Hello" }))).toThrow();
+  ).rejects.toThrow();
+  await expect(
+    parseXlsxPreview(bytes({ "text.txt": "Hello" }))
+  ).rejects.toThrow();
 });
 
-test("rejects highly compressed oversized XML before expansion", () => {
+test("rejects highly compressed oversized XML before expansion", async () => {
   const fixture = workbookFixture();
   fixture["xl/sharedStrings.xml"] = " ".repeat(25 * 1024 * 1024);
-  expect(() => parseXlsxPreview(bytes(fixture))).toThrow("expanded workbook");
+  await expect(parseXlsxPreview(bytes(fixture))).rejects.toThrow();
 });
 
-test("uses the workbook date system and tolerates invalid numeric dates", () => {
+test("expands a large allowed XML entry with the asynchronous unzip path", async () => {
+  const fixture = workbookFixture();
+  fixture["xl/sharedStrings.xml"] =
+    `<sst><si><t>${"x".repeat(600_000)}</t></si></sst>`;
+  const result = await parseXlsxPreview(bytes(fixture));
+  expect(result.sheets[0]?.rows[0]?.[0]?.value.length).toBe(600_000);
+  expect(result.sheets[0]?.rows[0]?.[1]?.value).toBe("3,000,000,000");
+});
+
+test("uses the workbook date system and tolerates invalid numeric dates", async () => {
   const fixture = workbookFixture();
   fixture["xl/workbook.xml"] = fixture["xl/workbook.xml"].replace(
     "<sheets>",
@@ -108,7 +104,46 @@ test("uses the workbook date system and tolerates invalid numeric dates", () => 
   );
   fixture["xl/worksheets/sheet2.xml"] =
     '<worksheet><sheetData><row r="1"><c r="A1" s="3"><v>0</v></c><c r="B1" s="3"><v>1e20</v></c></row></sheetData></worksheet>';
-  const sheet = parseXlsxPreview(bytes(fixture)).sheets[1]!;
+  const sheet = (await parseXlsxPreview(bytes(fixture))).sheets[1]!;
   expect(sheet.rows[0]?.[0]?.value).toBe("1904-01-01");
   expect(sheet.rows[0]?.[1]?.value).toBe("1e20");
+});
+
+test("skips chart sheets while keeping worksheets and refusing unsafe targets", async () => {
+  const fixture = workbookFixture();
+  fixture["xl/_rels/workbook.xml.rels"] = fixture[
+    "xl/_rels/workbook.xml.rels"
+  ].replace("worksheets/sheet2.xml", "chartsheets/sheet2.xml");
+  expect(
+    (await parseXlsxPreview(bytes(fixture))).sheets.map((sheet) => sheet.name)
+  ).toEqual(["Asumsi"]);
+  fixture["xl/_rels/workbook.xml.rels"] = fixture[
+    "xl/_rels/workbook.xml.rels"
+  ].replace("chartsheets/sheet2.xml", "../chartsheets/sheet2.xml");
+  await expect(parseXlsxPreview(bytes(fixture))).rejects.toThrow();
+});
+
+test("infers omitted row and cell references after explicit positions", async () => {
+  const fixture = workbookFixture();
+  fixture["xl/worksheets/sheet2.xml"] =
+    '<worksheet><sheetData><row><c><v>1</v></c><c><v>2</v></c></row><row r="4"><c r="C4"><v>3</v></c><c><v>4</v></c></row><row><c><v>5</v></c></row></sheetData></worksheet>';
+  const sheet = (await parseXlsxPreview(bytes(fixture))).sheets[1]!;
+  expect(sheet.rows[0]?.[0]?.value).toBe("1");
+  expect(sheet.rows[0]?.[1]?.value).toBe("2");
+  expect(sheet.rows[3]?.[2]?.value).toBe("3");
+  expect(sheet.rows[3]?.[3]?.value).toBe("4");
+  expect(sheet.rows[4]?.[0]?.value).toBe("5");
+});
+
+test("formats custom dates, built-in times and date-time cached values", async () => {
+  const fixture = workbookFixture();
+  fixture["xl/styles.xml"] =
+    '<styleSheet><numFmts><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/><numFmt numFmtId="165" formatCode="yyyy-mm-dd hh:mm:ss"/></numFmts><cellXfs><xf numFmtId="164"/><xf numFmtId="18"/><xf numFmtId="21"/><xf numFmtId="165"/></cellXfs></styleSheet>';
+  fixture["xl/worksheets/sheet2.xml"] =
+    '<worksheet><sheetData><row><c s="0"><v>45292</v></c><c s="1"><v>0.5</v></c><c s="2"><v>0.5</v></c><c s="3"><v>45292.5</v></c></row></sheetData></worksheet>';
+  const sheet = (await parseXlsxPreview(bytes(fixture))).sheets[1]!;
+  expect(sheet.rows[0]?.[0]?.value).toBe("2024-01-01");
+  expect(sheet.rows[0]?.[1]?.value).toBe("12:00 PM");
+  expect(sheet.rows[0]?.[2]?.value).toBe("12:00:00");
+  expect(sheet.rows[0]?.[3]?.value).toBe("2024-01-01 12:00:00");
 });

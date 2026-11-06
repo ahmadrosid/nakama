@@ -1451,14 +1451,20 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
         <div className="flex w-full min-w-0 flex-col gap-2">
           {message.imageAttachments.map((image, index) =>
             image.url ? (
-              <DocumentAttachmentPreview
-                document={{
-                  filename: `Image ${index + 1}`,
-                  mediaType: image.mediaType,
-                  url: image.url,
-                }}
-                key={image.url}
-              />
+              <div className="space-y-2" key={image.url}>
+                <DocumentAttachmentPreview
+                  document={{
+                    filename: `Image ${index + 1}`,
+                    mediaType: image.mediaType,
+                    url: image.url,
+                  }}
+                />
+                {image.description?.trim() ? (
+                  <p className="whitespace-pre-wrap text-sm">
+                    {image.description.trim()}
+                  </p>
+                ) : null}
+              </div>
             ) : (
               <ImageAttachmentPreview
                 description={image.description}

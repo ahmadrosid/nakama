@@ -14,8 +14,8 @@ import { FilePreviewCard } from "@/components/chat/artifact-attachment-preview";
 import { WorkbookGrid } from "@/components/chat/artifact-workbook-preview";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { ARTIFACT_HTML_IFRAME_SANDBOX } from "@/lib/artifact-html-preview";
 import {
-  parseDocxPreview,
   parseXlsxPreview,
   type WorkbookPreview,
 } from "@/lib/artifact-office-preview";
@@ -33,6 +33,7 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
+import { createClientId } from "@/lib/client-id";
 import type { DisplayDocument } from "@/lib/pasted-text";
 
 function downloadFile(file: DisplayDocument) {
@@ -44,7 +45,7 @@ function downloadFile(file: DisplayDocument) {
     return;
   }
 
-  if (!(file.attachmentId || /^data:[^;,]*;base64,/.test(href))) {
+  if (!(file.attachmentId || /^data:[^,]*;base64,/i.test(href))) {
     return;
   }
 
@@ -58,7 +59,7 @@ function downloadFile(file: DisplayDocument) {
 
 /** Check inline bytes before allocating a decoded buffer. */
 function inlineBlob(file: DisplayDocument): Blob {
-  const match = /^data:([^;,]*);base64,([\s\S]*)$/.exec(file.url ?? "");
+  const match = /^data:([^,]*);base64,([\s\S]*)$/i.exec(file.url ?? "");
 
   if (!match) {
     throw new Error("This attachment has no readable file content.");
@@ -126,6 +127,7 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
     const load = file.attachmentId
       ? scoped.readAttachmentContent(file.attachmentId, {
           maxBytes: FILE_PREVIEW_MAX_BYTES,
+          render: isWord ? "markdown" : undefined,
           signal: controller.signal,
         })
       : Promise.resolve().then(() => inlineBlob(file));
@@ -138,16 +140,18 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
           );
         }
 
-        const data = isWorkbook || isWord ? await blob.arrayBuffer() : null;
+        if (isWord && !file.attachmentId) {
+          throw new Error(
+            "Download this inline Word file, or send it to preview it."
+          );
+        }
 
-        const workbook = isWorkbook && data ? parseXlsxPreview(data) : null;
+        const data = isWorkbook ? await blob.arrayBuffer() : null;
 
-        const text =
-          isWord && data
-            ? parseDocxPreview(data)
-            : isText || isHtml
-              ? await blob.text()
-              : null;
+        const workbook =
+          isWorkbook && data ? await parseXlsxPreview(data) : null;
+
+        const text = isText || isHtml ? await blob.text() : null;
 
         if (!controller.signal.aborted) {
           setLoaded({ blob, text, workbook });
@@ -242,7 +246,7 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
       <ArtifactAttachmentPanelBody
         {...common}
         content={loaded?.text ?? null}
-        htmlSandbox=""
+        htmlSandbox={ARTIFACT_HTML_IFRAME_SANDBOX}
         kind="html"
       />
     );
@@ -278,7 +282,7 @@ export function DocumentAttachmentPreview({
   const mime = resolveArtifactMimeType(file.mediaType, file.filename);
 
   const contentKey = useMemo(
-    () => crypto.randomUUID(),
+    () => createClientId(),
     [activeOrg?.id, file.attachmentId, file.url, file.filename]
   );
 

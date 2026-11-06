@@ -1,6 +1,6 @@
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
-import { useEffect, useId, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import {
   parseXlsxPreview,
@@ -33,9 +33,10 @@ export function ArtifactWorkbookPreview({
         maxBytes: XLSX_PREVIEW_MAX_BYTES,
         signal: controller.signal,
       })
-      .then((result) => {
+      .then((result) => parseXlsxPreview(result.data))
+      .then((parsed) => {
         if (!controller.signal.aborted) {
-          setWorkbook(parseXlsxPreview(result.data));
+          setWorkbook(parsed);
         }
       })
       .catch((reason) => {
@@ -83,6 +84,10 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
   const columnCount = Math.max(6, sheet.columns);
   const cell = sheet.rows[selected.row]?.[selected.column];
   const address = `${columnIndexToLetter(selected.column)}${selected.row + 1}`;
+
+  const selectCell = useCallback((column: number, row: number) => {
+    setSelected({ column, row });
+  }, []);
 
   function selectSheet(index: number) {
     setSheetIndex(index);
@@ -137,6 +142,38 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
         <table
           aria-label={`${sheet.name} worksheet`}
           className="w-max min-w-full border-separate border-spacing-0"
+          onKeyDown={(event) => {
+            const direction = new Map<string, [number, number]>([
+              ["ArrowDown", [1, 0]],
+              ["ArrowLeft", [0, -1]],
+              ["ArrowRight", [0, 1]],
+              ["ArrowUp", [-1, 0]],
+            ]).get(event.key);
+
+            if (!direction) {
+              return;
+            }
+
+            event.preventDefault();
+
+            const next = {
+              column: Math.max(
+                0,
+                Math.min(columnCount - 1, selected.column + direction[1])
+              ),
+              row: Math.max(
+                0,
+                Math.min(rowCount - 1, selected.row + direction[0])
+              ),
+            };
+
+            setSelected(next);
+            grid.current
+              ?.querySelector<HTMLButtonElement>(
+                `[data-cell="${next.row}:${next.column}"]`
+              )
+              ?.focus();
+          }}
           style={{ fontSize: (13 * zoom) / 100 }}
         >
           <thead className="sticky top-0 z-20">
@@ -158,83 +195,15 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
           </thead>
           <tbody>
             {Array.from({ length: rowCount }, (_, row) => (
-              <tr key={row}>
-                <th
-                  className="sticky left-0 z-10 border-slate-200 border-r border-b bg-slate-100 px-3 font-normal text-slate-500"
-                  scope="row"
-                >
-                  {row + 1}
-                </th>
-                {Array.from({ length: columnCount }, (_, column) => {
-                  const value = sheet.rows[row]?.[column];
-
-                  const active =
-                    selected.row === row && selected.column === column;
-
-                  return (
-                    <td
-                      className="border-slate-200 border-r border-b p-0"
-                      key={column}
-                    >
-                      <button
-                        aria-label={`${columnIndexToLetter(column)}${row + 1}: ${value?.value ?? ""}`}
-                        aria-pressed={active}
-                        className={cn(
-                          "block w-full min-w-36 max-w-80 truncate px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-inset",
-                          active && "ring-2 ring-blue-600 ring-inset"
-                        )}
-                        data-cell={`${row}:${column}`}
-                        onClick={() => setSelected({ column, row })}
-                        onKeyDown={(event) => {
-                          const directions = new Map<string, [number, number]>([
-                            ["ArrowDown", [1, 0]],
-                            ["ArrowLeft", [0, -1]],
-                            ["ArrowRight", [0, 1]],
-                            ["ArrowUp", [-1, 0]],
-                          ]);
-
-                          const direction = directions.get(event.key);
-
-                          if (!direction) {
-                            return;
-                          }
-
-                          event.preventDefault();
-
-                          const next = {
-                            column: Math.max(
-                              0,
-                              Math.min(columnCount - 1, column + direction[1])
-                            ),
-                            row: Math.max(
-                              0,
-                              Math.min(rowCount - 1, row + direction[0])
-                            ),
-                          };
-
-                          setSelected(next);
-                          grid.current
-                            ?.querySelector<HTMLButtonElement>(
-                              `[data-cell="${next.row}:${next.column}"]`
-                            )
-                            ?.focus();
-                        }}
-                        style={{
-                          backgroundColor: value?.background,
-                          color: value?.color,
-                          fontWeight: value?.bold ? 600 : undefined,
-                          height: (34 * zoom) / 100,
-                        }}
-                        tabIndex={active ? 0 : -1}
-                        title={value?.value}
-                        type="button"
-                      >
-                        {value?.value || "\u00a0"}
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
+              <WorkbookRow
+                columnCount={columnCount}
+                key={row}
+                onSelect={selectCell}
+                row={row}
+                selectedColumn={selected.row === row ? selected.column : -1}
+                values={sheet.rows[row]}
+                zoom={zoom}
+              />
             ))}
           </tbody>
         </table>
@@ -304,3 +273,61 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
     </div>
   );
 }
+
+const WorkbookRow = memo(function WorkbookRow({
+  row,
+  values,
+  columnCount,
+  selectedColumn,
+  zoom,
+  onSelect,
+}: {
+  row: number;
+  values: WorkbookPreview["sheets"][number]["rows"][number] | undefined;
+  columnCount: number;
+  selectedColumn: number;
+  zoom: number;
+  onSelect: (column: number, row: number) => void;
+}) {
+  return (
+    <tr>
+      <th
+        className="sticky left-0 z-10 border-slate-200 border-r border-b bg-slate-100 px-3 font-normal text-slate-500"
+        scope="row"
+      >
+        {row + 1}
+      </th>
+      {Array.from({ length: columnCount }, (_, column) => {
+        const value = values?.[column];
+
+        const active = selectedColumn === column;
+
+        return (
+          <td className="border-slate-200 border-r border-b p-0" key={column}>
+            <button
+              aria-label={`${columnIndexToLetter(column)}${row + 1}: ${value?.value ?? ""}`}
+              aria-pressed={active}
+              className={cn(
+                "block w-full min-w-36 max-w-80 truncate px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-inset",
+                active && "ring-2 ring-blue-600 ring-inset"
+              )}
+              data-cell={`${row}:${column}`}
+              onClick={() => onSelect(column, row)}
+              style={{
+                backgroundColor: value?.background,
+                color: value?.color,
+                fontWeight: value?.bold ? 600 : undefined,
+                height: (34 * zoom) / 100,
+              }}
+              tabIndex={active ? 0 : -1}
+              title={value?.value}
+              type="button"
+            >
+              {value?.value || "\u00a0"}
+            </button>
+          </td>
+        );
+      })}
+    </tr>
+  );
+});
