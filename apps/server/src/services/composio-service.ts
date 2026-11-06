@@ -1703,6 +1703,13 @@ function findMeetMessages(value: unknown): Record<string, unknown>[] {
   return found;
 }
 
+/** Google Drive and Docs file links; group 1 is the file id. */
+const DRIVE_FILE_LINK_PATTERNS = [
+  /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/g,
+  /drive\.google\.com\/(?:open|uc)\?[^\s"'<>]*?id=([A-Za-z0-9_-]{10,})/g,
+  /docs\.google\.com\/[A-Za-z]+\/d\/([A-Za-z0-9_-]{10,})/g,
+];
+
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
 function extractMeetDriveIds(value: unknown): string[] {
   const ids = new Set<string>();
@@ -1727,9 +1734,9 @@ function extractMeetDriveIds(value: unknown): string[] {
           "base64"
         ).toString("utf8");
 
-        // Picks which text to scan for Drive ids, not a host trust check.
-        // codeql[js/incomplete-url-substring-sanitization]
-        if (decoded.includes("drive.google.com")) {
+        if (
+          DRIVE_FILE_LINK_PATTERNS.some((pattern) => decoded.match(pattern))
+        ) {
           text = decoded;
         }
       }
@@ -1742,11 +1749,7 @@ function extractMeetDriveIds(value: unknown): string[] {
         /* Keep original text. */
       }
 
-      for (const pattern of [
-        /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/g,
-        /drive\.google\.com\/(?:open|uc)\?[^\s"'<>]*?id=([A-Za-z0-9_-]{10,})/g,
-        /docs\.google\.com\/[A-Za-z]+\/d\/([A-Za-z0-9_-]{10,})/g,
-      ]) {
+      for (const pattern of DRIVE_FILE_LINK_PATTERNS) {
         for (const match of text.matchAll(pattern)) {
           ids.add(match[1]!);
         }

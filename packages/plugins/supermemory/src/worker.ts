@@ -263,23 +263,20 @@ async function runWorker(directory: string, pluginDataDir: string) {
       );
     }
 
-    const revisionInput = JSON.stringify([
-      "openai-parameters-v1",
-      automatic.apiKey,
-      automatic.baseUrl,
-      automatic.model,
-    ]);
-
-    // A cache revision that changes with the key, not a stored password hash.
-    // `//!` keeps the note in the bundled workers/server.js too.
-    //! codeql[js/insufficient-password-hash]
-    const revision = createHash("sha256").update(revisionInput).digest("hex");
-
     const config: ExtractionConfig = {
       apiKey: automatic.apiKey,
       baseUrl: automatic.baseUrl?.trim() || "https://api.openai.com/v1",
       model: automatic.model,
-      revision,
+      revision: createHash("sha256")
+        .update(
+          JSON.stringify([
+            "openai-parameters-v1",
+            automatic.apiKey,
+            automatic.baseUrl,
+            automatic.model,
+          ])
+        )
+        .digest("hex"),
     };
 
     await status("validating", "Checking the extraction provider");

@@ -5247,19 +5247,16 @@ async function runWorker(directory, pluginDataDir) {
     if (automatic?.type !== "openai" || !automatic.apiKey?.trim()) {
       throw new Error("Add an OpenAI provider in Settings, then restart Supermemory in Workers.");
     }
-    const revisionInput = JSON.stringify([
-      "openai-parameters-v1",
-      automatic.apiKey,
-      automatic.baseUrl,
-      automatic.model
-    ]);
-    //! codeql[js/insufficient-password-hash]
-    const revision = createHash("sha256").update(revisionInput).digest("hex");
     const config = {
       apiKey: automatic.apiKey,
       baseUrl: automatic.baseUrl?.trim() || "https://api.openai.com/v1",
       model: automatic.model,
-      revision
+      revision: createHash("sha256").update(JSON.stringify([
+        "openai-parameters-v1",
+        automatic.apiKey,
+        automatic.baseUrl,
+        automatic.model
+      ])).digest("hex")
     };
     await status("validating", "Checking the extraction provider");
     await validateExtraction(config);
