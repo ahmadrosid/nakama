@@ -20,7 +20,7 @@
     "@nakama/agent": "workspace:*",
     "@nakama/core": "workspace:*",
     "@nakama/db": "workspace:*",
-    "@openrouter/sdk": "^1.2.108",
+    "@openrouter/sdk": "^1.5.34",
     "@simplewebauthn/server": "^14.0.3",
     "fflate": "^0.8.3",
     "hono": "^4.13.13",
