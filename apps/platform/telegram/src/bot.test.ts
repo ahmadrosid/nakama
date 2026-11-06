@@ -6,7 +6,7 @@ import { resetActiveStreamsForTests } from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { Bot } from "grammy";
 import { TelegramAuthStore } from "./auth-store";
-import { redactBotToken, runTelegramBot } from "./bot";
+import { createBot, redactBotToken } from "./bot";
 import { createChatHandler, resetChatLocksForTests } from "./chat-handler";
 import {
   createMessageContext,
@@ -18,12 +18,12 @@ import {
   writeTelegramConfigIni,
 } from "./test-helpers";
 
+type PollingUpdate = Parameters<Bot["handleUpdate"]>[0];
+
 const TOKEN = "7654321098:AAF_fakeTokenValueDoNotUse_zzzz12345";
 
 describe("redactBotToken", () => {
-  // The leak is not hypothetical: grammY keeps the failed request path on the
-  // error, and the Bot API puts the token in that path. Use a real grammY error
-  // rather than a hand-written one, or the test stops tracking the library.
+  // Use grammY's real network error, which includes the token in the request URL.
   test("keeps the bot token out of a logged grammY network error", async () => {
     let captured: unknown;
 
@@ -72,14 +72,14 @@ const BOT_INFO = {
 function message(id: number, chat: number, text: string) {
   return {
     message: {
-      chat: { id: chat, type: "private" as const },
+      chat: { first_name: "User", id: chat, type: "private" as const },
       date: 0,
       from: { first_name: "User", id: 42, is_bot: false },
       message_id: id,
       text,
     },
     update_id: id,
-  };
+  } satisfies PollingUpdate;
 }
 
 async function waitUntil(condition: () => boolean) {
@@ -95,7 +95,7 @@ async function waitUntil(condition: () => boolean) {
 }
 
 async function withPolling(
-  batches: ReturnType<typeof message>[][],
+  batches: PollingUpdate[][],
   check: (fixture: Awaited<ReturnType<typeof pollingFixture>>) => Promise<void>
 ) {
   await withTempHome(async (home) => {
@@ -126,7 +126,8 @@ async function withPolling(
 
 async function pollingFixture(
   home: string,
-  batches: ReturnType<typeof message>[][]
+  batches: PollingUpdate[][],
+  failPolling = false
 ) {
   await writeTelegramConfigIni(home, { allowedUserIds: [42], botToken: TOKEN });
   const authStore = new TelegramAuthStore(null);
@@ -151,6 +152,14 @@ async function pollingFixture(
 
       if (method === "getUpdates") {
         polls += 1;
+
+        if (failPolling) {
+          return Response.json({
+            description: `Request failed at /bot${TOKEN}/getUpdates`,
+            error_code: polls === 1 ? 500 : 401,
+            ok: false,
+          });
+        }
 
         // Put later updates in a later HTTP poll, after the first turn starts.
         if (polls === 2) {
@@ -191,21 +200,22 @@ async function pollingFixture(
     client: { apiRoot: server.url.origin },
   });
 
-  bot.on(
-    "message",
-    createChatHandler({
+  const bridge = await createBot(
+    { botToken: TOKEN, orgId: null, profileId: "default" },
+    {
       authStore,
       client: mock.client,
-      config: { botToken: TOKEN, orgId: null, profileId: "default" },
       getBotInfo: () => TEST_BOT_INFO,
       orgStore,
       sessionStore: new ChannelSessionStore(path.join(home, "sessions.json")),
-    })
+    },
+    bot
   );
+
   bot.catch((error) => {
     errors.push(error.error);
   });
-  const runner = runTelegramBot(bot);
+  const runner = bridge.start();
 
   return {
     bot,
@@ -327,53 +337,29 @@ describe("Telegram polling", () => {
   });
 
   test("poll failures are reported without exposing the bot token", async () => {
-    let polls = 0;
-    const log = spyOn(console, "error").mockImplementation(() => {});
+    await withTempHome(async (home) => {
+      const log = spyOn(console, "error").mockImplementation(() => {});
+      const fixture = await pollingFixture(home, [], true);
+      let failure: unknown;
 
-    const server = Bun.serve({
-      fetch: (request) => {
-        if (new URL(request.url).pathname.endsWith("/deleteWebhook")) {
-          return Response.json({ ok: true, result: true });
+      try {
+        try {
+          await fixture.runner.running;
+        } catch (error) {
+          failure = error;
         }
 
-        polls += 1;
-
-        return Response.json({
-          description: `Request failed at /bot${TOKEN}/getUpdates`,
-          error_code: polls === 1 ? 500 : 401,
-          ok: false,
-        });
-      },
-      hostname: "127.0.0.1",
-      port: 0,
-    });
-
-    const bot = new Bot(TOKEN, {
-      botInfo: BOT_INFO,
-      client: { apiRoot: server.url.origin },
-    });
-
-    const runner = runTelegramBot(bot);
-    let failure: unknown;
-
-    try {
-      try {
-        await runner.running;
-      } catch (error) {
-        failure = error;
+        expect(failure).toBeInstanceOf(Error);
+        expect(inspect(failure)).not.toContain(TOKEN);
+        expect(log.mock.calls.length).toBeGreaterThanOrEqual(2);
+        expect(inspect(log.mock.calls)).not.toContain(TOKEN);
+        expect(fixture.getPollCount()).toBe(2);
+      } finally {
+        await fixture.runner.stop();
+        fixture.server.stop(true);
+        log.mockRestore();
       }
-
-      expect(failure).toBeInstanceOf(Error);
-      expect(inspect(failure)).not.toContain(TOKEN);
-      const output = inspect(log.mock.calls);
-      expect(log.mock.calls.length).toBeGreaterThanOrEqual(2);
-      expect(output).not.toContain(TOKEN);
-      expect(polls).toBe(2);
-    } finally {
-      await runner.stop();
-      server.stop(true);
-      log.mockRestore();
-    }
+    });
   });
 });
 
@@ -479,4 +465,84 @@ test("concurrent chats send session requests to their own organizations", async 
       await first;
     }
   });
+});
+
+test("a full same-chat queue still lets stop and another chat through polling", async () => {
+  await withPolling(
+    [
+      [message(1, 1, "long turn")],
+      Array.from({ length: 19 }, (_, index) =>
+        message(index + 2, 1, "queued turn")
+      ),
+      [message(21, 2, "another chat"), message(22, 1, "/stop")],
+    ],
+    async ({ mock, replies }) => {
+      await waitUntil(
+        () => mock.getStreamControls()[0]?.signal?.aborted === true
+      );
+      await waitUntil(() => mock.calls.sendStream === 3);
+
+      for (const turn of mock.getStreamControls()) {
+        turn.complete();
+      }
+
+      await waitUntil(() => replies.includes(2));
+      expect(mock.getStreamControls()[0]?.signal?.aborted).toBe(true);
+    }
+  );
+});
+
+test("a startup burst cannot start more than twenty turns", async () => {
+  await withPolling(
+    [
+      Array.from({ length: 25 }, (_, index) =>
+        message(index + 1, index + 1, "long turn")
+      ),
+    ],
+    async ({ mock, replies }) => {
+      await waitUntil(
+        () => replies.length === 5 && mock.calls.sendStream === 20
+      );
+      expect(mock.calls.sendStream).toBe(20);
+      expect(replies.every((chat) => chat > 20)).toBe(true);
+    }
+  );
+});
+
+test("overload preserves the group and authorization checks", async () => {
+  const group = message(21, -100, "an unrelated group message");
+  const stranger = message(22, 99, "unpaired user");
+  stranger.message.from.id = 99;
+  await withPolling(
+    [
+      Array.from({ length: 20 }, (_, index) =>
+        message(index + 1, index + 1, "long turn")
+      ),
+      [
+        {
+          ...group,
+          message: {
+            ...group.message,
+            chat: { id: -100, title: "Group", type: "supergroup" },
+          },
+        },
+        stranger,
+      ],
+    ],
+    async ({ getPollCount, mock, replies, runner }) => {
+      await waitUntil(
+        () => getPollCount() >= 3 && mock.calls.sendStream === 20
+      );
+      const stopping = runner.stop();
+
+      for (const turn of mock.getStreamControls()) {
+        turn.complete();
+      }
+
+      await stopping;
+      expect(replies).not.toContain(-100);
+      expect(replies).not.toContain(99);
+      expect(mock.calls.sendStream).toBe(20);
+    }
+  );
 });

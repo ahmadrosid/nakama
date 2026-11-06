@@ -116,6 +116,11 @@ export interface ChatHandlerDeps {
   authStore: TelegramAuthStore;
   client: NakamaClient;
   config: TelegramBridgeConfig;
+  dispatchTurn?: (
+    key: string,
+    work: () => Promise<void>,
+    ctx: Context
+  ) => boolean;
   getBotInfo?: () => TelegramBotInfo | undefined;
   orgStore: ChannelOrgStore;
   sessionStore: ChannelSessionStore;
@@ -134,6 +139,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     sessionStore,
     orgStore,
     getBotInfo = () => undefined,
+    dispatchTurn,
   } = deps;
 
   return async function handleMessage(ctx: Context): Promise<void> {
@@ -196,7 +202,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    await withChatLock(conversationKey, async () => {
+    const turn = async () => {
       await authStore.reload();
       const isAuthorized = authStore.isAuthorized(userId);
 
@@ -340,7 +346,23 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         telegram,
         messageText
       );
-    });
+    };
+
+    const runTurn = () => withChatLock(conversationKey, turn);
+
+    if (!dispatchTurn) {
+      await runTurn();
+
+      return;
+    }
+
+    if (!dispatchTurn(conversationKey, runTurn, ctx)) {
+      await authStore.reload();
+
+      if (authStore.isAuthorized(userId)) {
+        await telegram.send("This bot is busy. Try again shortly.");
+      }
+    }
   };
 
   async function requestAccess(ctx: Context, userId: number): Promise<void> {

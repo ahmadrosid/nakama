@@ -17,7 +17,7 @@ import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { getTelegramConfigDir } from "@nakama/core/telegram-config";
 import { createTelegramWorkerHeartbeat } from "@nakama/core/telegram-worker";
 import { TelegramAuthStore } from "./auth-store";
-import { createBot, runTelegramBot } from "./bot";
+import { createBot } from "./bot";
 import { loadTelegramIdentities, type TelegramBridgeConfig } from "./config";
 
 installErrorHandlers("worker:telegram");
@@ -180,7 +180,7 @@ async function startIdentity(
   const authStore = new TelegramAuthStore(config.owner ?? config.orgId ?? null);
   await authStore.reload();
 
-  const bot = await createBot(config, {
+  const { bot, start } = await createBot(config, {
     authStore,
     client,
     orgStore,
@@ -197,7 +197,7 @@ async function startIdentity(
     throw error;
   }
 
-  const polling = runTelegramBot(bot);
+  const polling = start();
 
   started.push({
     clearHeartbeat: heartbeat.clear,
