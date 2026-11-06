@@ -156,7 +156,7 @@ describe("scheduled backups", () => {
       expect(await readdir(missing)).toHaveLength(1);
       expect(await readdir(root)).toEqual([]);
     } finally {
-      stop();
+      await stop();
     }
   });
 
@@ -187,44 +187,49 @@ describe("scheduled backups", () => {
     });
 
     await Bun.sleep(50);
-    stopRecent();
-    stopEmpty();
+    await stopRecent();
+    await stopEmpty();
 
     expect(exports).toBe(1);
     expect(await readdir(recent)).toHaveLength(1);
     expect(await readdir(empty)).toHaveLength(1);
   });
 
-  test("keeps a 409 for Settings until the next good backup", async () => {
+  test("keeps the last failed run for Settings until the next good backup", async () => {
     const dir = await tempDir();
-
-    // With no backup in the dir, the first run starts at once.
-    const run = async (exportZip: () => Promise<Uint8Array>) => {
-      const stop = await startScheduledBackups({ dir, exportZip, key });
-      await Bun.sleep(50);
-      stop();
-    };
 
     const blocked = new NakamaApiError(
       "Cannot export a restorable backup: the server cannot read config.ini.",
       409
     );
 
-    await run(() => Promise.reject(new Error("disk full")));
-    expect(await readBackupError(dir)).toBeNull();
+    const tooBig = new NakamaApiError(
+      "Cannot export a restorable backup: ZIP exceeds the import limit.",
+      413
+    );
 
-    await run(() => Promise.reject(blocked));
+    await runOnce(dir, () => Promise.reject(blocked));
     expect(await readBackupError(dir)).toEqual({
       at: expect.any(String),
       message: blocked.message,
     });
 
-    await run(async () => Buffer.from("zip"));
+    // A later failure of another kind replaces the old record
+    await runOnce(dir, () => Promise.reject(tooBig));
+    expect((await readBackupError(dir))?.message).toBe(tooBig.message);
+
+    // A plain error is recorded too, without its raw detail
+    await runOnce(dir, () => Promise.reject(new Error("EIO /secret/path")));
+    const plain = await readBackupError(dir);
+    expect(plain).not.toBeNull();
+    expect(plain?.message).not.toContain("/secret/path");
+
+    await runOnce(dir, async () => Buffer.from("zip"));
     expect(await readBackupError(dir)).toBeNull();
     expect(await readdir(dir)).toHaveLength(1);
   });
 
-  test("a written backup is not reported as failed when the old 409 cannot be cleared", async () => {
+  test("a written backup is not reported as failed when the old record cannot be cleared", async () => {
     const dir = await tempDir();
     // A folder with content where the error file goes: rm without recursive refuses it
     await mkdir(join(dir, "scheduled-backup-error.json", "x"), {
@@ -233,46 +238,111 @@ describe("scheduled backups", () => {
     const errors = spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      const stop = await startScheduledBackups({
-        dir,
-        exportZip: async () => Buffer.from("zip"),
-        key,
-      });
+      await runOnce(dir, async () => Buffer.from("zip"));
 
-      await Bun.sleep(50);
-      stop();
-
-      const logged = errors.mock.calls.map((call) => String(call[0]));
-
-      const failed = logged.filter((line) => line.includes("backup failed"));
-
-      expect(failed).toEqual([]);
-      expect(logged).toHaveLength(1);
+      // Only the failed cleanup is logged: no failed run, no record attempt
+      expect(errors).toHaveBeenCalledTimes(1);
       expect(await readdir(dir)).toHaveLength(2);
     } finally {
       errors.mockRestore();
     }
   });
 
-  test("logs an error file it cannot read instead of treating it as no 409", async () => {
+  test("stop waits for a run that already started and does not schedule another", async () => {
+    const dir = await tempDir();
+    let release = () => {};
+
+    let exports = 0;
+
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    let started = () => {};
+
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+
+    const stop = await startScheduledBackups({
+      dir,
+      exportZip: async () => {
+        exports += 1;
+        started();
+        await gate;
+
+        return Buffer.from("zip");
+      },
+      key,
+    });
+
+    await running;
+    const stopped = stop();
+    release();
+    await stopped;
+
+    expect(exports).toBe(1);
+    expect(await readdir(dir)).toHaveLength(1);
+  });
+
+  test("fails on an error record it cannot read instead of reporting no failure", async () => {
     const dir = await tempDir();
     const file = join(dir, "scheduled-backup-error.json");
-    const errors = spyOn(console, "error").mockImplementation(() => {});
+    const unreadable = expect.objectContaining({ status: 500 });
 
-    try {
-      expect(await readBackupError(dir)).toBeNull();
-      expect(errors).not.toHaveBeenCalled();
+    expect(await readBackupError(dir)).toBeNull();
 
-      await writeFile(file, "not json");
-      expect(await readBackupError(dir)).toBeNull();
-      expect(errors).toHaveBeenCalledTimes(1);
+    await writeFile(file, "not json");
+    await expect(readBackupError(dir)).rejects.toEqual(unreadable);
 
-      await rm(file);
-      await mkdir(file);
-      expect(await readBackupError(dir)).toBeNull();
-      expect(errors).toHaveBeenCalledTimes(2);
-    } finally {
-      errors.mockRestore();
-    }
+    await writeFile(file, JSON.stringify({ at: "yesterday", message: "x" }));
+    await expect(readBackupError(dir)).rejects.toEqual(unreadable);
+
+    await writeFile(
+      file,
+      JSON.stringify({
+        at: new Date().toISOString(),
+        message: "x".repeat(20_000),
+      })
+    );
+    await expect(readBackupError(dir)).rejects.toEqual(unreadable);
+
+    await rm(file);
+    await mkdir(file);
+    await expect(readBackupError(dir)).rejects.toEqual(unreadable);
+
+    await rm(file, { recursive: true });
+    const target = join(dir, "target.json");
+    await writeFile(
+      target,
+      JSON.stringify({ at: new Date().toISOString(), message: "x" })
+    );
+    await symlink(target, file);
+    await expect(readBackupError(dir)).rejects.toEqual(unreadable);
   });
 });
+
+/** Starts the scheduler on a dir with no backup, so it runs at once, and stops after that run. */
+async function runOnce(
+  dir: string,
+  exportZip: () => Promise<Uint8Array>
+): Promise<void> {
+  let started = () => {};
+
+  const running = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+
+  const stop = await startScheduledBackups({
+    dir,
+    exportZip: () => {
+      started();
+
+      return exportZip();
+    },
+    key,
+  });
+
+  await running;
+  await stop();
+}
