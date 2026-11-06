@@ -3,11 +3,16 @@ import { Button } from "@nakama/ui/button";
 import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
 import { Switch } from "@nakama/ui/switch";
 import { Add01Icon, Delete02Icon } from "hugeicons-react";
-import { useId, useRef, useState } from "react";
+import { createContext, useContext, useId, useRef, useState } from "react";
 import { modelListRowVisionEnabled } from "@/components/model-list-editor.shared";
 import { createClientId, syncRowKeys } from "@/lib/client-id";
 
 export interface ModelListRow extends CustomModelEntry {}
+
+/** Model ID → the Defaults settings that use it, set by the Manage dialog. */
+export const ModelUsageContext = createContext<
+  Readonly<Record<string, readonly string[]>>
+>({});
 
 interface ModelListEditorProps {
   browse?: { disabled?: boolean; label: string; onClick: () => void };
@@ -87,6 +92,11 @@ export function ModelListEditor({
 
   const seenIds = new Set<string>();
   const defaultGroup = useId();
+  const usage = useContext(ModelUsageContext);
+
+  // A long list gets a search; short lists do not need one.
+  const [query, setQuery] = useState("");
+  const needle = models.length > 10 ? query.trim().toLowerCase() : "";
 
   // With no row marked, the first model with an ID is the default.
   const flaggedDefault = models.findIndex(
@@ -106,6 +116,16 @@ export function ModelListEditor({
 
   return (
     <div className="min-w-0 space-y-2">
+      {models.length > 10 ? (
+        <InputGroup>
+          <InputGroupInput
+            aria-label="Search saved models"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search saved models…"
+            value={query}
+          />
+        </InputGroup>
+      ) : null}
       {models.length > 0 ? (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {models.map((row, index) => {
@@ -117,6 +137,15 @@ export function ModelListEditor({
             const detailsOpen = openDetails.has(rowKey);
             const detailsId = `model-details-${rowKey}`;
 
+            if (
+              needle &&
+              !`${row.id} ${row.name ?? ""}`.toLowerCase().includes(needle)
+            ) {
+              return null;
+            }
+
+            const usedBy = usage[id];
+
             // Saved IDs are fixed; only new rows take an ID.
             const idLocked = id !== "" && savedIds.has(id);
 
@@ -125,10 +154,13 @@ export function ModelListEditor({
                 <div className="flex flex-wrap items-center gap-2">
                   {idLocked ? (
                     <p
-                      className="basis-full truncate px-1 font-mono text-muted-foreground text-xs"
+                      className="basis-full truncate px-1 text-muted-foreground text-xs"
                       title={row.id}
                     >
-                      {row.id}
+                      <span className="font-mono">{row.id}</span>
+                      {usedBy?.length ? (
+                        <span> · Used by {usedBy.join(", ")}</span>
+                      ) : null}
                     </p>
                   ) : (
                     <InputGroup className="min-w-0 basis-full">
@@ -157,130 +189,33 @@ export function ModelListEditor({
                       value={row.name ?? ""}
                     />
                   </InputGroup>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="flex items-center gap-1.5 text-xs">
-                      <input
-                        checked={index === defaultIndex}
-                        className="size-3.5 accent-primary"
-                        disabled={disabled || id === ""}
-                        name={defaultGroup}
-                        onChange={() => setDefault(index)}
-                        type="radio"
-                      />
-                      Default
-                    </label>
-                    {showThinking ? (
-                      <span className="flex items-center gap-1.5 text-xs">
-                        <Switch
-                          aria-label={`Reasoning for ${label}`}
-                          checked={row.supportsThinking === true}
-                          disabled={disabled}
-                          onCheckedChange={(checked) =>
-                            updateRow(index, { supportsThinking: checked })
-                          }
-                          size="sm"
-                        />
-                        Reasoning
-                      </span>
-                    ) : null}
-                    {showVision ? (
-                      <span className="flex items-center gap-1.5 text-xs">
-                        <Switch
-                          aria-label={`Vision for ${label}`}
-                          checked={modelListRowVisionEnabled(
-                            row,
-                            visionDefaultOn
-                          )}
-                          disabled={disabled}
-                          onCheckedChange={(checked) =>
-                            updateRow(index, { supportsVision: checked })
-                          }
-                          size="sm"
-                        />
-                        Vision
-                      </span>
-                    ) : null}
-                    <Button
-                      aria-controls={detailsId}
-                      aria-expanded={detailsOpen}
-                      aria-label={`${showPricing ? "Price and context" : "Context"} for ${label}`}
-                      disabled={disabled}
-                      onClick={() => toggleDetails(rowKey)}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <span className="sm:hidden">More</span>
-                      <span className="hidden sm:inline">
-                        {showPricing ? "Price and context" : "Context"}
-                      </span>
-                    </Button>
-                    <Button
-                      aria-label={`Remove ${label}`}
-                      disabled={disabled}
-                      onClick={() => removeRow(index)}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <Delete02Icon className="size-4" />
-                    </Button>
-                  </div>
+                  <ModelRowControls
+                    canBeDefault={id !== ""}
+                    defaultGroup={defaultGroup}
+                    detailsId={detailsId}
+                    detailsOpen={detailsOpen}
+                    disabled={disabled}
+                    isDefault={index === defaultIndex}
+                    label={label}
+                    onChange={(patch) => updateRow(index, patch)}
+                    onDefault={() => setDefault(index)}
+                    onRemove={() => removeRow(index)}
+                    onToggleDetails={() => toggleDetails(rowKey)}
+                    row={row}
+                    showPricing={showPricing}
+                    showThinking={showThinking}
+                    showVision={showVision}
+                    visionDefaultOn={visionDefaultOn}
+                  />
                 </div>
                 {detailsOpen ? (
-                  <div
-                    className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
-                    id={detailsId}
-                  >
-                    {showPricing
-                      ? PRICE_FIELDS.map(({ field, label: fieldLabel }) => (
-                          <label className="space-y-1 text-xs" key={field}>
-                            <span className="text-muted-foreground">
-                              {fieldLabel}
-                            </span>
-                            <InputGroup>
-                              <InputGroupInput
-                                disabled={disabled}
-                                min={0}
-                                onChange={(event) =>
-                                  updateRow(index, {
-                                    [field]: parseOptionalNumber(
-                                      event.target.value
-                                    ),
-                                  })
-                                }
-                                placeholder="Unknown"
-                                step="any"
-                                type="number"
-                                value={row[field] ?? ""}
-                              />
-                            </InputGroup>
-                          </label>
-                        ))
-                      : null}
-                    <label className="space-y-1 text-xs">
-                      <span className="text-muted-foreground">
-                        Context window (tokens)
-                      </span>
-                      <InputGroup>
-                        <InputGroupInput
-                          disabled={disabled}
-                          min={1}
-                          onChange={(event) =>
-                            updateRow(index, {
-                              contextWindow: parseOptionalNumber(
-                                event.target.value
-                              ),
-                            })
-                          }
-                          placeholder="Auto"
-                          step={1}
-                          type="number"
-                          value={row.contextWindow ?? ""}
-                        />
-                      </InputGroup>
-                    </label>
-                  </div>
+                  <ModelRowDetails
+                    detailsId={detailsId}
+                    disabled={disabled}
+                    onChange={(patch) => updateRow(index, patch)}
+                    row={row}
+                    showPricing={showPricing}
+                  />
                 ) : null}
               </li>
             );
@@ -316,6 +251,171 @@ export function ModelListEditor({
           </Button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function ModelRowControls({
+  canBeDefault,
+  defaultGroup,
+  detailsId,
+  detailsOpen,
+  disabled,
+  isDefault,
+  label,
+  onChange,
+  onDefault,
+  onRemove,
+  onToggleDetails,
+  row,
+  showPricing,
+  showThinking,
+  showVision,
+  visionDefaultOn,
+}: {
+  canBeDefault: boolean;
+  defaultGroup: string;
+  detailsId: string;
+  detailsOpen: boolean;
+  disabled?: boolean;
+  isDefault: boolean;
+  label: string;
+  onChange: (patch: Partial<ModelListRow>) => void;
+  onDefault: () => void;
+  onRemove: () => void;
+  onToggleDetails: () => void;
+  row: ModelListRow;
+  showPricing: boolean;
+  showThinking: boolean;
+  showVision: boolean;
+  visionDefaultOn: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <label className="flex items-center gap-1.5 text-xs">
+        <input
+          checked={isDefault}
+          className="size-3.5 accent-primary"
+          disabled={disabled || !canBeDefault}
+          name={defaultGroup}
+          onChange={onDefault}
+          type="radio"
+        />
+        Default
+      </label>
+      {showThinking ? (
+        <span className="flex items-center gap-1.5 text-xs">
+          <Switch
+            aria-label={`Reasoning for ${label}`}
+            checked={row.supportsThinking === true}
+            disabled={disabled}
+            onCheckedChange={(checked) =>
+              onChange({ supportsThinking: checked })
+            }
+            size="sm"
+          />
+          Reasoning
+        </span>
+      ) : null}
+      {showVision ? (
+        <span className="flex items-center gap-1.5 text-xs">
+          <Switch
+            aria-label={`Vision for ${label}`}
+            checked={modelListRowVisionEnabled(row, visionDefaultOn)}
+            disabled={disabled}
+            onCheckedChange={(checked) => onChange({ supportsVision: checked })}
+            size="sm"
+          />
+          Vision
+        </span>
+      ) : null}
+      <Button
+        aria-controls={detailsId}
+        aria-expanded={detailsOpen}
+        aria-label={`${showPricing ? "Price and context" : "Context"} for ${label}`}
+        disabled={disabled}
+        onClick={onToggleDetails}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        <span className="sm:hidden">More</span>
+        <span className="hidden sm:inline">
+          {showPricing ? "Price and context" : "Context"}
+        </span>
+      </Button>
+      <Button
+        aria-label={`Remove ${label}`}
+        disabled={disabled}
+        onClick={onRemove}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <Delete02Icon className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+function ModelRowDetails({
+  detailsId,
+  disabled,
+  onChange,
+  row,
+  showPricing,
+}: {
+  detailsId: string;
+  disabled?: boolean;
+  onChange: (patch: Partial<ModelListRow>) => void;
+  row: ModelListRow;
+  showPricing: boolean;
+}) {
+  return (
+    <div
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
+      id={detailsId}
+    >
+      {showPricing
+        ? PRICE_FIELDS.map(({ field, label: fieldLabel }) => (
+            <label className="space-y-1 text-xs" key={field}>
+              <span className="text-muted-foreground">{fieldLabel}</span>
+              <InputGroup>
+                <InputGroupInput
+                  disabled={disabled}
+                  min={0}
+                  onChange={(event) =>
+                    onChange({
+                      [field]: parseOptionalNumber(event.target.value),
+                    })
+                  }
+                  placeholder="Unknown"
+                  step="any"
+                  type="number"
+                  value={row[field] ?? ""}
+                />
+              </InputGroup>
+            </label>
+          ))
+        : null}
+      <label className="space-y-1 text-xs">
+        <span className="text-muted-foreground">Context window (tokens)</span>
+        <InputGroup>
+          <InputGroupInput
+            disabled={disabled}
+            min={1}
+            onChange={(event) =>
+              onChange({
+                contextWindow: parseOptionalNumber(event.target.value),
+              })
+            }
+            placeholder="Auto"
+            step={1}
+            type="number"
+            value={row.contextWindow ?? ""}
+          />
+        </InputGroup>
+      </label>
     </div>
   );
 }

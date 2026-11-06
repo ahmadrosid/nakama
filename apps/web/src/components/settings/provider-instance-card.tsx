@@ -5,9 +5,10 @@ import type {
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { ModelUsageContext } from "@/components/ModelListEditor";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import {
@@ -362,6 +363,72 @@ function ProviderKeyDialog({
   );
 }
 
+// The Defaults settings that use this provider, for Remove and Manage.
+function useProviderSettingUsage(instance: ProviderInstanceSummary) {
+  const { data: modelsResponse } = useModelsQuery();
+  const { data: vision } = useVisionSettings();
+  const { data: transcription } = useTranscriptionSettings();
+  const { data: imageGeneration } = useImageGenerationSettings();
+
+  return useMemo(() => {
+    const groups = groupModelsByProvider(modelsResponse?.models ?? []);
+
+    // Settings that pick a model from this provider lose it on remove.
+    const settingModels: Array<[string, string | null | undefined]> = [
+      ["Image parsing model", vision?.model],
+      ["Audio transcription model", transcription?.model],
+      ["Image generation model", imageGeneration?.model],
+    ];
+
+    // With no model saved, images come from a connected ChatGPT. Removing the
+    // last one leaves image generation with no provider.
+    const lastChatgpt =
+      instance.type === "chatgpt" &&
+      !groups.some(
+        (group) =>
+          group.providerId !== instance.id &&
+          group.models.some((model) => model.provider === "chatgpt")
+      );
+
+    // Manage marks the model each setting uses.
+    const modelUsage: Record<string, string[]> = {};
+
+    for (const [name, model] of settingModels) {
+      const resolved = model
+        ? decodeModelSelection(profileModelSelectionValue(model, groups))
+        : null;
+
+      if (resolved?.providerId === instance.id) {
+        modelUsage[resolved.modelId] = [
+          ...(modelUsage[resolved.modelId] ?? []),
+          name.replace(/ model$/, ""),
+        ];
+      }
+    }
+
+    const usedBy = settingModels.flatMap(([name, model]) => {
+      if (!model) {
+        return name === "Image generation model" && lastChatgpt ? [name] : [];
+      }
+
+      const resolved = decodeModelSelection(
+        profileModelSelectionValue(model, groups)
+      );
+
+      return resolved?.providerId === instance.id ? [name] : [];
+    });
+
+    return { modelUsage, usedBy };
+  }, [
+    imageGeneration?.model,
+    instance.id,
+    instance.type,
+    modelsResponse?.models,
+    transcription?.model,
+    vision?.model,
+  ]);
+}
+
 function ProviderInstanceCardDialogs({
   card,
   instance,
@@ -377,43 +444,10 @@ function ProviderInstanceCardDialogs({
   canManage: boolean;
   nextDefaultLabel?: string;
 }) {
-  const { data: modelsResponse } = useModelsQuery();
-  const { data: vision } = useVisionSettings();
-  const { data: transcription } = useTranscriptionSettings();
-  const { data: imageGeneration } = useImageGenerationSettings();
-  const groups = groupModelsByProvider(modelsResponse?.models ?? []);
-
-  // Settings that pick a model from this provider lose it on remove.
-  const settingModels: Array<[string, string | null | undefined]> = [
-    ["Image parsing model", vision?.model],
-    ["Audio transcription model", transcription?.model],
-    ["Image generation model", imageGeneration?.model],
-  ];
-
-  // With no model saved, images come from a connected ChatGPT. Removing the
-  // last one leaves image generation with no provider.
-  const lastChatgpt =
-    instance.type === "chatgpt" &&
-    !groups.some(
-      (group) =>
-        group.providerId !== instance.id &&
-        group.models.some((model) => model.provider === "chatgpt")
-    );
-
-  const usedBy = settingModels.flatMap(([name, model]) => {
-    if (!model) {
-      return name === "Image generation model" && lastChatgpt ? [name] : [];
-    }
-
-    const resolved = decodeModelSelection(
-      profileModelSelectionValue(model, groups)
-    );
-
-    return resolved?.providerId === instance.id ? [name] : [];
-  });
+  const { modelUsage, usedBy } = useProviderSettingUsage(instance);
 
   return (
-    <>
+    <ModelUsageContext.Provider value={modelUsage}>
       <ProviderRemoveDialog
         busy={card.busy}
         isDefault={isDefault}
@@ -453,6 +487,7 @@ function ProviderInstanceCardDialogs({
           open={card.editOpen}
           providerInstanceId={instance.id}
           remoteProvider={compatibleRemoteProvider(card)}
+          saveSummary={card.saveSummary}
           title={`Manage ${instance.label}`}
           wireApi={card.editWireApi}
         />
@@ -466,12 +501,13 @@ function ProviderInstanceCardDialogs({
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
+          saveSummary={card.saveSummary}
           title={`Manage ${instance.label}`}
         >
           <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>
       ) : null}
-    </>
+    </ModelUsageContext.Provider>
   );
 }
 

@@ -421,6 +421,7 @@ function ProviderModelsDialogShell({
   busy,
   dialogError,
   dirty = false,
+  saveSummary,
   title,
   onOpenChange,
   onSave,
@@ -430,6 +431,7 @@ function ProviderModelsDialogShell({
   busy: boolean;
   dialogError: string | null;
   dirty?: boolean;
+  saveSummary?: string | null;
   title: string;
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
@@ -491,6 +493,11 @@ function ProviderModelsDialogShell({
             />
           ) : (
             <>
+              {saveSummary ? (
+                <p className="mr-auto self-center text-muted-foreground text-sm">
+                  {saveSummary}
+                </p>
+              ) : null}
               <Button
                 disabled={busy}
                 onClick={requestClose}
@@ -533,11 +540,13 @@ export function ProviderCompatibleEditDialog({
   wireApi,
   fieldErrors,
   dirty,
+  saveSummary,
 }: {
   open: boolean;
   busy: boolean;
   dialogError: string | null;
   dirty?: boolean;
+  saveSummary?: string | null;
   editLabel: string;
   editBaseUrl: string;
   manageModels: ModelListRow[];
@@ -569,6 +578,7 @@ export function ProviderCompatibleEditDialog({
       onOpenChange={onOpenChange}
       onSave={onSave}
       open={open}
+      saveSummary={saveSummary}
       title={title}
     >
       <CustomProviderFields
@@ -675,6 +685,7 @@ export function ProviderManageModelsDialog({
   busy,
   dialogError,
   dirty,
+  saveSummary,
   onOpenChange,
   onSave,
   children,
@@ -684,6 +695,7 @@ export function ProviderManageModelsDialog({
   busy: boolean;
   dialogError: string | null;
   dirty?: boolean;
+  saveSummary?: string | null;
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
   children: ReactNode;
@@ -697,6 +709,7 @@ export function ProviderManageModelsDialog({
       onOpenChange={onOpenChange}
       onSave={onSave}
       open={open}
+      saveSummary={saveSummary}
       title={title}
     >
       {children}

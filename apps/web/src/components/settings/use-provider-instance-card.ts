@@ -97,6 +97,7 @@ export function useProviderInstanceCard({
 
   // What the dialog showed when it opened, to tell if the user changed it.
   const [openedSnapshot, setOpenedSnapshot] = useState("");
+  const [openedRows, setOpenedRows] = useState<ModelListRow[]>([]);
 
   // SAFETY: Provider instance summaries use the selected-provider contract.
   const providerType = instance.type as SelectedProvider;
@@ -128,6 +129,7 @@ export function useProviderInstanceCard({
 
     const rows = seedManageModelRows(instance.customModels, instanceModels);
     setManageModels(rows);
+    setOpenedRows(rows);
     setOpenedSnapshot(
       editSnapshot(rows, "", "", "chat", instance.openRouterRouting ?? {})
     );
@@ -152,6 +154,7 @@ export function useProviderInstanceCard({
     setEditBaseUrl(baseUrl);
     setEditWireApi(wireApi);
     setManageModels(rows);
+    setOpenedRows(rows);
     setOpenedSnapshot(editSnapshot(rows, instance.label, baseUrl, wireApi, {}));
     setEditOpen(true);
   };
@@ -352,6 +355,7 @@ export function useProviderInstanceCard({
     replaceKeyOpen,
     saveCompatible,
     saveManageModels,
+    saveSummary: dirty ? modelChangeSummary(openedRows, manageModels) : null,
     setApiKey,
     setDeleteOpen,
     setEditBaseUrl: (value: string) => {
@@ -381,4 +385,27 @@ function editSnapshot(
   routing: OpenRouterRoutingSettings
 ): string {
   return JSON.stringify({ baseUrl, label, models, routing, wireApi });
+}
+
+// What Save will change, for example "2 added · 1 removed · default changed".
+function modelChangeSummary(before: ModelListRow[], after: ModelListRow[]) {
+  const beforeIds = new Set(before.map((row) => row.id.trim()));
+
+  const afterIds = new Set(
+    after.flatMap((row) => (row.id.trim() ? [row.id.trim()] : []))
+  );
+
+  const added = [...afterIds].filter((id) => !beforeIds.has(id)).length;
+  const removed = [...beforeIds].filter((id) => !afterIds.has(id)).length;
+
+  const defaultOf = (rows: ModelListRow[]) =>
+    (rows.find((row) => row.default) ?? rows[0])?.id.trim();
+
+  const parts = [
+    added ? `${added} added` : null,
+    removed ? `${removed} removed` : null,
+    defaultOf(before) === defaultOf(after) ? null : "default changed",
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" · ") : "Unsaved changes";
 }
