@@ -502,12 +502,12 @@ describe("session routes are scoped to the caller's active org", () => {
         })
       );
 
-    expect((await patch("high")).status).toBe(204);
+    expect((await patch("max")).status).toBe(204);
     expect(
       (await databaseAdapter.getSession(victimSessionId))?.thinkingEffort
-    ).toBe("high");
+    ).toBe("max");
 
-    for (const invalid of ["max", 3]) {
+    for (const invalid of ["ultra", 3]) {
       expect((await patch(invalid)).status).toBe(400);
     }
 
