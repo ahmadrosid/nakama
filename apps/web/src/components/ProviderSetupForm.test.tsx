@@ -292,3 +292,13 @@ test("Edit models opens the same model list as Manage", async () => {
     container.querySelector('label[for="openai-provider-models"]')
   ).not.toBeNull();
 });
+
+test("a Custom endpoint with no name takes its host as the name", async () => {
+  const form = await renderSetupHook();
+  await act(async () => form().handleProviderSelect("openai_compatible"));
+  await act(async () =>
+    form().handleBaseUrlChange("https://api.example.test/v1")
+  );
+  await act(async () => form().handleBaseUrlBlur());
+  expect(form().displayName).toBe("api.example.test");
+});

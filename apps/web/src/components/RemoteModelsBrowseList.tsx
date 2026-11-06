@@ -68,7 +68,7 @@ function browseStatus(
   }
 
   // The shared list adds "· N in your list".
-  return `${count} model${count === 1 ? "" : "s"} from ${label}`;
+  return `Connected · ${count} model${count === 1 ? "" : "s"} from ${label}`;
 }
 
 export function RemoteModelsBrowseList({

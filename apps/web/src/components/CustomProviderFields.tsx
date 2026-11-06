@@ -195,12 +195,16 @@ export function CustomProviderFields({
           >
             <SelectTrigger className="w-full" id="provider-wire-api">
               <SelectValue>
-                {wireApi === "responses" ? "Responses" : "Chat completions"}
+                {wireApi === "responses"
+                  ? "Responses (/responses)"
+                  : "Chat completions (/chat/completions)"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="chat">Chat completions</SelectItem>
-              <SelectItem value="responses">Responses</SelectItem>
+              <SelectItem value="chat">
+                Chat completions (/chat/completions)
+              </SelectItem>
+              <SelectItem value="responses">Responses (/responses)</SelectItem>
             </SelectContent>
           </Select>
         </FormField>

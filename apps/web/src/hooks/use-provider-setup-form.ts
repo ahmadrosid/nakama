@@ -12,10 +12,10 @@ import type {
 import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
-import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { focusModelsField } from "@/hooks/focus-models-field";
+import { setupCustomModels } from "@/hooks/setup-custom-models";
 import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
 import { useCatalogModelRows } from "@/hooks/use-catalog-model-rows";
 import { formatError } from "@/lib/client";
@@ -355,10 +355,19 @@ export function useProviderSetupForm(
   }, []);
 
   const handleBaseUrlBlur = useCallback(() => {
-    if (baseUrl.trim()) {
-      setBaseUrlError(validateBaseUrlInput(baseUrl));
+    if (!baseUrl.trim()) {
+      return;
     }
-  }, [baseUrl]);
+
+    const error = validateBaseUrlInput(baseUrl);
+    setBaseUrlError(error);
+
+    // An empty name takes the host, so most people never type one.
+    if (!(error || displayName.trim())) {
+      setDisplayName(new URL(baseUrl.trim()).hostname);
+      setDisplayNameError(null);
+    }
+  }, [baseUrl, displayName]);
 
   const handleBaseUrlRequired = useCallback(() => {
     setBaseUrlError(validateBaseUrlInput(baseUrl));
@@ -518,44 +527,16 @@ export function useProviderSetupForm(
             apiKey: trimmedKey,
             baseUrl: resolvedCloudflareBaseUrl ?? baseUrl,
             chatgptOAuth: chatgptOAuth ?? undefined,
-            customModels:
-              usesCatalogList && catalogRows
-                ? normalizeModelListRows(catalogRows).map((entry) => ({
-                    ...entry,
-                    default: entry.id === modelToSave,
-                  }))
-                : (selectedProvider === "chatgpt" &&
-                      subscriptionModels.length) ||
-                    selectedProvider === "xai_oauth"
-                  ? filteredModels.map((entry) => ({
-                      default: entry.id === modelToSave,
-                      id: entry.id,
-                      name: entry.name,
-                      supportsVision: entry.supportsVision !== false,
-                    }))
-                  : selectedProvider === "openai_compatible" ||
-                      selectedProvider === "netra" ||
-                      selectedProvider === "ollama"
-                    ? normalizeModelListRows(customModels).map((entry) => ({
-                        ...entry,
-                        default: entry.id === modelToSave,
-                      }))
-                    : selectedProvider === "openrouter"
-                      ? normalizeModelListRows(openRouterModels)
-                      : isShortlistCapabilityProvider(selectedProvider)
-                        ? normalizeModelListRows(shortlistModels)
-                        : selectedProvider === "opencode_go" && modelToSave
-                          ? normalizeModelListRows([
-                              {
-                                default: true,
-                                id: modelToSave,
-                                name: getModelDisplayName(
-                                  filteredModels,
-                                  modelToSave
-                                ),
-                              },
-                            ])
-                          : undefined,
+            customModels: setupCustomModels({
+              catalogRows: usesCatalogList ? catalogRows : null,
+              customModels,
+              filteredModels,
+              modelToSave,
+              openRouterModels,
+              selectedProvider,
+              shortlistModels,
+              subscriptionCount: subscriptionModels.length,
+            }),
             displayName,
             hostMode:
               selectedProvider === "ollama" ? ollamaHostMode : undefined,
