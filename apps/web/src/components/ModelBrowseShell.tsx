@@ -10,6 +10,7 @@ import { cn } from "@nakama/ui/utils";
 import {
   type CSSProperties,
   Fragment,
+  type KeyboardEvent,
   type ReactNode,
   useLayoutEffect,
   useRef,
@@ -87,7 +88,10 @@ export function ModelBrowseShell({
   const collapsed = isLoading || Boolean(error) || isEmpty;
 
   return (
-    <div className={cn("flex flex-col", className, collapsed && "h-auto")}>
+    <div
+      className={cn("flex flex-col", className, collapsed && "h-auto")}
+      data-model-browse-shell=""
+    >
       <div className="flex flex-wrap items-center gap-2 border-border border-b px-3 py-2">
         {toolbar}
       </div>
@@ -185,6 +189,8 @@ export function VirtualModelBrowseList<T>({
   return (
     <div
       className="h-full overflow-y-auto"
+      data-model-browse-list=""
+      onKeyDown={moveBetweenRows}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       ref={scrollRef}
     >
@@ -200,6 +206,33 @@ export function VirtualModelBrowseList<T>({
       </div>
     </div>
   );
+}
+
+// Up and Down move between rows, as in the chat picker, so a long list does
+// not take one Tab per row.
+function moveBetweenRows(event: KeyboardEvent<HTMLDivElement>) {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+    return;
+  }
+
+  const rows = [...event.currentTarget.querySelectorAll("button")];
+  let index = -1;
+
+  for (const [position, row] of rows.entries()) {
+    if (row === document.activeElement) {
+      index = position;
+    }
+  }
+
+  const next = rows[index + (event.key === "ArrowDown" ? 1 : -1)];
+
+  if (index === -1 || !next) {
+    return;
+  }
+
+  event.preventDefault();
+  next.focus();
+  next.scrollIntoView({ block: "nearest" });
 }
 
 const BADGE_TONES: Record<BrowseModelBadgeTone, string> = {

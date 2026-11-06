@@ -1307,6 +1307,83 @@ function modelItemValue(
   return `${providerLabel} ${model.name} ${model.id}`;
 }
 
+const RECENT_MODELS_KEY = "nakama:recent-models";
+
+// The last three models picked here, kept in this browser only.
+// One selection per line, so reading back needs no parsing.
+function readRecentModels(): string[] {
+  try {
+    return (localStorage.getItem(RECENT_MODELS_KEY) ?? "")
+      .split("\n")
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecentModel(value: string) {
+  try {
+    localStorage.setItem(
+      RECENT_MODELS_KEY,
+      [value, ...readRecentModels().filter((item) => item !== value)]
+        .slice(0, 3)
+        .join("\n")
+    );
+  } catch {
+    // Storage can be off (private window); the picker works without it.
+  }
+}
+
+function RecentModelsGroup({
+  busy,
+  currentModelSelection,
+  groups,
+  onSelect,
+}: {
+  busy: boolean;
+  currentModelSelection: string | null | undefined;
+  groups: ChatComposerFullProps["providerModelGroups"];
+  onSelect: (value: string) => void;
+}) {
+  const recent = readRecentModels().flatMap((value) => {
+    for (const group of groups) {
+      for (const model of group.models) {
+        if (
+          encodeModelSelection(
+            model.providerId ?? group.providerId,
+            model.id
+          ) === value
+        ) {
+          return [{ group, model, value }];
+        }
+      }
+    }
+
+    return [];
+  });
+
+  // A short list needs no shortcut.
+  if (recent.length === 0 || groups.flatMap((g) => g.models).length < 6) {
+    return null;
+  }
+
+  return (
+    <CommandGroup heading="Recent">
+      {recent.map(({ group, model, value }) => (
+        <CommandItem
+          data-checked={currentModelSelection === value}
+          disabled={busy}
+          key={`recent:${value}`}
+          onSelect={() => onSelect(value)}
+          value={`recent ${modelItemValue(group.providerLabel, model)}`}
+        >
+          {model.name} · {group.providerLabel}
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
 // Reads the settings page's last key check, if any; it never starts one.
 function ProviderPickerHeading({
   label,
@@ -1456,6 +1533,7 @@ function ChatModelPicker({
   };
 
   const selectModel = (value: string) => {
+    rememberRecentModel(value);
     void props.onModelChange(value);
     closeModelPicker();
   };
@@ -1566,6 +1644,12 @@ function ChatModelPicker({
                   {props.profileModelId}
                 </CommandItem>
               ) : null}
+              <RecentModelsGroup
+                busy={busy}
+                currentModelSelection={props.currentModelSelection}
+                groups={props.providerModelGroups}
+                onSelect={selectModel}
+              />
               {props.providerModelGroups.map((group) => (
                 <CommandGroup
                   heading={

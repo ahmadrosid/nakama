@@ -108,3 +108,36 @@ test("a click does not drop a model the user made default", async () => {
   // The field says why the click kept it.
   expect(container.querySelector('[role="status"]')).not.toBeNull();
 });
+
+test("arrow keys move between list rows", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () =>
+    root!.render(
+      <CatalogModelsBrowseList
+        onSelect={() => undefined}
+        rows={[
+          { id: "a/one", name: "One" },
+          { id: "a/two", name: "Two" },
+        ]}
+      />
+    )
+  );
+
+  const rows = [
+    ...container.querySelectorAll<HTMLButtonElement>(
+      "[data-model-browse-list] button"
+    ),
+  ];
+
+  rows[0]?.focus();
+  await act(async () =>
+    rows[0]?.dispatchEvent(
+      new window.KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" })
+    )
+  );
+
+  expect(document.activeElement).toBe(rows[1]);
+});

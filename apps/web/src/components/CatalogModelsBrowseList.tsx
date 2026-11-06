@@ -119,6 +119,28 @@ function CatalogBrowseToolbar({
         className="min-w-35 flex-1 basis-full sm:basis-0"
         disabled={toolbarDisabled}
         onChange={(event) => onSearchChange(event.target.value)}
+        onKeyDown={(event) => {
+          // Escape clears the search before it closes the dialog.
+          if (event.key === "Escape" && search) {
+            event.preventDefault();
+            event.stopPropagation();
+            onSearchChange("");
+          }
+
+          // Down moves into the list.
+          if (event.key === "ArrowDown") {
+            const list = event.currentTarget
+              .closest("[data-model-browse-shell]")
+              ?.querySelector<HTMLButtonElement>(
+                "[data-model-browse-list] button"
+              );
+
+            if (list) {
+              event.preventDefault();
+              list.focus();
+            }
+          }
+        }}
         placeholder="Search model name or ID..."
         value={search}
       />
