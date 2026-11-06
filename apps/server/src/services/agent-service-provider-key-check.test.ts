@@ -155,6 +155,12 @@ describe("API key check on save", () => {
       async (service, providerId) => {
         const result = await service.setProviderSecret(providerId, LONG_KEY);
         expect(result.provider.hasApiKey).toBe(true);
+
+        const listed = await service.listProviders();
+        expect(
+          listed.providers.find((provider) => provider.id === providerId)
+            ?.apiKeyEnding
+        ).toBe("aaaa");
       }
     );
   });
@@ -167,6 +173,12 @@ describe("API key check on save", () => {
       async (service, providerId) => {
         const result = await service.setProviderSecret(providerId, LONG_KEY);
         expect(result.provider.hasApiKey).toBe(true);
+
+        const listed = await service.listProviders();
+        expect(
+          listed.providers.find((provider) => provider.id === providerId)
+            ?.apiKeyEnding
+        ).toBe("aaaa");
       }
     );
   });

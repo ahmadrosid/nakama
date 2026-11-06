@@ -236,7 +236,9 @@ function ReplaceKeyForm({
         </label>
         {instance.secretSource === "settings" ? (
           <span className="text-muted-foreground text-xs">
-            A key is already saved
+            {instance.apiKeyEnding
+              ? `Saved key ends in …${instance.apiKeyEnding}`
+              : "A key is already saved"}
           </span>
         ) : null}
       </div>

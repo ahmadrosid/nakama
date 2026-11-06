@@ -4128,6 +4128,11 @@ export class AgentService {
               instance,
               countModelsForInstance(instance)
             ),
+            // Enough to tell keys apart, never enough to use one.
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- The field must stay absent when no full key is saved.
+            ...(instance.apiKey.length >= 12
+              ? { apiKeyEnding: instance.apiKey.slice(-4) }
+              : {}),
             savedSecretAvailable: status?.savedAvailable ?? false,
             secretEnvName: status?.envName ?? envNames[0],
             secretSource: status?.source ?? ("missing" as const),

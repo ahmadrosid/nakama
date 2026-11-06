@@ -2105,6 +2105,8 @@ export interface OpenRouterRoutingSettings {
 }
 
 export interface ProviderInstanceSummary {
+  /** The last 4 characters of the saved key, for admins only. */
+  apiKeyEnding?: string;
   baseUrl?: string | null;
   createdAt: string;
   customModels?: CustomModelEntry[];

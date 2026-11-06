@@ -224,21 +224,32 @@ export function useProviderInstanceCard({
 
     // A clear waits 10 seconds, so Undo can stop it.
     if (action === "clear") {
-      let undone = false;
+      let pending = true;
+
+      // Runs once: after the wait, or at once if the tab closes first, so a
+      // leaked key is not left saved by a quick reload.
+      const clearNow = () => {
+        if (!pending) {
+          return;
+        }
+
+        pending = false;
+        window.removeEventListener("pagehide", clearNow);
+        onManage(instance.id, "clear")
+          .then(() => toast(`${instance.label} key cleared.`))
+          .catch((error) => onError(formatError(error)));
+      };
+
       setReplaceKeyOpen(false);
+      window.addEventListener("pagehide", clearNow);
       toast(`Clearing the ${instance.label} key.`, CLEAR_KEY_UNDO_MS, {
         label: "Undo",
         onClick: () => {
-          undone = true;
+          pending = false;
+          window.removeEventListener("pagehide", clearNow);
         },
       });
-      setTimeout(() => {
-        if (!undone) {
-          onManage(instance.id, "clear").catch((error) =>
-            onError(formatError(error))
-          );
-        }
-      }, CLEAR_KEY_UNDO_MS);
+      setTimeout(clearNow, CLEAR_KEY_UNDO_MS);
 
       return;
     }
