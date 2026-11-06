@@ -326,9 +326,25 @@ export function LlmProvidersPage() {
         onAddOpenChange={setAddProviderOpen}
         onFormError={setFormError}
       />
-      <SettingsSection title="Defaults">
-        <Card className="w-full shadow-none">
-          <CardContent className="divide-y divide-border p-0">
+      <section aria-labelledby="routing-heading" className="space-y-3">
+        <h2
+          className="font-semibold text-foreground text-sm"
+          id="routing-heading"
+        >
+          Routing
+        </h2>
+        <div className="overflow-hidden rounded-xl border border-border">
+          <div
+            aria-hidden
+            className="flex justify-between gap-3 bg-muted/40 px-4 py-2.5 text-muted-foreground text-xs"
+          >
+            <span>Task</span>
+            <span className="hidden gap-2 sm:grid sm:w-[25rem] sm:grid-cols-2">
+              <span>Provider</span>
+              <span>Model</span>
+            </span>
+          </div>
+          <div className="divide-y divide-border border-border border-t">
             <div id="image-parsing">
               <VisionSettingsCard />
             </div>
@@ -346,9 +362,9 @@ export function LlmProvidersPage() {
             <div id="browser-runtime">
               <BrowserRuntimeSettingsCard />
             </div>
-          </CardContent>
-        </Card>
-      </SettingsSection>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -17,7 +17,7 @@ export function SettingsModelTile({
         <p className="text-foreground text-sm">{title}</p>
         {footer}
       </div>
-      <div className="w-full min-w-0 sm:w-80">{children}</div>
+      <div className="w-full min-w-0 sm:w-[25rem]">{children}</div>
     </div>
   );
 }
