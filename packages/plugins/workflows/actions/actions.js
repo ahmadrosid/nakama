@@ -211,6 +211,12 @@ function validateWorkflowSteps(steps, allowedTools) {
     if (kind === "assert") {
       readRequiredStepString(record, "path", `Assert step ${id}`);
     }
+    if (record.onFail !== undefined) {
+      const isCheck = kind === "compare" || kind === "assert";
+      if (!(isCheck && (record.onFail === "fail" || record.onFail === "skip"))) {
+        throw new Error(isCheck ? `Step ${id} has invalid onFail: ${String(record.onFail)}. Use fail | skip.` : `Step ${id} cannot use onFail. Only compare and assert steps can.`);
+      }
+    }
     if (kind === "template") {
       readRequiredStepString(record, "template", `Template step ${id}`, {
         label: "template text"
@@ -371,20 +377,28 @@ class WorkflowRunner {
     const run = await this.workflowService.createRun(workflowId, runtimeInput);
     try {
       const output = await this.executeWorkflow(orgId, workflow, run.id, runtimeInput);
-      const completedRun = await this.workflowService.completeRun(run.id, workflowId, { output });
+      const completedRun = await this.workflowService.completeRun(run.id, workflowId, output === null ? { skipped: true } : { output });
       if (completedRun.status === "failed") {
         return {
           error: completedRun.error ?? "Workflow run failed.",
-          runId: run.id
+          runId: run.id,
+          status: "failed"
         };
       }
-      return { output: completedRun.output ?? output, runId: run.id };
+      if (output === null) {
+        return { runId: run.id, status: "skipped" };
+      }
+      return {
+        output: completedRun.output ?? output,
+        runId: run.id,
+        status: "completed"
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.completeRun(run.id, workflowId, {
         error: message
       });
-      return { error: message, runId: run.id };
+      return { error: message, runId: run.id, status: "failed" };
     }
   }
   async executeWorkflow(orgId, workflow, runId, runtimeInput) {
@@ -402,12 +416,16 @@ class WorkflowRunner {
           runId,
           workflowId: workflow.id
         });
+        const filtered = Boolean(result.error) && (step.kind === "compare" || step.kind === "assert") && step.onFail === "skip";
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
-          error: result.error,
+          error: filtered ? undefined : result.error,
           input: result.input,
           output: result.output,
-          status: result.error ? "failed" : "completed"
+          status: filtered ? "skipped" : result.error ? "failed" : "completed"
         });
+        if (filtered) {
+          return null;
+        }
         if (result.error) {
           failure = result.error;
         } else {
@@ -674,11 +692,12 @@ class WorkflowService {
     if (!row) {
       throw new Error("Workflow run not found.");
     }
+    const { skipped, ...fields } = result;
     const run = {
       ...JSON.parse(row.data),
-      ...result,
+      ...fields,
       completedAt: new Date().toISOString(),
-      status: result.error ? "failed" : "completed"
+      status: result.error ? "failed" : skipped ? "skipped" : "completed"
     };
     const { changes } = this.db.query("UPDATE runs SET data = ?, lease_until = NULL WHERE id = ? AND lease_until IS NOT NULL").run(JSON.stringify(run), id);
     if (!changes) {
@@ -861,7 +880,7 @@ async function run(input, context) {
         ...result,
         name: existing.name,
         run: completed,
-        status: result.error ? "failed" : "completed",
+        status: result.status,
         workflowId: existing.id
       };
     }

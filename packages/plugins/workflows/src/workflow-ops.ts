@@ -341,6 +341,20 @@ export function validateWorkflowSteps(
       readRequiredStepString(record, "path", `Assert step ${id}`);
     }
 
+    if (record.onFail !== undefined) {
+      const isCheck = kind === "compare" || kind === "assert";
+
+      if (
+        !(isCheck && (record.onFail === "fail" || record.onFail === "skip"))
+      ) {
+        throw new Error(
+          isCheck
+            ? `Step ${id} has invalid onFail: ${String(record.onFail)}. Use fail | skip.`
+            : `Step ${id} cannot use onFail. Only compare and assert steps can.`
+        );
+      }
+    }
+
     if (kind === "template") {
       readRequiredStepString(record, "template", `Template step ${id}`, {
         label: "template text",

@@ -1,4 +1,8 @@
-import type { StoredWorkflow, WorkflowStep } from "@nakama/core/contract";
+import type {
+  StoredWorkflow,
+  WorkflowRunStatus,
+  WorkflowStep,
+} from "@nakama/core/contract";
 import {
   buildReceiptBag,
   executeAssert,
@@ -16,7 +20,9 @@ type WorkflowRunResult = {
   error?: string;
   output?: string;
   runId?: string;
+  /** Set when the workflow is off and no run was made. */
   skipped?: boolean;
+  status?: Exclude<WorkflowRunStatus, "running">;
 };
 
 type DataStepResult = {
@@ -87,33 +93,44 @@ export class WorkflowRunner {
       const completedRun = await this.workflowService.completeRun(
         run.id,
         workflowId,
-        { output }
+        output === null ? { skipped: true } : { output }
       );
 
+      // An expired run stays failed even when the runner finishes late.
       if (completedRun.status === "failed") {
         return {
           error: completedRun.error ?? "Workflow run failed.",
           runId: run.id,
+          status: "failed",
         };
       }
 
-      return { output: completedRun.output ?? output, runId: run.id };
+      if (output === null) {
+        return { runId: run.id, status: "skipped" };
+      }
+
+      return {
+        output: completedRun.output ?? output,
+        runId: run.id,
+        status: "completed",
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.workflowService.completeRun(run.id, workflowId, {
         error: message,
       });
 
-      return { error: message, runId: run.id };
+      return { error: message, runId: run.id, status: "failed" };
     }
   }
 
+  /** Returns the summary, or null when a filter step skipped the run. */
   private async executeWorkflow(
     orgId: string,
     workflow: StoredWorkflow,
     runId: string,
     runtimeInput: WorkflowRecord
-  ): Promise<string> {
+  ): Promise<string | null> {
     const stepOutputs: WorkflowRecord = {};
     const bag = () => buildReceiptBag(runtimeInput, stepOutputs);
 
@@ -137,12 +154,22 @@ export class WorkflowRunner {
           workflowId: workflow.id,
         });
 
+        // A filter check that is false ends the run as skipped, not failed.
+        const filtered =
+          Boolean(result.error) &&
+          (step.kind === "compare" || step.kind === "assert") &&
+          step.onFail === "skip";
+
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
-          error: result.error,
+          error: filtered ? undefined : result.error,
           input: result.input,
           output: result.output,
-          status: result.error ? "failed" : "completed",
+          status: filtered ? "skipped" : result.error ? "failed" : "completed",
         });
+
+        if (filtered) {
+          return null;
+        }
 
         if (result.error) {
           failure = result.error;

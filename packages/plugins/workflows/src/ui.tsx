@@ -97,9 +97,15 @@ type Context = {
 
 export const inject = ["slots", "host", "styles", "ui"];
 
+/** A wrong path or value makes a check fail, so these two fields say what they take. */
+const checkFieldHints = new Map([
+  ["path", "Where to look, like input.ok or steps.fetch_data.count"],
+  ["expected", 'The value it must equal, like true, 3 or "done"'],
+]);
+
 const stepFields = {
-  assert: ["path", "expected"],
-  compare: ["left", "op", "right", "tolerance"],
+  assert: ["path", "expected", "onFail"],
+  compare: ["left", "op", "right", "tolerance", "onFail"],
   template: ["template"],
   tool: ["tool", "input"],
 } satisfies Record<string, string[]>;
@@ -145,7 +151,11 @@ function serializeSteps(steps: StepDraft[]) {
     kind,
     ...Object.fromEntries(
       (stepFields[kind] ?? [])
-        .filter((key) => key !== "tolerance" || fields[key])
+        .filter(
+          (key) =>
+            (key !== "tolerance" || fields[key]) &&
+            (key !== "onFail" || fields[key] === "skip")
+        )
         .map((key) => [
           key,
           key === "input"
@@ -190,6 +200,24 @@ function toolParts(name: string) {
     action: titleCase(split === -1 ? name : name.slice(split + 2)),
     app: titleCase(app.replace(/^plugin[_-]+/, "")),
   };
+}
+
+/** Line icon for a step card, by what the step does. */
+type StepIcon = "bot" | "compare" | "database" | "pencil" | "plug" | "shield";
+
+const kindIcons = new Map<string, StepIcon>([
+  ["assert", "shield"],
+  ["compare", "compare"],
+  ["summarize", "bot"],
+  ["template", "pencil"],
+]);
+
+function stepIcon(kind: string, fields: Record<string, string>): StepIcon {
+  if (kind === "tool") {
+    return fields.tool === "sqlite" ? "database" : "plug";
+  }
+
+  return kindIcons.get(kind) ?? "plug";
 }
 
 function stepApp(kind: string, fields: Record<string, string>) {
@@ -362,11 +390,15 @@ function formatDuration(ms: number) {
 }
 
 function formatRunTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
+  const date = new Date(iso);
+
+  return date.toLocaleString(undefined, {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     month: "short",
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
   });
 }
 
@@ -399,11 +431,170 @@ function dayGroup(iso: string) {
     return "Today";
   }
 
-  if (day === new Date(Date.now() - 86_400_000).toDateString()) {
+  // Step back one calendar day, not 24 hours, so DST days stay right.
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (day === yesterday.toDateString()) {
     return "Yesterday";
   }
 
   return "Earlier";
+}
+
+/** Plain text for an error, plus a link that fixes it when there is one. */
+function errorHelp(
+  error: string,
+  agent?: Profile,
+  failed?: WorkflowRunStepRecord
+) {
+  const missingTool = /^Unknown tool: (.+)$/i.exec(error)?.[1];
+
+  if (missingTool && agent) {
+    const parts = toolParts(missingTool);
+
+    return {
+      fix: {
+        href: `/profiles?profile=${encodeURIComponent(agent.id)}&section=tools`,
+        label: "Turn on tool",
+      },
+      missingTool: true,
+      text: `${agent.name} does not have the ${parts.app || parts.action} tool.`,
+    };
+  }
+
+  const server = /^MCP server "([^"]+)" is not connected\.$/.exec(error)?.[1];
+
+  if (server) {
+    return {
+      fix: { href: "/system?tab=mcp", label: "Open MCP settings" },
+      missingTool: false,
+      text: `${server} isn’t connected.`,
+    };
+  }
+
+  const check =
+    failed?.kind === "assert"
+      ? checkFailure(failed)
+      : failed?.kind === "compare"
+        ? compareFailure(failed)
+        : "";
+
+  return {
+    missingTool: Boolean(missingTool),
+    text: check || readableError(error),
+  };
+}
+
+/** "input.ok should be true, but it was missing." from a failed check step. */
+function checkFailure(step: Pick<WorkflowRunStepRecord, "input" | "output">) {
+  const input = parseWorkflowValue(step.input);
+  const output = parseWorkflowValue(step.output);
+
+  const path = isWorkflowRecord(input) ? readWorkflowString(input.path) : null;
+
+  if (!(path && isWorkflowRecord(input))) {
+    return "";
+  }
+
+  const actual = isWorkflowRecord(output) ? output.actual : undefined;
+
+  return `${path} should be ${JSON.stringify(input.expected)}, but it was ${
+    actual === undefined || actual === null ? "missing" : JSON.stringify(actual)
+  }.`;
+}
+
+/** A value as short readable text: strings in quotes, long values cut. */
+function shortValue(value: WorkflowValue | undefined) {
+  const text =
+    value === undefined || value === null ? "nothing" : JSON.stringify(value);
+
+  return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+}
+
+/** '"Stripe <…>" does not contain "github.com".' from a failed compare step. */
+function compareFailure(step: Pick<WorkflowRunStepRecord, "input" | "output">) {
+  const input = parseWorkflowValue(step.input);
+  const output = parseWorkflowValue(step.output);
+
+  if (!isWorkflowRecord(input)) {
+    return "";
+  }
+
+  const left = shortValue(input.left);
+  const right = shortValue(input.right);
+  const diff = isWorkflowRecord(output) ? output.diff : undefined;
+
+  const reason = isWorkflowRecord(diff)
+    ? readWorkflowString(diff.reason)
+    : null;
+
+  const op = readWorkflowString(input.op);
+
+  if (reason === "non-numeric") {
+    return `${left} and ${right} must both be numbers to compare.`;
+  }
+
+  if (op === "contains") {
+    return `${left} does not contain ${right}.`;
+  }
+
+  if (op === "near") {
+    return `${left} is not close enough to ${right}.`;
+  }
+
+  return op === "eq" ? `${left} should equal ${right}.` : "";
+}
+
+/** Why a filter step skipped the run, in plain words. */
+function skipReason(
+  step: Pick<WorkflowRunStepRecord, "input" | "output"> & { kind: string }
+) {
+  return step.kind === "assert" ? checkFailure(step) : compareFailure(step);
+}
+
+/** The step a failed run stopped at. */
+function failedStep(run: WorkflowRunRecord) {
+  return run.steps?.find((step) => step.status === "failed");
+}
+
+const WORKFLOW_DOCS = "https://ahmadrosid.github.io/nakama/workflows";
+
+const DISMISSED_KEY = "nakama:workflows:dismissed-runs";
+
+/** Failed runs the viewer closed the banner for, kept in this browser. */
+function loadDismissed() {
+  try {
+    const saved = parseWorkflowValue(
+      JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? "[]")
+    );
+
+    const ids = Array.isArray(saved) ? saved.map(readWorkflowString) : [];
+
+    return new Set(ids.filter((id) => id !== null).slice(-50));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveDismissed(ids: Set<string>) {
+  try {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids].slice(-50)));
+  } catch {
+    // Private mode or blocked storage: the banner stays closed until reload.
+  }
+}
+
+/** "Today, 5:09 PM", "Yesterday, 6:02 PM", else the date and time. */
+function runStarted(iso: string) {
+  const group = dayGroup(iso);
+
+  return group === "Earlier"
+    ? formatRunTime(iso)
+    : `${group}, ${new Date(iso).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      })}`;
 }
 
 /** Top-level fields of a step value as short label/value rows. */
@@ -881,6 +1072,17 @@ export function apply(ctx: Context) {
   }: {
     kind:
       | "add"
+      | "bot"
+      | "compare"
+      | "database"
+      | "pencil"
+      | "plug"
+      | "shield"
+      | "check"
+      | "chevronDown"
+      | "chevronRight"
+      | "chevronUp"
+      | "retry"
       | "play"
       | "delete"
       | "more"
@@ -889,6 +1091,7 @@ export function apply(ctx: Context) {
       | "collapse"
       | "download"
       | "json"
+      | "minus"
       | "rows"
       | "schema"
       | "table"
@@ -897,16 +1100,29 @@ export function apply(ctx: Context) {
   }) {
     const paths = {
       add: "M12 5v14M5 12h14",
+      bot: "M8 8h8a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3ZM12 4v4M9.5 13.5h.01M14.5 13.5h.01",
+      check: "m5 12 5 5 9-10",
+      chevronDown: "m6 9 6 6 6-6",
+      chevronRight: "m9 6 6 6-6 6",
+      chevronUp: "m6 15 6-6 6 6",
       close: "m6 6 12 12M6 18 18 6",
       collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
+      compare: "M12 4v16M8 20h8M5 8h14M7 8l-3 6h6L7 8ZM17 8l-3 6h6l-3-6Z",
+      database:
+        "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
       delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
       download: "M12 4v11M7 10l5 5 5-5M5 20h14",
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
+      minus: "M6 12h12",
       more: "M5 12h.01M12 12h.01M19 12h.01",
+      pencil: "M4 20h4L19 9l-4-4L4 16v4ZM13 7l4 4",
       play: "m8 5 11 7-11 7V5Z",
+      plug: "M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5",
+      retry: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
       rows: "M3 4h18v16H3V4ZM3 9h18M3 14h18",
       schema: "M4 6h16M4 12h10M4 18h6",
+      shield: "M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3ZM9 12l2 2 4-4",
       table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9",
@@ -931,20 +1147,17 @@ export function apply(ctx: Context) {
 
   ctx.styles(css);
 
+  /** Failed runs the user closed the banner for. Survives editor remounts. */
+  const dismissedRuns = loadDismissed();
+
   function WorkflowError({ message }: { message: string }) {
-    const connectionError = /^MCP server "([^"]+)" is not connected\.$/.exec(
-      message
-    );
+    const help = errorHelp(message);
 
     return (
       <div className="workflow-error" role="alert">
         <Icon kind="warning" />
-        <p>
-          {connectionError ? `${connectionError[1]} isn’t connected.` : message}
-        </p>
-        {connectionError ? (
-          <a href="/system?tab=mcp">Open MCP settings</a>
-        ) : null}
+        <p>{help.text}</p>
+        {help.fix ? <a href={help.fix.href}>{help.fix.label}</a> : null}
       </div>
     );
   }
@@ -1022,11 +1235,13 @@ export function apply(ctx: Context) {
     const label =
       run?.status === "failed" || record?.error
         ? "Failed"
-        : status === "running"
-          ? "Running"
-          : run?.status === "completed"
-            ? "Done"
-            : "Finished";
+        : run?.status === "skipped"
+          ? "Skipped"
+          : status === "running"
+            ? "Running"
+            : run?.status === "completed"
+              ? "Done"
+              : "Finished";
 
     return (
       <section aria-label="Workflow run" className="workflow-chat-card">
@@ -1074,7 +1289,7 @@ export function apply(ctx: Context) {
                   ? step.kind === "summarize"
                     ? "Written"
                     : "Done"
-                  : stepStatus
+                  : (stepStatusLabels.get(stepStatus) ?? stepStatus)
                 : `${content.trim().split(/\s+/).filter(Boolean).length} words`);
 
             return (
@@ -1352,6 +1567,7 @@ export function apply(ctx: Context) {
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState("");
     const [runs, setRuns] = React.useState<WorkflowRunRecord[]>([]);
+    const [, redraw] = React.useReducer((count: number) => count + 1, 0);
     const [confirmDelete, setConfirmDelete] = React.useState(false);
     const [view, setView] = React.useState("workflow");
     const [selection, setSelection] = React.useState("");
@@ -1630,20 +1846,73 @@ export function apply(ctx: Context) {
           setRuns(history);
         }
 
-        if (result.error) {
+        // The last-run banner shows a failed run. Throw only when the run
+        // is missing from history, so the error is never lost.
+        if (
+          result.error &&
+          !history.some((entry) => entry.id === result.run?.id)
+        ) {
           throw new Error(result.error);
         }
       });
 
     const title = titleCase;
     const lastRun = runs[0];
+    const canRun = Boolean(workflow) && !dirty && enabled && !busy;
+    const agent = profiles.find((profile) => profile.id === agentId);
+
+    const lastFailed =
+      lastRun?.status === "failed" && !dismissedRuns.has(lastRun.id)
+        ? lastRun
+        : undefined;
+
+    const bannerStep = lastFailed && failedStep(lastFailed);
+
+    const failedHelp = lastFailed?.error
+      ? errorHelp(lastFailed.error, agent, bannerStep)
+      : undefined;
+
+    const stoppedAt = bannerStep ? titleCase(bannerStep.stepId) : "";
+
+    // Why "Run again" is off, so a disabled button never looks broken.
+    const runBlocked = workflow
+      ? dirty
+        ? "Save your changes to run again."
+        : enabled
+          ? ""
+          : "Turn the workflow on to run again."
+      : "Save the workflow to run it.";
+
+    /** Opens the step a run stopped at, when it is still in the workflow. */
+    const editStep = (stepId: string) => {
+      const draft = steps.find((step) => step.id === stepId);
+      const key = draft?.key ?? (stepId === summaryStep?.id ? "summary" : "");
+
+      if (key) {
+        setView("workflow");
+        setSelection(key);
+      }
+    };
+
+    const canEditStep = (stepId: string) =>
+      steps.some((step) => step.id === stepId) || stepId === summaryStep?.id;
+
+    /** Loads a run's input into Run input so the user can change it. */
+    const editInput = (input: WorkflowRecord | null) => {
+      setRunInput(JSON.stringify(input ?? {}, null, 2));
+      setSelection("input");
+    };
 
     const showPicker =
       selection === "pick" || (picking && Boolean(selectedStep));
 
     const drawerApp = selectedStep
       ? stepApp(selectedStep.kind, selectedStep.fields)
-      : (profiles.find((profile) => profile.id === agentId)?.name ?? "Bot");
+      : (agent?.name ?? "Bot");
+
+    const drawerIcon = selectedStep
+      ? stepIcon(selectedStep.kind, selectedStep.fields)
+      : "bot";
 
     const valueSources: ValueSource[] = [
       {
@@ -1701,17 +1970,33 @@ export function apply(ctx: Context) {
     const allSteps = [
       ...steps.map((step) => ({
         app: stepApp(step.kind, step.fields),
+        icon: stepIcon(step.kind, step.fields),
         id: step.id,
         key: step.key,
         kind: step.kind,
       })),
       {
-        app: profiles.find((profile) => profile.id === agentId)?.name ?? "Bot",
+        app: agent?.name ?? "Bot",
+        icon: "bot" as const,
         id: summaryStep?.id ?? "summary",
         key: "summary",
         kind: "summarize",
       },
     ];
+
+    // Steps shows the failure inside the failed card, and History opens the
+    // run itself, so the banner is only for a step that is no longer here.
+    const failureInCard =
+      view === "workflow" &&
+      Boolean(
+        bannerStep && allSteps.some((entry) => entry.id === bannerStep.stepId)
+      );
+
+    const failedRun =
+      view !== "runs" && !failureInCard ? lastFailed : undefined;
+
+    const lastStopped =
+      lastRun?.status === "failed" || lastRun?.status === "skipped";
 
     return (
       <section className="workflow-editor">
@@ -1782,7 +2067,7 @@ export function apply(ctx: Context) {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button
-                  disabled={busy || !workflow || dirty || !enabled}
+                  disabled={!canRun}
                   onClick={() => runWorkflow()}
                   size="sm"
                   type="button"
@@ -1821,16 +2106,91 @@ export function apply(ctx: Context) {
               ))}
             </nav>
             {error && <WorkflowError message={error} />}
+            {failedRun && (
+              <div
+                className="workflow-error workflow-last-run"
+                data-fix={Boolean(failedHelp?.fix)}
+              >
+                <span className="workflow-last-run-icon">
+                  <Icon kind="warning" />
+                </span>
+                <p>
+                  <span>
+                    <strong>Last run failed</strong>
+                    <span className="workflow-empty">
+                      {` · ${runStarted(failedRun.startedAt)}`}
+                      {stoppedAt && ` · stopped at ${stoppedAt}`}
+                    </span>
+                  </span>
+                  <span>{failedHelp?.text ?? "Stopped"}</span>
+                </p>
+                <div className="workflow-run-buttons">
+                  {failedHelp?.fix ? (
+                    <Button render={<a href={failedHelp.fix.href} />} size="sm">
+                      {failedHelp.fix.label}
+                    </Button>
+                  ) : bannerStep && canEditStep(bannerStep.stepId) ? (
+                    <Button
+                      className="workflow-view-run"
+                      onClick={() => editStep(bannerStep.stepId)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Edit step
+                    </Button>
+                  ) : (
+                    <Button
+                      className="workflow-view-run"
+                      onClick={() => {
+                        setSelection("");
+                        setView("runs");
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      View run
+                    </Button>
+                  )}
+                  <Button
+                    disabled={!canRun}
+                    onClick={() => runWorkflow(failedRun.input)}
+                    size="sm"
+                    title={runBlocked || undefined}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Icon kind="retry" />
+                    Run again
+                  </Button>
+                  <Button
+                    aria-label="Dismiss"
+                    onClick={() => {
+                      dismissedRuns.add(failedRun.id);
+                      saveDismissed(dismissedRuns);
+                      redraw();
+                    }}
+                    size="icon-lg"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Icon kind="close" />
+                  </Button>
+                </div>
+              </div>
+            )}
             {view === "runs" && (
               <RunHistory
-                agent={profiles.find((profile) => profile.id === agentId)}
-                canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                agent={agent}
+                canEditStep={canEditStep}
+                canRun={canRun}
+                onEditInput={editInput}
+                onEditStep={editStep}
                 onRunAgain={(input) => runWorkflow(input)}
+                runBlocked={runBlocked}
                 runs={runs}
                 stepIds={allSteps.map((step) => step.id)}
-                stepNames={Object.fromEntries(
-                  allSteps.map((step) => [step.id, title(step.id)])
-                )}
               />
             )}
             {view === "data" && (
@@ -1839,13 +2199,16 @@ export function apply(ctx: Context) {
                 className="workflow-data-page"
               >
                 <DatabasePanel
-                  canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                  canRun={canRun}
                   onRun={() => runWorkflow()}
                   writers={tableWriters}
                 />
               </section>
             )}
-            <div className="workflow-scroll" hidden={view !== "workflow"}>
+            <div
+              className="workflow-scroll workflow-canvas"
+              hidden={view !== "workflow"}
+            >
               <div className="workflow-content">
                 <Textarea
                   aria-label="Workflow description"
@@ -1858,113 +2221,166 @@ export function apply(ctx: Context) {
                 <ol className="workflow-steps">
                   {allSteps.map((step, index) => {
                     const timing = lastTimeline.get(step.id);
+                    const next = allSteps[index + 1];
+                    const notReached = lastStopped && !timing;
+
+                    const failedHere =
+                      failureInCard && bannerStep?.stepId === step.id;
+
+                    const status = timing
+                      ? `${stepStatusLabels.get(timing.status) ?? timing.status}${
+                          timing.duration === null
+                            ? ""
+                            : ` · ${formatDuration(timing.duration)}`
+                        }`
+                      : "";
 
                     return (
                       <li key={step.key}>
                         <div
                           className="workflow-step-card"
+                          data-failed={failedHere}
+                          data-not-reached={notReached}
                           data-selected={selection === step.key}
                         >
-                          <Button
-                            className="workflow-step-open"
-                            onClick={() => setSelection(step.key)}
-                            type="button"
-                            variant="ghost"
-                          >
-                            <AppBadge app={step.app} />
-                            <span className="workflow-step-text">
-                              <span className="workflow-step-kind">
-                                {step.key === "summary"
-                                  ? "Summary"
-                                  : `Step ${index + 1}`}{" "}
-                                · {step.app}
-                              </span>
-                              <span className="workflow-step-name">
-                                {title(step.id) || "Untitled step"}
-                              </span>
-                            </span>
-                            {timing && (
-                              <span
-                                className="workflow-step-last"
-                                data-status={timing.status}
-                              >
-                                <span>
-                                  {timing.status === "completed" && "✓ "}
-                                  {stepStatusLabels.get(timing.status) ??
-                                    timing.status}
-                                  {timing.duration !== null &&
-                                    ` · ${formatDuration(timing.duration)}`}
-                                </span>
-                                <span
-                                  aria-hidden="true"
-                                  className="workflow-bar"
-                                >
-                                  <span
-                                    style={{
-                                      left: `${timing.left}%`,
-                                      width: `${timing.width}%`,
-                                    }}
-                                  />
-                                </span>
-                              </span>
-                            )}
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              disabled={busy}
-                              render={
-                                <Button
-                                  aria-label={`Options for ${title(step.id)}`}
-                                  size="icon-sm"
-                                  type="button"
-                                  variant="ghost"
-                                />
-                              }
+                          <div className="workflow-step-row">
+                            <Button
+                              className="workflow-step-open"
+                              onClick={() => setSelection(step.key)}
+                              type="button"
+                              variant="ghost"
                             >
-                              <Icon kind="more" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => setSelection(step.key)}
-                              >
-                                Configure
-                              </DropdownMenuItem>
-                              {step.key !== "summary" && (
-                                <>
-                                  <DropdownMenuItem
-                                    disabled={index === 0}
-                                    onClick={() => moveStep(step.key, -1)}
-                                  >
-                                    Move earlier
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    disabled={index === steps.length - 1}
-                                    onClick={() => moveStep(step.key, 1)}
-                                  >
-                                    Move later
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      setSteps((current) =>
-                                        current.filter(
-                                          (entry) => entry.key !== step.key
-                                        )
-                                      )
-                                    }
-                                    variant="destructive"
-                                  >
-                                    Delete step
-                                  </DropdownMenuItem>
-                                </>
+                              <span className="workflow-step-icon">
+                                <Icon kind={step.icon} />
+                              </span>
+                              <span className="workflow-step-text">
+                                <span className="workflow-step-name">
+                                  {title(step.id) || "Untitled step"}
+                                </span>
+                                <span className="workflow-step-kind">
+                                  {step.app}
+                                  {notReached && " · not reached"}
+                                </span>
+                              </span>
+                              {timing && (
+                                <span
+                                  aria-label={status}
+                                  className="workflow-step-mark"
+                                  data-status={timing.status}
+                                  role="img"
+                                  title={status}
+                                >
+                                  {timing.status === "completed" && (
+                                    <Icon kind="check" />
+                                  )}
+                                  {timing.status === "failed" && (
+                                    <Icon kind="close" />
+                                  )}
+                                  {timing.status === "skipped" && (
+                                    <Icon kind="minus" />
+                                  )}
+                                </span>
                               )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                disabled={busy}
+                                render={
+                                  <Button
+                                    aria-label={`Options for ${title(step.id)}`}
+                                    size="icon-sm"
+                                    type="button"
+                                    variant="ghost"
+                                  />
+                                }
+                              >
+                                <Icon kind="more" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => setSelection(step.key)}
+                                >
+                                  Configure
+                                </DropdownMenuItem>
+                                {step.key !== "summary" && (
+                                  <>
+                                    <DropdownMenuItem
+                                      disabled={index === 0}
+                                      onClick={() => moveStep(step.key, -1)}
+                                    >
+                                      Move earlier
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={index === steps.length - 1}
+                                      onClick={() => moveStep(step.key, 1)}
+                                    >
+                                      Move later
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        setSteps((current) =>
+                                          current.filter(
+                                            (entry) => entry.key !== step.key
+                                          )
+                                        )
+                                      }
+                                      variant="destructive"
+                                    >
+                                      Delete step
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                          {failedHere && lastFailed && (
+                            <div className="workflow-step-failure">
+                              <p>{failedHelp?.text ?? "Stopped"}</p>
+                              <div className="workflow-run-buttons">
+                                {failedHelp?.fix ? (
+                                  <Button
+                                    render={<a href={failedHelp.fix.href} />}
+                                    size="sm"
+                                  >
+                                    {failedHelp.fix.label}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    onClick={() => setSelection(step.key)}
+                                    size="sm"
+                                    type="button"
+                                  >
+                                    Edit step
+                                  </Button>
+                                )}
+                                <Button
+                                  disabled={!canRun}
+                                  onClick={() => runWorkflow(lastFailed.input)}
+                                  size="sm"
+                                  title={runBlocked || undefined}
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <Icon kind="retry" />
+                                  Run again
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        {index < steps.length && (
-                          <div
+                        {next && (
+                          <span
                             aria-hidden="true"
                             className="workflow-connector"
-                          />
+                            data-passed={
+                              timing?.status === "completed" &&
+                              lastTimeline.has(next.id)
+                            }
+                          >
+                            <span />
+                            <span />
+                            <span />
+                          </span>
                         )}
                       </li>
                     );
@@ -1972,6 +2388,7 @@ export function apply(ctx: Context) {
                 </ol>
                 <div className="workflow-add-actions">
                   <Button
+                    className="workflow-add-step"
                     onClick={() => setSelection("pick")}
                     type="button"
                     variant="outline"
@@ -2002,7 +2419,9 @@ export function apply(ctx: Context) {
                 </div>
               ) : (
                 <>
-                  <AppBadge app={drawerApp} />
+                  <span className="workflow-drawer-icon">
+                    <Icon kind={drawerIcon} />
+                  </span>
                   <div className="workflow-drawer-title">
                     <p>
                       {selectedStep ? `Step ${selectedIndex + 1}` : "Summary"} ·{" "}
@@ -2126,6 +2545,33 @@ export function apply(ctx: Context) {
                                 sources={valueSources}
                                 text={selectedStep.fields.input ?? ""}
                               />
+                            ) : field === "onFail" ? (
+                              <label className="workflow-enabled" key={field}>
+                                <Switch
+                                  aria-label="Skip the run when false"
+                                  checked={
+                                    selectedStep.fields.onFail === "skip"
+                                  }
+                                  disabled={busy}
+                                  onCheckedChange={(checked: boolean) =>
+                                    updateStep(selectedStep.key, {
+                                      fields: checked
+                                        ? {
+                                            ...selectedStep.fields,
+                                            onFail: "skip",
+                                          }
+                                        : Object.fromEntries(
+                                            Object.entries(
+                                              selectedStep.fields
+                                            ).filter(
+                                              ([key]) => key !== "onFail"
+                                            )
+                                          ),
+                                    })
+                                  }
+                                />
+                                Skip the run when false
+                              </label>
                             ) : field === "op" ? (
                               <Choice
                                 disabled={busy}
@@ -2151,6 +2597,11 @@ export function apply(ctx: Context) {
                               <label key={field}>
                                 {field === "input" ? "Details" : title(field)}
                                 <Textarea
+                                  aria-describedby={
+                                    checkFieldHints.has(field)
+                                      ? `check-hint-${field}`
+                                      : undefined
+                                  }
                                   disabled={busy}
                                   onChange={(event) =>
                                     updateStep(selectedStep.key, {
@@ -2167,6 +2618,14 @@ export function apply(ctx: Context) {
                                   }
                                   value={selectedStep.fields[field] ?? ""}
                                 />
+                                {checkFieldHints.has(field) && (
+                                  <span
+                                    className="workflow-field-hint"
+                                    id={`check-hint-${field}`}
+                                  >
+                                    {checkFieldHints.get(field)}
+                                  </span>
+                                )}
                               </label>
                             )
                           )}
@@ -2187,7 +2646,7 @@ export function apply(ctx: Context) {
                   )}
                   {panelTab === "database" && (
                     <DatabasePanel
-                      canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                      canRun={canRun}
                       onRun={() => runWorkflow()}
                       writers={tableWriters}
                     />
@@ -2204,6 +2663,14 @@ export function apply(ctx: Context) {
                         selectedStep && tried?.key === selectedStep.key
                           ? tried.result
                           : null;
+
+                      // A false filter check returns its result; a thrown error does not.
+                      const skips = Boolean(
+                        selectedStep &&
+                          attempt?.error &&
+                          attempt.output !== undefined &&
+                          selectedStep.fields.onFail === "skip"
+                      );
 
                       return (
                         <div className="workflow-step-fields">
@@ -2223,17 +2690,33 @@ export function apply(ctx: Context) {
                                   <p
                                     className="workflow-try-status"
                                     data-status={
-                                      attempt.error ? "failed" : "completed"
+                                      skips
+                                        ? "skipped"
+                                        : attempt.error
+                                          ? "failed"
+                                          : "completed"
                                     }
                                   >
-                                    {attempt.error ? "Stopped" : "Worked"} in{" "}
-                                    {formatDuration(attempt.durationMs)}
+                                    {skips
+                                      ? "Skipped"
+                                      : attempt.error
+                                        ? "Stopped"
+                                        : "Worked"}{" "}
+                                    in {formatDuration(attempt.durationMs)}
+                                    {skips &&
+                                      selectedStep &&
+                                      `. ${skipReason({
+                                        input: attempt.input,
+                                        kind: selectedStep.kind,
+                                        output: attempt.output,
+                                      })}`}
                                   </p>
                                   <StepReceipt
                                     receipt={{
-                                      error: attempt.error
-                                        ? readableError(attempt.error)
-                                        : null,
+                                      error:
+                                        attempt.error && !skips
+                                          ? readableError(attempt.error)
+                                          : null,
                                       input: attempt.input,
                                       output: attempt.output,
                                     }}
@@ -2302,8 +2785,21 @@ export function apply(ctx: Context) {
                 disabled={busy}
                 onClick={() => setSelection("")}
                 type="button"
+                variant="outline"
               >
                 Done
+              </Button>
+              <Button
+                disabled={!canRun}
+                onClick={() => {
+                  setSelection("");
+                  runWorkflow();
+                }}
+                title={runBlocked || undefined}
+                type="button"
+              >
+                <Icon kind="play" />
+                Run
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2426,18 +2922,25 @@ export function apply(ctx: Context) {
     runs,
     agent,
     stepIds,
-    stepNames,
     canRun,
+    runBlocked,
+    canEditStep,
+    onEditStep,
+    onEditInput,
     onRunAgain,
   }: {
     runs: WorkflowRunRecord[];
     agent?: Profile;
     stepIds: string[];
-    stepNames: Record<string, string>;
     canRun: boolean;
+    runBlocked: string;
+    canEditStep(stepId: string): boolean;
+    onEditStep(stepId: string): void;
+    onEditInput(input: WorkflowRecord | null): void;
     onRunAgain(input: WorkflowRecord | null): void;
   }) {
     const [openId, setOpenId] = React.useState<string | null>();
+    const [onlyFailed, setOnlyFailed] = React.useState(false);
 
     if (!runs[0]) {
       return (
@@ -2449,66 +2952,72 @@ export function apply(ctx: Context) {
 
     const open =
       openId === undefined
-        ? runs[0].status === "completed"
+        ? runs[0].status === "completed" || runs[0].status === "skipped"
           ? null
           : runs[0].id
         : openId;
 
-    const name = (stepId: string) => stepNames[stepId] ?? titleCase(stepId);
-    const days = new Map<string, WorkflowRunRecord[]>();
+    const failedCount = runs.filter((run) => run.status === "failed").length;
 
-    for (const run of runs) {
-      const day = new Date(run.startedAt).toDateString();
-      days.set(day, [...(days.get(day) ?? []), run]);
-    }
+    const shown = onlyFailed
+      ? runs.filter((run) => run.status === "failed")
+      : runs;
 
     return (
       <section aria-label="History" className="workflow-scroll">
-        <div className="workflow-days">
-          {[...days.values()].map((entries) => {
-            const worked = entries.filter(
-              (entry) => entry.status === "completed"
-            ).length;
-
-            const group = dayGroup(entries[0]!.startedAt);
-
-            return (
-              <section key={entries[0]!.id}>
-                <h3>
-                  {group === "Earlier"
-                    ? new Date(entries[0]!.startedAt).toLocaleDateString(
-                        undefined,
-                        { day: "numeric", month: "short" }
-                      )
-                    : group}
-                  <span className="workflow-empty">
-                    {entries.length === 1 ? "1 run" : `${entries.length} runs`}
-                    {worked > 0 &&
-                      (entries.length === 1
-                        ? " · worked"
-                        : ` · ${worked} worked`)}
-                  </span>
-                </h3>
-                <ol className="workflow-day-runs">
-                  {entries.map((run) => (
-                    <RunRow
-                      agent={agent}
-                      canRun={canRun}
-                      expanded={run.id === open}
-                      key={run.id}
-                      name={name}
-                      onRunAgain={onRunAgain}
-                      onToggle={() =>
-                        setOpenId(run.id === open ? null : run.id)
-                      }
-                      run={run}
-                      stepIds={stepIds}
-                    />
-                  ))}
-                </ol>
-              </section>
-            );
-          })}
+        <div className="workflow-runs-box">
+          {runs.length >= 5 && failedCount > 0 && failedCount < runs.length && (
+            <div className="workflow-runs-filter">
+              <Button
+                aria-pressed={!onlyFailed}
+                onClick={() => setOnlyFailed(false)}
+                size="sm"
+                type="button"
+                variant={onlyFailed ? "ghost" : "secondary"}
+              >
+                All {runs.length}
+              </Button>
+              <Button
+                aria-pressed={onlyFailed}
+                onClick={() => setOnlyFailed(true)}
+                size="sm"
+                type="button"
+                variant={onlyFailed ? "secondary" : "ghost"}
+              >
+                Failed {failedCount}
+              </Button>
+            </div>
+          )}
+          <table className="workflow-runs">
+            {runs.length >= 20 && <caption>Last 20 runs</caption>}
+            <thead>
+              <tr>
+                <th scope="col">Result</th>
+                <th scope="col">Started</th>
+                <th scope="col">Steps</th>
+                <th scope="col">Time</th>
+                <th aria-label="Details" scope="col" />
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((run) => (
+                <RunRow
+                  agent={agent}
+                  canEditStep={canEditStep}
+                  canRun={canRun}
+                  expanded={run.id === open}
+                  key={run.id}
+                  onEditInput={onEditInput}
+                  onEditStep={onEditStep}
+                  onRunAgain={onRunAgain}
+                  onToggle={() => setOpenId(run.id === open ? null : run.id)}
+                  run={run}
+                  runBlocked={runBlocked}
+                  stepIds={stepIds}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     );
@@ -2518,29 +3027,41 @@ export function apply(ctx: Context) {
     run,
     agent,
     stepIds,
-    name,
     expanded,
     canRun,
+    runBlocked,
+    canEditStep,
+    onEditStep,
+    onEditInput,
     onToggle,
     onRunAgain,
   }: {
     run: WorkflowRunRecord;
     agent?: Profile;
     stepIds: string[];
-    name(stepId: string): string;
     expanded: boolean;
     canRun: boolean;
+    runBlocked: string;
+    canEditStep(stepId: string): boolean;
+    onEditStep(stepId: string): void;
+    onEditInput(input: WorkflowRecord | null): void;
     onToggle(): void;
     onRunAgain(input: WorkflowRecord | null): void;
   }) {
     const receipts = run.steps ?? [];
     const timeline = runTimeline(run);
-    const failed = receipts.find((step) => step.status === "failed");
-    const missingTool = /^Unknown tool: (.+)$/i.exec(run.error ?? "")?.[1];
+    const failed = failedStep(run);
+    const stoppedAt = failed ? titleCase(failed.stepId) : "";
 
-    const missingName = missingTool
-      ? toolParts(missingTool).app || toolParts(missingTool).action
-      : "";
+    const filter =
+      run.status === "skipped"
+        ? run.steps?.find((step) => step.status === "skipped")
+        : undefined;
+
+    const skippedAt = filter ? titleCase(filter.stepId) : "";
+    const skippedWhy = filter ? skipReason(filter) : "";
+    const help = run.error ? errorHelp(run.error, agent, failed) : undefined;
+    const started = runStarted(run.startedAt);
 
     const recordedIds = receipts.map((step) => step.stepId);
 
@@ -2549,116 +3070,213 @@ export function apply(ctx: Context) {
       : stepIds;
 
     const reached = ids.filter((id) => timeline.has(id)).length;
+    const notReached = ids.filter((id) => !timeline.has(id));
+    const detailId = `run-detail-${run.id}`;
+
+    const barsLabel = ids
+      .map((id) => {
+        const status = timeline.get(id)?.status;
+
+        return `${titleCase(id)}: ${
+          status ? (stepStatusLabels.get(status) ?? status) : "not reached"
+        }`;
+      })
+      .join(", ");
 
     return (
-      <li data-status={run.status}>
-        <button aria-expanded={expanded} onClick={onToggle} type="button">
-          <span className="workflow-run-time">
-            {new Date(run.startedAt).toLocaleTimeString(undefined, {
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </span>
-          <span
-            aria-label={`${reached} of ${ids.length} steps ran`}
-            className="workflow-pips"
-            role="img"
-          >
-            {ids.map((id) => (
+      <>
+        <tr data-status={run.status}>
+          <td>
+            <span className="workflow-run-badge" data-status={run.status}>
+              {run.status === "failed" && <Icon kind="close" />}
+              {run.status === "completed" && <Icon kind="check" />}
+              {run.status === "failed"
+                ? "Failed"
+                : run.status === "running"
+                  ? "Running…"
+                  : (stepStatusLabels.get(run.status) ?? run.status)}
+            </span>
+          </td>
+          <th scope="row">{started}</th>
+          <td>
+            <span className="workflow-run-steps-cell">
               <span
-                data-status={timeline.get(id)?.status ?? "pending"}
-                key={id}
-              />
-            ))}
-          </span>
-          <span className="workflow-run-text">
-            {run.status === "failed"
-              ? failed
-                ? `Stopped at ${name(failed.stepId)}`
-                : "Stopped"
-              : run.status === "running"
-                ? "Running…"
-                : (stepStatusLabels.get(run.status) ?? run.status)}
-          </span>
-          <span className="workflow-run-took">
+                aria-label={barsLabel}
+                className="workflow-run-bars"
+                role="img"
+              >
+                {ids.map((id) => (
+                  <span
+                    data-status={timeline.get(id)?.status ?? "pending"}
+                    key={id}
+                  />
+                ))}
+              </span>
+              <span aria-hidden="true">
+                {reached} of {ids.length}
+              </span>
+              {run.status === "failed" && !expanded && (
+                <span className="workflow-empty">
+                  {stoppedAt ? `Stopped at ${stoppedAt}` : "Stopped"}
+                </span>
+              )}
+              {skippedAt && (
+                <span className="workflow-empty">{`Skipped at ${skippedAt}`}</span>
+              )}
+            </span>
+          </td>
+          <td className="workflow-run-took">
             {run.completedAt &&
               formatDuration(
                 Date.parse(run.completedAt) - Date.parse(run.startedAt)
               )}
-          </span>
-        </button>
+          </td>
+          <td>
+            <Button
+              aria-controls={expanded ? detailId : undefined}
+              aria-expanded={expanded}
+              aria-label={`${expanded ? "Hide" : "Open"} run from ${started}`}
+              onClick={onToggle}
+              size="icon-lg"
+              type="button"
+              variant="ghost"
+            >
+              <Icon kind={expanded ? "chevronUp" : "chevronDown"} />
+            </Button>
+          </td>
+        </tr>
         {expanded && (
-          <div className="workflow-run-detail">
-            <div className="workflow-run-actions">
-              {run.error ? (
-                <p data-missing-tool={Boolean(missingTool)} role="alert">
-                  {missingTool && agent
-                    ? `${agent.name} does not have the ${missingName} tool.`
-                    : readableError(run.error)}
-                </p>
-              ) : (
-                <p className="workflow-empty">{formatRunTime(run.startedAt)}</p>
-              )}
-              {missingTool && agent && (
-                <Button
-                  render={
-                    <a
-                      href={`/profiles?profile=${encodeURIComponent(agent.id)}&section=tools`}
-                    />
-                  }
-                  size="sm"
-                >
-                  Turn on tool
-                </Button>
-              )}
-              <Button
-                disabled={!canRun}
-                onClick={() => onRunAgain(run.input)}
-                size="sm"
-                type="button"
-                variant="secondary"
-              >
-                Run again
-              </Button>
-            </div>
-            <details className="workflow-run-receipts">
-              <summary>Step details</summary>
-              <ol className="workflow-run-steps">
-                {receipts.map((receipt) => {
-                  const duration = timeline.get(receipt.stepId)?.duration;
-
-                  return (
-                    <li data-status={receipt.status} key={receipt.id}>
-                      <details>
-                        <summary>
-                          <span
-                            className="workflow-run-mark"
-                            data-status={receipt.status}
+          <tr className="workflow-run-detail-row">
+            <td colSpan={5}>
+              <div className="workflow-run-detail" id={detailId}>
+                <div className="workflow-run-actions">
+                  {help ? (
+                    <>
+                      <Icon kind="warning" />
+                      <p data-error data-missing-tool={help.missingTool}>
+                        <strong>
+                          {stoppedAt ? `${stoppedAt} failed` : "Run failed"}
+                        </strong>
+                        <span>{help.text}</span>
+                      </p>
+                    </>
+                  ) : (
+                    <p className="workflow-empty">
+                      {skippedWhy
+                        ? `Skipped at ${skippedAt}: ${skippedWhy}`
+                        : formatRunTime(run.startedAt)}
+                    </p>
+                  )}
+                  <div className="workflow-run-buttons">
+                    {help?.fix && (
+                      <Button render={<a href={help.fix.href} />} size="sm">
+                        {help.fix.label}
+                      </Button>
+                    )}
+                    {!help?.fix && failed && canEditStep(failed.stepId) && (
+                      <Button
+                        onClick={() => onEditStep(failed.stepId)}
+                        size="sm"
+                        type="button"
+                      >
+                        Edit step
+                      </Button>
+                    )}
+                    <Button
+                      disabled={!canRun}
+                      onClick={() => onRunAgain(run.input)}
+                      size="sm"
+                      title={runBlocked || undefined}
+                      type="button"
+                      variant="outline"
+                    >
+                      <Icon kind="retry" />
+                      Run again
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            aria-label="More run actions"
+                            size="icon-sm"
+                            type="button"
+                            variant="ghost"
                           />
-                          <span>{name(receipt.stepId)}</span>
-                          <span className="workflow-empty">
-                            {stepStatusLabels.get(receipt.status) ??
-                              receipt.status}
-                            {duration != null &&
-                              ` · ${formatDuration(duration)}`}
-                          </span>
-                        </summary>
-                        <StepReceipt receipt={receipt} showError={false} />
-                      </details>
-                    </li>
-                  );
-                })}
-              </ol>
-            </details>
-            {run.status === "completed" && run.output && (
-              <section className="workflow-history-result">
-                <h4>Result</h4>
-                <p>{run.output}</p>
-              </section>
-            )}
-          </div>
+                        }
+                      >
+                        <Icon kind="more" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => onEditInput(run.input)}
+                        >
+                          Change input
+                        </DropdownMenuItem>
+                        {failed?.kind === "assert" && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              window.open(
+                                WORKFLOW_DOCS,
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
+                          >
+                            How checks work
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                {runBlocked && <p className="workflow-empty">{runBlocked}</p>}
+                <ol className="workflow-run-steps">
+                  {receipts.map((receipt) => {
+                    const duration = timeline.get(receipt.stepId)?.duration;
+
+                    return (
+                      <li data-status={receipt.status} key={receipt.id}>
+                        <details>
+                          <summary>
+                            <span
+                              className="workflow-run-mark"
+                              data-status={receipt.status}
+                            />
+                            <span>{titleCase(receipt.stepId)}</span>
+                            <span className="workflow-empty">
+                              {stepStatusLabels.get(receipt.status) ??
+                                receipt.status}
+                              {duration != null &&
+                                duration >= 1000 &&
+                                ` · ${formatDuration(duration)}`}
+                            </span>
+                            <Icon kind="chevronRight" />
+                          </summary>
+                          <StepReceipt receipt={receipt} showError={false} />
+                        </details>
+                      </li>
+                    );
+                  })}
+                  {run.status !== "running" &&
+                    notReached.map((id) => (
+                      <li data-status="pending" key={id}>
+                        <span className="workflow-run-mark" />
+                        <span>{titleCase(id)}</span>
+                        <span>Not reached</span>
+                      </li>
+                    ))}
+                </ol>
+                {run.status === "completed" && run.output && (
+                  <section className="workflow-history-result">
+                    <h4>Result</h4>
+                    <p>{run.output}</p>
+                  </section>
+                )}
+              </div>
+            </td>
+          </tr>
         )}
-      </li>
+      </>
     );
   }
 
