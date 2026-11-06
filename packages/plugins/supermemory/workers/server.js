@@ -1,6 +1,6 @@
 // @bun
 // src/worker.ts
-import { createHash, randomUUID } from "crypto";
+import { createHash, createHmac, randomUUID } from "crypto";
 import {
   chmod,
   mkdir,
@@ -5263,9 +5263,8 @@ async function runWorker(directory, pluginDataDir) {
       apiKey: automatic.apiKey,
       baseUrl: automatic.baseUrl?.trim() || "https://api.openai.com/v1",
       model: automatic.model,
-      revision: createHash("sha256").update(JSON.stringify([
+      revision: createHmac("sha256", automatic.apiKey).update(JSON.stringify([
         "openai-parameters-v1",
-        automatic.apiKey,
         automatic.baseUrl,
         automatic.model
       ])).digest("hex")
