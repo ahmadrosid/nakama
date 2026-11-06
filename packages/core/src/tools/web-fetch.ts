@@ -563,42 +563,6 @@ export async function fetchRemoteImage(
   return { bytes, contentType };
 }
 
-/**
- * Drop `<!-- … -->` comments with a scan, not a lazy regex, so an unclosed
- * comment stays linear. Like a browser, an unclosed comment runs to the end.
- * Repeat while a removal joins the pieces into a new `<!--`.
- */
-function stripHtmlComments(html: string): string {
-  let text = html;
-
-  while (text.includes("<!--")) {
-    let out = "";
-    let cursor = 0;
-
-    for (;;) {
-      const open = text.indexOf("<!--", cursor);
-
-      if (open === -1) {
-        out += text.slice(cursor);
-        break;
-      }
-
-      out += text.slice(cursor, open);
-      const close = text.indexOf("-->", open + 4);
-
-      if (close === -1) {
-        break;
-      }
-
-      cursor = close + 3;
-    }
-
-    text = out;
-  }
-
-  return text;
-}
-
 export async function convertHtmlToMarkdown(html: string): Promise<string> {
   const removeCommentNoise = (value: string) => {
     let current = value;
@@ -615,7 +579,33 @@ export async function convertHtmlToMarkdown(html: string): Promise<string> {
 
   // Strip whole comments before parsing: Word's conditional comments
   // (`<!--[if gte mso 9]>…<![endif]-->`) otherwise survive as visible text.
-  const cleanedHtml = stripHtmlComments(html);
+  // A scan, not a lazy regex, so an unclosed `<!--` stays linear; that text
+  // is kept, as before. Repeat while a removal joins pieces into a new `<!--`.
+  let cleanedHtml = html;
+
+  for (;;) {
+    let out = "";
+    let cursor = 0;
+
+    for (;;) {
+      const open = cleanedHtml.indexOf("<!--", cursor);
+      const close = open === -1 ? -1 : cleanedHtml.indexOf("-->", open + 4);
+
+      if (close === -1) {
+        out += cleanedHtml.slice(cursor);
+        break;
+      }
+
+      out += cleanedHtml.slice(cursor, open);
+      cursor = close + 3;
+    }
+
+    if (out === cleanedHtml) {
+      break;
+    }
+
+    cleanedHtml = out;
+  }
 
   const markdown = NodeHtmlMarkdown.translate(cleanedHtml, {
     bulletMarker: "-",

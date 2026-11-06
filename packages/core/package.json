@@ -38,6 +38,7 @@
     "./image-content": "./src/image-content.ts",
     "./cloudflare-provider-config": "./src/cloudflare-provider-config.ts",
     "./discovery-providers": "./src/discovery-providers.ts",
+    "./ids": "./src/ids.ts",
     "./ollama-provider-config": "./src/ollama-provider-config.ts",
     "./openrouter-model-slug": "./src/openrouter-model-slug.ts",
     "./provider-label": "./src/provider-label.ts",

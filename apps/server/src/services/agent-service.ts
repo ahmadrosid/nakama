@@ -188,6 +188,7 @@ import {
   messageContentHasImages,
   NakamaApiError,
   nanoid,
+  normalizeBaseUrl,
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
@@ -488,7 +489,7 @@ const API_KEY_CHECK_TIMEOUT_MS = 8000;
 async function checkApiKey(
   instance: ProviderInstance
 ): Promise<CheckProviderResponse["status"]> {
-  const localBaseUrl = instance.baseUrl?.trim().replace(/\/+$/, "");
+  const localBaseUrl = instance.baseUrl && normalizeBaseUrl(instance.baseUrl);
 
   // A local or custom endpoint without a key still answers /models when up.
   const check = instance.apiKey

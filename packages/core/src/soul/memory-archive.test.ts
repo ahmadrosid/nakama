@@ -129,14 +129,16 @@ describe("memory archive", () => {
     const append = formatArchiveAppend(
       new Date("2026-06-29T12:00:00.000Z"),
       [{ bullets: ["Old preference."], date: "2026-06-15" }],
-      "a ---->> b --!> c"
+      "ran migrate --force; a ---->> b --!> c"
     );
 
     const reasonLine = append
       .split("\n")
       .find((line) => line.startsWith("<!-- reason:"));
 
-    expect(reasonLine).toBe("<!-- reason: a ->> b -!> c -->");
+    expect(reasonLine).toBe(
+      "<!-- reason: ran migrate --force; a ----&gt;> b --!&gt; c -->"
+    );
   });
 
   test("formatArchiveAppend preserves original section dates", () => {

@@ -71,11 +71,11 @@ export function parseMemoryContent(content: string): ParsedMemory {
 }
 
 /**
- * Text that is safe inside `<!-- -->`. Collapse every `--` run, so no
- * `-->` or `--!>` can close the comment (removing `-->` can rebuild one).
+ * Text that is safe inside `<!-- -->`: the `>` of `-->` or `--!>` becomes
+ * `&gt;`. Removing `-->` instead can rebuild a new one from the pieces.
  */
 export function toHtmlCommentText(text: string): string {
-  return text.trim().replace(/-{2,}/g, "-");
+  return text.trim().replace(/--(!?)>/g, "--$1&gt;");
 }
 
 /** Drop trailing newlines with a scan; `/\n+$/` is quadratic on long newline runs. */

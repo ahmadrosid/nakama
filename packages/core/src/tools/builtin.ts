@@ -218,14 +218,15 @@ export function refuseProfileSkillMarkdownWrite(
   }
 
   // Segments, not a `skills/([^/]+)/(.+)$` regex that backtracks on
-  // repeated `skills/` parts. The first `skills/<name>/<rest>` wins.
+  // repeated `skills/` parts. The first `skills/<name>/<rest>` wins; an empty
+  // rest can only be the last segment, so the `!rest` check below covers it.
   const segments = resolvedPath.replace(/\\/g, "/").split("/");
 
   const index = segments.findIndex(
     (segment, at) =>
       segment.toLowerCase() === "skills" &&
       Boolean(segments[at + 1]) &&
-      Boolean(segments.slice(at + 2).join("/"))
+      at + 2 < segments.length
   );
 
   if (index === -1) {

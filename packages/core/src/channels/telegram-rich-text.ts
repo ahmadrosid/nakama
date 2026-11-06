@@ -143,21 +143,6 @@ function renderBlockquotes(text: string, tokens: TokenStore): string {
   });
 }
 
-/** `|---|:--:|` row: each cell is dashes with optional alignment colons. */
-function isTableSeparator(line: string): boolean {
-  let row = line.trim();
-
-  if (row.startsWith("|")) {
-    row = row.slice(1);
-  }
-
-  if (row.endsWith("|")) {
-    row = row.slice(0, -1);
-  }
-
-  return row.split("|").every((cell) => /^:?-+:?$/.test(cell.trim()));
-}
-
 /**
  * Split text on closed ``` fences: odd parts are whole fences.
  * A scan instead of a lazy regex, so an unclosed fence stays linear.
@@ -222,7 +207,13 @@ function convertTablesToBullets(text: string): string {
       !(
         isTableRow(header, pipeLed) &&
         separator?.includes("|") &&
-        isTableSeparator(separator)
+        // `|---|:--:|`: each cell is dashes with optional alignment colons.
+        separator
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .every((cell) => /^:?-+:?$/.test(cell.trim()))
       )
     ) {
       out.push(header);
