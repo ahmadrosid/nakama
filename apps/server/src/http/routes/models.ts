@@ -438,6 +438,14 @@ export function registerModelRoutes(
     .passthrough()
     .openapi("CreateProviderRequest");
 
+  const checkProviderKeyRequestSchema = z
+    .object({
+      apiKey: z.string().max(4096),
+      baseUrl: z.string().max(2048).optional(),
+      type: z.enum(USER_PROVIDER_NAMES),
+    })
+    .openapi("CheckProviderKeyRequest");
+
   const updateProviderRequestSchema = z
     .object({})
     .passthrough()
@@ -640,6 +648,33 @@ export function registerModelRoutes(
         },
       },
       summary: "Update a provider instance",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "checkProviderKey",
+      path: "/v1/providers/check-key",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: checkProviderKeyRequestSchema },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z.object({ status: z.string() }),
+            },
+          },
+          description: "What a live check of the typed key found",
+        },
+      },
+      summary: "Check a key before saving it",
       tags: ["Models"],
     })
   );
@@ -1919,6 +1954,13 @@ export function registerModelRoutes(
 
       return errorResponse(message, 400);
     }
+  });
+
+  app.post("/v1/providers/check-key", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson(c.req.raw, checkProviderKeyRequestSchema);
+
+    return json<CheckProviderResponse>(await agent.checkProviderKey(body));
   });
 
   app.post("/v1/providers/:providerId/default", async (c) => {

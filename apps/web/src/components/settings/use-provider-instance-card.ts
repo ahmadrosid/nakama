@@ -10,12 +10,13 @@ import {
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "@nakama/core/discovery-providers";
+import { toast } from "@nakama/ui/toast";
 import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 import {
   defaultOllamaSetupBaseUrl,
   type SelectedProvider,
@@ -49,6 +50,8 @@ function seedManageModelRows(
     supportsVision: model.supportsVision,
   }));
 }
+
+const CLEAR_KEY_UNDO_MS = 10_000;
 
 export function useProviderInstanceCard({
   instance,
@@ -200,11 +203,43 @@ export function useProviderInstanceCard({
       setReplaceKeyOpen(false);
       setApiKey("");
       setShowApiKey(false);
+      // Say if the provider took the new key, not only that it saved.
+      void client
+        .checkProvider(instance.id)
+        .then(({ status }) =>
+          toast(
+            status === "ok"
+              ? `Key saved. ${instance.label} accepted it.`
+              : "Key saved."
+          )
+        )
+        .catch(() => toast("Key saved."));
     });
   };
 
   const handleManageKey = async (action: "clear" | "use-stored") => {
     if (!onManage) {
+      return;
+    }
+
+    // A clear waits 10 seconds, so Undo can stop it.
+    if (action === "clear") {
+      let undone = false;
+      setReplaceKeyOpen(false);
+      toast(`Clearing the ${instance.label} key.`, CLEAR_KEY_UNDO_MS, {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+        },
+      });
+      setTimeout(() => {
+        if (!undone) {
+          onManage(instance.id, "clear").catch((error) =>
+            onError(formatError(error))
+          );
+        }
+      }, CLEAR_KEY_UNDO_MS);
+
       return;
     }
 

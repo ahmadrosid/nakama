@@ -137,6 +137,38 @@ export function ProviderSetupFormBody({
   );
 }
 
+// The key error, or the result of the live check after leaving the field.
+function ApiKeyFieldFooter({
+  form,
+}: {
+  form: ReturnType<typeof useProviderSetupForm>;
+}) {
+  if (form.apiKeyError) {
+    return (
+      <p className="text-destructive text-sm" id="api-key-error" role="alert">
+        {form.apiKeyError}
+      </p>
+    );
+  }
+
+  if (form.keyCheck?.key !== form.apiKey.trim()) {
+    return null;
+  }
+
+  return (
+    <p
+      className={
+        form.keyCheck.status === "ok"
+          ? "text-emerald-700 text-sm dark:text-emerald-300"
+          : "text-muted-foreground text-sm"
+      }
+      role="status"
+    >
+      {form.keyCheck.status === "ok" ? "Key works" : "Checking key…"}
+    </p>
+  );
+}
+
 function ProviderSetupApiKeyField({
   apiKeyOptional,
   density,
@@ -153,17 +185,7 @@ function ProviderSetupApiKeyField({
   return (
     <FormField
       density={density}
-      footer={
-        form.apiKeyError ? (
-          <p
-            className="text-destructive text-sm"
-            id="api-key-error"
-            role="alert"
-          >
-            {form.apiKeyError}
-          </p>
-        ) : null
-      }
+      footer={<ApiKeyFieldFooter form={form} />}
       id="api-key"
       label={
         apiKeyOptional && !hostedCustomEndpoint

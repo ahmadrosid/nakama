@@ -16,6 +16,7 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { focusModelsField } from "@/hooks/focus-models-field";
 import { setupCustomModels } from "@/hooks/setup-custom-models";
+import { useApiKeyCheck } from "@/hooks/use-api-key-check";
 import { useModelsQuery, useProvidersQuery } from "@/hooks/use-app-queries";
 import { useCatalogModelRows } from "@/hooks/use-catalog-model-rows";
 import { formatError } from "@/lib/client";
@@ -202,12 +203,30 @@ export function useProviderSetupForm(
     });
   }, [selectedProvider, filteredModels]);
 
+  const { keyCheck, runKeyCheck } = useApiKeyCheck(setApiKeyError);
+
   const handleApiKeyBlur = useCallback(() => {
     setApiKeyTouched(true);
-    setApiKeyError(
-      validateApiKeyForProvider(apiKey, selectedProvider, ollamaApiKeyOptions)
+
+    const error = validateApiKeyForProvider(
+      apiKey,
+      selectedProvider,
+      ollamaApiKeyOptions
     );
-  }, [apiKey, selectedProvider, ollamaApiKeyOptions]);
+
+    setApiKeyError(error);
+
+    if (!error && apiKey.trim() && isAuthenticated) {
+      void runKeyCheck(apiKey, selectedProvider, baseUrl);
+    }
+  }, [
+    apiKey,
+    baseUrl,
+    isAuthenticated,
+    runKeyCheck,
+    selectedProvider,
+    ollamaApiKeyOptions,
+  ]);
 
   const handleApiKeyChange = useCallback(
     (value: string) => {
@@ -646,6 +665,7 @@ export function useProviderSetupForm(
     handleShortlistModelsChange,
     handleSubmit,
     handleSubscriptionModelsChange,
+    keyCheck,
     modelsError,
     ollamaHostMode,
     openRouterModels,

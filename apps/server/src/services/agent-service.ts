@@ -4076,6 +4076,25 @@ export class AgentService {
     };
   }
 
+  /** Asks the provider if a typed key works, before anything is saved. */
+  async checkProviderKey(request: {
+    apiKey: string;
+    baseUrl?: string;
+    type: ProviderInstance["type"];
+  }): Promise<CheckProviderResponse> {
+    return {
+      // SAFETY: checkApiKey reads only type, apiKey, baseUrl and label.
+      status: await checkApiKey({
+        apiKey: request.apiKey.trim(),
+        baseUrl: request.baseUrl?.trim() || undefined,
+        createdAt: "",
+        id: "unsaved",
+        label: request.type,
+        type: request.type,
+      } as ProviderInstance),
+    };
+  }
+
   /** Asks the provider if the saved key still works. */
   async checkProvider(providerId: string): Promise<CheckProviderResponse> {
     await this.refreshManagedProviderKeys();

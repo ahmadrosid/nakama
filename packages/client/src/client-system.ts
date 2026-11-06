@@ -448,6 +448,17 @@ export class SystemClient extends NakamaClientCore {
     );
   }
 
+  async checkProviderKey(request: {
+    apiKey: string;
+    baseUrl?: string;
+    type: string;
+  }): Promise<CheckProviderResponse> {
+    return this.request<CheckProviderResponse>("/v1/providers/check-key", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
   async setDefaultProvider(
     providerId: string
   ): Promise<DeleteProviderResponse> {

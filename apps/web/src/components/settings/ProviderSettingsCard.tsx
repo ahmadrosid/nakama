@@ -153,7 +153,12 @@ export function ProviderSettingsCard({
                       providerId,
                       request,
                     });
-                    toast("Provider updated.");
+
+                    // A key save says its own result.
+                    if (!("apiKey" in request)) {
+                      toast("Provider updated.");
+                    }
+
                     onFormError(null);
                   }}
                 />

@@ -170,4 +170,15 @@ describe("API key check on save", () => {
       }
     );
   });
+
+  test("a typed key is checked before it is saved", async () => {
+    await withDeepSeekProvider(
+      async () => new Response("bad key", { status: 401 }),
+      async (service) => {
+        expect(
+          await service.checkProviderKey({ apiKey: LONG_KEY, type: "deepseek" })
+        ).toEqual({ status: "rejected" });
+      }
+    );
+  });
 });
