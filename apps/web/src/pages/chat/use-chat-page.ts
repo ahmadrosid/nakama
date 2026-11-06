@@ -8,6 +8,7 @@ import type {
   ChatContextUsage,
   ThinkingEffort,
 } from "@nakama/core/contract";
+import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
@@ -673,7 +674,7 @@ export function useChatPage() {
         return;
       }
 
-      if (effort !== "low" && effort !== "medium" && effort !== "high") {
+      if (!isThinkingEffort(effort)) {
         return;
       }
 
