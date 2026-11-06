@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
   chmod,
   mkdir,
@@ -267,11 +267,10 @@ async function runWorker(directory: string, pluginDataDir: string) {
       apiKey: automatic.apiKey,
       baseUrl: automatic.baseUrl?.trim() || "https://api.openai.com/v1",
       model: automatic.model,
-      revision: createHash("sha256")
+      revision: createHmac("sha256", automatic.apiKey)
         .update(
           JSON.stringify([
             "openai-parameters-v1",
-            automatic.apiKey,
             automatic.baseUrl,
             automatic.model,
           ])

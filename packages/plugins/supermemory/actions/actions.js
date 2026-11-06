@@ -5003,8 +5003,20 @@ function json(params) {
   });
   return jsonSchema;
 }
+// ../../core/src/compatible-provider-config.ts
+var JsonValueSchema = json();
+var JsonObjectSchema = record(string2(), JsonValueSchema);
+function normalizeBaseUrl(baseUrl) {
+  const trimmed = baseUrl.trim();
+  let end = trimmed.length;
+  while (end > 0 && trimmed[end - 1] === "/") {
+    end--;
+  }
+  return trimmed.slice(0, end);
+}
+
 // ../../core/src/supermemory-client.ts
-var JsonObjectSchema = record(string2(), json());
+var JsonObjectSchema2 = record(string2(), json());
 function normalizeUrl(value) {
   let url;
   try {
@@ -5018,7 +5030,7 @@ function normalizeUrl(value) {
   if (url.username || url.password || url.search || url.hash || !(url.protocol === "https:" || url.protocol === "http:" && privateHost)) {
     throw new Error("Use HTTPS, or HTTP on a private IP or localhost; omit credentials, query and fragment");
   }
-  return url.toString().replace(/\/+$/, "");
+  return normalizeBaseUrl(url.toString());
 }
 
 class SupermemoryError extends Error {
@@ -5086,7 +5098,7 @@ class SupermemoryClient {
         bytes.set(chunk, offset);
         offset += chunk.length;
       }
-      const result = JsonObjectSchema.safeParse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+      const result = JsonObjectSchema2.safeParse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
       if (!result.success) {
         throw new Error("Invalid response");
       }
