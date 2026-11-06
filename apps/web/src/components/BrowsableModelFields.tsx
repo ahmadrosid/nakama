@@ -145,7 +145,7 @@ export function BrowsableModelFields<T>({
       label="Models"
     >
       {showBrowse ? (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           {renderBrowse({
             addedIds,
             addedModels: customModels,
@@ -153,7 +153,8 @@ export function BrowsableModelFields<T>({
             onAddMany: handleAddMany,
             onSelect: handleBrowseSelect,
           })}
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* On a phone the list is long; its actions come first. */}
+          <div className="flex flex-wrap items-center justify-between gap-2 max-sm:order-first">
             <Button
               data-models-add=""
               disabled={disabled}

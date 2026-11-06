@@ -15,6 +15,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { formatError } from "@/lib/client";
 
@@ -83,6 +84,8 @@ export function ModelBrowseShell({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  const phone = usePhoneWidth();
+
   // Only a list needs the fixed height: a spinner, error or empty state stays
   // small, so the manual add stays in view.
   const collapsed = isLoading || Boolean(error) || isEmpty;
@@ -93,7 +96,7 @@ export function ModelBrowseShell({
         "flex flex-col",
         className,
         // On a phone the dialog's own scroll is the only one.
-        (collapsed || isPhoneWidth()) && "h-auto"
+        (collapsed || phone) && "h-auto"
       )}
       data-model-browse-shell=""
     >
@@ -144,6 +147,8 @@ export function VirtualModelBrowseList<T>({
   renderRow: (row: T, style: CSSProperties) => ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const phone = usePhoneWidth();
+  const [phoneLimit, setPhoneLimit] = useState(PHONE_PAGE_SIZE);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [prevRows, setPrevRows] = useState(rows);
@@ -151,6 +156,7 @@ export function VirtualModelBrowseList<T>({
   if (prevRows !== rows) {
     setPrevRows(rows);
     setScrollTop(0);
+    setPhoneLimit(PHONE_PAGE_SIZE);
   }
 
   useLayoutEffect(() => {
@@ -194,11 +200,12 @@ export function VirtualModelBrowseList<T>({
 
   const visibleRows = rows.slice(startIndex, endIndex);
 
-  // On a phone every row renders in the dialog's own scroll; no inner box.
-  if (isPhoneWidth()) {
+  // On a phone rows render in the dialog's own scroll, 50 at a time, so a
+  // long catalog cannot freeze a small device.
+  if (phone) {
     return (
       <div data-model-browse-list="" onKeyDown={moveBetweenRows}>
-        {rows.map((row) => (
+        {rows.slice(0, phoneLimit).map((row) => (
           <Fragment key={getKey(row)}>
             {renderRow(row, {
               height: MODEL_ROW_HEIGHT,
@@ -206,6 +213,16 @@ export function VirtualModelBrowseList<T>({
             })}
           </Fragment>
         ))}
+        {rows.length > phoneLimit ? (
+          <button
+            className="w-full px-3 py-2 text-left text-sm underline underline-offset-2"
+            onClick={() => setPhoneLimit((limit) => limit + PHONE_PAGE_SIZE)}
+            type="button"
+          >
+            Show {Math.min(PHONE_PAGE_SIZE, rows.length - phoneLimit)} more of{" "}
+            {rows.length - phoneLimit}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -232,10 +249,21 @@ export function VirtualModelBrowseList<T>({
   );
 }
 
-function isPhoneWidth(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia?.("(max-width: 639px)").matches === true
+const PHONE_QUERY = "(max-width: 639px)";
+
+const PHONE_PAGE_SIZE = 50;
+
+// Follows the window across the phone width, for example on rotate.
+function usePhoneWidth(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia?.(PHONE_QUERY);
+      query?.addEventListener("change", onChange);
+
+      return () => query?.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia?.(PHONE_QUERY).matches === true,
+    () => false
   );
 }
 
