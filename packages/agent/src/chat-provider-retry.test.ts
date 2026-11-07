@@ -201,6 +201,44 @@ describe("agent chat provider retry", () => {
     });
   });
 
+  test("keeps the raw socket error on the cause chain after a mid-stream drop", async () => {
+    const provider: ProviderClient = {
+      generateChat() {
+        throw new Error("streamChat only in this test");
+      },
+      generateText() {
+        return Promise.resolve({ content: "{}" });
+      },
+      name: "openai",
+      streamChat(_input: GenerateChatInput, handlers) {
+        handlers.onChunk("partial ");
+        throw Object.assign(
+          new TypeError("The socket connection was closed unexpectedly. RAW"),
+          { code: "ECONNRESET" }
+        );
+      },
+    };
+
+    const session = createAgentChatSession({ provider });
+    const caught = await session.sendStream("Hello", { onChunk() {} }).then(
+      () => null,
+      (error: unknown) => error
+    );
+
+    expect(caught).toMatchObject({ message: MODEL_CONNECTION_CLOSED_MESSAGE });
+
+    const messages: string[] = [];
+    let current: unknown = caught;
+    while (current instanceof Error) {
+      messages.push(current.message);
+      current = current.cause;
+    }
+
+    expect(messages.at(-1)).toBe(
+      "The socket connection was closed unexpectedly. RAW"
+    );
+  });
+
   test("retries a connection reset named by code once and succeeds", async () => {
     const reset = () =>
       Object.assign(new TypeError("socket hang up"), {

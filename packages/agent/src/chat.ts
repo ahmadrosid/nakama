@@ -1475,7 +1475,12 @@ async function generateReply(
         (content || thinking || pendingToolInputs.size > 0) &&
         isTransientConnectionError(error) &&
         !(error instanceof ProviderStreamInterruptedError)
-          ? new ProviderStreamInterruptedError(MODEL_CONNECTION_CLOSED_MESSAGE)
+          ? Object.assign(
+              new ProviderStreamInterruptedError(
+                MODEL_CONNECTION_CLOSED_MESSAGE
+              ),
+              { cause: error }
+            )
           : error;
 
       const interrupted = streamError instanceof ProviderStreamInterruptedError;
