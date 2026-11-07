@@ -16,6 +16,7 @@ import {
   type ListTimezonesResponse,
   type ModelsResponse,
   NakamaApiError,
+  type ProviderInstanceSummary,
   reportError,
   resetWhatsAppSessionForReconnect,
   type SendEmailTestRequest,
@@ -83,6 +84,16 @@ import {
   readOptionalJson,
 } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
+
+function providerIdentity(provider: ProviderInstanceSummary) {
+  return {
+    createdAt: provider.createdAt,
+    id: provider.id,
+    label: provider.label,
+    modelCount: provider.modelCount,
+    type: provider.type,
+  };
+}
 
 export function registerModelRoutes(
   app: HonoApp,
@@ -1873,15 +1884,26 @@ export function registerModelRoutes(
   });
 
   app.get("/v1/models", async (c) => {
-    getRequestAuth(c);
+    const auth = getRequestAuth(c);
     const source = c.req.query("source");
 
     const modelsSource =
       source === "remote" ? ("remote" as const) : ("catalog" as const);
 
-    return json<ModelsResponse>(
-      await agent.getModels({ source: modelsSource })
-    );
+    const result = await agent.getModels({ source: modelsSource });
+
+    if (auth.isPlatformAdmin) {
+      return json<ModelsResponse>(result);
+    }
+
+    // Same redaction as GET /v1/providers: the model picker only needs the
+    // identifying fields, not the endpoint, key status or custom inventory.
+    const { baseUrl: _baseUrl, customModels: _customModels, ...rest } = result;
+
+    return json<ModelsResponse>({
+      ...rest,
+      providers: result.providers.map(providerIdentity),
+    });
   });
 
   app.post("/v1/models/discover", async (c) => {
@@ -1903,13 +1925,7 @@ export function registerModelRoutes(
     // inventory, or routing details.
     const providers = auth.isPlatformAdmin
       ? result.providers
-      : result.providers.map((provider) => ({
-          createdAt: provider.createdAt,
-          id: provider.id,
-          label: provider.label,
-          modelCount: provider.modelCount,
-          type: provider.type,
-        }));
+      : result.providers.map(providerIdentity);
 
     return json<ListProvidersResponse>({
       defaultProviderId: result.defaultProviderId,
