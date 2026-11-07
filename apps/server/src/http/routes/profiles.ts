@@ -1952,6 +1952,19 @@ export function registerProfileRoutes(
         throw new NakamaApiError("Not found", 404);
       }
 
+      // A root org's published set is admin-only, same as its direct reads and
+      // the published-skill sibling route (`skills.ts`).
+      const organization =
+        await options.databaseAdapter?.getOrganizationById(orgId);
+
+      if (
+        !organization?.parentOrgId &&
+        auth.orgRole !== "admin" &&
+        !auth.isPlatformAdmin
+      ) {
+        throw new NakamaApiError("Not found", 404);
+      }
+
       const document = await agent.readPublishedKnowledgeBaseDocument(
         orgId,
         decodeURIComponent(c.req.param("publicationId")),
