@@ -30,6 +30,7 @@ import {
   type McpToolArguments,
   toCachedMcpToolSummaries,
 } from "./mcp-client-manager";
+import { fetchMcpRemote } from "./mcp-fetch";
 import {
   type McpOAuthGrant,
   McpServerOAuthProvider,
@@ -99,7 +100,12 @@ async function signInBeforeConnect(
     return;
   }
 
-  if ((await auth(provider, { serverUrl })) === "REDIRECT") {
+  if (
+    (await auth(provider, {
+      fetchFn: fetchMcpRemote,
+      serverUrl,
+    })) === "REDIRECT"
+  ) {
     throw new UnauthorizedError();
   }
 }
@@ -459,6 +465,7 @@ export class McpService {
 
     const result = await auth(provider, {
       authorizationCode: options.code,
+      fetchFn: fetchMcpRemote,
       serverUrl: config.url,
     });
 

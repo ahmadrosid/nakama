@@ -17,6 +17,7 @@ import type {
 import { getProfileSoulDir } from "@nakama/core";
 import type { CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
 import { z } from "zod";
+import { fetchMcpRemote } from "./mcp-fetch";
 
 /** A server that does not answer `initialize` must not hold a connect open. */
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -327,6 +328,7 @@ export class McpClientManager {
     await this.disconnectKey(connectionKey);
 
     const transport = new StreamableHTTPClientTransport(new URL(url), {
+      fetch: fetchMcpRemote,
       requestInit: {
         headers,
       },
@@ -477,8 +479,12 @@ function createTransport(
     return new StreamableHTTPClientTransport(
       new URL(http.url),
       options?.authProvider
-        ? { authProvider: options.authProvider, requestInit }
-        : { requestInit }
+        ? {
+            authProvider: options.authProvider,
+            fetch: fetchMcpRemote,
+            requestInit,
+          }
+        : { fetch: fetchMcpRemote, requestInit }
     );
   }
 
