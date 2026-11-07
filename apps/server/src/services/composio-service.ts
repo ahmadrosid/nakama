@@ -37,6 +37,7 @@ import {
   findRejectedConnectedAccountIds,
   isComposioDefaultAuthConfigMissing,
 } from "./composio-api-client";
+import { withClaimedOAuthState } from "./oauth-callback-claim";
 
 // HKDF, not a bare hash, to turn the API key into an AES key. Nothing reads
 // `sessionIdEnc` back, so rows written with the old key need no migration.
@@ -923,9 +924,20 @@ export class ComposioService {
     return { redirectUrl: link.redirectUrl };
   }
 
-  async completeOAuth(
+  completeOAuth(
     state: string,
     options: { connectedAccountId?: string | null } = {}
+  ): Promise<{ orgId: string; returnTo?: string; toolkitSlug: string }> {
+    return withClaimedOAuthState(
+      `composio:${state}`,
+      () => new NakamaApiError("Invalid OAuth state.", 400),
+      () => this.completeClaimedOAuth(state, options)
+    );
+  }
+
+  private async completeClaimedOAuth(
+    state: string,
+    options: { connectedAccountId?: string | null }
   ): Promise<{ orgId: string; returnTo?: string; toolkitSlug: string }> {
     await this.requireAvailable();
 

@@ -235,6 +235,47 @@ describe("MCP browser authorization", () => {
     await manager.disconnectAll();
   });
 
+  test("two callbacks with one state exchange the code once", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    const created = await service.createServer(
+      {
+        config: { url: remote.url },
+        connect: true,
+        name: "fake-remote-race",
+        transport: "http",
+      },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    const state = z
+      .string()
+      .parse(
+        new URL(z.string().parse(created.authorizationUrl)).searchParams.get(
+          "state"
+        )
+      );
+    const before = remote.tokenRequests.length;
+    const callback = () =>
+      service.completeOAuth(created.server.id, {
+        callbackBaseUrl: CALLBACK_BASE_URL,
+        code: "fake-auth-code",
+        state,
+      });
+
+    const results = await Promise.allSettled([callback(), callback()]);
+
+    expect(results.map((result) => result.status).toSorted()).toEqual([
+      "fulfilled",
+      "rejected",
+    ]);
+    expect(remote.tokenRequests.length - before).toBe(1);
+
+    await manager.disconnectAll();
+  });
+
   test("starts the requested sign-in on a server that lists tools anonymously", async () => {
     const db = createInMemoryDatabaseAdapter();
     const manager = new McpClientManager();

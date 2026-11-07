@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import {
   discoverOAuthProtectedResourceMetadata,
   type OAuthClientProvider,
@@ -204,7 +205,14 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
 
   /** The stored `state` is single use: it is spent by the callback. */
   matchesPendingState(state: string): boolean {
-    return Boolean(this.grant.state) && this.grant.state === state;
+    const pending = Buffer.from(this.grant.state ?? "");
+    const given = Buffer.from(state);
+
+    return (
+      pending.length > 0 &&
+      pending.length === given.length &&
+      timingSafeEqual(pending, given)
+    );
   }
 
   private async update(patch: Partial<McpOAuthGrant>): Promise<void> {
