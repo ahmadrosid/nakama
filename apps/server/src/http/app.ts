@@ -233,6 +233,12 @@ export function createHonoApp(options: ServerOptions) {
       return errorResponse("Invalid JSON in request body.", 400);
     }
 
+    // decodeURIComponent throws on a lone `%`. That is a bad request, not a
+    // server bug, so it must not reach the error tracker.
+    if (err instanceof URIError) {
+      return errorResponse("Invalid URL encoding.", 400);
+    }
+
     // A NakamaApiError is a refusal the route chose. Anything that reaches here
     // is a bug the caller only sees as a generic 500, so the tracker must see it.
     void reportError(err, { kind: "http", source: "server" });
