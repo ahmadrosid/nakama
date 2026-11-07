@@ -5,7 +5,6 @@ const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 
 /** A production dependency set baked into the image at build time. */
 const DEPENDENCY_SETS = {
-  meet: ".docker/meet-deps",
   runtime: ".docker/runtime-deps",
 } as const;
 

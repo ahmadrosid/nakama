@@ -17,14 +17,9 @@ updates:
     schedule:
       interval: "weekly"
 
-  # Installed into the image by Dockerfile:41-49 and the optional Meet build.
+  # Installed into the image by the Dockerfile.
   - package-ecosystem: "bun"
     directory: "/.docker/runtime-deps"
-    schedule:
-      interval: "weekly"
-
-  - package-ecosystem: "bun"
-    directory: "/.docker/meet-deps"
     schedule:
       interval: "weekly"
 

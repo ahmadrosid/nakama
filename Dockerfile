@@ -82,18 +82,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
   && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 
-# Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
-# runs as the existing non-root Nakama user. The manifest and lockfile are
-# copied unconditionally (two small files) so the install below can be
-# frozen; the packages themselves only land when the build arg is true.
+# Optional Chromium for PDF export. Chromium stays sandboxed and runs as the
+# existing non-root Nakama user. The build arg keeps its old name so existing
+# build commands still work.
 ARG INSTALL_MEET_DEPS=false
-COPY .docker/meet-deps/package.json .docker/meet-deps/bun.lock /opt/nakama-meet/
 RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       apt-get update && apt-get install -y --no-install-recommends \
-        chromium pulseaudio pulseaudio-utils fonts-liberation xvfb \
-      && rm -rf /var/lib/apt/lists/* \
-      && cd /opt/nakama-meet \
-      && bun install --frozen-lockfile --production --ignore-scripts; \
+        chromium fonts-liberation \
+      && rm -rf /var/lib/apt/lists/*; \
     fi
 
 # A named volume copies this owner on first mount, so uid 1000 can write
