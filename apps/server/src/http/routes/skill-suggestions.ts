@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { NakamaApiError } from "@nakama/core";
+import { canChatWithProfile, NakamaApiError } from "@nakama/core";
 import type {
   ApplySkillSuggestionResponse,
   ListSkillSuggestionsResponse,
@@ -109,14 +109,55 @@ export function registerSkillSuggestionRoutes(
 
     const profileId = c.req.query("profileId");
 
+    // Suggestion text is derived from chats with one profile. Admins see the
+    // whole org; a member sees only profiles they can chat with.
+    const canSeeAll = auth.isPlatformAdmin || auth.orgRole === "admin";
+
+    async function canReachProfile(targetProfileId: string): Promise<boolean> {
+      if (canSeeAll) {
+        return true;
+      }
+
+      const access = await options.agent.getProfileAccess(
+        orgId,
+        targetProfileId
+      );
+
+      return Boolean(
+        access &&
+          canChatWithProfile(access, {
+            isPlatformAdmin: auth.isPlatformAdmin,
+            orgRole: auth.orgRole,
+            userId: auth.user.id,
+          })
+      );
+    }
+
+    if (profileId && !(await canReachProfile(profileId))) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+
     const suggestions = await service.listSuggestions(orgId, {
       profileId: profileId || undefined,
       sessionId: sessionId || undefined,
       status,
     });
 
+    const visible = canSeeAll
+      ? suggestions
+      : (
+          await Promise.all(
+            suggestions.map(async (suggestion) => ({
+              allowed: await canReachProfile(suggestion.profileId),
+              suggestion,
+            }))
+          )
+        )
+          .filter((entry) => entry.allowed)
+          .map((entry) => entry.suggestion);
+
     return json<ListSkillSuggestionsResponse>({
-      suggestions: suggestions.map(toSkillSuggestion),
+      suggestions: visible.map(toSkillSuggestion),
     });
   });
 
@@ -168,6 +209,29 @@ export function registerSkillSuggestionRoutes(
       const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
       const suggestionId = decodeURIComponent(c.req.param("suggestionId"));
       const service = requireService();
+
+      const suggestion = await service.getSuggestion(orgId, suggestionId);
+      const canSeeAll = auth.isPlatformAdmin || auth.orgRole === "admin";
+
+      if (!canSeeAll) {
+        const access = await options.agent.getProfileAccess(
+          orgId,
+          suggestion.profileId
+        );
+
+        if (
+          !(
+            access &&
+            canChatWithProfile(access, {
+              isPlatformAdmin: auth.isPlatformAdmin,
+              orgRole: auth.orgRole,
+              userId: auth.user.id,
+            })
+          )
+        ) {
+          throw new NakamaApiError("Forbidden", 403);
+        }
+      }
 
       const result = await service.applySuggestion(
         orgId,
