@@ -43,6 +43,10 @@ export class NakamaAuthExpiredError extends NakamaApiError {
   }
 }
 
+/** What members see when the model connection drops mid-turn. */
+export const MODEL_CONNECTION_CLOSED_MESSAGE =
+  "The model connection closed before the reply finished. Try again.";
+
 /** A provider stream broke after it started. One more try can work. */
 export class ProviderStreamInterruptedError extends NakamaApiError {
   constructor(message: string) {
@@ -187,28 +191,6 @@ export function formatAutomationRunError<ErrorValue>(
   }
 
   return formatServerError(error);
-}
-
-/**
- * A failed agent turn as members see it. A dropped model connection gets plain
- * words instead of the runtime's fetch text; other errors keep their message.
- */
-export function formatAgentTurnError<ErrorValue>(error: ErrorValue): string {
-  if (error instanceof Error && isStreamDisconnectError(error)) {
-    return "The model connection closed before the reply finished. Try again.";
-  }
-
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
-  }
-
-  const stringError = z.string().safeParse(error);
-
-  if (stringError.success && stringError.data.trim()) {
-    return stringError.data.trim();
-  }
-
-  return "Something went wrong.";
 }
 
 export function formatServerError<ErrorValue>(error: ErrorValue): string {

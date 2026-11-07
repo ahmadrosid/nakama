@@ -2573,6 +2573,14 @@ export class AgentService {
       reply = (await Promise.race([sent, aborted])).trim();
     } catch (error) {
       if (!timeout.aborted) {
+        // A Stop is not a failure.
+        if (!input.signal?.aborted) {
+          console.error(
+            `[${kind}] fail org=${input.orgId} profile=${input.profileId} durationMs=${Date.now() - startedAt} reason=error`,
+            error
+          );
+        }
+
         throw error;
       }
 
