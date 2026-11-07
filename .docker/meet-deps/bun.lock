@@ -5,7 +5,7 @@
     "": {
       "name": "nakama-meet-deps",
       "dependencies": {
-        "betterwright": "2.8.1",
+        "betterwright": "2.9.1",
       },
     },
   },
@@ -32,7 +32,7 @@
 
     "@remusao/trie": ["@remusao/trie@2.1.0", "", {}, "sha512-Er3Q8q0/2OcCJPQYJOPLmCuqO0wu7cav3SPtpjlxSbjFi1x+A1pZkkLD6c9q2rGEkGW/tkrRzfrhNMt8VQjzXg=="],
 
-    "betterwright": ["betterwright@2.8.1", "", { "dependencies": { "@ghostery/adblocker-playwright": "2.18.2", "playwright-core": "1.61.1", "tldts": "7.4.9" }, "optionalDependencies": { "patchright-core": "1.61.1", "rookie-cookies": "0.6.0", "ws": "8.21.0" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.30.0", "@modelcontextprotocol/sdk": ">=1.13.0", "electron": ">=43.4.1" }, "optionalPeers": ["@anthropic-ai/sdk", "@modelcontextprotocol/sdk", "electron"], "bin": { "betterwright": "dist/bin/betterwright.js" } }, "sha512-zPJPyJzPK9+egrL7OnxN9qXwKwuES5LbiFA9ZrPyiYiROLXAZpGj4fnXiIYWMfBBvE0sSLkkUgy6C++F42gMtw=="],
+    "betterwright": ["betterwright@2.9.1", "", { "dependencies": { "@ghostery/adblocker-playwright": "2.18.2", "playwright-core": "1.61.1", "tldts": "7.4.9" }, "optionalDependencies": { "patchright-core": "1.61.1", "rookie-cookies": "0.6.0", "ws": "8.21.0" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.30.0", "@modelcontextprotocol/sdk": ">=1.13.0", "electron": ">=43.4.1" }, "optionalPeers": ["@anthropic-ai/sdk", "@modelcontextprotocol/sdk", "electron"], "bin": { "betterwright": "dist/bin/betterwright.js" } }, "sha512-JwIY6i7xjaioxxy8p1gDulDqZjAq6KtiaxaAxNNNmtwZdkKXJ8DgnPPq0xHbI+eavSkCspfGCviGV3vfxyDyGA=="],
 
     "patchright-core": ["patchright-core@1.61.1", "", { "bin": { "patchright-core": "cli.js" } }, "sha512-d6Ju67DE6OzqlEX3WPvUX2SLEs6iMY1WERit//mpsrT98VHcztaUo0CBw2Lpxq25VdufVEiWEdcc0HnLwdiq6A=="],
 
