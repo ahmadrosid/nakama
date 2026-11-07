@@ -107,15 +107,24 @@ function isMutatingMethod(method: string): boolean {
  * NODE_ENV=production alone is not enough — Docker serves HTTP by default and
  * browsers drop Secure cookies on http:// hosts (#112).
  *
- * X-Forwarded-Proto can upgrade http backends behind TLS terminators, but must
- * never downgrade an https request URL (spoofed/forwarded "http").
+ * X-Forwarded-Proto can upgrade http backends behind TLS terminators, but only
+ * when NAKAMA_TRUST_PROXY=true: without a trusted proxy any client can set the
+ * header. It must never downgrade an https request URL (spoofed "http").
  */
-export function isSecureRequest(request: Request): boolean {
-  const forwardedProto = request.headers
-    .get("x-forwarded-proto")
-    ?.split(",")[0]
-    ?.trim()
-    .toLowerCase();
+export function isSecureRequest(
+  request: Request,
+  options: { trustProxy?: boolean } = {}
+): boolean {
+  const trustProxy =
+    options.trustProxy ?? process.env.NAKAMA_TRUST_PROXY === "true";
+
+  const forwardedProto = trustProxy
+    ? request.headers
+        .get("x-forwarded-proto")
+        ?.split(",")[0]
+        ?.trim()
+        .toLowerCase()
+    : undefined;
 
   let urlIsHttps = false;
 
