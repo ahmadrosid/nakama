@@ -5,6 +5,7 @@ import {
   formatMemoryArchiveYearMonth,
   getMemoryArchiveDir,
 } from "./memory-paths";
+import { trimTrailingNewlines } from "./org-memory";
 import { getProfileSoulDir } from "./resolve";
 
 export const MEMORY_ARCHIVE_TEMPLATE = `# Archived Memory
@@ -76,17 +77,6 @@ export function parseMemoryContent(content: string): ParsedMemory {
  */
 export function toHtmlCommentText(text: string): string {
   return text.trim().replace(/--(!?)>/g, "--$1&gt;");
-}
-
-/** Drop trailing newlines with a scan; `/\n+$/` is quadratic on long newline runs. */
-export function trimTrailingNewlines(text: string): string {
-  let end = text.length;
-
-  while (end > 0 && text[end - 1] === "\n") {
-    end--;
-  }
-
-  return text.slice(0, end);
 }
 
 export function rebuildMemoryContent(parsed: ParsedMemory): string {
