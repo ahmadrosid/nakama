@@ -117,10 +117,12 @@ export interface RehydrateOptions {
   documentsAsReference?: boolean;
 }
 
+const REOPEN_DOCUMENT_TOOL = "extract_document_text";
+
 export function documentReferenceText(
   part: Extract<MessageContentPart, { type: "document_ref" }>
 ): string {
-  return `[File: ${part.filename ?? "document"} was attached earlier in this conversation and is still stored. Its contents are not repeated here. Call extract_document_text with documentRef "${part.attachmentId}" to read it again.]`;
+  return `[File: ${part.filename ?? "document"} was attached earlier in this conversation and is still stored. Its contents are not repeated here. Call ${REOPEN_DOCUMENT_TOOL} with documentRef "${part.attachmentId}" to read it again.]`;
 }
 
 export async function rehydrateAttachmentRefsInContent(
@@ -185,17 +187,35 @@ export async function rehydrateAttachmentRefsInContent(
   return result;
 }
 
+export interface RehydrateMessagesOptions {
+  /**
+   * Tools offered on this provider call. A reference tells the model to call
+   * extract_document_text, so without that tool documents are sent in full.
+   */
+  toolNames?: readonly string[];
+  /**
+   * Index of the user message that started this turn. User messages after it
+   * carry tool images, not a new turn. Defaults to the last user message.
+   */
+  turnStartIndex?: number;
+}
+
 export async function rehydrateMessagesForProvider(
   messages: readonly ChatMessage[],
-  load: LoadAttachmentBytes
+  load: LoadAttachmentBytes,
+  options: RehydrateMessagesOptions = {}
 ): Promise<ChatMessage[]> {
-  // Only the newest user message still needs its documents in full. Anything
+  // Only the turn being answered still needs its documents in full. Anything
   // earlier has already been answered, so repeating it bills the same tokens
   // once per provider call for the rest of the session (nakama#1454).
-  const lastUserIndex = messages.reduce(
-    (last, message, index) => (message.role === "user" ? index : last),
-    -1
-  );
+  const turnStartIndex =
+    options.turnStartIndex ??
+    messages.reduce(
+      (last, message, index) => (message.role === "user" ? index : last),
+      -1
+    );
+
+  const canReopen = options.toolNames?.includes(REOPEN_DOCUMENT_TOOL) ?? false;
 
   const result: ChatMessage[] = [];
 
@@ -208,7 +228,7 @@ export async function rehydrateMessagesForProvider(
     result.push({
       ...message,
       content: await rehydrateAttachmentRefsInContent(message.content, load, {
-        documentsAsReference: index !== lastUserIndex,
+        documentsAsReference: canReopen && index < turnStartIndex,
       }),
     });
   }

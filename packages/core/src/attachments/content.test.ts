@@ -166,7 +166,8 @@ describe("attachment content helpers", () => {
         { content: "here is the summary", role: "assistant" },
         { content: "now add a section", role: "user" },
       ],
-      load
+      load,
+      { toolNames: ["extract_document_text"] }
     );
 
     // SAFETY: This fixture starts with a user message containing typed content parts.

@@ -11,6 +11,7 @@ import type {
   MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
+  RehydrateMessagesOptions,
   SendMessageInput,
   ToolCall,
   ToolContext,
@@ -216,7 +217,8 @@ export interface AgentChatSessionOptions {
     content: string | MessageContentPart[]
   ) => Promise<string | MessageContentPart[]>;
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[]
+    messages: readonly ChatMessage[],
+    options: RehydrateMessagesOptions
   ) => Promise<ChatMessage[]>;
   resolvePromptContext?: (
     context?: ResolvePromptContextInput
@@ -580,7 +582,8 @@ async function sendMessage(
       content: string | MessageContentPart[]
     ) => Promise<string | MessageContentPart[]>;
     rehydrateMessagesForProvider?: (
-      messages: readonly ChatMessage[]
+      messages: readonly ChatMessage[],
+      options: RehydrateMessagesOptions
     ) => Promise<ChatMessage[]>;
     signal?: AbortSignal;
     whatsappMessage?: ToolContext["whatsappMessage"];
@@ -782,7 +785,8 @@ async function runConversation(
   handlers?: StreamHandlers,
   toolContext?: ToolContext,
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[]
+    messages: readonly ChatMessage[],
+    options: RehydrateMessagesOptions
   ) => Promise<ChatMessage[]>,
   onContextUsage?: (
     usedTokens: number,
@@ -1313,7 +1317,8 @@ async function generateReply(
   mode: "send" | "stream",
   handlers?: StreamHandlers,
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[]
+    messages: readonly ChatMessage[],
+    options: RehydrateMessagesOptions
   ) => Promise<ChatMessage[]>,
   signal?: AbortSignal,
   toolGroupId?: string
@@ -1328,8 +1333,13 @@ async function generateReply(
   );
 
   let attachments: MessageContentPart[] = [];
+  let turnStartIndex: number | undefined;
 
   for (const [index, message] of history.entries()) {
+    if (index === lastUserIndex) {
+      turnStartIndex = expanded.length;
+    }
+
     if (message.role === "tool" && message.attachments?.length) {
       const { attachments: parts, ...toolMessage } = message;
       expanded.push(toolMessage);
@@ -1358,7 +1368,10 @@ async function generateReply(
   const messages =
     rehydrateMessagesForProvider === undefined
       ? expanded
-      : await rehydrateMessagesForProvider(expanded);
+      : await rehydrateMessagesForProvider(expanded, {
+          toolNames: tools?.map((tool) => tool.name) ?? [],
+          turnStartIndex,
+        });
 
   const input = {
     messages,
