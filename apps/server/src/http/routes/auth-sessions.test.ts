@@ -319,4 +319,18 @@ describe("browser session governance", () => {
     const stillLive = await listSessions(app, owner);
     expect(stillLive.sessions.length).toBeGreaterThan(0);
   });
+
+  test("password reset request refuses a non-JSON body", async () => {
+    const { app } = await createApp();
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: '{"email":"victim@example.com"}',
+        headers: { "Content-Type": "text/plain" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+  });
 });
