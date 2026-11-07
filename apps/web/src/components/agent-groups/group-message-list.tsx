@@ -189,7 +189,13 @@ function TypingRow({
   return (
     <div className="mt-3 flex items-end gap-2">
       {speaker ? (
-        <ProfileAvatar className="outline-none" profile={speaker} size="sm" />
+        <ProfileAvatar
+          active
+          activity={stopping ? "idle" : "responding"}
+          className="outline-none"
+          profile={speaker}
+          size="sm"
+        />
       ) : (
         <span className="size-7 shrink-0" />
       )}

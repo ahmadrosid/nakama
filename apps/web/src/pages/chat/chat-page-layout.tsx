@@ -18,6 +18,8 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
+import type { AgentActivity } from "@/components/moodstone";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   RecentChatsDialogs,
   type SessionTarget,
@@ -406,12 +408,16 @@ export function ChatWelcome({
  */
 export function ChatSessionBar({
   actions,
+  activity,
   cognito,
+  profile,
   profileId,
   sessionId,
 }: {
   actions?: ReactNode;
+  activity?: AgentActivity;
   cognito: boolean;
+  profile?: ProfileSummary;
   profileId: string;
   sessionId: string;
 }) {
@@ -426,7 +432,16 @@ export function ChatSessionBar({
 
   return (
     <div className="-mx-6 flex h-12 shrink-0 items-center gap-2 border-border border-b px-4 max-sm:hidden">
-      <div className="flex h-7 min-w-0 flex-1 items-center">
+      <div className="flex h-7 min-w-0 flex-1 items-center gap-2">
+        {profile ? (
+          <ProfileAvatar
+            active
+            activity={activity}
+            className="outline-none"
+            profile={profile}
+            size="sm"
+          />
+        ) : null}
         {cognito ? (
           <h1 className="truncate px-2.5 font-medium text-sm">Cognito chat</h1>
         ) : (

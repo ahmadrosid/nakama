@@ -11,7 +11,9 @@
       "!packages/plugins/*/actions",
       "!packages/plugins/*/ui/app.js",
       "!packages/plugins/*/workers",
-      "!tools/oxlint/anti-slop"
+      "!tools/oxlint/anti-slop",
+      "!apps/web/src/components/moodstone/core",
+      "!apps/web/src/components/moodstone/svg.ts"
     ]
   },
   "css": {
