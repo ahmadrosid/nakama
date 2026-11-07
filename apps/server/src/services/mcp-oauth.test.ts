@@ -257,7 +257,9 @@ describe("MCP browser authorization", () => {
           "state"
         )
       );
+
     const before = remote.tokenRequests.length;
+
     const callback = () =>
       service.completeOAuth(created.server.id, {
         callbackBaseUrl: CALLBACK_BASE_URL,
