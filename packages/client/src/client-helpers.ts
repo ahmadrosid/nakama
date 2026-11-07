@@ -154,63 +154,6 @@ function parseXhrHeaders(raw: string): Headers {
   return headers;
 }
 
-export async function readBodyWithProgress(
-  response: Response,
-  onProgress?: TransferProgress
-): Promise<ArrayBuffer> {
-  if (!(onProgress && response.body)) {
-    return response.arrayBuffer();
-  }
-
-  const total = Number(response.headers.get("Content-Length") ?? 0);
-  // With a known size, write into one buffer so the tab holds the archive once.
-  const data = new Uint8Array(total > 0 ? total : 0);
-  const extra: Uint8Array[] = [];
-  let loaded = 0;
-  onProgress(0, total);
-
-  // A reader, not `for await`: Safari cannot iterate a ReadableStream.
-  const reader = response.body.getReader();
-
-  for (;;) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    if (extra.length === 0 && loaded + value.byteLength <= data.byteLength) {
-      data.set(value, loaded);
-    } else {
-      // The size is unknown or the header was wrong: keep the rest as chunks.
-      extra.push(value);
-    }
-
-    loaded += value.byteLength;
-    onProgress(loaded, total);
-  }
-
-  if (extra.length === 0) {
-    return data.byteLength === loaded
-      ? data.buffer
-      : data.slice(0, loaded).buffer;
-  }
-
-  const filled =
-    loaded - extra.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-
-  const joined = new Uint8Array(loaded);
-  joined.set(data.subarray(0, filled), 0);
-  let offset = filled;
-
-  for (const chunk of extra) {
-    joined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return joined.buffer;
-}
-
 export function readContentDispositionFilename(
   headers: Headers
 ): string | null {

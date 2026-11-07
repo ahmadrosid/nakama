@@ -26,6 +26,9 @@ import type { AppEnv } from "./types";
 
 const LEGACY_COOKIE_NAMES = PLAIN_BROWSER_SESSION_COOKIE_NAMES;
 
+/** Large-body routes use this cap; JSON import bodies must not exceed it. */
+export const MAX_HTTP_REQUEST_BODY_LIMIT_BYTES = 140 * 1024 * 1024;
+
 const HOST_BOUND_COOKIE_NAMES = HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES;
 
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -531,12 +534,65 @@ export function readUntilClientGone<T>(
   return Promise.race([read, gone]);
 }
 
+async function readJsonBodyWithLimit<T>(
+  request: Request,
+  maxBytes: number
+): Promise<T> {
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw new NakamaApiError("Request body is too large.", 413);
+  }
+
+  if (!request.body) {
+    return undefined;
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      bytes += value.byteLength;
+
+      if (bytes > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new NakamaApiError("Request body is too large.", 413);
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const text = Buffer.concat(
+    chunks.map((chunk) => Buffer.from(chunk))
+  ).toString("utf8");
+
+  // SAFETY: the caller's schema validates this parsed value before use.
+  return JSON.parse(text) as T;
+}
+
 export async function readJson<T>(
   request: Request,
-  schema?: ZodType<T>
+  schema?: ZodType<T>,
+  maxBytes?: number
 ): Promise<T> {
   try {
-    const body = await readUntilClientGone(request, request.json());
+    const body = maxBytes
+      ? await readUntilClientGone(
+          request,
+          readJsonBodyWithLimit<T>(request, maxBytes)
+        )
+      : await readUntilClientGone(request, request.json());
 
     if (!schema) {
       return body;

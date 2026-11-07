@@ -39,7 +39,6 @@ import type { JsonValue } from "./client-helpers";
 import {
   createUploadFetch,
   encodeArchiveData,
-  readBodyWithProgress,
   readContentDispositionFilename,
 } from "./client-helpers";
 import type { TransferProgress } from "./types";
@@ -130,20 +129,13 @@ export class SystemClient extends NakamaClientCore {
   }
 
   async getBackupStatus(): Promise<BackupStatusResponse> {
-    return this.request<BackupStatusResponse>("/v1/platform/data/backup-status");
+    return this.request<BackupStatusResponse>(
+      "/v1/platform/data/backup-status"
+    );
   }
 
-  async exportData(options: { onProgress?: TransferProgress } = {}): Promise<{
-    filename: string;
-    data: ArrayBuffer;
-  }> {
-    const response = await this.fetchRaw("/v1/platform/data/export");
-
-    return {
-      data: await readBodyWithProgress(response, options.onProgress),
-      filename:
-        readContentDispositionFilename(response.headers) ?? "nakama-export.zip",
-    };
+  exportDataResponse(): Promise<Response> {
+    return this.fetchRaw("/v1/platform/data/export");
   }
 
   async exportUserData(userId: string): Promise<{

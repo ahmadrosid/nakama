@@ -1,5 +1,7 @@
 import { Database } from "bun:sqlite";
-import { constants, type Dirent } from "node:fs";
+import { once } from "node:events";
+import { constants, createWriteStream, type Dirent } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import {
   access,
   chmod,
@@ -8,6 +10,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readdir,
   readFile,
   realpath,
@@ -17,6 +20,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import {
   basename,
   dirname,
@@ -27,6 +31,9 @@ import {
   resolve,
   sep,
 } from "node:path";
+import { type Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { crc32 } from "node:zlib";
 import {
   assertConfigPathSegment,
   type DataExportManifest,
@@ -50,7 +57,8 @@ import {
   type DatabaseAdapter,
   resolveDatabasePath,
 } from "@nakama/db";
-import { unzipSync, zipSync } from "fflate";
+import { Zip, ZipDeflate, ZipPassThrough, zipSync } from "fflate";
+import * as yauzl from "yauzl";
 import { decodeSecretsKey, ManagedSecrets } from "./managed-secrets";
 import {
   PluginExportBarrierError,
@@ -58,7 +66,11 @@ import {
   runWithPluginExportBarrier,
   vacuumPluginDatabaseInto,
 } from "./plugin-service";
-import { decryptBackup, isEncryptedBackup } from "./scheduled-backup";
+import {
+  decryptBackup,
+  decryptBackupFile,
+  isEncryptedBackup,
+} from "./scheduled-backup";
 
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 
@@ -82,6 +94,76 @@ export const MAX_IMPORT_ENTRY_BYTES = 100 * 1024 * 1024;
 
 export const MAX_IMPORT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024;
 
+export interface ImportLimits {
+  archiveBytes: number;
+  entries: number;
+  entryBytes: number;
+  uncompressedBytes: number;
+}
+
+/**
+ * Authenticated admin routes may carry a full install backup. The writer is
+ * ZIP32, so the archive must stay under 4 GiB.
+ */
+export const DATA_IMPORT_LIMITS: ImportLimits = {
+  archiveBytes: 2 * 1024 * 1024 * 1024,
+  entries: MAX_IMPORT_ENTRIES,
+  entryBytes: 1024 * 1024 * 1024,
+  uncompressedBytes: 3 * 1024 * 1024 * 1024,
+};
+
+/** The unauthenticated first-run import keeps the small, pre-admin budget. */
+export const SETUP_IMPORT_LIMITS: ImportLimits = {
+  archiveBytes: MAX_IMPORT_ARCHIVE_BYTES,
+  entries: MAX_IMPORT_ENTRIES,
+  entryBytes: MAX_IMPORT_ENTRY_BYTES,
+  uncompressedBytes: MAX_IMPORT_UNCOMPRESSED_BYTES,
+};
+
+const MAX_DATA_IMPORT_ARCHIVE_BYTES = 3.5 * 1024 * 1024 * 1024;
+
+const MAX_DATA_IMPORT_ENTRY_BYTES = 3.5 * 1024 * 1024 * 1024;
+
+const MAX_DATA_IMPORT_UNCOMPRESSED_BYTES = 4 * 1024 * 1024 * 1024;
+
+function envLimit(name: string, fallback: number, ceiling: number): number {
+  const raw = process.env[name];
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const value = Number(raw);
+
+  if (!(Number.isFinite(value) && value > 0)) {
+    return fallback;
+  }
+
+  return Math.min(Math.floor(value), ceiling);
+}
+
+/** Reads the admin caps at call time so deployments and tests can tune them. */
+export function getDataImportLimits(): ImportLimits {
+  return {
+    archiveBytes: envLimit(
+      "NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES",
+      DATA_IMPORT_LIMITS.archiveBytes,
+      MAX_DATA_IMPORT_ARCHIVE_BYTES
+    ),
+    entries: MAX_IMPORT_ENTRIES,
+    entryBytes: envLimit(
+      "NAKAMA_DATA_IMPORT_MAX_ENTRY_BYTES",
+      DATA_IMPORT_LIMITS.entryBytes,
+      MAX_DATA_IMPORT_ENTRY_BYTES
+    ),
+    uncompressedBytes: envLimit(
+      "NAKAMA_DATA_IMPORT_MAX_UNCOMPRESSED_BYTES",
+      DATA_IMPORT_LIMITS.uncompressedBytes,
+      MAX_DATA_IMPORT_UNCOMPRESSED_BYTES
+    ),
+  };
+}
+
 /** Base64 carries 3 bytes per 4 characters. */
 const MAX_IMPORT_ARCHIVE_BASE64_CHARS =
   Math.ceil(MAX_IMPORT_ARCHIVE_BYTES / 3) * 4;
@@ -89,6 +171,7 @@ const MAX_IMPORT_ARCHIVE_BASE64_CHARS =
 export interface CreateDataExportOptions {
   databasePath?: string | null;
   drainTimeoutMs?: number;
+  limits?: ImportLimits;
   now?: Date;
   rootDir?: string;
 }
@@ -99,12 +182,20 @@ export interface CreateDataExportResult {
   manifest: DataExportManifest;
 }
 
+export interface CreateDataExportFileResult {
+  cleanup: () => Promise<void>;
+  filename: string;
+  manifest: DataExportManifest;
+  path: string;
+}
+
 export interface CreateUserDataExportResult {
   data: Buffer;
   filename: string;
 }
 
 export interface PreviewDataImportOptions {
+  limits?: ImportLimits;
   rootDir?: string;
 }
 
@@ -118,17 +209,12 @@ export interface RestoreDataImportOptions {
   beforeReplace?: () => Promise<void> | void;
   confirm: boolean;
   databasePath?: string | null;
+  limits?: ImportLimits;
   /** Defaults to `PM2_HOME` in the desktop app. A live pm2 home that is a top-level entry stays in place. */
   pm2Home?: string | null;
   rootDir?: string;
   /** Defaults to `NAKAMA_SERVER_LOG` in the desktop app, its log for this process. */
   serverLog?: string | null;
-}
-
-interface ZipEntry {
-  data: Buffer;
-  name: string;
-  uncompressedSize: number;
 }
 
 interface InventoryItem {
@@ -139,6 +225,10 @@ interface InventoryItem {
 const RESTORE_PREFIX = ".nakama-restore-";
 
 const BACKUP_PREFIX = ".nakama-backup-";
+
+const EXPORT_PREFIX = ".nakama-export-";
+
+const UPLOAD_PREFIX = ".nakama-upload-";
 
 const PLUGIN_SNAPSHOT_PREFIX = ".nakama-plugin-snapshot-";
 
@@ -373,11 +463,12 @@ export async function retireAppUserData(
   }
 }
 
-export async function createNakamaDataExport(
+export async function createNakamaDataExportFile(
   options: CreateDataExportOptions = {}
-): Promise<CreateDataExportResult> {
+): Promise<CreateDataExportFileResult> {
   const rootDir = resolveNakamaRootDir(options.rootDir);
   const createdAt = (options.now ?? new Date()).toISOString();
+  const limits = options.limits ?? getDataImportLimits();
 
   const configuredDatabasePath = resolveConfiguredDatabasePath(
     rootDir,
@@ -387,14 +478,19 @@ export async function createNakamaDataExport(
   try {
     return await runWithPluginExportBarrier(
       async () => {
-        const snapshotParent = (await pathExists(rootDir))
-          ? await mkdtemp(join(rootDir, PLUGIN_SNAPSHOT_PREFIX))
-          : "";
+        await mkdir(rootDir, { mode: 0o700, recursive: true });
+        const exportParent = await mkdtemp(join(rootDir, EXPORT_PREFIX));
+        const archivePath = join(exportParent, "export.zip");
 
         try {
-          const snapshots = snapshotParent
-            ? await snapshotOrgPluginDatabases(rootDir, snapshotParent)
-            : new Map<string, string>();
+          const snapshotParent = await mkdtemp(
+            join(exportParent, PLUGIN_SNAPSHOT_PREFIX)
+          );
+
+          const snapshots = await snapshotOrgPluginDatabases(
+            rootDir,
+            snapshotParent
+          );
 
           const outsideDatabases: DataExportSkippedItem[] = [];
 
@@ -410,7 +506,7 @@ export async function createNakamaDataExport(
                 path: databasePath,
                 reason: "Database path is outside the Nakama root.",
               });
-            } else if (snapshotParent && (await pathExists(databasePath))) {
+            } else if (await pathExists(databasePath)) {
               const target = join(snapshotParent, relativeDatabasePath);
               await snapshotDatabaseInto(rootDir, databasePath, target);
               snapshots.set(toZipPath(relativeDatabasePath), target);
@@ -424,121 +520,36 @@ export async function createNakamaDataExport(
 
           skipped.push(...outsideDatabases);
 
-          const entries: Record<string, Uint8Array> = {};
-
-          for (const file of files) {
-            validateArchivePath(file.relativePath);
-            const isConfigFile = CONFIG_FILES.has(file.relativePath);
-            let data: Buffer;
-
-            try {
-              data = await readFile(file.absolutePath);
-            } catch (error) {
-              rethrowIfUnreadable(file.relativePath, error);
-
-              // Config files are required for a restore, so their loss fails the export.
-              if (isConfigFile || !isMissingPathError(error)) {
-                throw error;
-              }
-
-              skipped.push({
-                path: file.relativePath,
-                reason: DELETED_DURING_EXPORT,
-              });
-              continue;
-            }
-
-            if (
-              isConfigFile &&
-              /(?:^|\n)\s*(?:api_key|password)\s*=/m.test(data.toString("utf8"))
-            ) {
-              throw new NakamaApiError(
-                "Legacy plaintext secrets must migrate before export.",
-                409
-              );
-            }
-
-            entries[file.relativePath] = data;
-          }
-
-          for (const [relativePath, absolutePath] of snapshots) {
-            validateArchivePath(relativePath);
-            entries[relativePath] = await readFile(absolutePath);
-          }
-
-          const exportedPaths = Object.keys(entries);
-
-          const topLevelPaths = Array.from(
-            new Set(
-              exportedPaths.map((path) => path.split("/")[0]).filter(Boolean)
-            )
-          ).sort();
-
-          const totalBytes = Object.values(entries).reduce(
-            (sum, data) => sum + data.byteLength,
-            0
-          );
-
-          const manifest: DataExportManifest = {
-            apiVersion: NAKAMA_API_VERSION,
+          const manifest = await writeExportArchive({
+            archivePath,
             createdAt,
-            fileCount: exportedPaths.length,
-            kind: "nakama-export",
+            files,
+            limits,
+            rootDir,
             skipped,
-            sourceRootName: basename(rootDir) || ".nakama",
-            topLevelPaths,
-            totalBytes,
-            version: NAKAMA_EXPORT_FORMAT_VERSION,
+            snapshots,
+          });
+
+          let cleaned = false;
+
+          const cleanup = async () => {
+            if (cleaned) {
+              return;
+            }
+
+            cleaned = true;
+            await rm(exportParent, { force: true, recursive: true });
           };
-
-          entries[NAKAMA_EXPORT_MANIFEST] = Buffer.from(
-            JSON.stringify(manifest, null, 2),
-            "utf8"
-          );
-
-          let entryCount = 0;
-          let uncompressedTotal = 0;
-
-          try {
-            for (const [name, entry] of Object.entries(entries)) {
-              entryCount += 1;
-              uncompressedTotal += entry.byteLength;
-              validateArchiveEntryLimits(
-                name,
-                entry.byteLength,
-                entryCount,
-                uncompressedTotal
-              );
-            }
-          } catch (error) {
-            if (error instanceof NakamaApiError) {
-              throw new NakamaApiError(
-                `Cannot export a restorable backup: ${error.message} Use a filesystem or volume backup instead.`,
-                413
-              );
-            }
-
-            throw error;
-          }
-
-          const archive = zipSync(entries);
-
-          if (archive.byteLength > MAX_IMPORT_ARCHIVE_BYTES) {
-            throw new NakamaApiError(
-              `Cannot export a restorable backup: ZIP exceeds the ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)} import limit. Use a filesystem or volume backup instead.`,
-              413
-            );
-          }
 
           return {
-            data: Buffer.from(archive),
+            cleanup,
             filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
             manifest,
+            path: archivePath,
           };
-        } finally {
-          if (snapshotParent) {
-            await rm(snapshotParent, { force: true, recursive: true });
-          }
+        } catch (error) {
+          await rm(exportParent, { force: true, recursive: true });
+          throw error;
         }
       },
       { drainTimeoutMs: options.drainTimeoutMs }
@@ -550,6 +561,330 @@ export async function createNakamaDataExport(
 
     throw error;
   }
+}
+
+/**
+ * In-memory form, for tests and small callers. Routes and scheduled backups
+ * must use `createNakamaDataExportFile` so a large install never sits in RAM.
+ */
+export async function createNakamaDataExport(
+  options: CreateDataExportOptions = {}
+): Promise<CreateDataExportResult> {
+  const file = await createNakamaDataExportFile(options);
+
+  try {
+    return {
+      data: await readFile(file.path),
+      filename: file.filename,
+      manifest: file.manifest,
+    };
+  } finally {
+    await file.cleanup();
+  }
+}
+
+async function writeExportArchive(options: {
+  archivePath: string;
+  createdAt: string;
+  files: InventoryItem[];
+  limits: ImportLimits;
+  rootDir: string;
+  skipped: DataExportSkippedItem[];
+  snapshots: ReadonlyMap<string, string>;
+}): Promise<DataExportManifest> {
+  let entryCount = 0;
+  let uncompressedTotal = 0;
+  let archiveBytes = 0;
+  let zipError: Error | null = null;
+  const writtenPaths: string[] = [];
+
+  const out = createWriteStream(options.archivePath, {
+    highWaterMark: 1024 * 1024,
+  });
+
+  // A cap error destroys the stream; later fflate chunks must become no-ops.
+  out.on("error", (error) => {
+    zipError = zipError ?? error;
+  });
+
+  const zip = new Zip((error, chunk) => {
+    if (error) {
+      zipError = new Error(error.message);
+
+      return;
+    }
+
+    if (
+      !chunk ||
+      chunk.byteLength === 0 ||
+      zipError ||
+      out.destroyed ||
+      out.writableEnded
+    ) {
+      return;
+    }
+
+    archiveBytes += chunk.byteLength;
+
+    if (archiveBytes > options.limits.archiveBytes) {
+      zipError = new NakamaApiError(
+        `Cannot export a restorable backup: ZIP exceeds the ${megabytes(options.limits.archiveBytes)} import limit. Use a filesystem or volume backup instead.`,
+        413
+      );
+
+      return;
+    }
+
+    out.write(chunk);
+  });
+
+  const addEntry = async (
+    name: string,
+    write: (entry: ZipDeflate | ZipPassThrough) => Promise<void>,
+    compress: boolean
+  ): Promise<void> => {
+    validateArchivePath(name);
+    entryCount += 1;
+
+    if (entryCount > options.limits.entries) {
+      throw new NakamaApiError(
+        `Cannot export a restorable backup: Archive exceeds the ${options.limits.entries} entry limit. Use a filesystem or volume backup instead.`,
+        413
+      );
+    }
+
+    const entry = compress
+      ? new ZipDeflate(name, { level: 6 })
+      : new ZipPassThrough(name);
+
+    zip.add(entry);
+
+    try {
+      await write(entry);
+    } catch (error) {
+      zipError =
+        zipError ?? (error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+
+    if (zipError) {
+      throw zipError;
+    }
+
+    if (out.writableNeedDrain) {
+      await once(out, "drain");
+    }
+
+    writtenPaths.push(name);
+  };
+
+  const addBufferEntry = async (
+    name: string,
+    data: Uint8Array,
+    compress: boolean
+  ): Promise<void> => {
+    if (data.byteLength > options.limits.entryBytes) {
+      throw new NakamaApiError(
+        `Cannot export a restorable backup: Archive entry ${name} exceeds the ${megabytes(options.limits.entryBytes)} limit. Use a filesystem or volume backup instead.`,
+        413
+      );
+    }
+
+    if (
+      uncompressedTotal + data.byteLength >
+      options.limits.uncompressedBytes
+    ) {
+      throw new NakamaApiError(
+        `Cannot export a restorable backup: Archive exceeds the ${megabytes(options.limits.uncompressedBytes)} uncompressed limit. Use a filesystem or volume backup instead.`,
+        413
+      );
+    }
+
+    await addEntry(
+      name,
+      async (entry) => {
+        entry.push(data, false);
+        entry.push(new Uint8Array(0), true);
+      },
+      compress
+    );
+
+    uncompressedTotal += data.byteLength;
+  };
+
+  const addFileEntry = async (
+    name: string,
+    absolutePath: string,
+    compress: boolean
+  ): Promise<void> => {
+    let handle: FileHandle;
+
+    try {
+      handle = await open(absolutePath, "r");
+    } catch (error) {
+      rethrowIfUnreadable(name, error);
+
+      if (!isMissingPathError(error)) {
+        throw error;
+      }
+
+      options.skipped.push({
+        path: name,
+        reason: DELETED_DURING_EXPORT,
+      });
+
+      return;
+    }
+
+    try {
+      await addEntry(
+        name,
+        async (entry) => {
+          let fileBytes = 0;
+
+          const input = handle.createReadStream({
+            highWaterMark: 64 * 1024,
+          });
+
+          for await (const chunk of input) {
+            fileBytes += chunk.byteLength;
+
+            if (fileBytes > options.limits.entryBytes) {
+              throw new NakamaApiError(
+                `Cannot export a restorable backup: Archive entry ${name} exceeds the ${megabytes(options.limits.entryBytes)} limit. Use a filesystem or volume backup instead.`,
+                413
+              );
+            }
+
+            if (
+              uncompressedTotal + fileBytes >
+              options.limits.uncompressedBytes
+            ) {
+              throw new NakamaApiError(
+                `Cannot export a restorable backup: Archive exceeds the ${megabytes(options.limits.uncompressedBytes)} uncompressed limit. Use a filesystem or volume backup instead.`,
+                413
+              );
+            }
+
+            entry.push(chunk, false);
+
+            if (zipError) {
+              throw zipError;
+            }
+
+            if (out.writableNeedDrain) {
+              await once(out, "drain");
+            }
+          }
+
+          entry.push(new Uint8Array(0), true);
+
+          if (zipError) {
+            throw zipError;
+          }
+
+          uncompressedTotal += fileBytes;
+        },
+        compress
+      );
+    } finally {
+      await handle.close();
+    }
+  };
+
+  try {
+    for (const file of options.files) {
+      if (CONFIG_FILES.has(file.relativePath)) {
+        let data: Buffer;
+
+        try {
+          data = await readFile(file.absolutePath);
+        } catch (error) {
+          rethrowIfUnreadable(file.relativePath, error);
+          throw error;
+        }
+
+        if (
+          /(?:^|\n)\s*(?:api_key|password)\s*=/m.test(data.toString("utf8"))
+        ) {
+          throw new NakamaApiError(
+            "Legacy plaintext secrets must migrate before export.",
+            409
+          );
+        }
+
+        await addBufferEntry(file.relativePath, data, true);
+        continue;
+      }
+
+      await addFileEntry(
+        file.relativePath,
+        file.absolutePath,
+        isCompressibleFile(file.relativePath)
+      );
+    }
+
+    for (const [relativePath, absolutePath] of options.snapshots) {
+      await addFileEntry(
+        relativePath,
+        absolutePath,
+        isCompressibleFile(relativePath)
+      );
+    }
+
+    const topLevelPathSet = new Set<string>();
+
+    for (const path of writtenPaths) {
+      const first = path.split("/")[0];
+
+      if (first) {
+        topLevelPathSet.add(first);
+      }
+    }
+
+    const topLevelPaths = [...topLevelPathSet].sort();
+
+    const manifest: DataExportManifest = {
+      apiVersion: NAKAMA_API_VERSION,
+      createdAt: options.createdAt,
+      fileCount: writtenPaths.length,
+      kind: "nakama-export",
+      skipped: options.skipped,
+      sourceRootName: basename(options.rootDir) || ".nakama",
+      topLevelPaths,
+      totalBytes: uncompressedTotal,
+      version: NAKAMA_EXPORT_FORMAT_VERSION,
+    };
+
+    await addBufferEntry(
+      NAKAMA_EXPORT_MANIFEST,
+      Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
+      true
+    );
+
+    zip.end();
+
+    const closed = Promise.withResolvers<void>();
+    out.once("error", closed.reject);
+    out.end(() => closed.resolve());
+    await closed.promise;
+
+    if (zipError) {
+      throw zipError;
+    }
+
+    return manifest;
+  } catch (error) {
+    out.destroy();
+    throw error;
+  }
+}
+
+const COMPRESSIBLE_FILE =
+  /\.(?:csv|html|ini|js|json|jsonl|log|md|ts|txt|xml|yaml|yml)$/i;
+
+function isCompressibleFile(name: string): boolean {
+  return COMPRESSIBLE_FILE.test(name);
 }
 
 export async function createNakamaUserDataExport(
@@ -927,34 +1262,161 @@ async function addDirectoryFiles(
   }
 }
 
+interface ArchiveValidation {
+  archiveFileCount: number;
+  archiveTotalBytes: number;
+  manifest: DataExportManifest;
+  topLevelPaths: string[];
+}
+
+async function validateArchiveFile(
+  archivePath: string,
+  limits: ImportLimits
+): Promise<ArchiveValidation> {
+  const zipfile = await openZipFile(archivePath);
+
+  try {
+    return await validateArchiveEntries(zipfile, limits);
+  } finally {
+    zipfile.close();
+  }
+}
+
+/** Reads the whole central directory and rejects before the restore writes a byte. */
+async function validateArchiveEntries(
+  zipfile: yauzl.ZipFile,
+  limits: ImportLimits
+): Promise<ArchiveValidation> {
+  let entryCount = 0;
+  let uncompressedTotal = 0;
+  let archiveFileCount = 0;
+  let archiveTotalBytes = 0;
+  let manifest: DataExportManifest | null = null;
+  const names = new Set<string>();
+  const topLevelPaths = new Set<string>();
+
+  const done = Promise.withResolvers<void>();
+  zipfile.on("error", done.reject);
+  zipfile.on("end", () => done.resolve());
+  zipfile.on("entry", (entry: ZipEntryInfo) => {
+    try {
+      entryCount += 1;
+      uncompressedTotal += entry.uncompressedSize;
+      validateArchivePath(entry.fileName);
+      validateArchiveEntryLimits(
+        entry.fileName,
+        entry.uncompressedSize,
+        entryCount,
+        uncompressedTotal,
+        limits
+      );
+
+      // biome-ignore lint/suspicious/noBitwiseOperators: ZIP stores the Unix file mode in the upper 16 bits.
+      const mode = (entry.externalFileAttributes >>> 16) & 0xff_ff;
+
+      // biome-ignore lint/suspicious/noBitwiseOperators: S_IFMT and S_IFLNK are bit masks.
+      if ((mode & 0o17_0000) === 0o12_0000) {
+        throw new NakamaApiError(
+          `Archive entry is a symlink: ${entry.fileName}`,
+          400
+        );
+      }
+
+      if (entry.compressionMethod !== 0 && entry.compressionMethod !== 8) {
+        throw new NakamaApiError(
+          `Archive entry uses an unsupported compression method: ${entry.fileName}`,
+          400
+        );
+      }
+
+      const key =
+        process.platform === "linux"
+          ? entry.fileName
+          : entry.fileName.toLowerCase();
+
+      if (names.has(key)) {
+        throw new NakamaApiError(
+          `Archive has duplicate entry: ${entry.fileName}`,
+          400
+        );
+      }
+
+      names.add(key);
+
+      if (entry.fileName === NAKAMA_EXPORT_MANIFEST) {
+        void readZipEntryBuffer(zipfile, entry, MAX_MANIFEST_BYTES)
+          .then((data) => {
+            manifest = parseManifestBuffer(data);
+            zipfile.readEntry();
+          })
+          .catch((error: Error) => {
+            zipfile.close();
+            done.reject(error);
+          });
+
+        return;
+      }
+
+      if (!entry.fileName.endsWith("/")) {
+        archiveFileCount += 1;
+        archiveTotalBytes += entry.uncompressedSize;
+        const first = entry.fileName.split("/")[0];
+
+        if (first) {
+          topLevelPaths.add(first);
+        }
+      }
+
+      zipfile.readEntry();
+    } catch (error) {
+      zipfile.close();
+      done.reject(error);
+    }
+  });
+
+  zipfile.readEntry();
+  await done.promise;
+
+  if (!manifest) {
+    throw new NakamaApiError("Archive is missing Nakama export manifest.", 400);
+  }
+
+  return {
+    archiveFileCount,
+    archiveTotalBytes,
+    manifest,
+    topLevelPaths: [...topLevelPaths].sort(),
+  };
+}
+
+export async function previewNakamaDataImportFile(
+  archivePath: string,
+  options: PreviewDataImportOptions = {}
+): Promise<DataImportPreviewResponse> {
+  const rootDir = resolveNakamaRootDir(options.rootDir);
+  const limits = options.limits ?? getDataImportLimits();
+  const validation = await validateArchiveFile(archivePath, limits);
+
+  return {
+    archiveFileCount: validation.archiveFileCount,
+    archiveTotalBytes: validation.archiveTotalBytes,
+    manifest: validation.manifest,
+    topLevelPaths: validation.topLevelPaths,
+    willReplaceRoot: await pathExists(rootDir),
+  };
+}
+
 export async function previewNakamaDataImport(
   archive: Buffer | Uint8Array | ArrayBuffer,
   options: PreviewDataImportOptions = {}
 ): Promise<DataImportPreviewResponse> {
-  const rootDir = resolveNakamaRootDir(options.rootDir);
-  const entries = readZip(toBuffer(archive));
-  const manifest = readManifest(entries);
+  const temp = await writeTempImportArchive(toBuffer(archive));
 
-  const restorableEntries = entries.filter(
-    (entry) => entry.name !== NAKAMA_EXPORT_MANIFEST
-  );
-
-  return {
-    archiveFileCount: restorableEntries.length,
-    archiveTotalBytes: restorableEntries.reduce(
-      (sum, entry) => sum + entry.uncompressedSize,
-      0
-    ),
-    manifest,
-    topLevelPaths: Array.from(
-      new Set(
-        restorableEntries
-          .map((entry) => entry.name.split("/")[0])
-          .filter(Boolean)
-      )
-    ).sort(),
-    willReplaceRoot: await pathExists(rootDir),
-  };
+  try {
+    return await previewNakamaDataImportFile(temp.path, options);
+  } finally {
+    await temp.cleanup();
+  }
 }
 
 // A caller with its own advice for an archive over the cap passes it as tooLargeMessage.
@@ -1018,8 +1480,180 @@ function megabytes(bytes: number): string {
   return `${bytes / (1024 * 1024)} MB`;
 }
 
+const MAX_MANIFEST_BYTES = 1024 * 1024;
+
+export async function spoolImportArchive(
+  body: ReadableStream<Uint8Array>,
+  options: {
+    limits: ImportLimits;
+    rootDir?: string;
+    signal?: AbortSignal;
+    tooLargeMessage?: string;
+  }
+): Promise<{ cleanup: () => Promise<void>; path: string }> {
+  const rootDir = resolveNakamaRootDir(options.rootDir);
+  await mkdir(rootDir, { mode: 0o700, recursive: true });
+  const dir = await mkdtemp(join(rootDir, UPLOAD_PREFIX));
+  const path = join(dir, "archive.zip");
+  const writer = Bun.file(path).writer();
+  let bytes = 0;
+
+  try {
+    await body.pipeTo(
+      new WritableStream<Uint8Array>({
+        async write(chunk) {
+          bytes += chunk.byteLength;
+
+          if (bytes > options.limits.archiveBytes) {
+            throw new NakamaApiError(
+              options.tooLargeMessage ??
+                `Import archive must be at most ${megabytes(options.limits.archiveBytes)}.`,
+              413
+            );
+          }
+
+          await writer.write(chunk);
+        },
+      }),
+      { signal: options.signal }
+    );
+    await writer.end();
+  } catch (error) {
+    try {
+      await writer.end();
+    } catch {
+      // The original failure is the one that matters.
+    }
+
+    await rm(dir, { force: true, recursive: true });
+    throw error;
+  }
+
+  let cleaned = false;
+
+  return {
+    cleanup: async () => {
+      if (cleaned) {
+        return;
+      }
+
+      cleaned = true;
+      await rm(dir, { force: true, recursive: true });
+    },
+    path,
+  };
+}
+
+/** Removes leftovers from a crash or container restart. Runs before serving. */
+export async function cleanupDataPortabilityTempDirs(
+  rootDir?: string
+): Promise<void> {
+  const root = resolveNakamaRootDir(rootDir);
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+
+  const prefixes = [
+    RESTORE_PREFIX,
+    BACKUP_PREFIX,
+    EXPORT_PREFIX,
+    UPLOAD_PREFIX,
+  ];
+
+  for (const entry of entries) {
+    if (
+      entry.isDirectory() &&
+      prefixes.some((prefix) => entry.name.startsWith(prefix))
+    ) {
+      await rm(join(root, entry.name), { force: true, recursive: true });
+    }
+  }
+}
+
+/** Opens an uploaded archive, decrypting a scheduled backup into a sibling file. */
+export async function openImportArchive(
+  archivePath: string
+): Promise<{ cleanup: () => Promise<void>; path: string }> {
+  const handle = await open(archivePath, "r");
+  const header = Buffer.alloc(28);
+
+  try {
+    await handle.read(header, 0, header.byteLength, 0);
+  } finally {
+    await handle.close();
+  }
+
+  if (!isEncryptedBackup(header)) {
+    return { cleanup: async () => undefined, path: archivePath };
+  }
+
+  const dir = await mkdtemp(join(dirname(archivePath), UPLOAD_PREFIX));
+  const path = join(dir, "archive.zip");
+
+  try {
+    await decryptBackupFile(
+      archivePath,
+      path,
+      decodeSecretsKey(process.env.NAKAMA_SECRETS_KEY ?? "")
+    );
+  } catch {
+    await rm(dir, { force: true, recursive: true });
+    throw new NakamaApiError(
+      "Cannot decrypt this backup with NAKAMA_SECRETS_KEY.",
+      400
+    );
+  }
+
+  let cleaned = false;
+
+  return {
+    cleanup: async () => {
+      if (cleaned) {
+        return;
+      }
+
+      cleaned = true;
+      await rm(dir, { force: true, recursive: true });
+    },
+    path,
+  };
+}
+
+export async function writeTempImportArchive(
+  data: Buffer
+): Promise<{ cleanup: () => Promise<void>; path: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "nakama-import-"));
+  const path = join(dir, "archive.zip");
+  await writeFile(path, data, { mode: 0o600 });
+
+  let cleaned = false;
+
+  return {
+    cleanup: async () => {
+      if (cleaned) {
+        return;
+      }
+
+      cleaned = true;
+      await rm(dir, { force: true, recursive: true });
+    },
+    path,
+  };
+}
+
 export async function restoreNakamaDataImport(
   archive: Buffer | Uint8Array | ArrayBuffer,
+  options: RestoreDataImportOptions
+): Promise<RestoreDataImportResponse> {
+  const temp = await writeTempImportArchive(toBuffer(archive));
+
+  try {
+    return await restoreNakamaDataImportFile(temp.path, options);
+  } finally {
+    await temp.cleanup();
+  }
+}
+
+export async function restoreNakamaDataImportFile(
+  archivePath: string,
   options: RestoreDataImportOptions
 ): Promise<RestoreDataImportResponse> {
   if (!options.confirm) {
@@ -1027,8 +1661,9 @@ export async function restoreNakamaDataImport(
   }
 
   const rootDir = resolveNakamaRootDir(options.rootDir);
-  const entries = readZip(toBuffer(archive));
-  const manifest = readManifest(entries);
+  const limits = options.limits ?? getDataImportLimits();
+  const validation = await validateArchiveFile(archivePath, limits);
+  const zipfile = await openZipFile(archivePath);
 
   const liveDatabasePath = pathInsideRoot(
     rootDir,
@@ -1071,16 +1706,9 @@ export async function restoreNakamaDataImport(
 
   try {
     await mkdir(stagedRoot, { mode: 0o700, recursive: true });
-    let restoredFileCount = 0;
-
-    for (const entry of entries) {
-      if (entry.name === NAKAMA_EXPORT_MANIFEST) {
-        continue;
-      }
-
-      await writeRestoredEntry(stagedRoot, entry);
-      restoredFileCount += 1;
-    }
+    const extracted = await extractArchiveEntries(zipfile, stagedRoot);
+    const manifest = validation.manifest;
+    const restoredFileCount = extracted.restoredFileCount;
 
     await moveArchiveDatabaseToLiveLayout(
       stagedRoot,
@@ -1374,6 +2002,12 @@ export async function restoreNakamaDataImport(
 
     throw error;
   } finally {
+    try {
+      zipfile.close();
+    } catch {
+      // Already closed by autoClose.
+    }
+
     await rm(stagingParent, { force: true, recursive: true });
   }
 }
@@ -1424,7 +2058,15 @@ async function inventoryConfigRoot(
       const skipReason = skipRelativePathReason(relativePath, snapshots);
 
       if (skipReason) {
-        if (!firstSegment(relativePath).startsWith(PLUGIN_SNAPSHOT_PREFIX)) {
+        const first = firstSegment(relativePath);
+
+        if (
+          !(
+            first.startsWith(PLUGIN_SNAPSHOT_PREFIX) ||
+            first.startsWith(EXPORT_PREFIX) ||
+            first.startsWith(UPLOAD_PREFIX)
+          )
+        ) {
           skipped.push({
             path: relativePath,
             reason: skipReason,
@@ -1452,108 +2094,191 @@ async function inventoryConfigRoot(
   }
 }
 
-async function writeRestoredEntry(
-  rootDir: string,
-  entry: ZipEntry
+interface ExtractedArchive {
+  restoredFileCount: number;
+}
+
+/** Extracts the already-validated entries. The first pass rejected any unsafe entry. */
+async function extractArchiveEntries(
+  zipfile: yauzl.ZipFile,
+  stagedRoot: string
+): Promise<ExtractedArchive> {
+  let restoredFileCount = 0;
+
+  const done = Promise.withResolvers<void>();
+  zipfile.on("error", done.reject);
+  zipfile.on("end", () => done.resolve());
+  zipfile.on("entry", (entry: ZipEntryInfo) => {
+    void (async () => {
+      if (entry.fileName.endsWith("/")) {
+        await mkdir(
+          resolveRestoredTarget(stagedRoot, entry.fileName.replace(/\/$/, "")),
+          { mode: 0o700, recursive: true }
+        );
+        zipfile.readEntry();
+
+        return;
+      }
+
+      if (entry.fileName === NAKAMA_EXPORT_MANIFEST) {
+        zipfile.readEntry();
+
+        return;
+      }
+
+      await extractZipEntry(zipfile, entry, stagedRoot);
+      restoredFileCount += 1;
+      zipfile.readEntry();
+    })().catch((error: Error) => {
+      zipfile.close();
+      done.reject(error);
+    });
+  });
+
+  zipfile.readEntry();
+  await done.promise;
+
+  return { restoredFileCount };
+}
+
+async function extractZipEntry(
+  zipfile: yauzl.ZipFile,
+  entry: ZipEntryInfo,
+  stagedRoot: string
 ): Promise<void> {
-  validateArchivePath(entry.name);
-  const targetPath = resolve(rootDir, entry.name);
-  const relativeTarget = relative(rootDir, targetPath);
+  const target = resolveRestoredTarget(stagedRoot, entry.fileName);
+  await mkdir(dirname(target), { mode: 0o700, recursive: true });
 
-  if (relativeTarget.startsWith("..") || isAbsolute(relativeTarget)) {
+  let crc = 0;
+  let bytes = 0;
+
+  const verify = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      bytes += chunk.byteLength;
+
+      if (bytes > entry.uncompressedSize) {
+        callback(
+          new NakamaApiError(
+            `Archive entry ${entry.fileName} has the wrong size.`,
+            400
+          )
+        );
+
+        return;
+      }
+
+      crc = crc32(chunk, crc);
+      callback(null, chunk);
+    },
+  });
+
+  const readStream = await openZipReadStream(zipfile, entry);
+  await pipeline(
+    readStream,
+    verify,
+    createWriteStream(target, { mode: 0o600 })
+  );
+
+  if (bytes !== entry.uncompressedSize) {
     throw new NakamaApiError(
-      `Archive entry escapes restore root: ${entry.name}`,
+      `Archive entry ${entry.fileName} has the wrong size.`,
       400
     );
   }
 
-  await mkdir(dirname(targetPath), { mode: 0o700, recursive: true });
-  await writeFile(targetPath, entry.data, { mode: 0o600 });
+  // biome-ignore lint/suspicious/noBitwiseOperators: CRC-32 is an unsigned 32-bit value.
+  if (crc >>> 0 !== entry.crc32 >>> 0) {
+    throw new NakamaApiError(
+      `Archive entry ${entry.fileName} failed its checksum.`,
+      400
+    );
+  }
 }
 
-function validateArchiveEntryLimits(
-  name: string,
-  size: number,
-  entryCount: number,
-  uncompressedTotal: number
-): void {
-  if (entryCount > MAX_IMPORT_ENTRIES) {
-    throw new NakamaApiError(
-      `Archive exceeds the ${MAX_IMPORT_ENTRIES} entry limit.`,
-      400
-    );
-  }
+function openZipFile(path: string): Promise<yauzl.ZipFile> {
+  const result = Promise.withResolvers<yauzl.ZipFile>();
 
-  if (size > MAX_IMPORT_ENTRY_BYTES) {
-    throw new NakamaApiError(
-      `Archive entry ${name} exceeds the ${megabytes(MAX_IMPORT_ENTRY_BYTES)} limit.`,
-      400
-    );
-  }
+  yauzl.open(
+    path,
+    {
+      decodeStrings: true,
+      lazyEntries: true,
+      // Our own byte-count check gives a clearer error and runs after the
+      // declared-size caps, so yauzl must not reject the entry first.
+      validateEntrySizes: false,
+    },
+    (error, zipfile) => {
+      if (error) {
+        result.reject(
+          error instanceof NakamaApiError
+            ? error
+            : new NakamaApiError("Invalid ZIP archive.", 400)
+        );
 
-  if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
-    throw new NakamaApiError(
-      `Archive exceeds the ${megabytes(MAX_IMPORT_UNCOMPRESSED_BYTES)} uncompressed limit.`,
-      400
-    );
-  }
+        return;
+      }
+
+      result.resolve(zipfile);
+    }
+  );
+
+  return result.promise;
 }
 
-function readZip(buffer: Buffer): ZipEntry[] {
-  let entryCount = 0;
-  let uncompressedTotal = 0;
+function openZipReadStream(
+  zipfile: yauzl.ZipFile,
+  entry: ZipEntryInfo
+): Promise<Readable> {
+  const result = Promise.withResolvers<Readable>();
 
-  // fflate sizes each output buffer from the entry's declared uncompressed
-  // size, so refusing here is what stops a bomb from being inflated at all.
-  const admitEntry = (name: string, size: number): boolean => {
-    entryCount += 1;
-    uncompressedTotal += size;
-    validateArchiveEntryLimits(name, size, entryCount, uncompressedTotal);
+  zipfile.openReadStream(entry, (error, stream) => {
+    if (error) {
+      result.reject(error);
 
-    return true;
-  };
+      return;
+    }
+
+    result.resolve(stream);
+  });
+
+  return result.promise;
+}
+
+async function readZipEntryBuffer(
+  zipfile: yauzl.ZipFile,
+  entry: ZipEntryInfo,
+  maxBytes: number
+): Promise<Buffer> {
+  const stream = await openZipReadStream(zipfile, entry);
+  const chunks: Buffer[] = [];
+  let size = 0;
+
+  for await (const chunk of stream) {
+    size += chunk.length;
+
+    if (size > maxBytes) {
+      throw new NakamaApiError(
+        `Archive entry ${entry.fileName} is too large.`,
+        400
+      );
+    }
+
+    chunks.push(Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+function parseManifestBuffer(data: Buffer): DataExportManifest {
+  let manifest: DataExportManifest;
 
   try {
-    return Object.entries(
-      unzipSync(buffer, {
-        filter: (file) => admitEntry(file.name, file.originalSize),
-      })
-    )
-      .filter(([name]) => !name.endsWith("/"))
-      .map(([name, data]) => {
-        validateArchivePath(name);
-        const entryData = Buffer.from(data);
-
-        return {
-          data: entryData,
-          name,
-          uncompressedSize: entryData.length,
-        };
-      });
+    manifest = parseDataExportManifest(JSON.parse(data.toString("utf8")));
   } catch (error) {
     if (error instanceof NakamaApiError) {
       throw error;
     }
 
-    throw new NakamaApiError("Invalid ZIP archive.", 400);
-  }
-}
-
-function readManifest(entries: ZipEntry[]): DataExportManifest {
-  const manifestEntry = entries.find(
-    (entry) => entry.name === NAKAMA_EXPORT_MANIFEST
-  );
-
-  if (!manifestEntry) {
-    throw new NakamaApiError("Archive is missing Nakama export manifest.", 400);
-  }
-
-  let manifest: DataExportManifest;
-
-  try {
-    const parsed: unknown = JSON.parse(manifestEntry.data.toString("utf8"));
-    manifest = parseDataExportManifest(parsed);
-  } catch {
     throw new NakamaApiError("Nakama export manifest is not valid JSON.", 400);
   }
 
@@ -1569,6 +2294,54 @@ function readManifest(entries: ZipEntry[]): DataExportManifest {
   }
 
   return manifest;
+}
+
+function resolveRestoredTarget(rootDir: string, name: string): string {
+  validateArchivePath(name);
+  const target = resolve(rootDir, name);
+  const relativeTarget = relative(rootDir, target);
+
+  if (
+    relativeTarget.startsWith("..") ||
+    isAbsolute(relativeTarget) ||
+    relativeTarget === ""
+  ) {
+    throw new NakamaApiError(
+      `Archive entry escapes restore root: ${name}`,
+      400
+    );
+  }
+
+  return target;
+}
+
+function validateArchiveEntryLimits(
+  name: string,
+  size: number,
+  entryCount: number,
+  uncompressedTotal: number,
+  limits: ImportLimits
+): void {
+  if (entryCount > limits.entries) {
+    throw new NakamaApiError(
+      `Archive exceeds the ${limits.entries} entry limit.`,
+      400
+    );
+  }
+
+  if (size > limits.entryBytes) {
+    throw new NakamaApiError(
+      `Archive entry ${name} exceeds the ${megabytes(limits.entryBytes)} limit.`,
+      400
+    );
+  }
+
+  if (uncompressedTotal > limits.uncompressedBytes) {
+    throw new NakamaApiError(
+      `Archive exceeds the ${megabytes(limits.uncompressedBytes)} uncompressed limit.`,
+      400
+    );
+  }
 }
 
 function validateArchivePath(path: string): void {
@@ -1609,7 +2382,12 @@ function validateArchivePath(path: string): void {
 
   const first = normalized.split("/")[0] ?? "";
 
-  if (first.startsWith(RESTORE_PREFIX) || first.startsWith(BACKUP_PREFIX)) {
+  if (
+    first.startsWith(RESTORE_PREFIX) ||
+    first.startsWith(BACKUP_PREFIX) ||
+    first.startsWith(EXPORT_PREFIX) ||
+    first.startsWith(UPLOAD_PREFIX)
+  ) {
     throw new NakamaApiError(
       `Archive entry uses a reserved restore path: ${path}`,
       400
@@ -1637,6 +2415,8 @@ function skipRelativePathReason(
     (parts[0] === "orgs" && parts[2] === "meet" && parts[3] === "audio") ||
     first.startsWith(RESTORE_PREFIX) ||
     first.startsWith(BACKUP_PREFIX) ||
+    first.startsWith(EXPORT_PREFIX) ||
+    first.startsWith(UPLOAD_PREFIX) ||
     first.startsWith(PLUGIN_SNAPSHOT_PREFIX)
   ) {
     return "Internal data-portability temporary path.";
@@ -2027,6 +2807,8 @@ async function listMovableTopLevelEntries(
         keptEntries.has(name) ||
         name.startsWith(RESTORE_PREFIX) ||
         name.startsWith(BACKUP_PREFIX) ||
+        name.startsWith(EXPORT_PREFIX) ||
+        name.startsWith(UPLOAD_PREFIX) ||
         name.startsWith(PLUGIN_SNAPSHOT_PREFIX)
       )
   );

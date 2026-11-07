@@ -15,6 +15,7 @@ import { NakamaApiError } from "@nakama/core";
 import { decodeArchiveRequestData } from "./data-portability";
 import {
   assertBackupDirOutsideRoot,
+  type BackupExportFile,
   encryptBackup,
   readBackupError,
   startScheduledBackups,
@@ -32,6 +33,13 @@ async function tempDir(): Promise<string> {
   dirs.push(dir);
 
   return dir;
+}
+
+async function makeExportFile(contents: string) {
+  const path = join(await tempDir(), "export.zip");
+  await writeFile(path, contents);
+
+  return { cleanup: async () => undefined, path };
 }
 
 afterEach(async () => {
@@ -66,7 +74,7 @@ describe("scheduled backups", () => {
     for (let day = 1; day <= 9; day += 1) {
       await writeBackup({
         dir,
-        exportZip: async () => Buffer.from(`day ${day}`),
+        exportFile: () => makeExportFile(`day ${day}`),
         key,
         now: new Date(Date.UTC(2026, 9, day)),
       });
@@ -139,10 +147,10 @@ describe("scheduled backups", () => {
 
     const stop = await startScheduledBackups({
       dir: missing,
-      exportZip: async () => {
+      exportFile: async () => {
         exports += 1;
 
-        return Buffer.from("zip");
+        return await makeExportFile("zip");
       },
       key,
     });
@@ -163,10 +171,10 @@ describe("scheduled backups", () => {
   test("a restart writes at once only when no recent backup exists", async () => {
     let exports = 0;
 
-    const exportZip = async () => {
+    const exportFile = async () => {
       exports += 1;
 
-      return Buffer.from("zip");
+      return await makeExportFile("zip");
     };
 
     const recent = await tempDir();
@@ -174,7 +182,7 @@ describe("scheduled backups", () => {
 
     const stopRecent = await startScheduledBackups({
       dir: recent,
-      exportZip,
+      exportFile,
       key,
     });
 
@@ -182,7 +190,7 @@ describe("scheduled backups", () => {
 
     const stopEmpty = await startScheduledBackups({
       dir: empty,
-      exportZip,
+      exportFile,
       key,
     });
 
@@ -199,8 +207,8 @@ describe("scheduled backups", () => {
     const dir = await tempDir();
 
     // With no backup in the dir, the first run starts at once.
-    const run = async (exportZip: () => Promise<Uint8Array>) => {
-      const stop = await startScheduledBackups({ dir, exportZip, key });
+    const run = async (exportFile: () => Promise<BackupExportFile>) => {
+      const stop = await startScheduledBackups({ dir, exportFile, key });
       await Bun.sleep(50);
       stop();
     };
@@ -219,7 +227,7 @@ describe("scheduled backups", () => {
       message: blocked.message,
     });
 
-    await run(async () => Buffer.from("zip"));
+    await run(() => makeExportFile("zip"));
     expect(await readBackupError(dir)).toBeNull();
     expect(await readdir(dir)).toHaveLength(1);
   });
@@ -235,7 +243,7 @@ describe("scheduled backups", () => {
     try {
       const stop = await startScheduledBackups({
         dir,
-        exportZip: async () => Buffer.from("zip"),
+        exportFile: () => makeExportFile("zip"),
         key,
       });
 
