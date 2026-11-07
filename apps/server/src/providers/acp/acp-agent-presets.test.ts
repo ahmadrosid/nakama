@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import {
+  CODEX_NOT_INSTALLED_MESSAGE,
   listAcpAgentPresets,
   resolveAcpAgentLaunch,
 } from "./acp-agent-presets";
@@ -18,6 +25,41 @@ function binFolder(name: string): string {
   chmodSync(file, 0o755);
 
   return dir;
+}
+
+/**
+ * A node_modules tree laid out like the Docker image's: codex-acp, the Codex
+ * wrapper, and (unless stripped) the linux-x64 binary package.
+ */
+function codexInstall({ binary }: { binary: boolean }) {
+  const modules = join(
+    mkdtempSync(join(tmpdir(), "acp-codex-")),
+    "node_modules"
+  );
+
+  const entry = join(
+    modules,
+    "@agentclientprotocol",
+    "codex-acp",
+    "dist",
+    "index.js"
+  );
+
+  mkdirSync(dirname(entry), { recursive: true });
+  writeFileSync(entry, "");
+  mkdirSync(join(modules, "@openai", "codex"), { recursive: true });
+  writeFileSync(join(modules, "@openai", "codex", "package.json"), "{}");
+
+  if (binary) {
+    const pkg = join(modules, "@openai", "codex-linux-x64");
+    const bin = join(pkg, "vendor", "x86_64-unknown-linux-musl", "bin");
+
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(pkg, "package.json"), "{}");
+    writeFileSync(join(bin, "codex"), "");
+  }
+
+  return { args: [entry], command: "/usr/bin/bun" };
 }
 
 /** An env with no install folders of the test machine in it. */
@@ -144,6 +186,50 @@ describe("ACP agent launch", () => {
     });
 
     expect(launch).toEqual({ args: ["acp"], command: exe, shell: false });
+  });
+
+  test("starts the bundled Codex preset on this machine", () => {
+    const codex = listAcpAgentPresets().find((preset) => preset.id === "codex");
+
+    expect(() =>
+      resolveAcpAgentLaunch(codex!.agent, { env: cleanEnv() })
+    ).not.toThrow();
+  });
+
+  test("says Codex can't run when its binary was stripped", () => {
+    const agent = codexInstall({ binary: false });
+
+    expect(() =>
+      resolveAcpAgentLaunch(agent, {
+        arch: "x64",
+        env: cleanEnv(),
+        platform: "linux",
+      })
+    ).toThrow(CODEX_NOT_INSTALLED_MESSAGE);
+  });
+
+  test("starts Codex when its platform binary is there", () => {
+    const agent = codexInstall({ binary: true });
+
+    expect(
+      resolveAcpAgentLaunch(agent, {
+        arch: "x64",
+        env: cleanEnv(),
+        platform: "linux",
+      })
+    ).toEqual({ ...agent, shell: false });
+  });
+
+  test("CODEX_PATH skips the bundled binary check", () => {
+    const agent = codexInstall({ binary: false });
+
+    expect(() =>
+      resolveAcpAgentLaunch(agent, {
+        arch: "x64",
+        env: cleanEnv({ CODEX_PATH: "/usr/local/bin/codex" }),
+        platform: "linux",
+      })
+    ).not.toThrow();
   });
 
   test.skipIf(process.platform === "win32")(
