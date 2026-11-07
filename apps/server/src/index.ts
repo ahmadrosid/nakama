@@ -89,6 +89,7 @@ import {
   createMcpAwareEmailOutboundAdapter,
   hasAutomationEmailDeliveryPath,
 } from "./services/mcp-email-delivery";
+import { installMcpSecretStore } from "./services/mcp-secret-store";
 import { McpService } from "./services/mcp-service";
 import { cleanupInterruptedMeetImports } from "./services/meet-recording-import";
 import { OrgMemoryService } from "./services/org-memory-service";
@@ -212,6 +213,7 @@ if (process.env.NAKAMA_SECRETS_KEY_NEXT) {
 }
 
 setToolSecrets(managedSecrets);
+await installMcpSecretStore(database.adapter, managedSecrets);
 
 setManagedSecretResolver(
   async (scope, name, envNames) =>

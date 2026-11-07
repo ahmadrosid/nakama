@@ -135,9 +135,10 @@ export class ManagedSecrets {
     scope: string,
     name: string,
     value: string,
-    envNames: string[] = []
+    envNames: string[] = [],
+    maxLength = 8192
   ): Promise<void> {
-    if (!value || /[\r\n\0]/.test(value) || value.length > 8192) {
+    if (!value || /[\r\n\0]/.test(value) || value.length > maxLength) {
       throw new Error("Enter a valid secret.");
     }
 
