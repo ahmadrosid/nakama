@@ -53,6 +53,11 @@ jobs:
       - name: Check
         run: bun run check:ci
 
+      # Critical only for now: four high advisories sit outside the declared
+      # version ranges. Raise to high once those are bumped.
+      - name: Audit dependencies
+        run: bun audit --audit-level=critical
+
   duplication:
     runs-on: ubuntu-latest
     steps:
