@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { getProfileSoulDir, SOUL_TEMPLATE } from "@nakama/core";
+import {
+  formatAgentTurnError,
+  getProfileSoulDir,
+  SOUL_TEMPLATE,
+} from "@nakama/core";
 import { groupRoster } from "@nakama/core/agent-groups";
 import { setupTestConfigDir } from "../test-config-dir";
 import { groupMemoryTool } from "../tools/group-memory-tool";
@@ -756,6 +760,27 @@ describe("AgentGroupService", () => {
         .thread(ORG_ID, USER_ID, group.id, sessionId, root!.id)
         .messages.map((message) => message.content)
     ).toEqual(["ok", "more?", "_boom_"]);
+  });
+
+  test("a dropped model connection stores plain words, not the fetch error", async () => {
+    // What Bun's fetch throws when the provider closes the socket.
+    const dropped = Object.assign(
+      new TypeError(
+        "The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
+      ),
+      { code: "ECONNRESET" }
+    );
+
+    const { chat, contents, service } = setup(() => {
+      throw dropped;
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@alpha hi");
+    const [, stored] = contents(group.id, sessionId);
+
+    expect(stored).toBe(`_${formatAgentTurnError(dropped)}_`);
+    expect(stored).not.toContain(dropped.message);
   });
 
   test("a running turn exposes the agent's steps and text so far", async () => {

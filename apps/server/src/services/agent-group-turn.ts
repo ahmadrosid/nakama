@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DocumentAttachment, OrgRole, ProfileSummary } from "@nakama/core";
 import {
+  formatAgentTurnError,
   getProfileSoulDir,
   resolveDocumentPartForProvider,
   SOUL_FILES,
@@ -426,9 +427,15 @@ export async function takeGroupTurn(
           ),
       userId: turn.userId,
     })
-    .catch((error) =>
-      failSubAgentResult(error instanceof Error ? error.message : String(error))
-    );
+    .catch((error) => {
+      // Members see plain words; the raw cause stays in the server log.
+      console.error(
+        `[group_member] turn failed org=${orgId} group=${group.id} profile=${profileId}`,
+        error
+      );
+
+      return failSubAgentResult(formatAgentTurnError(error));
+    });
 
   if (turn.signal?.aborted) {
     if (written.trim() || memoryChanges.length > 0) {

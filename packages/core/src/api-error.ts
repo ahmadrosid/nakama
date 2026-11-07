@@ -189,6 +189,28 @@ export function formatAutomationRunError<ErrorValue>(
   return formatServerError(error);
 }
 
+/**
+ * A failed agent turn as members see it. A dropped model connection gets plain
+ * words instead of the runtime's fetch text; other errors keep their message.
+ */
+export function formatAgentTurnError<ErrorValue>(error: ErrorValue): string {
+  if (error instanceof Error && isStreamDisconnectError(error)) {
+    return "The model connection closed before the reply finished. Try again.";
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  const stringError = z.string().safeParse(error);
+
+  if (stringError.success && stringError.data.trim()) {
+    return stringError.data.trim();
+  }
+
+  return "Something went wrong.";
+}
+
 export function formatServerError<ErrorValue>(error: ErrorValue): string {
   if (error instanceof NakamaApiError) {
     return error.message;
