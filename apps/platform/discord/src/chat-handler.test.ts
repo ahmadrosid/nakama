@@ -158,6 +158,7 @@ async function createPairedHandler(
   options: NonNullable<Parameters<typeof createMockClient>[0]> & {
     apiClient?: NakamaClient;
     configProfileId?: string;
+    owner?: { orgId: string; profileId: string };
     pairedUserIds?: string[];
     allowedUserIds?: string[];
   } = {}
@@ -193,6 +194,7 @@ async function createPairedHandler(
     client,
     config: {
       botToken: "discord-bot-token",
+      owner: options.owner,
       profileId: options.configProfileId ?? "default",
     },
     orgStore,
@@ -769,11 +771,9 @@ describe("createChatHandler artifact delivery", () => {
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(1);
       expect(dm.fileSendCalls).toBe(1);
-      expect(
-        dm.sentMessages.some((reply) =>
-          reply.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+      expect(dm.sentMessages.join("\n")).toContain(
+        "https://app.example/s/tok_test"
+      );
     });
   });
 
@@ -851,11 +851,9 @@ describe("createChatHandler artifact delivery", () => {
       expect(calls.publishProfileArtifactShare).toBe(1);
       expect(calls.readProfileArtifactContent).toBe(0);
       expect(dm.fileSendCalls).toBe(0);
-      expect(
-        dm.sentMessages.some((reply) =>
-          reply.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+      expect(dm.sentMessages.join("\n")).toContain(
+        "https://app.example/s/tok_test"
+      );
     });
   });
 
@@ -1807,6 +1805,61 @@ describe("createChatHandler guild thread routing", () => {
       expect(guild.startThreadCalls).toBe(1);
       expect(guild.channelSentMessages).toContain("Channel fallback");
       expect(guild.threadSentMessages).toHaveLength(0);
+    });
+  });
+
+  // The owner's agent is listed only in the owner's org, not the active one.
+  test("/status names the owner's agent from the owner's org", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand } = await createPairedHandler(homeDir, {
+        owner: { orgId: "org_owner", profileId: "agent_owner" },
+        profilesByOrgId: {
+          org_owner: [
+            { id: "agent_owner", model: "local::owned", name: "Owner Bot" },
+          ],
+        },
+        providerConfigured: true,
+      });
+
+      const statusCmd = createSlashInteraction({ commandName: "status" });
+      await handleSlashCommand(statusCmd.interaction);
+
+      const statusText = statusCmd.replies.join("\n");
+      expect(statusText).toContain("Profile: Owner Bot");
+      expect(statusText).toContain("Model: owned");
+    });
+  });
+
+  test("/status names the profile, model and this chat's session", async () => {
+    await withTempHome(async (homeDir) => {
+      const { handleSlashCommand } = await createPairedHandler(homeDir, {
+        profiles: [
+          {
+            id: "default",
+            isDefault: true,
+            model: "local::base",
+            name: "Default Bot",
+          },
+        ],
+        providerConfigured: true,
+      });
+
+      const newCmd = createSlashInteraction({ commandName: "new" });
+      await handleSlashCommand(newCmd.interaction);
+
+      const statusCmd = createSlashInteraction({ commandName: "status" });
+      await handleSlashCommand(statusCmd.interaction);
+
+      expect(statusCmd.replies.join("\n")).toBe(
+        [
+          "Server: ok",
+          "Provider configured: yes",
+          "Profile: Default Bot",
+          "Provider: unknown",
+          "Model: base",
+          "Session: session_",
+        ].join("\n")
+      );
     });
   });
 

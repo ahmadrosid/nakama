@@ -5,6 +5,7 @@ import {
   formatMemoryArchiveYearMonth,
   getMemoryArchiveDir,
 } from "./memory-paths";
+import { trimTrailingNewlines } from "./org-memory";
 import { getProfileSoulDir } from "./resolve";
 
 export const MEMORY_ARCHIVE_TEMPLATE = `# Archived Memory
@@ -65,9 +66,17 @@ export function parseMemoryContent(content: string): ParsedMemory {
   }
 
   return {
-    preamble: preambleLines.join("\n").replace(/\n+$/, ""),
+    preamble: trimTrailingNewlines(preambleLines.join("\n")),
     sections,
   };
+}
+
+/**
+ * Text that is safe inside `<!-- -->`: the `>` of `-->` or `--!>` becomes
+ * `&gt;`. Removing `-->` instead can rebuild a new one from the pieces.
+ */
+export function toHtmlCommentText(text: string): string {
+  return text.trim().replace(/--(!?)>/g, "--$1&gt;");
 }
 
 export function rebuildMemoryContent(parsed: ParsedMemory): string {
@@ -85,7 +94,7 @@ export function rebuildMemoryContent(parsed: ParsedMemory): string {
     }
   }
 
-  const content = parts.join("\n").replace(/\n+$/, "");
+  const content = trimTrailingNewlines(parts.join("\n"));
 
   return content.length > 0 ? `${content}\n` : content;
 }
@@ -157,7 +166,7 @@ export function formatArchiveAppend(
   const lines = [`<!-- archived: ${archivedAt.toISOString()} -->`];
 
   if (reason?.trim()) {
-    lines.push(`<!-- reason: ${reason.trim().replace(/-->/g, "")} -->`);
+    lines.push(`<!-- reason: ${toHtmlCommentText(reason)} -->`);
   }
 
   for (const section of sections) {
@@ -246,7 +255,7 @@ export async function archiveMemoryBullets(
   const archiveExists = await pathExists(archivePath);
 
   const archiveContent = archiveExists
-    ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${archiveAppend}`
+    ? `${trimTrailingNewlines(await readText(archivePath))}\n\n${archiveAppend}`
     : `${MEMORY_ARCHIVE_TEMPLATE}\n${archiveAppend}`;
 
   const activeContent = rebuildMemoryContent(active);

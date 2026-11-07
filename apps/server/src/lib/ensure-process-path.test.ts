@@ -93,3 +93,43 @@ test("does not pass the master key to child processes", () => {
     }
   }
 });
+
+describe("getToolExecutionEnv keeps Nakama credentials out of tools", () => {
+  const LEAKED = [
+    "NAKAMA_LOCAL_AUTH_TOKEN",
+    "NAKAMA_PLUGIN_NPM_TOKEN",
+    "NAKAMA_EMAIL_ATTACHMENT_SECRET",
+    "NAKAMA_TELEGRAM_MANAGER_BOT_TOKEN",
+    "TELEGRAM_MANAGER_WEBHOOK_SECRET",
+    "NAKAMA_WHATSAPP_CONTEXT_TOKEN",
+    "NAKAMA_SEED_ADMIN_PASSWORD",
+  ];
+
+  afterEach(() => {
+    for (const key of [...LEAKED, "GITHUB_TOKEN", "NAKAMA_PORT"]) {
+      delete process.env[key];
+    }
+  });
+
+  test("strips Nakama's own tokens and secrets", () => {
+    for (const key of LEAKED) {
+      process.env[key] = "secret-value";
+    }
+
+    const env = getToolExecutionEnv();
+
+    for (const key of LEAKED) {
+      expect({ key, value: env[key] }).toEqual({ key, value: undefined });
+    }
+  });
+
+  test("keeps a user's own token and ordinary Nakama settings", () => {
+    process.env.GITHUB_TOKEN = "user-token";
+    process.env.NAKAMA_PORT = "4310";
+
+    const env = getToolExecutionEnv();
+
+    expect(env.GITHUB_TOKEN).toBe("user-token");
+    expect(env.NAKAMA_PORT).toBe("4310");
+  });
+});

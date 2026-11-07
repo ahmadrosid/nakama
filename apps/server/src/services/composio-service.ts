@@ -1,4 +1,4 @@
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 import {
   COMPOSIO_CUSTOM_AUTH_REQUIRED,
   type ComposioCatalogToolkitSummary,
@@ -37,9 +37,12 @@ import {
   findRejectedConnectedAccountIds,
   isComposioDefaultAuthConfigMissing,
 } from "./composio-api-client";
+import { withClaimedOAuthState } from "./oauth-callback-claim";
 
+// HKDF, not a bare hash, to turn the API key into an AES key. Nothing reads
+// `sessionIdEnc` back, so rows written with the old key need no migration.
 function deriveKey(secret: string): Buffer {
-  return createHash("sha256").update(`nakama-composio:${secret}`).digest();
+  return Buffer.from(hkdfSync("sha256", secret, "", "nakama-composio", 32));
 }
 
 function encryptComposioSecret(plaintext: string, secret: string): string {
@@ -921,9 +924,20 @@ export class ComposioService {
     return { redirectUrl: link.redirectUrl };
   }
 
-  async completeOAuth(
+  completeOAuth(
     state: string,
     options: { connectedAccountId?: string | null } = {}
+  ): Promise<{ orgId: string; returnTo?: string; toolkitSlug: string }> {
+    return withClaimedOAuthState(
+      `composio:${state}`,
+      () => new NakamaApiError("Invalid OAuth state.", 400),
+      () => this.completeClaimedOAuth(state, options)
+    );
+  }
+
+  private async completeClaimedOAuth(
+    state: string,
+    options: { connectedAccountId?: string | null }
   ): Promise<{ orgId: string; returnTo?: string; toolkitSlug: string }> {
     await this.requireAvailable();
 
@@ -1701,6 +1715,13 @@ function findMeetMessages(value: unknown): Record<string, unknown>[] {
   return found;
 }
 
+/** Google Drive and Docs file links; group 1 is the file id. */
+const DRIVE_FILE_LINK_PATTERNS = [
+  /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/g,
+  /drive\.google\.com\/(?:open|uc)\?[^\s"'<>]*?id=([A-Za-z0-9_-]{10,})/g,
+  /docs\.google\.com\/[A-Za-z]+\/d\/([A-Za-z0-9_-]{10,})/g,
+];
+
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Composio tool payloads are untyped JSON that this function inspects structurally.
 function extractMeetDriveIds(value: unknown): string[] {
   const ids = new Set<string>();
@@ -1725,7 +1746,9 @@ function extractMeetDriveIds(value: unknown): string[] {
           "base64"
         ).toString("utf8");
 
-        if (decoded.includes("drive.google.com")) {
+        if (
+          DRIVE_FILE_LINK_PATTERNS.some((pattern) => decoded.match(pattern))
+        ) {
           text = decoded;
         }
       }
@@ -1738,11 +1761,7 @@ function extractMeetDriveIds(value: unknown): string[] {
         /* Keep original text. */
       }
 
-      for (const pattern of [
-        /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/g,
-        /drive\.google\.com\/(?:open|uc)\?[^\s"'<>]*?id=([A-Za-z0-9_-]{10,})/g,
-        /docs\.google\.com\/[A-Za-z]+\/d\/([A-Za-z0-9_-]{10,})/g,
-      ]) {
+      for (const pattern of DRIVE_FILE_LINK_PATTERNS) {
         for (const match of text.matchAll(pattern)) {
           ids.add(match[1]!);
         }

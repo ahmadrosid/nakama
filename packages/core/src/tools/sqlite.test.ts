@@ -19,6 +19,32 @@ afterEach(() => {
 });
 
 describe("sqlite tool", () => {
+  test("stops at the row limit instead of reading every row", async () => {
+    const result = await runSqliteTool(
+      {
+        sql: "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3000000) SELECT i FROM n",
+      },
+      { orgId: "org_test" },
+      { databasePath: ":memory:" }
+    );
+
+    expect(result).toMatchObject({ truncated: true });
+    expect("rows" in result && result.rows).toHaveLength(1000);
+  });
+
+  test("stops at the size limit when rows are large", async () => {
+    const result = await runSqliteTool(
+      {
+        sql: "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100) SELECT i, replace(hex(zeroblob(50000)), '0', 'x') AS big FROM n",
+      },
+      { orgId: "org_test" },
+      { databasePath: ":memory:" }
+    );
+
+    expect(result).toMatchObject({ truncated: true });
+    expect("rows" in result && result.rows.length).toBeLessThan(11);
+  });
+
   test("returns columns and rows for SELECT", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nakama-sqlite-"));
     const databasePath = join(dir, "workflow-data.sqlite");

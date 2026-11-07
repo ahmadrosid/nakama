@@ -8,6 +8,17 @@
 
 import type { MemorySection } from "./memory-archive";
 
+/** Drop trailing newlines with a scan; `/\n+$/` is quadratic on long newline runs. */
+export function trimTrailingNewlines(text: string): string {
+  let end = text.length;
+
+  while (end > 0 && text[end - 1] === "\n") {
+    end--;
+  }
+
+  return text.slice(0, end);
+}
+
 export const ORG_MEMORY_HEADER = "## Org Memory";
 
 export const ORG_MEMORY_PREAMBLE = `${ORG_MEMORY_HEADER}
@@ -62,7 +73,9 @@ export function detectOrgMemoryInjectionWarnings(
     warnings.push("Contains markdown headings.");
   }
 
-  if (/<\/?[a-z][\s\S]*>/i.test(bullet)) {
+  const tagStart = bullet.search(/<\/?[a-z]/i);
+
+  if (tagStart !== -1 && bullet.includes(">", tagStart)) {
     warnings.push("Contains HTML-like markup.");
   }
 
@@ -136,7 +149,7 @@ export function parseOrgMemoryContent(
 
   return normalizeParsedOrgMemory({
     pinned,
-    preamble: preambleLines.join("\n").replace(/\n+$/, ""),
+    preamble: trimTrailingNewlines(preambleLines.join("\n")),
     sections,
   });
 }
@@ -146,7 +159,6 @@ function stripPinnedHeaderFromPreamble(preamble: string): string {
     .split(/\r?\n/)
     .filter((line) => !/^## Pinned\s*$/.test(line.trim()))
     .join("\n")
-    .replace(/\n+$/, "")
     .trim();
 }
 
@@ -202,7 +214,7 @@ export function rebuildOrgMemoryContent(parsed: ParsedOrgMemory): string {
     }
   }
 
-  const content = parts.join("\n").replace(/\n+$/, "");
+  const content = trimTrailingNewlines(parts.join("\n"));
 
   return content.length > 0 ? `${content}\n` : content;
 }

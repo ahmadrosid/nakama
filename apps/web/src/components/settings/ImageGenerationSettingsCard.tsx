@@ -1,6 +1,9 @@
 import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
-import { SettingsModelSelect } from "@/components/settings/settings-model-select";
+import {
+  type SettingsModelOption,
+  SettingsModelSelect,
+} from "@/components/settings/settings-model-select";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   useImageGenerationSettings,
@@ -21,10 +24,7 @@ const CLEAR_IMAGE_GENERATION_MODEL_VALUE = "__image_generation_unset__";
 /** Saved model that turns image generation off (server: IMAGE_GENERATION_OFF). */
 const IMAGE_GENERATION_OFF_VALUE = "off";
 
-interface ImageGenerationChoice {
-  label: string;
-  value: string;
-}
+type ImageGenerationChoice = SettingsModelOption;
 
 interface ImageGenerationProviderSummary {
   hasApiKey: boolean;
@@ -115,6 +115,8 @@ function imageGenerationChoices(
       ? [
           {
             label: `OpenAI: ${IMAGE_GENERATION_MODEL_OPTIONS[0].name}`,
+            name: IMAGE_GENERATION_MODEL_OPTIONS[0].name,
+            provider: { id: "openai", label: "OpenAI" },
             value: IMAGE_GENERATION_SELECTION,
           },
         ]
@@ -122,6 +124,8 @@ function imageGenerationChoices(
     ...compatibleGroups.flatMap((group) =>
       group.models.map((model) => ({
         label: `${group.providerLabel}: ${model.name}`,
+        name: model.name,
+        provider: { id: group.providerId, label: group.providerLabel },
         value: encodeModelSelection(group.providerId, model.id),
       }))
     ),

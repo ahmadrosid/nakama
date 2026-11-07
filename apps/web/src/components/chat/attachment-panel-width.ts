@@ -19,6 +19,10 @@ export function clampAttachmentPanelWidth(
     ? TABLET_MAX_VIEWPORT_WIDTH
     : window.innerWidth
 ): number {
+  if (viewportWidth < 768) {
+    return viewportWidth;
+  }
+
   const maxWidth = Math.floor(
     viewportWidth * attachmentPanelMaxWidthRatio(viewportWidth)
   );

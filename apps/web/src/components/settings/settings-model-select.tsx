@@ -9,13 +9,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { ArrowDown01Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 
+const PROVIDER_PREFIX = "provider:";
+
 export interface SettingsModelOption {
   disabled?: boolean;
   label: string;
+  /** The model name alone, shown in the Model picker. */
+  name?: string;
+  /** Options with a provider go in the Model picker under that provider. */
+  provider?: { id: string; label: string };
   value: string;
 }
 
-/** A model picker with search, as in the chat picker. */
+/**
+ * A Provider picker and a Model picker. Options with no provider (None, Off)
+ * are picked from the Provider list and leave the Model picker empty.
+ */
 export function SettingsModelSelect({
   ariaLabel,
   disabled,
@@ -28,6 +37,136 @@ export function SettingsModelSelect({
   disabled?: boolean;
   onValueChange: (value: string) => void;
   options: SettingsModelOption[];
+  triggerLabel: ReactNode;
+  value: string;
+}) {
+  // A provider picked before its model; nothing saves until a model is picked.
+  const [pendingProviderId, setPendingProviderId] = useState<string | null>(
+    null
+  );
+
+  const selected = options.find((option) => option.value === value);
+  const providerId = pendingProviderId ?? selected?.provider?.id ?? null;
+
+  const providers = [
+    ...new Map(
+      options.flatMap((option) =>
+        option.provider ? [[option.provider.id, option.provider] as const] : []
+      )
+    ).values(),
+  ];
+
+  const providerOptions: SettingsModelOption[] = [
+    ...options.filter((option) => !option.provider),
+    ...providers.map((provider) => ({
+      disabled: options.every(
+        (option) => option.provider?.id !== provider.id || option.disabled
+      ),
+      label: provider.label,
+      value: `${PROVIDER_PREFIX}${provider.id}`,
+    })),
+  ];
+
+  const modelOptions = options
+    .filter((option) => option.provider && option.provider.id === providerId)
+    .map((option) => ({ ...option, label: option.name ?? option.label }));
+
+  const providerLabel = providerId
+    ? providers.find((provider) => provider.id === providerId)?.label
+    : selected
+      ? selected.label
+      : triggerLabel;
+
+  const modelPicked = Boolean(
+    selected?.provider && selected.provider.id === providerId
+  );
+
+  const modelLabel =
+    modelPicked && selected
+      ? (selected.name ?? selected.label)
+      : providerId
+        ? "Choose model"
+        : "—";
+
+  return (
+    <div className="grid w-full grid-cols-2 gap-2">
+      <SettingsPicker
+        ariaLabel={`${ariaLabel} provider`}
+        disabled={disabled}
+        emptyLabel="No provider found."
+        onValueChange={(next) => {
+          if (!next.startsWith(PROVIDER_PREFIX)) {
+            setPendingProviderId(null);
+            onValueChange(next);
+
+            return;
+          }
+
+          const nextId = next.slice(PROVIDER_PREFIX.length);
+
+          if (nextId === selected?.provider?.id) {
+            setPendingProviderId(null);
+
+            return;
+          }
+
+          const choices = options.filter(
+            (option) => option.provider?.id === nextId && !option.disabled
+          );
+
+          // One model leaves nothing to choose.
+          if (choices.length === 1) {
+            setPendingProviderId(null);
+            onValueChange(choices[0].value);
+
+            return;
+          }
+
+          setPendingProviderId(nextId);
+        }}
+        options={providerOptions}
+        searchPlaceholder="Search providers…"
+        triggerLabel={providerLabel}
+        value={providerId ? `${PROVIDER_PREFIX}${providerId}` : value}
+      />
+      <SettingsPicker
+        ariaLabel={`${ariaLabel} model`}
+        disabled={disabled || !providerId}
+        emptyLabel="No model found."
+        onValueChange={(next) => {
+          setPendingProviderId(null);
+          onValueChange(next);
+        }}
+        options={modelOptions}
+        searchPlaceholder="Search models…"
+        triggerLabel={
+          <span className={modelPicked ? undefined : "text-muted-foreground"}>
+            {modelLabel}
+          </span>
+        }
+        value={value}
+      />
+    </div>
+  );
+}
+
+/** One picker with search, as in the chat picker. */
+function SettingsPicker({
+  ariaLabel,
+  disabled,
+  emptyLabel,
+  onValueChange,
+  options,
+  searchPlaceholder,
+  triggerLabel,
+  value,
+}: {
+  ariaLabel: string;
+  disabled?: boolean;
+  emptyLabel: string;
+  onValueChange: (value: string) => void;
+  options: SettingsModelOption[];
+  searchPlaceholder: string;
   triggerLabel: ReactNode;
   value: string;
 }) {
@@ -55,10 +194,10 @@ export function SettingsModelSelect({
       >
         <Command className="rounded-lg bg-transparent p-0">
           <div className="border-border/60 border-b p-2 [&_[data-slot=command-input-wrapper]]:p-0">
-            <CommandInput placeholder="Search models…" />
+            <CommandInput placeholder={searchPlaceholder} />
           </div>
           <CommandList className="max-h-72 p-1">
-            <CommandEmpty>No model found.</CommandEmpty>
+            <CommandEmpty>{emptyLabel}</CommandEmpty>
             {options.map((option) => (
               <CommandItem
                 data-checked={option.value === value ? true : undefined}

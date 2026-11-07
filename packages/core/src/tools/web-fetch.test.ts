@@ -675,6 +675,17 @@ describe("web_fetch happy path", () => {
 });
 
 describe("convertHtmlToMarkdown", () => {
+  test("keeps the text after an unclosed comment", async () => {
+    const md = await convertHtmlToMarkdown(
+      "<p>Intro</p><!-- a --><p>Kept</p><p>a <!-- b</p><p>Tail text</p>"
+    );
+
+    expect(md).toContain("Intro");
+    expect(md).toContain("Kept");
+    expect(md).not.toContain(" a ");
+    expect(md).toContain("Tail text");
+  });
+
   test("converts headings and bold", async () => {
     const md = await convertHtmlToMarkdown(
       "<h2>Sub</h2><p>a <strong>b</strong></p>"

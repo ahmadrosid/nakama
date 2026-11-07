@@ -1,5 +1,9 @@
-import { describe, expect, test } from "bun:test";
-import { loadLocalAuthToken } from "@nakama/core";
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+  loadLocalAuthToken,
+  readEnvValue,
+  setManagedSecretResolver,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../../services/auth-service";
 import { AutomationService } from "../../services/automation-service";
@@ -11,6 +15,14 @@ import { seedLocalClientUser } from "../test-org-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-internal-automations-test-");
+
+afterEach(() => {
+  setManagedSecretResolver(
+    async (_scope, _name, envNames) =>
+      envNames.map((name) => readEnvValue(process.env, name)).find(Boolean) ??
+      null
+  );
+});
 
 const PROFILE_ID = "profile_default";
 
@@ -141,6 +153,45 @@ describe("internal automation routes", () => {
     );
 
     expect(run.status).toBe(401);
+
+    const botToken = await app.fetch(
+      new Request(
+        "http://localhost:4310/v1/internal/channel-bot-token?scope=org_a&name=telegram-bot:agent_a",
+        { headers: session.headers() }
+      )
+    );
+
+    expect(botToken.status).toBe(401);
+  });
+
+  test("gives a worker its bot token and nothing else", async () => {
+    const secrets = new Map([
+      ["org_a/telegram-bot:agent_a", "111:AAA"],
+      ["global/email", "mail-password"],
+    ]);
+
+    setManagedSecretResolver(
+      async (scope, name) => secrets.get(`${scope}/${name}`) ?? null
+    );
+
+    const options = createServerOptions();
+    await seedLocalClientUser(options.databaseAdapter);
+    const app = createHonoApp(options);
+    const headers = { Authorization: `Bearer ${await loadLocalAuthToken()}` };
+    const base = "http://localhost:4310/v1/internal/channel-bot-token";
+
+    const token = await app.fetch(
+      new Request(`${base}?scope=org_a&name=telegram-bot:agent_a`, { headers })
+    );
+
+    expect(token.status).toBe(200);
+    expect(await token.json()).toEqual({ token: "111:AAA" });
+
+    const email = await app.fetch(
+      new Request(`${base}?scope=global&name=email`, { headers })
+    );
+
+    expect(email.status).toBe(404);
   });
 
   test("runs automation via internal endpoint for the owning org", async () => {

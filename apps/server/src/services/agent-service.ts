@@ -188,6 +188,7 @@ import {
   messageContentHasImages,
   NakamaApiError,
   nanoid,
+  normalizeBaseUrl,
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
@@ -231,6 +232,7 @@ import {
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
+import { isDocxFile, isLegacyDocFile } from "@nakama/core/artifact-mime";
 import {
   type ChannelConfigScope,
   isChannelOwner,
@@ -240,6 +242,7 @@ import {
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "@nakama/core/discovery-providers";
+import { convertDocxToMarkdown } from "@nakama/core/docx-text";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
 import {
@@ -488,7 +491,7 @@ const API_KEY_CHECK_TIMEOUT_MS = 8000;
 async function checkApiKey(
   instance: ProviderInstance
 ): Promise<CheckProviderResponse["status"]> {
-  const localBaseUrl = instance.baseUrl?.trim().replace(/\/+$/, "");
+  const localBaseUrl = instance.baseUrl && normalizeBaseUrl(instance.baseUrl);
 
   // A local or custom endpoint without a key still answers /models when up.
   const check = instance.apiKey
@@ -2810,10 +2813,37 @@ export class AgentService {
     }
   }
 
+  /** Throws 403 when the caller cannot use the profile in chat. */
+  async assertProfileChatAccess(
+    orgId: string,
+    profileId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, profileId),
+      access
+    );
+  }
+
+  /**
+   * Whether saving this session as a case would move a private chat out of its
+   * owner's hands. Shared messaging history stays team-visible.
+   */
+  async sessionHistoryPrivacy(
+    record: StoredSessionRecord
+  ): Promise<{ isPrivate: boolean; ownerUserId: string | null }> {
+    if (isSharedHistory(record) || (await this.isChildOfSharedChat(record))) {
+      return { isPrivate: false, ownerUserId: null };
+    }
+
+    return { isPrivate: true, ownerUserId: record.userId ?? null };
+  }
+
   async readChatAttachment(
     orgId: string,
     attachmentId: string,
-    access: ChatProfileAccess
+    access: ChatProfileAccess,
+    options: { preview?: boolean; render?: "markdown" } = {}
   ): Promise<LoadedAttachmentBytes | null> {
     const record = await this.db.getAttachment(attachmentId);
 
@@ -2840,10 +2870,38 @@ export class AgentService {
 
     await this.assertSessionOwner(sessionRecord, access);
 
-    return createAttachmentLoader(this.db, {
+    const renderWord =
+      options.render === "markdown" &&
+      (isDocxFile(record.filename ?? "", record.mediaType) ||
+        isLegacyDocFile(record.filename ?? "", record.mediaType));
+
+    if (options.preview && !renderWord && record.sizeBytes > 8 * 1024 * 1024) {
+      throw new NakamaApiError(
+        "This file exceeds the 8 MB preview limit. Download it instead.",
+        413
+      );
+    }
+
+    const attachment = await createAttachmentLoader(this.db, {
       orgId,
       profileId: record.profileId,
     })(attachmentId);
+
+    if (attachment && renderWord) {
+      const markdown = await convertDocxToMarkdown(
+        Buffer.from(attachment.bytes)
+      );
+
+      const bytes = Buffer.from(markdown, "utf8");
+
+      if (bytes.byteLength > 8 * 1024 * 1024) {
+        throw new NakamaApiError("Preview exceeds the byte limit.", 413);
+      }
+
+      return { ...attachment, bytes, mediaType: "text/markdown" };
+    }
+
+    return attachment;
   }
 
   private assertChatProfileAccess(
@@ -3089,7 +3147,11 @@ export class AgentService {
     );
     await this.db.updateSessionTitle(nextSessionId, branchTitle);
 
-    return { sessionId: nextSessionId };
+    return {
+      // A source the client could load has a valid channel.
+      channel: parseAgentChannel(branchRecord.channel) ?? "web",
+      sessionId: nextSessionId,
+    };
   }
 
   async listSessions(
@@ -6714,10 +6776,11 @@ export class AgentService {
 
         return replaceImagePartsWithDescriptions(forVision, descriptions);
       },
-      rehydrateMessagesForProvider: async (messages) => {
+      rehydrateMessagesForProvider: async (messages, rehydrateOptions) => {
         const rehydrated = await rehydrateAttachmentMessages(
           messages,
-          loadAttachment
+          loadAttachment,
+          rehydrateOptions
         );
 
         // Expand /learn only for the provider. History stays raw so skill

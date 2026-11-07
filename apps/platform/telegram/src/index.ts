@@ -6,6 +6,7 @@ import {
   log,
 } from "@nakama/core";
 import { hasActiveStreams } from "@nakama/core/channel-active-stream";
+import { readBotTokensFromServer } from "@nakama/core/channel-config-shared";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
@@ -49,6 +50,15 @@ registerCleanupHandlers(async () => {
 });
 
 try {
+  const authToken =
+    (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined;
+
+  // The token is encrypted on disk; the server reads it for us.
+  const tokenClient = new NakamaClient({ authToken });
+  readBotTokensFromServer((secret) =>
+    tokenClient.getChannelBotToken(secret.scope, secret.name)
+  );
+
   const identities = await loadTelegramIdentities();
 
   const { serverUrl, spawnedChild: child } = await ensureServerRunning({
@@ -56,9 +66,6 @@ try {
   });
 
   spawnedChild = child;
-
-  const authToken =
-    (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined;
 
   const probe = new NakamaClient({
     authToken,

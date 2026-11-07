@@ -65,7 +65,13 @@ function clientAddress(
   trustProxy: boolean
 ): string | null {
   if (trustProxy) {
-    const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+    // The proxy appends the address it saw, so only the last hop is
+    // trustworthy. Earlier hops come from the client and can be rotated.
+    const forwarded = c.req
+      .header("x-forwarded-for")
+      ?.split(",")
+      .at(-1)
+      ?.trim();
 
     if (forwarded) {
       return forwarded;

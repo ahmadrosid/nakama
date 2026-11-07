@@ -5,6 +5,7 @@ import {
   defaultOllamaBaseUrl,
   defaultOllamaLabel,
   isChatgptProviderConnected,
+  isOllamaCloudBaseUrl,
   isOllamaCloudInstance,
   isValidBaseUrl,
   NakamaApiError,
@@ -335,7 +336,7 @@ function buildProviderFieldsFromRequest(
   if (type === "ollama") {
     const resolvedHostMode: OllamaHostMode =
       request.hostMode ??
-      (request.baseUrl?.includes("ollama.com") ? "cloud" : "local");
+      (isOllamaCloudBaseUrl(request.baseUrl) ? "cloud" : "local");
 
     const baseUrl = normalizeBaseUrl(
       request.baseUrl?.trim() || defaultOllamaBaseUrl(resolvedHostMode)

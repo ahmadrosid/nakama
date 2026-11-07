@@ -54,53 +54,81 @@ async function renderCard(policy: MfaPolicyResponse) {
     await act(() => Bun.sleep(0));
   };
 
-  const control = (label: string) =>
-    document.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
+  const radio = (label: string) =>
+    [
+      ...document.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+    ].find((input) => input.closest("label")?.textContent?.startsWith(label));
+
+  const checked = () =>
+    radio("Off")?.checked
+      ? "off"
+      : radio("Optional")?.checked
+        ? "optional"
+        : radio("Required")?.checked
+          ? "required"
+          : null;
 
   const button = (label: string) =>
     [...document.querySelectorAll<HTMLElement>("button")].find(
       (element) => element.textContent?.trim() === label
     );
 
-  return { button, click, container, control, update };
+  return { button, checked, click, container, radio, update };
 }
 
-test("turning MFA off for all users waits for the confirm", async () => {
-  const card = await renderCard(ENABLED);
+test("the card shows the saved policy as one of three choices", async () => {
+  expect((await renderCard({ ...ENABLED, enabled: false })).checked()).toBe(
+    "off"
+  );
+});
 
-  await card.click(() => card.control("MFA for all users"));
+test("turning MFA off waits for the confirm", async () => {
+  const card = await renderCard(ENABLED);
+  expect(card.checked()).toBe("optional");
+
+  await card.click(() => card.radio("Off"));
   expect(card.update).not.toHaveBeenCalled();
+  expect(card.checked()).toBe("optional");
 
   await card.click(() => card.button("Turn off"));
   await waitFor(() => card.update.mock.calls.length > 0);
   expect(card.update).toHaveBeenCalledWith({ enabled: false, required: false });
 });
 
-test("roles can be picked before sign-in requires MFA", async () => {
-  const card = await renderCard(ENABLED);
+test("Optional turns MFA on without a confirm", async () => {
+  const card = await renderCard({ ...ENABLED, enabled: false });
 
-  expect(card.control("Required for: Admins")).toBeDefined();
+  await card.click(() => card.radio("Optional"));
+  await waitFor(() => card.update.mock.calls.length > 0);
+  expect(card.update).toHaveBeenCalledWith({ enabled: true });
+  expect(card.checked()).toBe("optional");
+});
 
-  await card.click(() => card.control("Require for sign-in"));
+test("Required from Off waits for the confirm, then shows the roles", async () => {
+  const card = await renderCard({ ...ENABLED, enabled: false });
+  expect(card.button("Admins")).toBeUndefined();
+
+  await card.click(() => card.radio("Required"));
   expect(card.update).not.toHaveBeenCalled();
 
   await card.click(() => card.button("Require"));
   await waitFor(() => card.update.mock.calls.length > 0);
-  expect(card.update).toHaveBeenCalledWith({ required: true });
+  expect(card.update).toHaveBeenCalledWith({ enabled: true, required: true });
+  expect(card.button("Admins")?.getAttribute("aria-pressed")).toBe("true");
+});
+
+test("Optional from Required drops the requirement without a confirm", async () => {
+  const card = await renderCard({ ...ENABLED, required: true });
+
+  await card.click(() => card.radio("Optional"));
+  await waitFor(() => card.update.mock.calls.length > 0);
+  expect(card.update).toHaveBeenCalledWith({ required: false });
 });
 
 test("adding a role while sign-in requires MFA waits for the confirm", async () => {
   const card = await renderCard({ ...ENABLED, required: true });
 
-  await card.click(() => card.control("Required for: Admins"));
-
-  const members = () =>
-    [
-      ...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'),
-    ].find((item) => item.textContent?.trim() === "Members");
-
-  await waitFor(() => members() !== undefined);
-  await card.click(members);
+  await card.click(() => card.button("Members"));
   expect(card.update).not.toHaveBeenCalled();
 
   await card.click(() => card.button("Require"));
@@ -108,6 +136,12 @@ test("adding a role while sign-in requires MFA waits for the confirm", async () 
   expect(card.update).toHaveBeenCalledWith({
     enforcedRoles: ["admin", "member"],
   });
+});
+
+test("the last selected role cannot be removed", async () => {
+  const card = await renderCard({ ...ENABLED, required: true });
+
+  expect(card.button("Admins")?.hasAttribute("disabled")).toBe(true);
 });
 
 test("a change made during a save is saved after it", async () => {
@@ -121,15 +155,15 @@ test("a change made during a save is saved after it", async () => {
       })
   );
 
-  await card.click(() => card.control("MFA for all users"));
-  await card.click(() => card.control("Require for sign-in"));
+  await card.click(() => card.radio("Optional"));
+  await card.click(() => card.radio("Required"));
   await card.click(() => card.button("Require"));
   expect(card.update).toHaveBeenCalledTimes(1);
 
   await act(async () => finishFirst());
   await waitFor(() => card.update.mock.calls.length > 1);
   expect(card.update.mock.calls.map(([input]) => input)).toEqual([
-    { enabled: true, required: false },
+    { enabled: true },
     { required: true },
   ]);
 });

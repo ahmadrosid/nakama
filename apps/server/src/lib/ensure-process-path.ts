@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { isSecretEnvKey } from "@nakama/core";
+import { isToolHiddenEnvKey } from "@nakama/core";
 
 let ensured = false;
 
@@ -89,7 +89,7 @@ export function getToolExecutionEnv(): NodeJS.ProcessEnv {
   const baseEnv = { ...process.env };
 
   for (const key of Object.keys(baseEnv)) {
-    if (isSecretEnvKey(key)) {
+    if (isToolHiddenEnvKey(key)) {
       delete baseEnv[key];
     }
   }

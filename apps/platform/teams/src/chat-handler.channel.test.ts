@@ -1,6 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { withTempHome } from "@nakama/core/channel-test-helpers";
 import { ALLOWED, activity, CONFIG, createHarness } from "./test-helpers";
+
+// The thread cap tests run 500 turns, and each one saves the whole session
+// file. On a loaded CI runner that takes more than the 5 s default.
+setDefaultTimeout(30_000);
 
 describe("teams chat handler in a channel thread", () => {
   const THREAD_A = "19:general@thread.tacv2;messageid=1001";

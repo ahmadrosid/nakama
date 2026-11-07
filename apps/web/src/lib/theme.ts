@@ -4,7 +4,7 @@ export type ResolvedTheme = "light" | "dark";
 
 export const THEME_STORAGE_KEY = "nakama-theme";
 
-export function isTheme(value: string | null | undefined): value is Theme {
+function isTheme(value: string | null | undefined): value is Theme {
   return value === "light" || value === "dark" || value === "system";
 }
 

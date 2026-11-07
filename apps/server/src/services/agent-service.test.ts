@@ -318,3 +318,87 @@ describe("AgentService /skill requests", () => {
     expect(system).not.toContain("Add skill");
   });
 });
+
+describe("AgentService documents from earlier turns", () => {
+  setupTestConfigDir("nakama-document-history-");
+
+  const pdf = Buffer.from("%PDF-1.4\n% nakama-2386 report\n%%EOF\n").toString(
+    "base64"
+  );
+
+  async function callsCarryingTheDocument(
+    assignExtract: boolean
+  ): Promise<boolean[]> {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+
+    if (assignExtract) {
+      const now = new Date().toISOString();
+
+      await db.upsertTool({
+        createdAt: now,
+        description: "extract_document_text",
+        handlerConfig: {},
+        handlerType: "builtin",
+        id: "tool_extract_document_text",
+        name: "extract_document_text",
+        updatedAt: now,
+      });
+      await db.assignToolToProfile(
+        "profile_default",
+        "tool_extract_document_text"
+      );
+    }
+
+    const agent = new AgentService(null, null, db);
+    const calls: GenerateChatInput[] = [];
+
+    const record = (input: GenerateChatInput) => {
+      calls.push(input);
+
+      return Promise.resolve({
+        assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
+        content: "ok",
+        toolCalls: [],
+      });
+    };
+
+    Object.assign(agent, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: {
+          generateChat: record,
+          name: "anthropic",
+          streamChat: record,
+        },
+      }),
+    });
+
+    const sessionId = await agent.createSession(
+      TEST_ORG_ID,
+      "web",
+      "profile_default",
+      null
+    );
+
+    const session = await agent.sessions.get(sessionId, TEST_ORG_ID);
+
+    await session?.send({
+      documents: [
+        { data: pdf, filename: "report.pdf", mediaType: "application/pdf" },
+      ],
+      message: "Read this",
+    });
+    await session?.send({ message: "What was the total?" });
+
+    return calls.map((call) => JSON.stringify(call.messages).includes(pdf));
+  }
+
+  test("are sent as a reference when the profile can reopen them", async () => {
+    expect(await callsCarryingTheDocument(true)).toEqual([true, false]);
+  });
+
+  test("are sent in full when the profile cannot reopen them", async () => {
+    expect(await callsCarryingTheDocument(false)).toEqual([true, true]);
+  });
+});

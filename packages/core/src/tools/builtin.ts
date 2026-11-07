@@ -217,15 +217,24 @@ export function refuseProfileSkillMarkdownWrite(
     return;
   }
 
-  const normalized = resolvedPath.replace(/\\/g, "/");
-  const match = normalized.match(/(?:^|\/)skills\/([^/]+)\/(.+)$/i);
+  // Segments, not a `skills/([^/]+)/(.+)$` regex that backtracks on
+  // repeated `skills/` parts. The first `skills/<name>/<rest>` wins; an empty
+  // rest can only be the last segment, so the `!rest` check below covers it.
+  const segments = resolvedPath.replace(/\\/g, "/").split("/");
 
-  if (!match) {
+  const index = segments.findIndex(
+    (segment, at) =>
+      segment.toLowerCase() === "skills" &&
+      Boolean(segments[at + 1]) &&
+      at + 2 < segments.length
+  );
+
+  if (index === -1) {
     return;
   }
 
-  const skillName = match[1];
-  const rest = match[2];
+  const skillName = segments[index + 1];
+  const rest = segments.slice(index + 2).join("/");
 
   if (!skillName || skillName === "." || skillName === ".." || !rest) {
     return;

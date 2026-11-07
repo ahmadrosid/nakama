@@ -564,12 +564,48 @@ export async function fetchRemoteImage(
 }
 
 export async function convertHtmlToMarkdown(html: string): Promise<string> {
-  const removeCommentNoise = (value: string) =>
-    value.replace(/<!--(?:\[--|\]--|\[|\])?-->/g, "");
+  const removeCommentNoise = (value: string) => {
+    let current = value;
+    let previous: string;
+
+    // Repeat until stable, so a removal cannot join a new marker.
+    do {
+      previous = current;
+      current = previous.replace(/<!--(?:\[--|\]--|\[|\])?-->/g, "");
+    } while (current !== previous);
+
+    return current;
+  };
 
   // Strip whole comments before parsing: Word's conditional comments
   // (`<!--[if gte mso 9]>…<![endif]-->`) otherwise survive as visible text.
-  const cleanedHtml = html.replace(/<!--[\s\S]*?-->/g, "");
+  // A scan, not a lazy regex, so an unclosed `<!--` stays linear; that text
+  // is kept, as before. Repeat while a removal joins pieces into a new `<!--`.
+  let cleanedHtml = html;
+
+  for (;;) {
+    let out = "";
+    let cursor = 0;
+
+    for (;;) {
+      const open = cleanedHtml.indexOf("<!--", cursor);
+      const close = open === -1 ? -1 : cleanedHtml.indexOf("-->", open + 4);
+
+      if (close === -1) {
+        out += cleanedHtml.slice(cursor);
+        break;
+      }
+
+      out += cleanedHtml.slice(cursor, open);
+      cursor = close + 3;
+    }
+
+    if (out === cleanedHtml) {
+      break;
+    }
+
+    cleanedHtml = out;
+  }
 
   const markdown = NodeHtmlMarkdown.translate(cleanedHtml, {
     bulletMarker: "-",

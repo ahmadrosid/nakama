@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeBaseUrl } from "./compatible-provider-config";
 import type { JsonValue } from "./contract";
 
 export type Connection = { url: string; token: string };
@@ -43,7 +44,7 @@ export function normalizeUrl(value: string): string {
     );
   }
 
-  return url.toString().replace(/\/+$/, "");
+  return normalizeBaseUrl(url.toString());
 }
 
 export class SupermemoryError extends Error {

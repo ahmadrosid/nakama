@@ -1,13 +1,15 @@
 import type { TransferProgress } from "@nakama/client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
-export function useExportData() {
-  return useMutation({
-    mutationFn: (onProgress?: TransferProgress) =>
-      client.exportData({ onProgress }),
+/** Read once when Settings opens; a scheduled backup runs at most once a day. */
+export function useBackupStatusQuery() {
+  return useQuery({
+    queryFn: () => client.getBackupStatus(),
+    queryKey: queryKeys.backupStatus,
+    staleTime: Number.POSITIVE_INFINITY,
   });
 }
 

@@ -28,10 +28,12 @@
     "pacote": "^22.0.0",
     "pm2": "^7.0.4",
     "tar": "^7.5.22",
+    "yauzl": "3.4.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/pacote": "^11.1.8",
+    "@types/yauzl": "2.10.3",
     "msw": "^2.15.0"
   }
 }

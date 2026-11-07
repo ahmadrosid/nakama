@@ -168,6 +168,8 @@ export function TranscriptionSettingsCard({
           ...transcriptionModelGroups.flatMap((group) =>
             group.models.map((model) => ({
               label: `${model.name} · ${group.providerLabel}`,
+              name: model.name,
+              provider: { id: group.providerId, label: group.providerLabel },
               value: encodeModelSelection(group.providerId, model.id),
             }))
           ),

@@ -266,7 +266,7 @@ export function WebSearchSettingsCard() {
             </p>
           ) : null}
         </div>
-        <div className="w-full min-w-0 sm:w-80">
+        <div className="grid w-full min-w-0 gap-2 sm:w-[25rem] sm:grid-cols-2">
           <Select
             disabled={form.pending}
             onValueChange={form.selectProvider}
@@ -292,6 +292,12 @@ export function WebSearchSettingsCard() {
               ))}
             </SelectContent>
           </Select>
+          <span
+            aria-hidden
+            className="hidden h-8 items-center px-2.5 text-muted-foreground text-sm sm:flex"
+          >
+            —
+          </span>
         </div>
       </div>
 

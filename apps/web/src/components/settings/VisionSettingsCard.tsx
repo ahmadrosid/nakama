@@ -146,6 +146,8 @@ export function VisionSettingsCard() {
           ...visionModelGroups.flatMap((group) =>
             group.models.map((model) => ({
               label: `${model.name} · ${group.providerLabel}`,
+              name: model.name,
+              provider: { id: group.providerId, label: group.providerLabel },
               value: encodeModelSelection(group.providerId, model.id),
             }))
           ),
@@ -162,6 +164,8 @@ export function VisionSettingsCard() {
               .map((model) => ({
                 disabled: true,
                 label: `${model.name} · ${group.providerLabel} · cannot read images`,
+                name: `${model.name} · cannot read images`,
+                provider: { id: group.providerId, label: group.providerLabel },
                 value: `no-vision:${encodeModelSelection(group.providerId, model.id)}`,
               }))
           ),

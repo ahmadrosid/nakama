@@ -19,6 +19,9 @@ export const DEFAULT_TIMEOUT_MS = 15_000;
 
 export const MAX_OUTPUT_CHARS = 32_000;
 
+/** One ripgrep JSON record, which carries the whole matching line. */
+const MAX_RECORD_CHARS = 1_000_000;
+
 export interface RipgrepMatch {
   file: string;
   line: number;
@@ -120,9 +123,23 @@ export async function runRipgrep(
     };
 
     child.stdout.on("data", (chunk: Buffer | string) => {
+      if (truncated) {
+        return;
+      }
+
       stdoutBuffer += String(chunk);
       const lines = stdoutBuffer.split("\n");
       stdoutBuffer = lines.pop() ?? "";
+
+      // A match on one huge line (minified code) arrives as one JSON record.
+      // Stop before buffering it whole instead of after.
+      if (stdoutBuffer.length > MAX_RECORD_CHARS) {
+        stdoutBuffer = "";
+        truncated = true;
+        maybeStopForLimits();
+
+        return;
+      }
 
       for (const line of lines) {
         if (!line.trim()) {
@@ -139,9 +156,16 @@ export async function runRipgrep(
           continue;
         }
 
-        if (matches.length < options.maxResults) {
+        if (
+          matches.length < options.maxResults &&
+          collectedChars + parsed.chars <= MAX_OUTPUT_CHARS
+        ) {
           matches.push(parsed.match);
           collectedChars += parsed.chars;
+        } else {
+          truncated = true;
+          maybeStopForLimits();
+          break;
         }
 
         if (

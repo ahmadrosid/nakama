@@ -330,6 +330,94 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("/status in a group topic names that topic's session", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        {
+          profiles: [
+            {
+              id: "default",
+              isDefault: true,
+              model: "local::base",
+              name: "Default Bot",
+            },
+          ],
+          providerConfigured: true,
+        }
+      );
+
+      const topic = {
+        chatId: -100_123,
+        chatType: "supergroup" as const,
+        messageThreadId: 10,
+        userId: 42,
+      };
+
+      await handleMessage(createMessageContext({ ...topic, text: "/new" }).ctx);
+
+      const status = createMessageContext({ ...topic, text: "/status" });
+      await handleMessage(status.ctx);
+
+      expect(status.replies.join("\n")).toBe(
+        [
+          "Server: ok",
+          "Provider configured: yes",
+          "Profile: Default Bot",
+          "Provider: unknown",
+          "Model: base",
+          "Session: session_",
+        ].join("\n")
+      );
+    });
+  });
+
+  // The owner's agent is listed only in the owner's org, not the active one.
+  test("/status names the owner's agent from the owner's org", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: {
+            ...TEST_CONFIG,
+            orgId: "org_test",
+            owner: { orgId: "org_owner", profileId: "agent_owner" },
+          },
+        },
+        {
+          profiles: [{ id: "default", isDefault: true, name: "Default Bot" }],
+          profilesByOrgId: {
+            org_owner: [
+              { id: "agent_owner", model: "local::owned", name: "Owner Bot" },
+            ],
+          },
+          providerConfigured: true,
+        }
+      );
+
+      const status = createMessageContext({ text: "/status", userId: 42 });
+      const listedBefore = calls.listProfiles;
+      await handleMessage(status.ctx);
+
+      const statusText = status.replies.join("\n");
+      expect(statusText).toContain("Profile: Owner Bot");
+      expect(statusText).toContain("Model: owned");
+      // One lookup finds the agent; status does not list profiles again.
+      expect(calls.listProfiles - listedBefore).toBe(1);
+    });
+  });
+
   test("/status in a group topic reports that topic profile", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
@@ -2022,11 +2110,7 @@ describe("createChatHandler artifact delivery", () => {
       await handleMessage(ctx);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
-      expect(
-        replies.some((reply) =>
-          reply.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+      expect(replies.join("\n")).toContain("https://app.example/s/tok_test");
     });
   });
 
@@ -2340,5 +2424,114 @@ test("owned connection discards foreign hot sessions and never switches or falls
     ).rejects.toThrow();
     expect(calls.sendStream).toBe(sent);
     expect(calls.createSession).toBe(1);
+  });
+});
+
+describe("concurrent chats in different orgs", () => {
+  test("a chat's session is created in its own org while another chat switches org", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [1001, 1002],
+      });
+
+      const { client, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        { orgs: createMultiTestOrgs() }
+      );
+
+      await handler(
+        createMessageContext({ chatId: 1001, text: "1", userId: 1001 }).ctx
+      );
+      await handler(
+        createMessageContext({ chatId: 1002, text: "2", userId: 1002 }).ctx
+      );
+
+      // Each client scope tracks its own org, and the shared base does too,
+      // so the test sees which org a createSession would have sent.
+      const sessionOrgs: Array<string | null> = [];
+      const base = client as unknown as Record<string, unknown>;
+      let baseOrg: string | null = null;
+      const baseSetOrgId = base.setOrgId as (orgId: string | null) => void;
+      const baseCreateSession = base.createSession as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      const baseListProfiles = base.listProfiles as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+
+      let releaseFirst: () => void = () => {};
+      const firstWaits = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let listCalls = 0;
+      let orgSets = 0;
+
+      const track = (
+        target: Record<string, unknown>,
+        getOrg: () => string | null,
+        setOrg: (orgId: string | null) => void
+      ) => {
+        target.setOrgId = (orgId: string | null) => {
+          setOrg(orgId);
+          baseSetOrgId(orgId);
+          orgSets += 1;
+
+          if (orgSets === 2) {
+            releaseFirst();
+          }
+        };
+        target.createSession = (...args: unknown[]) => {
+          sessionOrgs.push(getOrg());
+
+          return baseCreateSession(...args);
+        };
+      };
+
+      track(
+        base,
+        () => baseOrg,
+        (orgId) => {
+          baseOrg = orgId;
+        }
+      );
+      base.listProfiles = async (...args: unknown[]) => {
+        listCalls += 1;
+
+        // The first chat waits here until the second chat has set its org.
+        if (listCalls === 1) {
+          await firstWaits;
+        }
+
+        return baseListProfiles(...args);
+      };
+      base.forOrg = () => {
+        const scoped = Object.create(base) as Record<string, unknown>;
+        let scopedOrg: string | null = baseOrg;
+        track(
+          scoped,
+          () => scopedOrg,
+          (orgId) => {
+            scopedOrg = orgId;
+          }
+        );
+
+        return scoped;
+      };
+
+      await Promise.all([
+        handler(
+          createMessageContext({ chatId: 1001, text: "hello", userId: 1001 })
+            .ctx
+        ),
+        handler(
+          createMessageContext({ chatId: 1002, text: "hello", userId: 1002 })
+            .ctx
+        ),
+      ]);
+
+      expect(sessionOrgs.toSorted()).toEqual(["org_a", "org_b"]);
+    });
   });
 });

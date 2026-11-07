@@ -1,72 +1,45 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@nakama/ui/select";
-import { ComputerIcon, MoonIcon, Sun01Icon } from "hugeicons-react";
+import { cn } from "@nakama/ui/utils";
+import { ComputerIcon, Moon02Icon, Sun01Icon } from "hugeicons-react";
 import { useTheme } from "@/context/use-theme";
 import type { Theme } from "@/lib/theme";
-import { isTheme } from "@/lib/theme";
 
 const THEME_OPTIONS: {
+  icon: typeof Sun01Icon;
   id: Theme;
   label: string;
-  icon: typeof Sun01Icon;
 }[] = [
-  { icon: Sun01Icon, id: "light", label: "Light" },
-  { icon: MoonIcon, id: "dark", label: "Dark" },
   { icon: ComputerIcon, id: "system", label: "System" },
+  { icon: Sun01Icon, id: "light", label: "Light" },
+  { icon: Moon02Icon, id: "dark", label: "Dark" },
 ];
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
-  const selected =
-    THEME_OPTIONS.find((option) => option.id === theme) ?? THEME_OPTIONS[1];
-
-  const SelectedIcon = selected.icon;
-
   return (
-    <Select
-      onValueChange={(value) => {
-        if (value != null && isTheme(value)) {
-          setTheme(value);
-        }
-      }}
-      value={theme}
-    >
-      <SelectTrigger
-        aria-label={`Appearance: ${selected.label}`}
-        className="w-[8.25rem]"
-      >
-        <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-          <SelectedIcon
-            aria-hidden="true"
-            className="size-3.5 shrink-0 text-muted-foreground"
-            strokeWidth={1.75}
-          />
-          <span className="truncate">{selected.label}</span>
-        </span>
-      </SelectTrigger>
-      <SelectContent align="end">
-        {THEME_OPTIONS.map((option) => {
-          const Icon = option.icon;
+    <div className="flex gap-0.5 rounded-lg bg-muted p-0.5">
+      {THEME_OPTIONS.map((option) => {
+        const selected = option.id === theme;
+        const Icon = option.icon;
 
-          return (
-            <SelectItem key={option.id} value={option.id}>
-              <span className="flex items-center gap-2">
-                <Icon
-                  aria-hidden="true"
-                  className="size-3.5 shrink-0"
-                  strokeWidth={1.75}
-                />
-                {option.label}
-              </span>
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
+        return (
+          <button
+            aria-pressed={selected}
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-md px-3 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+              selected
+                ? "bg-background font-medium text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            key={option.id}
+            onClick={() => setTheme(option.id)}
+            type="button"
+          >
+            <Icon aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
