@@ -55,7 +55,12 @@ export function DataPortabilityPanel() {
 
   const [error, setError] = useState<string | null>(null);
   const backupStatus = useBackupStatusQuery();
-  const lastBackupError = backupStatus.data?.lastError;
+
+  // A failed refetch keeps old data; do not show that next to "Cannot check"
+  const lastBackupError = backupStatus.isError
+    ? null
+    : backupStatus.data?.lastError;
+
   const exportMutation = useExportData();
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();
@@ -237,11 +242,11 @@ function PanelError({ children }: { children: ReactNode }) {
   return (
     <div className="px-4 py-3">
       <div
-        role="alert"
         className={cn(
           "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
           "border-destructive/30 bg-destructive/10 text-destructive"
         )}
+        role="alert"
       >
         <Alert02Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
         <span className="text-pretty">{children}</span>
