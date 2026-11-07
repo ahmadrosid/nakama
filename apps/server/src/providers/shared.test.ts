@@ -84,6 +84,10 @@ describe("provider shared helpers", () => {
     expect(events).toEqual(['{"chunk":1}']);
     expect(error).toBeInstanceOf(ProviderStreamInterruptedError);
     expect(error.status).toBe(502);
+    expect(error.cause).toMatchObject({
+      code: "ECONNRESET",
+      message: "The socket connection was closed unexpectedly.",
+    });
   });
 
   test("readSseEvents keeps an abort as an abort", async () => {

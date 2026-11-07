@@ -291,7 +291,10 @@ async function readStreamChunk(
       throw error;
     }
 
-    throw new ProviderStreamInterruptedError(MODEL_CONNECTION_CLOSED_MESSAGE);
+    throw Object.assign(
+      new ProviderStreamInterruptedError(MODEL_CONNECTION_CLOSED_MESSAGE),
+      { cause: error }
+    );
   }
 }
 
