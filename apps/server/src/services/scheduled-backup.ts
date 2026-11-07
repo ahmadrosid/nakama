@@ -38,10 +38,22 @@ const backupErrorSchema = z.object({
   message: z.string(),
 });
 
+type BackupError = NonNullable<BackupStatusResponse["lastError"]>;
+
+// Failures this process could not write to disk (for example, the disk is full).
+// One entry per backup dir; it is newer than any record on disk.
+const unrecordedErrors = new Map<string, BackupError>();
+
 /** Throws when the record exists but cannot be read, so Settings shows that it cannot check. */
 export async function readBackupError(
   dir: string
 ): Promise<BackupStatusResponse["lastError"]> {
+  const unrecorded = unrecordedErrors.get(dir);
+
+  if (unrecorded) {
+    return unrecorded;
+  }
+
   const path = join(dir, ERROR_FILE);
   let info: Awaited<ReturnType<typeof lstat>>;
 
@@ -325,10 +337,15 @@ export async function writeBackup(options: {
     await exported.cleanup();
   }
 
-  const backups = await listBackups(options.dir);
+  // The backup is written; a failed rotation must not report it as failed
+  try {
+    const backups = await listBackups(options.dir);
 
-  for (const old of backups.slice(0, -KEEP)) {
-    await unlink(join(options.dir, old));
+    for (const old of backups.slice(0, -KEEP)) {
+      await unlink(join(options.dir, old));
+    }
+  } catch (error) {
+    console.error(`Nakama cannot remove old backups: ${describe(error)}`);
   }
 
   return path;
@@ -357,6 +374,7 @@ export async function startScheduledBackups(options: {
     try {
       const path = await writeBackup(options);
       console.log(`Nakama backup written to ${path}`);
+      unrecordedErrors.delete(options.dir);
 
       // Its own catch: the backup is written, a failed cleanup must not report it as failed
       try {
@@ -376,12 +394,14 @@ export async function startScheduledBackups(options: {
           ? error.message
           : "The scheduled backup failed. The server log has the details.";
 
+      const record = { at: new Date().toISOString(), message };
+
       try {
-        await writeAtomically(
-          errorPath,
-          JSON.stringify({ at: new Date().toISOString(), message })
-        );
+        await writeAtomically(errorPath, JSON.stringify(record));
+        unrecordedErrors.delete(options.dir);
       } catch (recordError) {
+        // Keep it in memory, so Settings does not show an older record or no failure
+        unrecordedErrors.set(options.dir, record);
         console.error(
           `Nakama cannot record the backup error: ${describe(recordError)}`
         );
