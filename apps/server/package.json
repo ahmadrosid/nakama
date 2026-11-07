@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@types/pacote": "^11.1.8",
-    "@types/yauzl": "2.10.3",
+    "@types/yauzl": "3.4.0",
     "msw": "^2.15.0"
   }
 }
