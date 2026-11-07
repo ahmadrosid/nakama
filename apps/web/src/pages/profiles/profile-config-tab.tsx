@@ -551,26 +551,22 @@ function ProfileFooterActions({
   const destructive = actions.filter((action) => action.destructive);
 
   return (
-    <footer className="flex w-0 min-w-full flex-col items-center gap-3">
-      {regular.length > 0 ? (
-        <div className="grid w-full grid-cols-2 gap-2 sm:auto-cols-fr sm:grid-flow-col sm:grid-cols-none">
-          {regular.map(({ Icon, disabled, label, onClick }) => (
-            <button
-              className="flex h-9 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-muted px-3 font-medium text-foreground/80 text-sm outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-              disabled={disabled}
-              key={label}
-              onClick={onClick}
-              type="button"
-            >
-              <Icon aria-hidden className="size-4" />
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+    <footer className="flex w-0 min-w-full flex-wrap items-center gap-2 border-border border-t pt-5">
+      {regular.map(({ Icon, disabled, label, onClick }) => (
+        <button
+          className="flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-background px-3.5 font-medium text-foreground/90 text-sm shadow-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+          disabled={disabled}
+          key={label}
+          onClick={onClick}
+          type="button"
+        >
+          <Icon aria-hidden className="size-4" />
+          {label}
+        </button>
+      ))}
       {destructive.map(({ Icon, disabled, label, onClick }) => (
         <button
-          className="flex h-9 items-center gap-2 rounded-full px-4 font-medium text-red-700 text-sm outline-none transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 dark:text-destructive"
+          className="ml-auto flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-red-200 bg-background px-3.5 font-medium text-red-700 text-sm shadow-xs outline-none transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 dark:border-destructive/40 dark:text-destructive"
           disabled={disabled}
           key={label}
           onClick={onClick}
