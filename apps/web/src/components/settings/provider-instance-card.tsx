@@ -4,17 +4,19 @@ import type {
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
+import { TableCell, TableRow } from "@nakama/ui/table";
+import { useQuery } from "@tanstack/react-query";
 import {
   Delete02Icon,
-  Edit03Icon,
   Key01Icon,
-  ListViewIcon,
+  RefreshIcon,
+  Settings02Icon,
+  StarIcon,
 } from "hugeicons-react";
-import type { ReactNode } from "react";
+import { type ComponentType, useEffect, useMemo, useRef } from "react";
 import { CatalogProviderModelFields } from "@/components/CatalogProviderModelFields";
-import { CustomProviderFields } from "@/components/CustomProviderFields";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
+import { ModelUsageContext } from "@/components/model-list-editor.shared";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
 import { ShortlistBrowseProviderModelFields } from "@/components/ShortlistBrowseProviderModelFields";
 import {
@@ -30,43 +32,50 @@ import {
   CHATGPT_SIGN_IN,
   XAI_SIGN_IN,
 } from "@/components/subscription-sign-in.shared";
+import {
+  useImageGenerationSettings,
+  useModelsQuery,
+  useTranscriptionSettings,
+  useVisionSettings,
+} from "@/hooks/use-app-queries";
+import { client } from "@/lib/client";
+import {
+  decodeModelSelection,
+  groupModelsByProvider,
+  profileModelSelectionValue,
+} from "@/lib/models";
+import { queryKeys } from "@/lib/query-keys";
 
 function ProviderActionButton({
   label,
+  icon: Icon,
   disabled,
   destructive,
   onClick,
-  children,
 }: {
   label: string;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   disabled?: boolean;
   destructive?: boolean;
   onClick: () => void;
-  children: ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            aria-label={label}
-            className={
-              destructive
-                ? "text-muted-foreground hover:text-destructive"
-                : "text-muted-foreground"
-            }
-            disabled={disabled}
-            onClick={onClick}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            {children}
-          </Button>
-        }
-      />
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
+    <Button
+      aria-label={label}
+      className={
+        destructive
+          ? "text-destructive hover:text-destructive"
+          : "text-muted-foreground hover:text-foreground"
+      }
+      disabled={disabled}
+      onClick={onClick}
+      size="icon"
+      title={label}
+      type="button"
+      variant="ghost"
+    >
+      <Icon aria-hidden className="size-4" />
+    </Button>
   );
 }
 
@@ -117,85 +126,215 @@ function providerKeyActionLabel(
   return hasApiKey ? "Update key" : "Add key";
 }
 
-function ProviderInstanceTableRow({
+function providerAuthLabel(
+  card: ReturnType<typeof useProviderInstanceCard>,
+  instance: ProviderInstanceSummary
+): string {
+  if (instance.secretSource === "environment") {
+    return `Env ${instance.secretEnvName}`;
+  }
+
+  if (card.isChatgpt || card.isXaiOAuth) {
+    return "Sign-in";
+  }
+
+  return instance.hasApiKey ? "API key" : "None";
+}
+
+function providerCheckWarning(
+  status: string | undefined,
+  label: string
+): string | null {
+  switch (status) {
+    case "error":
+      return "Could not check";
+    case "rejected":
+      return "Key rejected";
+    case "needs-key":
+      return "Needs a key";
+    case "unreachable":
+      return `Cannot reach ${label}`;
+    default:
+      return null;
+  }
+}
+
+function ProviderConnectedBadge({ ok }: { ok: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 ${
+        ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`size-2 rounded-full ${ok ? "bg-emerald-500" : "bg-destructive"}`}
+      />
+      {ok ? "Connected" : "Not connected"}
+    </span>
+  );
+}
+
+function ProviderStatus({
+  checkable,
+  connected,
+  instance,
+}: {
+  checkable: boolean;
+  connected: boolean;
+  instance: ProviderInstanceSummary;
+}) {
+  // A live check, so a key the provider stopped taking shows here and not
+  // first in a chat. Once per provider every 10 minutes.
+  const {
+    data: check,
+    isError,
+    isFetching: checking,
+    refetch: checkAgain,
+  } = useQuery({
+    // Local and custom endpoints can be checked without a key.
+    enabled: checkable,
+    queryFn: () => client.checkProvider(instance.id),
+    queryKey: queryKeys.providerCheck(instance.id),
+    staleTime: 10 * 60_000,
+  });
+
+  const status = isError ? "error" : check?.status;
+  const warning = providerCheckWarning(status, instance.label);
+
+  if (!warning) {
+    return <ProviderConnectedBadge ok={connected || status === "ok"} />;
+  }
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-2">
+      <span
+        className={
+          status === "error" || status === "unreachable"
+            ? "text-amber-700 dark:text-amber-300"
+            : "text-destructive"
+        }
+        role="status"
+      >
+        {warning}
+      </span>
+      <button
+        className="text-foreground underline underline-offset-2 disabled:opacity-50"
+        disabled={checking}
+        onClick={() => void checkAgain()}
+        type="button"
+      >
+        {checking ? "Checking…" : "Check again"}
+      </button>
+    </span>
+  );
+}
+
+function ProviderInstanceRow({
   instance,
   card,
   canManage,
+  isDefault,
+  autoFocus,
+  onMakeDefault,
 }: {
   instance: ProviderInstanceSummary;
   card: ReturnType<typeof useProviderInstanceCard>;
   canManage: boolean;
+  isDefault: boolean;
+  autoFocus: boolean;
+  onMakeDefault?: () => void;
 }) {
+  // A provider just added takes focus, so a keyboard user lands on it.
+  const rowRef = useRef<HTMLTableRowElement>(null);
+
+  useEffect(() => {
+    if (autoFocus) {
+      rowRef.current?.focus();
+    }
+  }, [autoFocus]);
+
   const endpoint = instance.baseUrl?.trim() || null;
 
+  const connected =
+    instance.hasApiKey || instance.secretSource === "environment";
+
+  // Compatible providers edit name, URL and models in one dialog.
+  const opensEdit = card.isCompatibleLike;
+  const signsIn = card.isChatgpt || card.isXaiOAuth;
+
   return (
-    <tr>
-      <td className="px-3 py-2.5 align-middle">
-        <p className="truncate font-medium text-foreground text-sm">
-          {instance.label}
+    <TableRow
+      className="outline-none focus-visible:bg-muted"
+      ref={rowRef}
+      tabIndex={-1}
+    >
+      <TableCell className="max-w-64">
+        <p className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+          <span className="truncate">{instance.label}</span>
+          {isDefault ? (
+            <span className="shrink-0 rounded-md border border-border px-1.5 font-normal text-muted-foreground text-xs">
+              Default
+            </span>
+          ) : null}
         </p>
-        {instance.hasApiKey ||
-        instance.secretSource === "environment" ? null : (
-          <p className="text-destructive text-xs">Not connected</p>
-        )}
-      </td>
-      <td className="px-3 py-2.5 align-middle">
         {endpoint ? (
           <p
-            className="max-w-[18rem] truncate font-mono text-2xs text-foreground/80"
+            className="truncate font-mono text-muted-foreground text-xs"
             title={endpoint}
           >
             {endpoint}
           </p>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2.5 align-middle">
-        <span className="text-muted-foreground text-sm">
-          {providerModelCountLabel(instance.modelCount)}
-        </span>
-      </td>
-      <td className="px-3 py-2.5 align-middle">
-        <div className="flex items-center justify-end gap-0.5">
-          {card.isCompatibleLike ? (
-            <ProviderActionButton label="Edit" onClick={card.openEdit}>
-              <Edit03Icon className="size-3.5" />
-            </ProviderActionButton>
-          ) : null}
-          {canManage ? (
-            <ProviderActionButton
-              label={
-                card.isOpenRouter
-                  ? "Manage models and routing"
-                  : "Manage models"
-              }
-              onClick={card.openManage}
-            >
-              <ListViewIcon className="size-3.5" />
-            </ProviderActionButton>
-          ) : null}
+        ) : null}
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-muted-foreground">
+        {providerAuthLabel(card, instance)}
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        {providerModelCountLabel(instance.modelCount)}
+      </TableCell>
+      <TableCell>
+        <ProviderStatus
+          checkable={connected || card.isCompatibleLike}
+          connected={connected}
+          instance={instance}
+        />
+      </TableCell>
+      <TableCell className="whitespace-nowrap py-1.5 pr-2 text-right">
+        {opensEdit || canManage ? (
           <ProviderActionButton
-            label={
-              instance.secretSource === "environment"
-                ? `Managed by ${instance.secretEnvName}`
-                : providerKeyActionLabel(card, instance.hasApiKey)
-            }
-            onClick={() => card.setReplaceKeyOpen(true)}
-          >
-            <Key01Icon className="size-3.5" />
-          </ProviderActionButton>
+            icon={Settings02Icon}
+            label={`Manage ${instance.label}`}
+            onClick={opensEdit ? card.openEdit : card.openManage}
+          />
+        ) : null}
+        <ProviderActionButton
+          disabled={instance.secretSource === "environment"}
+          icon={signsIn ? RefreshIcon : Key01Icon}
+          label={
+            instance.secretSource === "environment"
+              ? `Key from ${instance.secretEnvName}`
+              : providerKeyActionLabel(card, instance.hasApiKey)
+          }
+          onClick={() => card.setReplaceKeyOpen(true)}
+        />
+        {onMakeDefault && !isDefault ? (
           <ProviderActionButton
-            destructive
             disabled={card.busy}
-            label="Remove"
-            onClick={() => card.setDeleteOpen(true)}
-          >
-            <Delete02Icon className="size-3.5" />
-          </ProviderActionButton>
-        </div>
-      </td>
-    </tr>
+            icon={StarIcon}
+            label={`Make ${instance.label} default`}
+            onClick={onMakeDefault}
+          />
+        ) : null}
+        <ProviderActionButton
+          destructive
+          disabled={card.busy}
+          icon={Delete02Icon}
+          label={`Remove ${instance.label}`}
+          onClick={() => card.setDeleteOpen(true)}
+        />
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -208,27 +347,6 @@ function ProviderManageModelsFields({
 }) {
   return (
     <>
-      {card.isCompatibleLike ? (
-        <CustomProviderFields
-          apiKey=""
-          baseUrl={instance.baseUrl ?? ""}
-          baseUrlError={null}
-          browseLabel={card.isOllama ? "Ollama" : undefined}
-          customModels={card.manageModels}
-          disabled={card.busy}
-          displayName={instance.label}
-          displayNameError={null}
-          hideIdentity={card.providerType === "netra"}
-          hostMode={instance.hostMode ?? undefined}
-          identityReadOnly
-          modelsError={null}
-          onBaseUrlChange={() => {}}
-          onCustomModelsChange={card.handleManageModelsChange}
-          onDisplayNameChange={() => {}}
-          providerInstanceId={instance.id}
-          remoteProvider={compatibleRemoteProvider(card)}
-        />
-      ) : null}
       {card.isOpenRouter ? (
         <OpenRouterProviderModelFields
           customModels={card.manageModels}
@@ -269,72 +387,159 @@ function ProviderManageModelsFields({
   );
 }
 
-function ProviderInstanceCardDialogs({
+function ProviderKeyDialog({
   card,
   instance,
-  isSole,
-  canManage,
 }: {
   card: ReturnType<typeof useProviderInstanceCard>;
   instance: ProviderInstanceSummary;
+}) {
+  return card.isChatgpt ? (
+    <ProviderReconnectDialog
+      busy={card.busy}
+      dialogError={card.dialogError}
+      instance={instance}
+      onConnected={(chatgptOAuth) => void card.reconnect({ chatgptOAuth })}
+      onOpenChange={card.setReplaceKeyOpen}
+      open={card.replaceKeyOpen}
+      signIn={CHATGPT_SIGN_IN}
+    />
+  ) : card.isXaiOAuth ? (
+    <ProviderReconnectDialog
+      busy={card.busy}
+      dialogError={card.dialogError}
+      instance={instance}
+      onConnected={(xaiOAuth) => void card.reconnect({ xaiOAuth })}
+      onOpenChange={card.setReplaceKeyOpen}
+      open={card.replaceKeyOpen}
+      signIn={XAI_SIGN_IN}
+    />
+  ) : (
+    <ProviderReplaceKeyDialog
+      apiKey={card.apiKey}
+      busy={card.busy}
+      dialogError={card.dialogError}
+      instance={instance}
+      onApiKeyChange={card.setApiKey}
+      onManage={(action) => void card.handleManageKey(action)}
+      onOpenChange={card.setReplaceKeyOpen}
+      onSave={() => void card.handleReplaceKey()}
+      onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
+      open={card.replaceKeyOpen}
+      providerType={card.providerType}
+      showApiKey={card.showApiKey}
+    />
+  );
+}
+
+// The Defaults settings that use this provider, for Remove and Manage.
+function useProviderSettingUsage(instance: ProviderInstanceSummary) {
+  const { data: modelsResponse } = useModelsQuery();
+  const { data: vision } = useVisionSettings();
+  const { data: transcription } = useTranscriptionSettings();
+  const { data: imageGeneration } = useImageGenerationSettings();
+
+  return useMemo(() => {
+    const groups = groupModelsByProvider(modelsResponse?.models ?? []);
+
+    // Settings that pick a model from this provider lose it on remove.
+    const settingModels: Array<[string, string | null | undefined]> = [
+      ["Image parsing model", vision?.model],
+      ["Audio transcription model", transcription?.model],
+      ["Image generation model", imageGeneration?.model],
+    ];
+
+    // With no model saved, images come from a connected ChatGPT. Removing the
+    // last one leaves image generation with no provider.
+    const lastChatgpt =
+      instance.type === "chatgpt" &&
+      !groups.some(
+        (group) =>
+          group.providerId !== instance.id &&
+          group.models.some((model) => model.provider === "chatgpt")
+      );
+
+    // Manage marks the model each setting uses.
+    const modelUsage: Record<string, string[]> = {};
+
+    for (const [name, model] of settingModels) {
+      const resolved = model
+        ? decodeModelSelection(profileModelSelectionValue(model, groups))
+        : null;
+
+      if (resolved?.providerId === instance.id) {
+        modelUsage[resolved.modelId] = [
+          ...(modelUsage[resolved.modelId] ?? []),
+          name.replace(/ model$/, ""),
+        ];
+      }
+    }
+
+    const usedBy = settingModels.flatMap(([name, model]) => {
+      if (!model) {
+        return name === "Image generation model" && lastChatgpt ? [name] : [];
+      }
+
+      const resolved = decodeModelSelection(
+        profileModelSelectionValue(model, groups)
+      );
+
+      return resolved?.providerId === instance.id ? [name] : [];
+    });
+
+    return { modelUsage, usedBy };
+  }, [
+    imageGeneration?.model,
+    instance.id,
+    instance.type,
+    modelsResponse?.models,
+    transcription?.model,
+    vision?.model,
+  ]);
+}
+
+function ProviderInstanceCardDialogs({
+  card,
+  instance,
+  isDefault,
+  isSole,
+  canManage,
+  nextDefaultLabel,
+}: {
+  card: ReturnType<typeof useProviderInstanceCard>;
+  instance: ProviderInstanceSummary;
+  isDefault: boolean;
   isSole: boolean;
   canManage: boolean;
+  nextDefaultLabel?: string;
 }) {
+  const { modelUsage, usedBy } = useProviderSettingUsage(instance);
+
   return (
-    <>
+    <ModelUsageContext.Provider value={modelUsage}>
       <ProviderRemoveDialog
         busy={card.busy}
+        isDefault={isDefault}
         isSole={isSole}
         label={instance.label}
+        nextDefaultLabel={nextDefaultLabel}
         onConfirm={() => void card.handleDelete()}
         onOpenChange={card.setDeleteOpen}
         open={card.deleteOpen}
+        usedBy={usedBy}
       />
 
-      {card.isChatgpt ? (
-        <ProviderReconnectDialog
-          busy={card.busy}
-          dialogError={card.dialogError}
-          instance={instance}
-          onConnected={(chatgptOAuth) => void card.reconnect({ chatgptOAuth })}
-          onOpenChange={card.setReplaceKeyOpen}
-          open={card.replaceKeyOpen}
-          signIn={CHATGPT_SIGN_IN}
-        />
-      ) : card.isXaiOAuth ? (
-        <ProviderReconnectDialog
-          busy={card.busy}
-          dialogError={card.dialogError}
-          instance={instance}
-          onConnected={(xaiOAuth) => void card.reconnect({ xaiOAuth })}
-          onOpenChange={card.setReplaceKeyOpen}
-          open={card.replaceKeyOpen}
-          signIn={XAI_SIGN_IN}
-        />
-      ) : (
-        <ProviderReplaceKeyDialog
-          apiKey={card.apiKey}
-          busy={card.busy}
-          dialogError={card.dialogError}
-          instance={instance}
-          onApiKeyChange={card.setApiKey}
-          onManage={(action) => void card.handleManageKey(action)}
-          onOpenChange={card.setReplaceKeyOpen}
-          onSave={() => void card.handleReplaceKey()}
-          onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
-          open={card.replaceKeyOpen}
-          providerType={card.providerType}
-          showApiKey={card.showApiKey}
-        />
-      )}
+      <ProviderKeyDialog card={card} instance={instance} />
 
       {card.isCompatibleLike ? (
         <ProviderCompatibleEditDialog
           browseLabel={card.isOllama ? "Ollama" : undefined}
           busy={card.busy}
           dialogError={card.dialogError}
+          dirty={card.dirty}
           editBaseUrl={card.editBaseUrl}
           editLabel={card.editLabel}
+          fieldErrors={card.editFieldErrors}
           hideIdentity={card.providerType === "netra"}
           hostMode={instance.hostMode ?? undefined}
           manageModels={card.editManageModels}
@@ -351,25 +556,27 @@ function ProviderInstanceCardDialogs({
           open={card.editOpen}
           providerInstanceId={instance.id}
           remoteProvider={compatibleRemoteProvider(card)}
+          saveSummary={card.saveSummary}
+          title={`Manage ${instance.label}`}
           wireApi={card.editWireApi}
         />
       ) : null}
 
-      {canManage ? (
+      {canManage && !card.isCompatibleLike ? (
         <ProviderManageModelsDialog
           busy={card.busy}
           dialogError={card.isCompatibleLike ? card.dialogError : null}
+          dirty={card.dirty}
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
-          title={
-            card.isOpenRouter ? "Manage models and routing" : "Manage models"
-          }
+          saveSummary={card.saveSummary}
+          title={`Manage ${instance.label}`}
         >
           <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>
       ) : null}
-    </>
+    </ModelUsageContext.Provider>
   );
 }
 
@@ -380,7 +587,11 @@ export function ProviderInstanceCard({
   onDelete,
   onManage,
   onError,
+  isDefault = false,
   isSole = false,
+  nextDefaultLabel,
+  autoFocus = false,
+  onMakeDefault,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -394,7 +605,11 @@ export function ProviderInstanceCard({
     action: "clear" | "use-stored"
   ) => Promise<void>;
   onError: (error: string | null) => void;
+  isDefault?: boolean;
   isSole?: boolean;
+  nextDefaultLabel?: string;
+  autoFocus?: boolean;
+  onMakeDefault?: () => void;
 }) {
   const card = useProviderInstanceCard({
     catalog,
@@ -409,16 +624,21 @@ export function ProviderInstanceCard({
 
   return (
     <>
-      <ProviderInstanceTableRow
+      <ProviderInstanceRow
+        autoFocus={autoFocus}
         canManage={canManage}
         card={card}
         instance={instance}
+        isDefault={isDefault}
+        onMakeDefault={onMakeDefault}
       />
       <ProviderInstanceCardDialogs
         canManage={canManage}
         card={card}
         instance={instance}
+        isDefault={isDefault}
         isSole={isSole}
+        nextDefaultLabel={nextDefaultLabel}
       />
     </>
   );

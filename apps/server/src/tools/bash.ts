@@ -496,16 +496,13 @@ function translateBracket(body: string): string {
   }
 
   const negated = body.startsWith("!") || body.startsWith("^");
-  let content = negated ? body.slice(1) : body;
+  const content = negated ? body.slice(1) : body;
 
-  content = content.replace(
-    /\[:[a-z]+:\]/g,
-    (match) => POSIX_CLASSES[match] ?? ""
+  // One pass: escape backslash and `]`, and expand POSIX classes, so the
+  // `\s` from `[:space:]` is not escaped again into a literal backslash.
+  const escaped = content.replace(/\[:[a-z]+:\]|[\\\]]/g, (match) =>
+    match.length === 1 ? `\\${match}` : (POSIX_CLASSES[match] ?? "")
   );
-
-  const escaped = content
-    .replaceAll("\\", "\\\\")
-    .replaceAll("]", `${String.fromCharCode(92)}]`);
 
   return negated ? `[^/${escaped}]` : `[${escaped}]`;
 }

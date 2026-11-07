@@ -183,15 +183,15 @@ export function ProfileSystemPromptCard({ state }: { state: IdentityState }) {
   }
 
   return (
-    <div className="w-full rounded-2xl bg-muted/60 px-5 pt-4 pb-5">
+    <div className="w-full rounded-xl bg-muted/60 px-5 pt-4 pb-5">
       <ExpandableTextarea
         containerClassName="gap-3"
         dialogDescription="Instructions sent to the model at the start of each chat."
         disabled={busy || !canManageProfile}
-        editButtonClassName="h-8 rounded-full bg-background px-3 font-medium text-foreground/80 shadow-xs after:hidden hover:bg-background hover:text-foreground"
+        editButtonClassName="h-8 rounded-lg border border-border bg-background px-3 font-medium text-foreground/80 text-sm after:hidden hover:bg-background hover:text-foreground"
         htmlFor="profile-prompt"
         label="System prompt"
-        labelClassName="font-medium text-foreground/80 text-sm"
+        labelClassName="font-semibold text-foreground text-sm"
         onChange={(event) => handleEditPromptChange(event.target.value)}
         onSave={flushSave}
         previewClassName="border-0 p-0 hover:bg-transparent dark:bg-transparent"
@@ -267,7 +267,7 @@ function ProfileAgentPicker({
       };
 
   return (
-    <div className="flex min-w-0 max-w-full items-center gap-2 text-muted-foreground text-sm">
+    <div className="flex h-9 min-w-0 max-w-full items-center rounded-full bg-muted text-muted-foreground text-sm">
       <ProfileChatAgentField
         disabled={disabled}
         hasCustomAgent={hasAcpAgent && !acpAgentId}
@@ -327,7 +327,7 @@ function ProfileModelField({
     <Popover onOpenChange={setModelPickerOpen} open={modelPickerOpen}>
       <PopoverTrigger
         aria-label="Select model"
-        className="flex h-8 min-w-0 cursor-pointer items-center gap-1.5 rounded-full bg-muted px-3 font-medium text-foreground/80 text-xs outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-full min-w-0 cursor-pointer items-center gap-1.5 rounded-full pr-4 pl-1 font-medium text-foreground/80 text-sm outline-none before:mr-1 before:text-muted-foreground/60 before:content-['/'] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled || providerModelGroups.length === 0}
         id="profile-model"
       >
@@ -422,7 +422,7 @@ function ProfileChatAgentField({
     >
       <SelectTrigger
         aria-label="Chat agent"
-        className="h-8 w-auto gap-1.5 rounded-full border-0 bg-muted px-3 font-medium text-foreground/80 text-xs shadow-none hover:text-foreground dark:bg-muted"
+        className="h-full w-auto gap-1.5 rounded-full border-0 bg-transparent pr-1 pl-4 font-medium text-muted-foreground text-sm shadow-none hover:text-foreground dark:bg-transparent"
         id="profile-chat-agent"
       >
         <SelectValue placeholder="Nakama">

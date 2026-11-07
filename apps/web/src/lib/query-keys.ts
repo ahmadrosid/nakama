@@ -39,6 +39,7 @@ export const queryKeys = {
     runs: (automationId: string) =>
       ["automations", automationId, "runs"] as const,
   },
+  backupStatus: ["data", "backupStatus"] as const,
   browserSessions: ["browserSessions"] as const,
   cerebrasModels: ["cerebrasModels"] as const,
   composio: {
@@ -108,6 +109,8 @@ export const queryKeys = {
     detail: (profileId: string) => ["profiles", profileId] as const,
     history: (profileId: string) => ["profiles", profileId, "history"] as const,
   },
+  providerCheck: (providerId: string) =>
+    ["providers", providerId, "check"] as const,
   providerModelDiscovery: (providerId: string) =>
     ["providers", providerId, "modelDiscovery"] as const,
   providers: ["providers"] as const,

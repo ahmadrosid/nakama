@@ -330,6 +330,94 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("/status in a group topic names that topic's session", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        {
+          profiles: [
+            {
+              id: "default",
+              isDefault: true,
+              model: "local::base",
+              name: "Default Bot",
+            },
+          ],
+          providerConfigured: true,
+        }
+      );
+
+      const topic = {
+        chatId: -100_123,
+        chatType: "supergroup" as const,
+        messageThreadId: 10,
+        userId: 42,
+      };
+
+      await handleMessage(createMessageContext({ ...topic, text: "/new" }).ctx);
+
+      const status = createMessageContext({ ...topic, text: "/status" });
+      await handleMessage(status.ctx);
+
+      expect(status.replies.join("\n")).toBe(
+        [
+          "Server: ok",
+          "Provider configured: yes",
+          "Profile: Default Bot",
+          "Provider: unknown",
+          "Model: base",
+          "Session: session_",
+        ].join("\n")
+      );
+    });
+  });
+
+  // The owner's agent is listed only in the owner's org, not the active one.
+  test("/status names the owner's agent from the owner's org", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: {
+            ...TEST_CONFIG,
+            orgId: "org_test",
+            owner: { orgId: "org_owner", profileId: "agent_owner" },
+          },
+        },
+        {
+          profiles: [{ id: "default", isDefault: true, name: "Default Bot" }],
+          profilesByOrgId: {
+            org_owner: [
+              { id: "agent_owner", model: "local::owned", name: "Owner Bot" },
+            ],
+          },
+          providerConfigured: true,
+        }
+      );
+
+      const status = createMessageContext({ text: "/status", userId: 42 });
+      const listedBefore = calls.listProfiles;
+      await handleMessage(status.ctx);
+
+      const statusText = status.replies.join("\n");
+      expect(statusText).toContain("Profile: Owner Bot");
+      expect(statusText).toContain("Model: owned");
+      // One lookup finds the agent; status does not list profiles again.
+      expect(calls.listProfiles - listedBefore).toBe(1);
+    });
+  });
+
   test("/status in a group topic reports that topic profile", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
@@ -2022,11 +2110,7 @@ describe("createChatHandler artifact delivery", () => {
       await handleMessage(ctx);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
-      expect(
-        replies.some((reply) =>
-          reply.includes("https://app.example/s/tok_test")
-        )
-      ).toBe(true);
+      expect(replies.join("\n")).toContain("https://app.example/s/tok_test");
     });
   });
 

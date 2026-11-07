@@ -4,6 +4,7 @@ import {
   getActiveProviderInstance,
   isChatgptProviderConnected,
   isOllamaCloudInstance,
+  normalizeBaseUrl,
   type ProviderClient,
   type ProviderInstance,
   type ProviderName,
@@ -330,6 +331,56 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       });
     }
   }
+}
+
+// A cheap authenticated read that answers 401/403 for a bad key. Null when the
+// provider has no such endpoint we know, or checks its key another way.
+export function apiKeyCheckRequest(
+  instance: ProviderInstance
+): { url: string; headers: Record<string, string> } | null {
+  const apiKey = instance.apiKey.trim();
+
+  const baseUrlOverride =
+    instance.baseUrl && normalizeBaseUrl(instance.baseUrl);
+
+  if (!apiKey) {
+    return null;
+  }
+
+  const bearer = { Authorization: `Bearer ${apiKey}` };
+
+  if (instance.type === "anthropic") {
+    return baseUrlOverride
+      ? null
+      : {
+          headers: { "anthropic-version": "2023-06-01", "x-api-key": apiKey },
+          url: "https://api.anthropic.com/v1/models",
+        };
+  }
+
+  if (instance.type === "openrouter") {
+    return { headers: bearer, url: "https://openrouter.ai/api/v1/key" };
+  }
+
+  const defaultBaseUrls: Partial<Record<ProviderInstance["type"], string>> = {
+    deepseek: DEFAULT_DEEPSEEK_BASE_URL,
+    mistral: DEFAULT_MISTRAL_BASE_URL,
+    openai: "https://api.openai.com/v1",
+    together: DEFAULT_TOGETHER_BASE_URL,
+    xai: DEFAULT_XAI_BASE_URL,
+  };
+
+  const defaultBaseUrl =
+    defaultBaseUrls[instance.type] ??
+    (instance.type === "netra" ? null : defaultDiscoveryBaseUrl(instance.type));
+
+  if (!(defaultBaseUrl || instance.type === "openai_compatible")) {
+    return null;
+  }
+
+  const baseUrl = baseUrlOverride || defaultBaseUrl;
+
+  return baseUrl ? { headers: bearer, url: `${baseUrl}/models` } : null;
 }
 
 export function readApiKeyForInstance(

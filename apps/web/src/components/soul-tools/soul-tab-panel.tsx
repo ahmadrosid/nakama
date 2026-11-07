@@ -64,7 +64,7 @@ export function SoulTabPanel({
       <ul
         className={
           embedded
-            ? "grid gap-2.5 sm:grid-cols-2 [&>li]:overflow-hidden [&>li]:rounded-2xl [&>li]:bg-muted/60"
+            ? "grid gap-2.5 sm:grid-cols-2 [&>li]:overflow-hidden [&>li]:rounded-xl [&>li]:bg-muted/60"
             : "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
         }
       >
@@ -257,7 +257,9 @@ function FileStatusListItem({
         type="button"
       >
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-foreground text-sm">{label}</p>
+          <p className="truncate font-medium text-foreground text-sm">
+            {label}
+          </p>
           <p className="mt-0.5 truncate text-muted-foreground text-xs">
             {description}
           </p>

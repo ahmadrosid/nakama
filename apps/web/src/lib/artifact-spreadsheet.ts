@@ -12,12 +12,14 @@ function delimiterForFilename(filename: string): string {
 
 function parseDelimitedSpreadsheet(
   content: string,
-  delimiter: string
-): SpreadsheetRows {
+  delimiter: string,
+  limits?: { rows: number; columns: number }
+) {
   const rows: SpreadsheetRows = [];
   let row: string[] = [];
   let cell = "";
   let quoted = false;
+  let truncated = false;
 
   for (let index = 0; index < content.length; index += 1) {
     const char = content[index];
@@ -42,14 +44,29 @@ function parseDelimitedSpreadsheet(
     }
 
     if (char === delimiter) {
-      row.push(cell);
+      if (row.length < (limits?.columns ?? Number.POSITIVE_INFINITY)) {
+        row.push(cell);
+      }
+
+      if (row.length === limits?.columns) {
+        truncated = true;
+      }
+
       cell = "";
       continue;
     }
 
     if (char === "\n") {
-      row.push(cell);
+      if (row.length < (limits?.columns ?? Number.POSITIVE_INFINITY)) {
+        row.push(cell);
+      }
+
       rows.push(row);
+
+      if (rows.length >= (limits?.rows ?? Number.POSITIVE_INFINITY)) {
+        return { rows, truncated: truncated || index + 1 < content.length };
+      }
+
       row = [];
       cell = "";
       continue;
@@ -63,11 +80,14 @@ function parseDelimitedSpreadsheet(
   }
 
   if (cell || row.length > 0) {
-    row.push(cell);
+    if (row.length < (limits?.columns ?? Number.POSITIVE_INFINITY)) {
+      row.push(cell);
+    }
+
     rows.push(row);
   }
 
-  return rows.length > 0 ? rows : [[""]];
+  return { rows: rows.length > 0 ? rows : [[""]], truncated };
 }
 
 function serializeDelimitedSpreadsheet(
@@ -93,11 +113,19 @@ function serializeDelimitedSpreadsheet(
 
 export function parseSpreadsheetText(
   filename: string,
-  content: string
-): SpreadsheetRows {
-  return normalizeSpreadsheetRows(
-    parseDelimitedSpreadsheet(content, delimiterForFilename(filename))
+  content: string,
+  limits?: { rows: number; columns: number }
+) {
+  const parsed = parseDelimitedSpreadsheet(
+    content,
+    delimiterForFilename(filename),
+    limits
   );
+
+  return {
+    rows: normalizeSpreadsheetRows(parsed.rows),
+    truncated: parsed.truncated,
+  };
 }
 
 export function serializeSpreadsheetText(
@@ -120,13 +148,6 @@ function normalizeSpreadsheetRows(rows: SpreadsheetRows): SpreadsheetRows {
   return normalized.length > 0 ? normalized : [[""]];
 }
 
-// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- The spreadsheet editor imports this public helper.
-export function normalizeSpreadsheetShape(
-  rows: SpreadsheetRows
-): SpreadsheetRows {
-  return normalizeSpreadsheetRows(rows);
-}
-
 /** 0 → A, 25 → Z, 26 → AA */
 export function columnIndexToLetter(index: number): string {
   let n = index + 1;
@@ -139,4 +160,12 @@ export function columnIndexToLetter(index: number): string {
   }
 
   return result;
+}
+
+export function isXlsxFile(filename: string, mimeType = ""): boolean {
+  return (
+    /\.xlsx$/i.test(filename) ||
+    mimeType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
 }

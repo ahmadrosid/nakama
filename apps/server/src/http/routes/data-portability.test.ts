@@ -1,15 +1,16 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   getKnowledgeBaseDir,
   getOrgKnowledgeBaseDir,
   getProfileArtifactsDir,
   getUserConfigDir,
+  NakamaApiError,
   saveAttachmentBytes,
 } from "@nakama/core";
-import * as fflate from "fflate";
 import { unzipSync, zipSync } from "fflate";
 import {
   createNakamaDataExport,
@@ -18,7 +19,10 @@ import {
   NAKAMA_ORG_EXPORT_MANIFEST,
   NAKAMA_USER_EXPORT_MANIFEST,
 } from "../../services/data-portability";
-import { encryptBackup } from "../../services/scheduled-backup";
+import {
+  encryptBackup,
+  startScheduledBackups,
+} from "../../services/scheduled-backup";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -61,9 +65,8 @@ describe("data portability routes", () => {
       databaseAdapter
     );
 
-    const zipMock = spyOn(fflate, "zipSync").mockReturnValue(
-      new Uint8Array(MAX_IMPORT_ARCHIVE_BYTES + 1)
-    );
+    const previousCap = process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES;
+    process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES = "100";
 
     try {
       const response = await app.fetch(
@@ -76,7 +79,11 @@ describe("data portability routes", () => {
       expect(response.headers.get("content-disposition")).toBeNull();
       expect((await response.json()).error).toEqual(expect.any(String));
     } finally {
-      zipMock.mockRestore();
+      if (previousCap === undefined) {
+        delete process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES;
+      } else {
+        process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES = previousCap;
+      }
     }
   });
 
@@ -91,17 +98,17 @@ describe("data portability routes", () => {
 
     const blocked = join(getUserConfigDir(), "SOUL.md.bak-0101");
     await writeFile(blocked, "soul");
-    const realReadFile = fsPromises.readFile;
+    const realOpen = fsPromises.open;
 
-    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
-      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
-      (async (...args: Parameters<typeof realReadFile>) => {
+    const openMock = spyOn(fsPromises, "open").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real open unchanged.
+      (async (...args: Parameters<typeof realOpen>) => {
         if (args[0] === blocked) {
           throw Object.assign(new Error("denied"), { code: "EACCES" });
         }
 
-        return await realReadFile(...args);
-      }) as typeof realReadFile
+        return await realOpen(...args);
+      }) as typeof realOpen
     );
 
     try {
@@ -114,7 +121,7 @@ describe("data portability routes", () => {
       expect(response.status).toBe(409);
       expect((await response.json()).error).toContain("SOUL.md.bak-0101");
     } finally {
-      readMock.mockRestore();
+      openMock.mockRestore();
     }
   });
 
@@ -145,6 +152,67 @@ describe("data portability routes", () => {
     expect(Buffer.from(archive["config.ini"]!).toString("utf8")).toBe(
       "provider=openai"
     );
+  });
+
+  test("platform admin reads the last scheduled backup's 409", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const lastError = async () => {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/platform/data/backup-status", {
+          headers: session.headers(),
+        })
+      );
+
+      expect(response.status).toBe(200);
+
+      return (await response.json()).lastError;
+    };
+
+    const previousDir = process.env.NAKAMA_BACKUP_DIR;
+    const dir = await mkdtemp(join(tmpdir(), "nakama-backup-status-"));
+
+    const blocked = new NakamaApiError(
+      "the server cannot read config.ini",
+      409
+    );
+
+    try {
+      delete process.env.NAKAMA_BACKUP_DIR;
+      expect(await lastError()).toBeNull();
+
+      process.env.NAKAMA_BACKUP_DIR = dir;
+      expect(await lastError()).toBeNull();
+
+      // An empty backup dir runs the first backup at once.
+      const stop = await startScheduledBackups({
+        dir,
+        exportFile: () => Promise.reject(blocked),
+        key: Buffer.alloc(32, 4),
+      });
+
+      await Bun.sleep(50);
+      stop();
+
+      expect(await lastError()).toEqual({
+        at: expect.any(String),
+        message: blocked.message,
+      });
+    } finally {
+      if (previousDir === undefined) {
+        delete process.env.NAKAMA_BACKUP_DIR;
+      } else {
+        process.env.NAKAMA_BACKUP_DIR = previousDir;
+      }
+
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 
   test("platform admin exports one user's data without secrets or other users", async () => {
@@ -717,9 +785,25 @@ describe("data portability routes", () => {
     });
 
     expect((await send("restore")).status).toBe(400);
-    expect(
-      (await send("preview", Buffer.alloc(MAX_IMPORT_ARCHIVE_BYTES + 1))).status
-    ).toBe(413);
+
+    const previousCap = process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES;
+    process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES = String(
+      MAX_IMPORT_ARCHIVE_BYTES
+    );
+
+    try {
+      expect(
+        (await send("preview", Buffer.alloc(MAX_IMPORT_ARCHIVE_BYTES + 1)))
+          .status
+      ).toBe(413);
+    } finally {
+      if (previousCap === undefined) {
+        delete process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES;
+      } else {
+        process.env.NAKAMA_DATA_IMPORT_MAX_ARCHIVE_BYTES = previousCap;
+      }
+    }
+
     await expect(
       readFile(join(getUserConfigDir(), "config.ini"), "utf8")
     ).resolves.toBe("changed");
@@ -960,7 +1044,14 @@ describe("data portability routes", () => {
       })
     );
 
+    const backupStatusResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/backup-status", {
+        headers: orgSession.headers(),
+      })
+    );
+
     expect(exportResponse.status).toBe(403);
+    expect(backupStatusResponse.status).toBe(403);
     expect(userExportResponse.status).toBe(403);
     expect(orgExportResponse.status).toBe(403);
     expect(previewResponse.status).toBe(403);
@@ -1144,5 +1235,5 @@ describe("data portability routes", () => {
 
     expect(restoreResponse.status).toBe(400);
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
-  });
+  }, 30_000);
 });

@@ -62,6 +62,18 @@ export function createMockClient(
       sizeBytes: number;
       updatedAt: string;
     }>;
+    providerConfigured?: boolean;
+    /** What listProfiles answers for one org; other calls get `profiles`. */
+    profilesByOrgId?: Record<
+      string,
+      Array<{
+        id: string;
+        name?: string;
+        model?: string | null;
+        isDefault?: boolean;
+        isSuper?: boolean;
+      }>
+    >;
     onSendStream?: (
       input: SendMessageInput,
       handlers?: StreamHandlers
@@ -154,7 +166,10 @@ export function createMockClient(
         todos: [],
       };
     },
-    health: async () => ({ ok: true, providerConfigured: false }),
+    health: async () => ({
+      ok: true,
+      providerConfigured: options.providerConfigured ?? false,
+    }),
     listProfileArtifacts: async () => {
       calls.listProfileArtifacts += 1;
       const artifacts = options.listedArtifacts ?? [];
@@ -166,9 +181,11 @@ export function createMockClient(
         total: artifacts.length,
       };
     },
-    listProfiles: async () =>
+    listProfiles: async (orgId?: string) =>
       parseListProfilesResponse({
-        profiles: profiles.map((profile) => ({
+        profiles: (
+          (orgId ? options.profilesByOrgId?.[orgId] : undefined) ?? profiles
+        ).map((profile) => ({
           id: profile.id,
           isDefault: profile.isDefault ?? false,
           isSuper: profile.isSuper ?? false,

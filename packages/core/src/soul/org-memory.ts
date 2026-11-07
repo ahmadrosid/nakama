@@ -6,7 +6,7 @@
  * testable and lets the service layer own all filesystem access.
  */
 
-import type { MemorySection } from "./memory-archive";
+import { type MemorySection, trimTrailingNewlines } from "./memory-archive";
 
 export const ORG_MEMORY_HEADER = "## Org Memory";
 
@@ -62,7 +62,9 @@ export function detectOrgMemoryInjectionWarnings(
     warnings.push("Contains markdown headings.");
   }
 
-  if (/<\/?[a-z][\s\S]*>/i.test(bullet)) {
+  const tagStart = bullet.search(/<\/?[a-z]/i);
+
+  if (tagStart !== -1 && bullet.includes(">", tagStart)) {
     warnings.push("Contains HTML-like markup.");
   }
 
@@ -136,7 +138,7 @@ export function parseOrgMemoryContent(
 
   return normalizeParsedOrgMemory({
     pinned,
-    preamble: preambleLines.join("\n").replace(/\n+$/, ""),
+    preamble: trimTrailingNewlines(preambleLines.join("\n")),
     sections,
   });
 }
@@ -146,7 +148,6 @@ function stripPinnedHeaderFromPreamble(preamble: string): string {
     .split(/\r?\n/)
     .filter((line) => !/^## Pinned\s*$/.test(line.trim()))
     .join("\n")
-    .replace(/\n+$/, "")
     .trim();
 }
 
@@ -202,7 +203,7 @@ export function rebuildOrgMemoryContent(parsed: ParsedOrgMemory): string {
     }
   }
 
-  const content = parts.join("\n").replace(/\n+$/, "");
+  const content = trimTrailingNewlines(parts.join("\n"));
 
   return content.length > 0 ? `${content}\n` : content;
 }

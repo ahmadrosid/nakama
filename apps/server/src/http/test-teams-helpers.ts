@@ -60,6 +60,10 @@ export async function setupOwnedProfile() {
           ownerUserId: id === MEMBER_PROFILE_ID ? "user_member" : "user_admin",
         },
       }),
+      getProfileAccess: async (_orgId: string, id: string) => ({
+        isSuper: false,
+        ownerUserId: id === MEMBER_PROFILE_ID ? "user_member" : "user_admin",
+      }),
       listProfiles: async () => ({ profiles: [{ id: PROFILE_ID }] }),
     },
     workerManager: {

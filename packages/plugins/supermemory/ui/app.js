@@ -570,12 +570,12 @@ function createBrowser(ctx) {
       let active = true;
       ctx.host.call("get_document", { agentId, id: documentId }).then((result) => {
         if (active) {
-          const document3 = asJsonRecord(result);
-          const title = document3 && readJsonString(document3.title);
-          const source = document3 && readJsonString(document3.source);
-          if (document3 && title && source) {
+          const document2 = asJsonRecord(result);
+          const title = document2 && readJsonString(document2.title);
+          const source = document2 && readJsonString(document2.source);
+          if (document2 && title && source) {
             setDocument({
-              content: readJsonString(document3.content),
+              content: readJsonString(document2.content),
               source,
               title
             });
@@ -799,7 +799,7 @@ function usePage(ctx) {
         if (!(result && Array.isArray(result.profiles))) {
           throw new Error("Invalid profile response");
         }
-        const profiles2 = result.profiles.flatMap((profile) => {
+        const profiles = result.profiles.flatMap((profile) => {
           const record = asJsonRecord(profile);
           const id = record && readJsonString(record.id);
           const name = record && readJsonString(record.name);
@@ -810,7 +810,7 @@ function usePage(ctx) {
         const workerMessage = workerRecord && readJsonString(workerRecord.message);
         setError("");
         setWorker(workerState ? { message: workerMessage ?? undefined, state: workerState } : null);
-        setProfiles(profiles2);
+        setProfiles(profiles);
         setConfigured(result.configured === true);
         setCanConfigure(result.canConfigure === true);
       }).catch((reason) => {

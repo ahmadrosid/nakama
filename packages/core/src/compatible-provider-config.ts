@@ -20,7 +20,15 @@ export function parseWireApi<Value>(value: Value): WireApi | undefined {
 }
 
 export function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, "");
+  const trimmed = baseUrl.trim();
+  let end = trimmed.length;
+
+  // A scan, not `/\/+$/`, which is quadratic on long slash runs.
+  while (end > 0 && trimmed[end - 1] === "/") {
+    end--;
+  }
+
+  return trimmed.slice(0, end);
 }
 
 export function isValidBaseUrl(baseUrl: string): boolean {

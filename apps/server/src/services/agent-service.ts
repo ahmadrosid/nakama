@@ -28,6 +28,7 @@ import type {
   ChatContextUsage,
   ChatgptOAuthCredentials,
   ChatMessage,
+  CheckProviderResponse,
   CloneProfileRequest,
   CompactionResponse,
   ComposioSettingsResponse,
@@ -188,6 +189,7 @@ import {
   messageContentHasImages,
   NakamaApiError,
   nanoid,
+  normalizeBaseUrl,
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
@@ -231,6 +233,7 @@ import {
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
+import { isDocxFile, isLegacyDocFile } from "@nakama/core/artifact-mime";
 import {
   type ChannelConfigScope,
   isChannelOwner,
@@ -240,6 +243,7 @@ import {
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "@nakama/core/discovery-providers";
+import { convertDocxToMarkdown } from "@nakama/core/docx-text";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
 import {
@@ -256,6 +260,7 @@ import {
 import { z } from "zod";
 import {
   AVAILABLE_MODELS,
+  apiKeyCheckRequest,
   catalogCustomModelsToCatalog,
   createProviderForInstance,
   createProviderFromActiveConfig,
@@ -488,6 +493,60 @@ const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
 
 function isSharedHistory(record: StoredSessionRecord): boolean {
   return SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel);
+}
+
+const API_KEY_CHECK_TIMEOUT_MS = 8000;
+
+// Stops a key the provider refuses before it is saved. Only 401/403 blocks:
+// a slow or unreachable provider must not stop an admin from saving a key.
+async function checkApiKey(
+  instance: ProviderInstance
+): Promise<CheckProviderResponse["status"]> {
+  const localBaseUrl = instance.baseUrl && normalizeBaseUrl(instance.baseUrl);
+
+  // A local or custom endpoint without a key still answers /models when up.
+  const check = instance.apiKey
+    ? apiKeyCheckRequest(instance)
+    : localBaseUrl &&
+        (instance.type === "ollama" || instance.type === "openai_compatible")
+      ? { headers: {}, url: `${localBaseUrl}/models` }
+      : null;
+
+  if (!check) {
+    return "unchecked";
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(check.url, {
+      headers: check.headers,
+      signal: AbortSignal.timeout(API_KEY_CHECK_TIMEOUT_MS),
+    });
+  } catch (error) {
+    console.warn(`Could not check the ${instance.label} API key:`, error);
+
+    return "unreachable";
+  }
+
+  await response.body?.cancel();
+
+  if (response.status === 401 || response.status === 403) {
+    // With no key sent, the endpoint is asking for one, not refusing it.
+    return instance.apiKey ? "rejected" : "needs-key";
+  }
+
+  return "ok";
+}
+
+// Only a key the provider refuses stops a save; an outage does not.
+async function rejectRefusedApiKey(instance: ProviderInstance): Promise<void> {
+  if ((await checkApiKey(instance)) === "rejected") {
+    throw new NakamaApiError(
+      `${instance.label} rejected this API key. Check the key and try again.`,
+      400
+    );
+  }
 }
 
 export class AgentService {
@@ -2774,10 +2833,37 @@ export class AgentService {
     }
   }
 
+  /** Throws 403 when the caller cannot use the profile in chat. */
+  async assertProfileChatAccess(
+    orgId: string,
+    profileId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, profileId),
+      access
+    );
+  }
+
+  /**
+   * Whether saving this session as a case would move a private chat out of its
+   * owner's hands. Shared messaging history stays team-visible.
+   */
+  async sessionHistoryPrivacy(
+    record: StoredSessionRecord
+  ): Promise<{ isPrivate: boolean; ownerUserId: string | null }> {
+    if (isSharedHistory(record) || (await this.isChildOfSharedChat(record))) {
+      return { isPrivate: false, ownerUserId: null };
+    }
+
+    return { isPrivate: true, ownerUserId: record.userId ?? null };
+  }
+
   async readChatAttachment(
     orgId: string,
     attachmentId: string,
-    access: ChatProfileAccess
+    access: ChatProfileAccess,
+    options: { preview?: boolean; render?: "markdown" } = {}
   ): Promise<LoadedAttachmentBytes | null> {
     const record = await this.db.getAttachment(attachmentId);
 
@@ -2804,10 +2890,38 @@ export class AgentService {
 
     await this.assertSessionOwner(sessionRecord, access);
 
-    return createAttachmentLoader(this.db, {
+    const renderWord =
+      options.render === "markdown" &&
+      (isDocxFile(record.filename ?? "", record.mediaType) ||
+        isLegacyDocFile(record.filename ?? "", record.mediaType));
+
+    if (options.preview && !renderWord && record.sizeBytes > 8 * 1024 * 1024) {
+      throw new NakamaApiError(
+        "This file exceeds the 8 MB preview limit. Download it instead.",
+        413
+      );
+    }
+
+    const attachment = await createAttachmentLoader(this.db, {
       orgId,
       profileId: record.profileId,
     })(attachmentId);
+
+    if (attachment && renderWord) {
+      const markdown = await convertDocxToMarkdown(
+        Buffer.from(attachment.bytes)
+      );
+
+      const bytes = Buffer.from(markdown, "utf8");
+
+      if (bytes.byteLength > 8 * 1024 * 1024) {
+        throw new NakamaApiError("Preview exceeds the byte limit.", 413);
+      }
+
+      return { ...attachment, bytes, mediaType: "text/markdown" };
+    }
+
+    return attachment;
   }
 
   private assertChatProfileAccess(
@@ -3053,7 +3167,11 @@ export class AgentService {
     );
     await this.db.updateSessionTitle(nextSessionId, branchTitle);
 
-    return { sessionId: nextSessionId };
+    return {
+      // A source the client could load has a valid channel.
+      channel: parseAgentChannel(branchRecord.channel) ?? "web",
+      sessionId: nextSessionId,
+    };
   }
 
   async listSessions(
@@ -4040,6 +4158,37 @@ export class AgentService {
     };
   }
 
+  /** Asks the provider if a typed key works, before anything is saved. */
+  async checkProviderKey(request: {
+    apiKey: string;
+    baseUrl?: string;
+    type: ProviderInstance["type"];
+  }): Promise<CheckProviderResponse> {
+    return {
+      // SAFETY: checkApiKey reads only type, apiKey, baseUrl and label.
+      status: await checkApiKey({
+        apiKey: request.apiKey.trim(),
+        baseUrl: request.baseUrl?.trim() || undefined,
+        createdAt: "",
+        id: "unsaved",
+        label: request.type,
+        type: request.type,
+      } as ProviderInstance),
+    };
+  }
+
+  /** Asks the provider if the saved key still works. */
+  async checkProvider(providerId: string): Promise<CheckProviderResponse> {
+    await this.refreshManagedProviderKeys();
+    const instance = findProviderInstance(this.userConfig, providerId);
+
+    if (!instance) {
+      throw new NakamaApiError("Provider not found.", 404);
+    }
+
+    return { status: await checkApiKey(instance) };
+  }
+
   async listProviders(): Promise<ListProvidersResponse> {
     await this.refreshManagedProviderKeys();
     const providers = this.userConfig?.providers ?? [];
@@ -4061,6 +4210,11 @@ export class AgentService {
               instance,
               countModelsForInstance(instance)
             ),
+            // Enough to tell keys apart, never enough to use one.
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- The field must stay absent when no full key is saved.
+            ...(instance.apiKey.length >= 12
+              ? { apiKeyEnding: instance.apiKey.slice(-4) }
+              : {}),
             savedSecretAvailable: status?.savedAvailable ?? false,
             secretEnvName: status?.envName ?? envNames[0],
             secretSource: status?.source ?? ("missing" as const),
@@ -4357,6 +4511,24 @@ export class AgentService {
           countModelsForInstance(updated)
         ),
       };
+    });
+  }
+
+  /** Makes this provider the one new chats use when nothing else is set. */
+  async setDefaultProvider(
+    providerId: string
+  ): Promise<DeleteProviderResponse> {
+    return providerPublicationLock.withLock("providers", async () => {
+      if (!findProviderInstance(this.userConfig, providerId)) {
+        throw new NakamaApiError("Provider not found.", 404);
+      }
+
+      const config = { ...this.userConfig!, defaultProviderId: providerId };
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+
+      return { defaultProviderId: providerId };
     });
   }
 
@@ -4794,6 +4966,8 @@ export class AgentService {
       });
     }
 
+    await rejectRefusedApiKey(updated);
+
     await this.managedSecrets.save(
       "global",
       `provider:${providerId}`,
@@ -4866,6 +5040,30 @@ export class AgentService {
 
   async getProfile(orgId: string, profileId: string): Promise<ProfileResponse> {
     return this.profileService.getProfile(orgId, profileId);
+  }
+
+  /**
+   * The fields an access check reads, from one row lookup. A guard uses it so
+   * an unknown id and a hidden agent cost the same, and the full detail loads
+   * only after access passes.
+   */
+  async getProfileAccess(
+    orgId: string,
+    profileId: string
+  ): Promise<{
+    isSuper: boolean;
+    ownerUserId: string | null;
+    sharedWithTeam: boolean;
+  } | null> {
+    const profile = await this.db.getProfileForOrg(profileId, orgId);
+
+    return profile
+      ? {
+          isSuper: profile.isSuper,
+          ownerUserId: profile.ownerUserId ?? null,
+          sharedWithTeam: profile.sharedWithTeam !== false,
+        }
+      : null;
   }
 
   async createProfile(
@@ -6882,10 +7080,11 @@ export class AgentService {
 
         return replaceImagePartsWithDescriptions(forVision, descriptions);
       },
-      rehydrateMessagesForProvider: async (messages) => {
+      rehydrateMessagesForProvider: async (messages, rehydrateOptions) => {
         const rehydrated = await rehydrateAttachmentMessages(
           messages,
-          loadAttachment
+          loadAttachment,
+          rehydrateOptions
         );
 
         // Expand /learn only for the provider. History stays raw so skill

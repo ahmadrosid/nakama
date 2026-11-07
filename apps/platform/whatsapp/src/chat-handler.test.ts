@@ -497,6 +497,70 @@ describe("createChatHandler", () => {
     });
   });
 
+  test("/status names the agent and this chat's session", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const { handler: handleMessage, sent } = await createTestHandler(
+        homeDir,
+        undefined,
+        { providerConfigured: true }
+      );
+
+      await handleMessage({ jid: PAIRED_JID, text: "/new" });
+      await handleMessage({ jid: PAIRED_JID, text: "/status" });
+
+      expect(sent.at(-1)?.text).toBe(
+        [
+          "Server: ok",
+          "Provider configured: yes",
+          "Agent: Default",
+          "Provider: unknown",
+          "Model: none",
+          "Session: session_",
+        ].join("\n")
+      );
+    });
+  });
+
+  // The owner's agent is listed only in the owner's org, not the active one.
+  test("/status names the owner's agent from the owner's org", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const { handler: handleMessage, sent } = await createTestHandler(
+        homeDir,
+        {
+          config: {
+            owner: { orgId: "org_owner", profileId: "agent_owner" },
+            phoneNumber: "1234567890",
+            profileId: "default",
+          },
+        },
+        {
+          profilesByOrgId: {
+            org_owner: [
+              { id: "agent_owner", model: "local::owned", name: "Owner Bot" },
+            ],
+          },
+          providerConfigured: true,
+        }
+      );
+
+      await handleMessage({ jid: PAIRED_JID, text: "/status" });
+
+      const statusText = sent.map((entry) => entry.text).join("\n");
+      expect(statusText).toContain("Agent: Owner Bot");
+      expect(statusText).toContain("Model: owned");
+    });
+  });
+
   test("handles /compact command", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {

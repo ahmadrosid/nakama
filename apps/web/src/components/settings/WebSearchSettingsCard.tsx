@@ -256,7 +256,7 @@ export function WebSearchSettingsCard() {
     <div className="space-y-3 px-4 py-3" id="web-search-settings">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
-          <p className="font-medium text-foreground text-sm">Web search</p>
+          <p className="text-foreground text-sm">Web search</p>
           {form.savedHint ? (
             <p
               className="text-emerald-700 text-xs dark:text-emerald-300"
@@ -266,7 +266,7 @@ export function WebSearchSettingsCard() {
             </p>
           ) : null}
         </div>
-        <div className="w-full min-w-0 sm:w-56">
+        <div className="grid w-full min-w-0 gap-2 sm:w-[25rem] sm:grid-cols-2">
           <Select
             disabled={form.pending}
             onValueChange={form.selectProvider}
@@ -274,17 +274,17 @@ export function WebSearchSettingsCard() {
           >
             <SelectTrigger
               aria-label="Web search provider"
-              className="h-9 w-full"
+              className="h-8 w-full"
               id="web-search-provider"
             >
               <SelectValue>
                 {PROVIDER_PRESETS.find(
                   (preset) => preset.value === form.provider
-                )?.label ?? "Built-in (default)"}
+                )?.label ?? "Built-in"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value={BUILT_IN_VALUE}>Built-in (default)</SelectItem>
+              <SelectItem value={BUILT_IN_VALUE}>Built-in</SelectItem>
               {PROVIDER_PRESETS.map((preset) => (
                 <SelectItem key={preset.value} value={preset.value}>
                   {preset.label}
@@ -292,6 +292,12 @@ export function WebSearchSettingsCard() {
               ))}
             </SelectContent>
           </Select>
+          <span
+            aria-hidden
+            className="hidden h-8 items-center px-2.5 text-muted-foreground text-sm sm:flex"
+          >
+            —
+          </span>
         </div>
       </div>
 

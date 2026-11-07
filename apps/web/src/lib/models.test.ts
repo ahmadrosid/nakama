@@ -7,9 +7,11 @@ import {
   encodeModelSelection,
   filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
+  isLocalBaseUrl,
   profileModelSelectionValue,
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
+  resolveOpenRouterSetupModel,
   validateCustomModelsInput,
 } from "./models";
 
@@ -26,6 +28,19 @@ describe("buildCreateProviderRequest", () => {
       "fireworks",
       "ollama",
       "opencode_go",
+      "openai",
+      "anthropic",
+      "gemini",
+      "deepseek",
+      "doubao",
+      "together",
+      "xiaomi",
+      "meta",
+      "vercel_ai_gateway",
+      "mistral",
+      "qwen",
+      "qwen_cn",
+      "perplexity",
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
@@ -210,6 +225,8 @@ describe("resolveModelVisionSupport", () => {
       "openrouter",
       "mistral",
       "ollama",
+      "netra",
+      "groq",
     ];
 
     for (const provider of USER_PROVIDER_NAMES) {
@@ -363,5 +380,37 @@ describe("validateCustomModelsInput", () => {
     expect(validateCustomModelsInput([{ id: " " }])).toBe(
       "Add at least one model."
     );
+  });
+
+  test("rejects the same model ID twice", () => {
+    expect(
+      validateCustomModelsInput([{ id: "m" }, { id: " m " }])
+    ).not.toBeNull();
+    expect(validateCustomModelsInput([{ id: "m" }, { id: "n" }])).toBeNull();
+  });
+});
+
+describe("isLocalBaseUrl", () => {
+  test("treats loopback and private hosts as local", () => {
+    expect(isLocalBaseUrl("http://localhost:11434/v1")).toBe(true);
+    expect(isLocalBaseUrl("http://192.168.1.4:8000/v1")).toBe(true);
+    expect(isLocalBaseUrl("https://apihub.agnes-ai.com/v1")).toBe(false);
+  });
+});
+
+describe("resolveOpenRouterSetupModel", () => {
+  test("the row marked default wins over the catalog pick", () => {
+    expect(
+      resolveOpenRouterSetupModel(
+        [{ id: "a/one" }, { default: true, id: "a/two" }],
+        "a/one"
+      )
+    ).toBe("a/two");
+  });
+
+  test("with no row marked, the catalog pick stays", () => {
+    expect(
+      resolveOpenRouterSetupModel([{ id: "a/one" }, { id: "a/two" }], "a/two")
+    ).toBe("a/two");
   });
 });

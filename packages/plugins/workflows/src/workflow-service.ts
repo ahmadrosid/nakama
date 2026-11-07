@@ -299,7 +299,7 @@ export class WorkflowService {
   async completeRun(
     id: string,
     workflowId: string,
-    result: { error?: string; output?: string }
+    result: { error?: string; output?: string; skipped?: boolean }
   ): Promise<WorkflowRunRecord> {
     const row = this.db
       .query<{ data: string }, [string, string]>(
@@ -311,11 +311,13 @@ export class WorkflowService {
       throw new Error("Workflow run not found.");
     }
 
+    const { skipped, ...fields } = result;
+
     const run = {
       ...JSON.parse(row.data),
-      ...result,
+      ...fields,
       completedAt: new Date().toISOString(),
-      status: result.error ? "failed" : "completed",
+      status: result.error ? "failed" : skipped ? "skipped" : "completed",
     };
 
     // A run without a lease is already finished (for example expired); keep that result.

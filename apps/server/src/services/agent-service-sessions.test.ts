@@ -346,6 +346,34 @@ describe("AgentService branching", () => {
     ).toHaveLength(2);
   });
 
+  // The web client takes the branch's channel from this answer.
+  test("a branch reports the channel it inherits from its source", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const service = new AgentService(null, null, db);
+
+    const sourceSessionId = await service.createSession(
+      ORG_ID,
+      "cli",
+      "profile_default"
+    );
+
+    await db.replaceMessagesForSession(sourceSessionId, [
+      {
+        createdAt: "2026-06-14T10:00:00.000Z",
+        id: "msg_1",
+        payload: { content: "Hello", role: "user" },
+        seq: 0,
+        sessionId: sourceSessionId,
+      },
+    ]);
+
+    const result = await service.branchSession(sourceSessionId, 0, ORG_ID);
+
+    expect(result?.channel).toBe("cli");
+    expect((await db.getSession(result!.sessionId))?.channel).toBe("cli");
+  });
+
   test("detaches a branch without losing its messages", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());

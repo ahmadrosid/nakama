@@ -2,6 +2,7 @@ import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type {
   AgentTodo,
   ChatUsage,
+  CheckProviderResponse,
   ProviderModelOption,
   SkillSummary,
 } from "@nakama/core/contract";
@@ -31,6 +32,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
   Add01Icon,
   Alert02Icon,
@@ -135,6 +137,7 @@ import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
+import { queryKeys } from "@/lib/query-keys";
 import { THINKING_EFFORT_OPTIONS } from "@/lib/thinking-settings";
 import { PluginView } from "@/pages/PluginPage";
 import { composerActions } from "./chat-composer.shared";
@@ -1304,6 +1307,117 @@ function modelItemValue(
   return `${providerLabel} ${model.name} ${model.id}`;
 }
 
+const RECENT_MODELS_KEY = "nakama:recent-models";
+
+// The last three models picked here, kept in this browser only.
+// One selection per line, so reading back needs no parsing.
+function readRecentModels(): string[] {
+  try {
+    return (localStorage.getItem(RECENT_MODELS_KEY) ?? "")
+      .split("\n")
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecentModel(value: string) {
+  try {
+    localStorage.setItem(
+      RECENT_MODELS_KEY,
+      [value, ...readRecentModels().filter((item) => item !== value)]
+        .slice(0, 3)
+        .join("\n")
+    );
+  } catch {
+    // Storage can be off (private window); the picker works without it.
+  }
+}
+
+function RecentModelsGroup({
+  busy,
+  currentModelSelection,
+  groups,
+  onSelect,
+}: {
+  busy: boolean;
+  currentModelSelection: string | null | undefined;
+  groups: ChatComposerFullProps["providerModelGroups"];
+  onSelect: (value: string) => void;
+}) {
+  const recent = readRecentModels().flatMap((value) => {
+    for (const group of groups) {
+      for (const model of group.models) {
+        if (
+          encodeModelSelection(
+            model.providerId ?? group.providerId,
+            model.id
+          ) === value
+        ) {
+          return [{ group, model, value }];
+        }
+      }
+    }
+
+    return [];
+  });
+
+  // A short list needs no shortcut.
+  if (recent.length === 0 || groups.flatMap((g) => g.models).length < 6) {
+    return null;
+  }
+
+  return (
+    <CommandGroup heading="Recent">
+      {recent.map(({ group, model, value }) => (
+        <CommandItem
+          data-checked={currentModelSelection === value}
+          disabled={busy}
+          key={`recent:${value}`}
+          onSelect={() => onSelect(value)}
+          value={`recent ${modelItemValue(group.providerLabel, model)}`}
+        >
+          {model.name} · {group.providerLabel}
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
+// Reads the settings page's last key check, if any; it never starts one.
+function ProviderPickerHeading({
+  label,
+  providerId,
+}: {
+  label: string;
+  providerId: string;
+}) {
+  const { data: check } = useQuery<CheckProviderResponse>({
+    enabled: false,
+    queryKey: queryKeys.providerCheck(providerId),
+  });
+
+  const warning =
+    check?.status === "rejected"
+      ? "Key rejected"
+      : check?.status === "needs-key"
+        ? "Needs a key"
+        : check?.status === "unreachable"
+          ? "Cannot reach"
+          : null;
+
+  return (
+    <span className="flex items-center gap-2">
+      {label}
+      {warning ? (
+        <span className="font-normal text-amber-700 dark:text-amber-300">
+          {warning}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function resolveModelPickerState(props: ChatComposerFullProps) {
   const effortOptions = props.thinkingEffortOptions ?? THINKING_EFFORT_OPTIONS;
 
@@ -1321,9 +1435,28 @@ function resolveModelPickerState(props: ChatComposerFullProps) {
       )
     : null;
 
-  const modelLabel = props.currentModelSelection
+  const baseModelLabel = props.currentModelSelection
     ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
     : "Model";
+
+  // Two providers can serve a model with the same name; say which one runs.
+  const selectedGroup = props.providerModelGroups.find((group) =>
+    group.models.some(
+      (model) =>
+        encodeModelSelection(model.providerId ?? group.providerId, model.id) ===
+        props.currentModelSelection
+    )
+  );
+
+  const sharedName =
+    props.providerModelGroups.filter((group) =>
+      group.models.some((model) => model.name === baseModelLabel)
+    ).length > 1;
+
+  const modelLabel =
+    selectedGroup && sharedName
+      ? `${baseModelLabel} · ${selectedGroup.providerLabel}`
+      : baseModelLabel;
 
   return {
     effort,
@@ -1400,6 +1533,7 @@ function ChatModelPicker({
   };
 
   const selectModel = (value: string) => {
+    rememberRecentModel(value);
     void props.onModelChange(value);
     closeModelPicker();
   };
@@ -1464,7 +1598,7 @@ function ChatModelPicker({
       >
         <PopoverTrigger
           aria-label="Select model and effort"
-          className="flex h-7 max-w-full items-center overflow-hidden rounded-full bg-muted px-2.5 font-medium text-foreground text-xs transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
+          className="flex h-7 max-w-full items-center overflow-hidden rounded-lg bg-muted px-2.5 font-medium text-foreground text-xs transition-[background-color,opacity] hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-expanded:bg-accent"
           disabled={disabled || !(hasModels || effort)}
           ref={props.modelPickerTriggerRef}
           title={triggerLabel}
@@ -1510,9 +1644,20 @@ function ChatModelPicker({
                   {props.profileModelId}
                 </CommandItem>
               ) : null}
+              <RecentModelsGroup
+                busy={busy}
+                currentModelSelection={props.currentModelSelection}
+                groups={props.providerModelGroups}
+                onSelect={selectModel}
+              />
               {props.providerModelGroups.map((group) => (
                 <CommandGroup
-                  heading={group.providerLabel}
+                  heading={
+                    <ProviderPickerHeading
+                      label={group.providerLabel}
+                      providerId={group.providerId}
+                    />
+                  }
                   key={group.providerId}
                 >
                   {group.models.map((model) => {
@@ -1621,7 +1766,7 @@ function ChatComposerFullFooter({
 /** Visible 32px face; ≥40px hit via pseudo. Keep transform in transition for press scale. */
 const composerSubmitButtonClassName = cn(
   composerHitTargetClass,
-  "size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 active:scale-[0.96] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+  "size-8 shrink-0 rounded-full bg-primary text-primary-foreground shadow-none transition-[color,background-color,transform,opacity] hover:bg-primary/90 active:scale-[0.96] disabled:bg-foreground/10 disabled:text-muted-foreground disabled:opacity-100"
 );
 
 const composerAttachmentRemoveClassName = cn(

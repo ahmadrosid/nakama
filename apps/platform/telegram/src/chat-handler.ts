@@ -8,6 +8,7 @@ import {
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
+import { describeChannelStatus } from "@nakama/core/channel-commands";
 import {
   type ChannelOrgStore,
   findOrgBySelectionInput,
@@ -879,35 +880,17 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     telegram: TelegramRichMessenger,
     chatId: string
   ): Promise<void> {
-    try {
-      const health = await client.health();
+    const status = await describeChannelStatus(client, {
+      findAgent: async () => {
+        const agent = await resolveSessionProfile(chatId);
 
-      const lines = [
-        `Server: ${health.ok ? "ok" : "degraded"}`,
-        `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
-      ];
+        return { agent, id: agent.id };
+      },
+      label: "Profile",
+      sessionId: sessionStore.get(chatId)?.sessionId,
+    });
 
-      if (health.providerConfigured) {
-        const models = await client.getModels();
-        const profiles = await listSelectableProfiles();
-        const profileId = await resolveSessionProfileId(chatId);
-        const profile = profiles.find((entry) => entry.id === profileId);
-
-        const modelLabel = profile?.model?.includes("::")
-          ? profile.model.slice(profile.model.indexOf("::") + 2)
-          : (profile?.model ?? "none");
-
-        lines.push(`Profile: ${profile?.name ?? profileId}`);
-        lines.push(`Provider: ${models.provider ?? "unknown"}`);
-        lines.push(`Model: ${modelLabel}`);
-      } else {
-        lines.push("Chat runs in offline mode without an API key.");
-      }
-
-      await replyChunks(telegram, lines.join("\n"));
-    } catch (error) {
-      await telegram.send(formatClientError(error));
-    }
+    await replyChunks(telegram, status);
   }
 
   async function resolveSession(chatId: string): Promise<RemoteChatSession> {
@@ -983,14 +966,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function resolveSessionProfileId(chatId: string): Promise<string> {
+    return (await resolveSessionProfile(chatId)).id;
+  }
+
+  /** The chat's agent. An owner's connection looks it up in the owner's org. */
+  async function resolveSessionProfile(chatId: string) {
     if (config.owner) {
       const { profiles } = await client.listProfiles(config.owner.orgId);
 
-      if (!profiles.some((profile) => profile.id === config.owner!.profileId)) {
+      const ownerProfile = profiles.find(
+        (profile) => profile.id === config.owner!.profileId
+      );
+
+      if (!ownerProfile) {
         throw new Error("The connection owner is unavailable.");
       }
 
-      return config.owner.profileId;
+      return ownerProfile;
     }
 
     const profiles = await listSelectableProfiles();
@@ -1000,11 +992,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const match = profiles.find((profile) => profile.id === storedProfileId);
 
       if (match) {
-        return match.id;
+        return match;
       }
     }
 
-    return pickProfileForOrg(profiles, config.profileId).id;
+    return pickProfileForOrg(profiles, config.profileId);
   }
 
   async function clearSessionArtifactState(

@@ -74,7 +74,9 @@ import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
 
 import {
-  createNakamaDataExport,
+  cleanupDataPortabilityTempDirs,
+  createNakamaDataExportFile,
+  getDataImportLimits,
   retireAppUserData,
 } from "./services/data-portability";
 import { openaiProviderKey } from "./services/google-meet/actions";
@@ -159,6 +161,12 @@ const MAX_AUTOMATION_RUN_RESUMES = 2;
 await seedDatabase(database.adapter, { grantBash: isTenantBashEnabled() });
 
 await cleanupInterruptedMeetImports();
+
+try {
+  await cleanupDataPortabilityTempDirs(getUserConfigDir());
+} catch (error) {
+  console.warn("Could not remove stale data portability temp dirs:", error);
+}
 
 await claimLegacyCustomTools(database.adapter);
 
@@ -451,9 +459,10 @@ if (backupDir) {
     assertBackupDirOutsideRoot(backupDir, getUserConfigDir());
     await startScheduledBackups({
       dir: backupDir,
-      exportZip: async () =>
-        (await googleMeetService.withSnapshot(() => createNakamaDataExport()))
-          .data,
+      exportFile: async () =>
+        await googleMeetService.withSnapshot(() =>
+          createNakamaDataExportFile()
+        ),
       key: decodeSecretsKey(process.env.NAKAMA_SECRETS_KEY ?? ""),
     });
   } catch (error) {
@@ -734,7 +743,10 @@ function startServer(options: {
         },
         hostname: options.host,
         idleTimeout: 255,
-        maxRequestBodySize: MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
+        maxRequestBodySize: Math.max(
+          MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
+          getDataImportLimits().archiveBytes + 64 * 1024 * 1024
+        ),
         port,
       });
     } catch (error) {

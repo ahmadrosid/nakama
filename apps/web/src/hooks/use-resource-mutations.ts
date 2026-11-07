@@ -836,27 +836,6 @@ export function useArtifactsExist(
   });
 }
 
-export function useWriteArtifactMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      profileId,
-      artifactPath,
-      content,
-    }: {
-      profileId: string;
-      artifactPath: string;
-      content: string;
-    }) => client.writeProfileArtifactContent(profileId, artifactPath, content),
-    onSuccess: (_data, variables) =>
-      invalidateQueries(
-        queryClient,
-        queryKeys.artifacts.profile(variables.profileId)
-      ),
-  });
-}
-
 export function useDeleteArtifactMutation() {
   const queryClient = useQueryClient();
 

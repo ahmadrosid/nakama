@@ -102,22 +102,18 @@ export function SettingsPage() {
         <SettingsSection title="General">
           <Card className="w-full shadow-none">
             <CardContent className="divide-y divide-border p-0">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <p className="font-medium text-foreground text-sm">
-                  Appearance
-                </p>
+              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <p className="text-foreground text-sm">Appearance</p>
                 <ThemeToggle />
               </div>
 
               <UserContextSettings />
 
               <div
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
                 id="chat-usage-setting"
               >
-                <p className="font-medium text-foreground text-sm">
-                  Token usage in chat
-                </p>
+                <p className="text-foreground text-sm">Token usage in chat</p>
                 <Switch
                   aria-label="Token usage in chat"
                   checked={chatUsage.visible}
@@ -204,10 +200,10 @@ export function TimezoneSettingsRow() {
   return (
     <div
       aria-busy={saveTimezoneMutation.isPending || undefined}
-      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+      className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-4 py-3"
     >
       <div className="min-w-0 space-y-0.5">
-        <p className="font-medium text-foreground text-sm">Timezone</p>
+        <p className="text-foreground text-sm">Timezone</p>
         {error ? (
           <p className="text-destructive text-xs" role="alert">
             {error}
@@ -313,7 +309,7 @@ function SettingsSection({
   return (
     <section aria-labelledby={headingId} className="space-y-3">
       <h2
-        className="px-4 font-medium text-muted-foreground text-xs uppercase tracking-wide"
+        className="type-section-title font-medium text-muted-foreground"
         id={headingId}
       >
         {title}
@@ -325,6 +321,7 @@ function SettingsSection({
 
 export function LlmProvidersPage() {
   const [formError, setFormError] = useState<string | null>(null);
+  const [addProviderOpen, setAddProviderOpen] = useState(false);
   const { hash } = useLocation();
 
   useEffect(() => {
@@ -335,26 +332,51 @@ export function LlmProvidersPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <ProviderSettingsCard formError={formError} onFormError={setFormError} />
-      <Card className="w-full shadow-none">
-        <CardContent className="divide-y divide-border p-0">
-          <div id="image-parsing">
-            <VisionSettingsCard />
+      <ProviderSettingsCard
+        addOpen={addProviderOpen}
+        formError={formError}
+        onAddOpenChange={setAddProviderOpen}
+        onFormError={setFormError}
+      />
+      <section aria-labelledby="routing-heading" className="space-y-3">
+        <h2
+          className="font-semibold text-foreground text-sm"
+          id="routing-heading"
+        >
+          Routing
+        </h2>
+        <div className="overflow-hidden rounded-xl border border-border">
+          <div
+            aria-hidden
+            className="flex justify-between gap-3 bg-muted/40 px-4 py-2.5 text-muted-foreground text-xs"
+          >
+            <span>Task</span>
+            <span className="hidden gap-2 sm:grid sm:w-[25rem] sm:grid-cols-2">
+              <span>Provider</span>
+              <span>Model</span>
+            </span>
           </div>
-          <div id="transcription">
-            <TranscriptionSettingsCard />
+          <div className="divide-y divide-border border-border border-t">
+            <div id="image-parsing">
+              <VisionSettingsCard />
+            </div>
+            <div id="transcription">
+              <TranscriptionSettingsCard
+                onAddProvider={() => setAddProviderOpen(true)}
+              />
+            </div>
+            <div id="image-generation">
+              <ImageGenerationSettingsCard />
+            </div>
+            <div id="web-search">
+              <WebSearchSettingsCard />
+            </div>
+            <div id="browser-runtime">
+              <BrowserRuntimeSettingsCard />
+            </div>
           </div>
-          <div id="image-generation">
-            <ImageGenerationSettingsCard />
-          </div>
-          <div id="web-search">
-            <WebSearchSettingsCard />
-          </div>
-          <div id="browser-runtime">
-            <BrowserRuntimeSettingsCard />
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 }

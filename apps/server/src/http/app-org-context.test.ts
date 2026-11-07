@@ -30,6 +30,7 @@ function createServerOptions() {
       assertSessionProfileAccess: async () => {},
       createSession: async () => "session_1",
       getProfile: async () => ({ profile: { id: "default" } }),
+      getProfileAccess: async () => ({ isSuper: false, ownerUserId: null }),
       getSessionMessages: async () => ({
         channel: "web",
         contextUsage: null,

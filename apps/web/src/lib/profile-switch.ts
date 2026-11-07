@@ -30,10 +30,16 @@ export function resolveProfileSwitch(input: {
     pathname === PAGE_PATHS.automations ||
     pathname === buildChatBasePath();
 
+  // On Profiles the URL names the open agent. It can be one the rail does not
+  // list (a blocked deep link), and picking any listed agent leaves it.
+  const openProfileId = onProfilesPage
+    ? (new URLSearchParams(search).get("profile") ?? activeProfileId)
+    : activeProfileId;
+
   // Outside chat (Settings, Skills, ...) the rail still highlights the active
   // agent, so picking it opens its chat instead of doing nothing.
   if (
-    profileId === activeProfileId &&
+    profileId === openProfileId &&
     (onProfilesPage || swapsInPlace || isChatSessionPath(pathname))
   ) {
     return { kind: "stay" };

@@ -8,6 +8,14 @@ import {
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
+import {
+  channelCommandHelp,
+  channelCommandWord,
+  createWaitingTurns,
+  describeChannelStatus,
+  parseChannelCommand,
+  runChannelCommand,
+} from "@nakama/core/channel-commands";
 import type { ChannelOwner } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { readTextOrNull, writeTextFile } from "@nakama/core/fs";
@@ -75,15 +83,7 @@ const LINK_IN_DM_REPLY =
 const NO_CODE_PROMPT =
   "This bot is not linked yet. Open Nakama Integrations → Slack, generate a pairing code, then send it here.";
 
-const HELP_TEXT = [
-  "Chat with me in this DM, or @mention me in a channel. I reply in a thread and follow it after that.",
-  "",
-  "!new: start a fresh conversation",
-  "!clear: clear this conversation's history",
-  "!stop: stop the current reply",
-  "!status: server and model status",
-  "!help: this message",
-].join("\n");
+const HELP_TEXT = `Chat with me in this DM, or @mention me in a channel. I reply in a thread and follow it after that.\n\n${channelCommandHelp()}`;
 
 /** Turns Slack's escaped message text back into what the user typed. */
 export function normalizeSlackText(text: string, botUserId: string): string {
@@ -297,6 +297,8 @@ export function wantsSlackEvent(
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
+  // Turns waiting for the chat lock, which only !stop can reach.
+  const waitingTurns = createWaitingTurns();
   const { botTeamId, botUserId, owner, sessionStore, slack } = deps;
   const memberCache = new Map<string, { at: number; member: boolean }>();
 
@@ -385,98 +387,62 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    const [command = ""] = text.startsWith("!")
-      ? text.slice(1).split(/\s+/)
-      : [];
+    const word = channelCommandWord(text);
 
-    if (command === "stop") {
-      await reply(
-        stopActiveStream(conversationKey) ? "Stopping…" : "Nothing to stop."
-      );
-
-      return;
-    }
-
-    // A turn holds the conversation lock until it ends, so these commands stop
-    // it before queueing on the lock; stopping from inside would never land.
-    if (command === "new" || command === "clear") {
-      stopActiveStream(conversationKey);
-    }
-
-    if (command === "help") {
-      await reply(HELP_TEXT);
-
-      return;
-    }
-
-    if (command === "org" || command === "profile") {
+    if (word === "org" || word === "profile") {
       await reply(`This connection belongs to agent ${owner.profileId}.`);
 
       return;
     }
 
-    await chatLock.withLock(conversationKey, async () => {
-      // The connection belongs to one agent, so every request is pinned to its
-      // org; each event still gets its own client so turns never share one.
-      const client = deps.client.forOrg(owner.orgId);
+    const command = parseChannelCommand(text);
 
-      switch (command) {
-        case "": {
-          await runTurn(client, event, conversationKey, text, isDm);
-
-          return;
-        }
-
-        case "new": {
-          await onTurnStart?.();
-          await createAndBindSession(client, conversationKey);
-          await reply("Started a new conversation.");
-
-          return;
-        }
-
-        case "clear": {
+    if (command !== null) {
+      await runChannelCommand(command, {
+        clearSession: async () => {
+          const client = deps.client.forOrg(owner.orgId);
           await onTurnStart?.();
           await (await resolveSession(client, conversationKey)).clear();
-          await reply("History cleared.");
+        },
+        helpText: HELP_TEXT,
+        reply,
+        runLocked: (work) => chatLock.withLock(conversationKey, work),
+        startSession: async () => {
+          const client = deps.client.forOrg(owner.orgId);
+          await onTurnStart?.();
+          await createAndBindSession(client, conversationKey);
+        },
+        status: () =>
+          describeStatus(deps.client.forOrg(owner.orgId), conversationKey),
+        // Both are called, so the running turn and the queued ones all stop.
+        stop: () => {
+          const stoppedWaiting = waitingTurns.stop(conversationKey);
+          const stoppedRunning = stopActiveStream(conversationKey);
+
+          return stoppedWaiting || stoppedRunning;
+        },
+      });
+
+      return;
+    }
+
+    const queued = waitingTurns.join(conversationKey);
+
+    try {
+      await chatLock.withLock(conversationKey, async () => {
+        if (queued.signal.aborted) {
+          await reply("Stopped.");
 
           return;
         }
 
-        case "status": {
-          await reply(await describeStatus(client, conversationKey));
-
-          return;
-        }
-
-        default:
-          await reply("Unknown command. Send !help for the list.");
-      }
-    });
-
-    async function describeStatus(
-      client: NakamaClient,
-      sessionKey: string
-    ): Promise<string> {
-      try {
-        const health = await client.health();
-
-        const lines = [
-          `Server: ${health.ok ? "ok" : "degraded"}`,
-          `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
-        ];
-
-        const profile = await resolveOwnerProfile(client);
-        lines.push(`Agent: ${profile.name}`);
-
-        if (profile?.model) {
-          lines.push(`Model: ${profile.model.split("::").pop()}`);
-        }
-
-        return lines.join("\n");
-      } catch (error) {
-        return formatClientError(error);
-      }
+        // The connection belongs to one agent, so every request is pinned to
+        // its org; each event still gets its own client so turns never share one.
+        const client = deps.client.forOrg(owner.orgId);
+        await runTurn(client, event, conversationKey, text, isDm, queued);
+      });
+    } finally {
+      waitingTurns.leave(conversationKey, queued);
     }
 
     async function runTurn(
@@ -484,7 +450,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       inbound: SlackMessageEvent,
       sessionKey: string,
       message: string,
-      direct: boolean
+      direct: boolean,
+      queued: AbortController
     ): Promise<void> {
       if (!message) {
         await reply("Send me a message to get started. Try !help.");
@@ -495,6 +462,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const session = await resolveSession(client, sessionKey);
       await onTurnStart?.();
       const signal = registerActiveStream(sessionKey);
+
+      // From here !stop reaches the turn through the registry. A stop that
+      // came during the session lookup is carried over.
+      waitingTurns.leave(sessionKey, queued);
+
+      if (queued.signal.aborted) {
+        stopActiveStream(sessionKey);
+      }
+
       let pending = "";
       // Early posts run one after another so their messages stay in order.
       let earlyPosts: Promise<void> = Promise.resolve();
@@ -559,6 +535,21 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
     }
   };
+
+  function describeStatus(
+    client: NakamaClient,
+    sessionKey: string
+  ): Promise<string> {
+    return describeChannelStatus(client, {
+      findAgent: async () => {
+        const agent = await resolveOwnerProfile(client);
+
+        return { agent, id: agent.id };
+      },
+      label: "Agent",
+      sessionId: sessionStore.get(sessionKey)?.sessionId,
+    });
+  }
 
   /** The owning agent, or an error when it was deleted after the connection was saved. */
   async function resolveOwnerProfile(client: NakamaClient) {

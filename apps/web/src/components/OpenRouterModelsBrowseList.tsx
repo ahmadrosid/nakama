@@ -36,6 +36,7 @@ function useOpenRouterModels() {
 type OpenRouterBrowseSelectHandler = (row: OpenRouterModelRow) => void;
 
 interface OpenRouterModelsBrowseListProps {
+  addedIds?: ReadonlySet<string>;
   className?: string;
   multiSelect?: boolean;
   onAddMany?: (rows: OpenRouterModelRow[]) => void;
@@ -45,6 +46,7 @@ interface OpenRouterModelsBrowseListProps {
 export function OpenRouterModelsBrowseList({
   onSelect,
   className,
+  addedIds,
   multiSelect,
   onAddMany,
 }: OpenRouterModelsBrowseListProps) {
@@ -62,6 +64,7 @@ export function OpenRouterModelsBrowseList({
 
   return (
     <CatalogModelsBrowseList<OpenRouterModelRow>
+      addedIds={addedIds}
       className={className}
       isDeprecated={(row) => row.deprecated}
       multiSelect={multiSelect}

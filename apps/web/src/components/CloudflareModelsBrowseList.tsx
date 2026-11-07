@@ -10,6 +10,7 @@ import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
 interface CloudflareModelsBrowseListProps {
+  addedIds?: ReadonlySet<string>;
   apiKey?: string;
   /** Workers AI URL for the account, used before the provider is saved. */
   baseUrl?: string;
@@ -37,6 +38,7 @@ export function CloudflareModelsBrowseList({
   apiKey,
   baseUrl,
   className,
+  addedIds,
   multiSelect,
   onAddMany,
   onSelect,
@@ -76,6 +78,7 @@ export function CloudflareModelsBrowseList({
 
   return (
     <CatalogModelsBrowseList<CapabilityBrowseRow>
+      addedIds={addedIds}
       className={className}
       filterRows={(rows, search, hideDeprecated) =>
         filterCapabilityBrowseRows(rows, { hideDeprecated, search })

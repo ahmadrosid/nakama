@@ -260,8 +260,11 @@ const WORKFLOW_STEP_KINDS = [
   "compare",
   "assert",
   "template",
+  "agent",
   "summarize",
 ] as const;
+
+const AGENT_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const WORKFLOW_COMPARE_OPS = ["eq", "near", "contains"] as const;
 
@@ -275,6 +278,7 @@ export function validateWorkflowSteps(
 
   const seenStepIds = new Set<string>();
   const priorStepIds = new Set<string>();
+  const agentFields = new Map<string, Set<string>>();
   let summarizeCount = 0;
 
   for (const [index, step] of steps.entries()) {
@@ -291,7 +295,7 @@ export function validateWorkflowSteps(
     if (kind === "summarize") {
       if (index !== steps.length - 1) {
         throw new Error(
-          "Summarize step must be the last step. Use a tool for intermediate extraction or analysis."
+          "Summarize step must be the last step. Use an agent step for analysis in the middle of a workflow."
         );
       }
 
@@ -337,8 +341,27 @@ export function validateWorkflowSteps(
       }
     }
 
+    if (kind === "agent") {
+      readRequiredStepString(record, "prompt", `Agent step ${id}`);
+      agentFields.set(id, readAgentFields(record.fields, id));
+    }
+
     if (kind === "assert") {
       readRequiredStepString(record, "path", `Assert step ${id}`);
+    }
+
+    if (record.onFail !== undefined) {
+      const isCheck = kind === "compare" || kind === "assert";
+
+      if (
+        !(isCheck && (record.onFail === "fail" || record.onFail === "skip"))
+      ) {
+        throw new Error(
+          isCheck
+            ? `Step ${id} has invalid onFail: ${String(record.onFail)}. Use fail | skip.`
+            : `Step ${id} cannot use onFail. Only compare and assert steps can.`
+        );
+      }
     }
 
     if (kind === "template") {
@@ -350,7 +373,7 @@ export function validateWorkflowSteps(
     const refs = collectTemplateRefs(record);
 
     for (const ref of refs) {
-      validateTemplateRef(ref, priorStepIds, id);
+      validateTemplateRef(ref, priorStepIds, id, agentFields);
     }
 
     priorStepIds.add(id);
@@ -450,10 +473,67 @@ function readRequiredStepString(
   throw new Error(`${prefix} is missing ${options?.label ?? key}.`);
 }
 
+function readAgentFields(value: WorkflowValue, id: string): Set<string> {
+  if (!isWorkflowRecord(value) || Object.keys(value).length === 0) {
+    throw new Error(
+      `Agent step ${id} requires fields: an object of output keys, e.g. { "decision": "act | ignore" }.`
+    );
+  }
+
+  for (const [key, note] of Object.entries(value)) {
+    if (!AGENT_FIELD_PATTERN.test(key)) {
+      throw new Error(
+        `Agent step ${id} has invalid field name: ${key}. Use letters, digits, and _.`
+      );
+    }
+
+    if (readString(note) === null) {
+      throw new Error(
+        `Agent step ${id} field ${key} must describe its value as text.`
+      );
+    }
+  }
+
+  return new Set(Object.keys(value));
+}
+
+/** Reads the agent reply as one JSON object and keeps only the declared fields. */
+export function parseAgentReply(
+  reply: string,
+  fields: Record<string, string>,
+  stepId: string
+) {
+  const start = reply.indexOf("{");
+  const end = reply.lastIndexOf("}");
+  let parsed: WorkflowValue;
+
+  try {
+    parsed = start === -1 ? undefined : JSON.parse(reply.slice(start, end + 1));
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!isWorkflowRecord(parsed)) {
+    throw new Error(`Agent step ${stepId} did not reply with a JSON object.`);
+  }
+
+  const record = parsed;
+  const missing = Object.keys(fields).find((key) => record[key] === undefined);
+
+  if (missing) {
+    throw new Error(`Agent step ${stepId} reply is missing field: ${missing}`);
+  }
+
+  return Object.fromEntries(
+    Object.keys(fields).map((key) => [key, record[key]])
+  );
+}
+
 function validateTemplateRef(
   ref: string,
   priorStepIds: Set<string>,
-  currentStepId: string
+  currentStepId: string,
+  agentFields: Map<string, Set<string>>
 ): void {
   if (ref.startsWith("input.")) {
     return;
@@ -475,6 +555,15 @@ function validateTemplateRef(
     if (!priorStepIds.has(stepId)) {
       throw new Error(
         `Step ${currentStepId} references unknown step in template: ${ref}`
+      );
+    }
+
+    const field = ref.split(".")[2];
+    const declared = agentFields.get(stepId);
+
+    if (field && declared && !declared.has(field)) {
+      throw new Error(
+        `Step ${currentStepId} references ${ref}, but agent step ${stepId} declares only: ${[...declared].join(", ")}`
       );
     }
 

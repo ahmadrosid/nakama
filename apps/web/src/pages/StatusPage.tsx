@@ -100,7 +100,9 @@ function PluginWorkersSection() {
 
   return (
     <section aria-label="Plugin workers" className="space-y-3">
-      <h2 className="type-section-title">Plugin workers</h2>
+      <h2 className="type-section-title font-medium text-muted-foreground">
+        Plugin workers
+      </h2>
       <Card className="w-full overflow-hidden shadow-none">
         <CardContent className="divide-y divide-border p-0">
           {data.map((worker) => {
@@ -192,7 +194,9 @@ function StatusDashboard({
   return (
     <div className="space-y-8">
       <section aria-label="Automation activity" className="space-y-3">
-        <h2 className="type-section-title">Automation activity</h2>
+        <h2 className="type-section-title font-medium text-muted-foreground">
+          Automation activity
+        </h2>
         <Card className="w-full overflow-hidden shadow-none">
           <CardContent className="divide-y divide-border p-0">
             <QuickStat
@@ -208,7 +212,9 @@ function StatusDashboard({
         </Card>
       </section>
       <section aria-label="Services" className="space-y-3">
-        <h2 className="type-section-title">Services</h2>
+        <h2 className="type-section-title font-medium text-muted-foreground">
+          Services
+        </h2>
         <Card className="w-full overflow-hidden shadow-none">
           <CardContent className="divide-y divide-border p-0">
             {workerRows.map((row) => (
@@ -797,7 +803,9 @@ function UsageGroupList({
 
   return (
     <div className="space-y-3">
-      <h2 className="type-section-title">{title}</h2>
+      <h2 className="type-section-title font-medium text-muted-foreground">
+        {title}
+      </h2>
       <Card className="w-full overflow-hidden shadow-none">
         <CardContent className="p-0">
           {groups.map((group) => (
@@ -972,11 +980,11 @@ function QuickStat({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 px-4 py-3",
+        "flex min-h-13 items-center justify-between gap-3 px-4 py-3",
         active && "bg-primary/5 dark:bg-primary/10"
       )}
     >
-      <p className="font-medium text-foreground text-sm">{label}</p>
+      <p className="text-foreground text-sm">{label}</p>
       <p
         className={cn(
           "font-medium text-foreground text-sm tabular-nums",

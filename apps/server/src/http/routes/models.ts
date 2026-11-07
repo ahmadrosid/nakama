@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
   type AgentBrowserStatusResponse,
+  type CheckProviderResponse,
   type ComposioSettingsResponse,
   type ConfigureProviderResponse,
   type CreateProviderResponse,
@@ -437,6 +438,14 @@ export function registerModelRoutes(
     .passthrough()
     .openapi("CreateProviderRequest");
 
+  const checkProviderKeyRequestSchema = z
+    .object({
+      apiKey: z.string().max(4096),
+      baseUrl: z.string().max(2048).optional(),
+      type: z.enum(USER_PROVIDER_NAMES),
+    })
+    .openapi("CheckProviderKeyRequest");
+
   const updateProviderRequestSchema = z
     .object({})
     .passthrough()
@@ -639,6 +648,81 @@ export function registerModelRoutes(
         },
       },
       summary: "Update a provider instance",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "checkProviderKey",
+      path: "/v1/providers/check-key",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: checkProviderKeyRequestSchema },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z.object({ status: z.string() }),
+            },
+          },
+          description: "What a live check of the typed key found",
+        },
+      },
+      summary: "Check a key before saving it",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "setDefaultProvider",
+      path: "/v1/providers/{providerId}/default",
+      request: { params: providerIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: deleteProviderResponseSchema },
+          },
+          description: "The new default provider",
+        },
+      },
+      summary: "Make a provider the default",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "checkProvider",
+      path: "/v1/providers/{providerId}/check",
+      request: { params: providerIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  status: z.enum([
+                    "ok",
+                    "rejected",
+                    "needs-key",
+                    "unreachable",
+                    "unchecked",
+                  ]),
+                })
+                .openapi("CheckProviderResponse"),
+            },
+          },
+          description: "What a live check of the saved key found",
+        },
+      },
+      summary: "Check a provider's saved key",
       tags: ["Models"],
     })
   );
@@ -1869,6 +1953,47 @@ export function registerModelRoutes(
       const message = error instanceof Error ? error.message : String(error);
 
       return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/providers/check-key", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson(c.req.raw, checkProviderKeyRequestSchema);
+
+    return json<CheckProviderResponse>(await agent.checkProviderKey(body));
+  });
+
+  app.post("/v1/providers/:providerId/default", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    try {
+      return json<DeleteProviderResponse>(
+        await agent.setDefaultProvider(
+          decodeURIComponent(c.req.param("providerId"))
+        )
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/v1/providers/:providerId/check", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    try {
+      return json<CheckProviderResponse>(
+        await agent.checkProvider(decodeURIComponent(c.req.param("providerId")))
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      throw error;
     }
   });
 

@@ -23,6 +23,7 @@
     "whatsapp",
     "discord",
     "slack",
+    "teams",
     "---Concepts---",
     "multi-tenancy",
     "org-memory",

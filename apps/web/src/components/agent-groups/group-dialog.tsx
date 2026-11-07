@@ -12,6 +12,7 @@ import {
   Input,
   Textarea,
 } from "@nakama/ui";
+import { cn } from "@nakama/ui/utils";
 import { Camera01Icon, Cancel01Icon } from "hugeicons-react";
 import { useRef, useState } from "react";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -22,7 +23,10 @@ import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 
 const IMAGE_TYPES = "image/png,image/jpeg,image/gif,image/webp";
 
-/** Chips for the chosen agents and a search that adds more. */
+/** Show agent avatars in their own shape, not cut to a circle. */
+const UNCLIPPED_AVATAR = "rounded-none outline-none";
+
+/** Chips for the chosen agents in the search field, and every agent below it. */
 function MemberPicker({
   memberIds,
   onAdd,
@@ -40,9 +44,7 @@ function MemberPicker({
   const selected = groupRoster({ handles: {}, memberIds }, profiles).members;
 
   const matches = profiles.filter(
-    (profile) =>
-      !(profile.isSuper || chosen.has(profile.id)) &&
-      profile.name.toLowerCase().includes(needle)
+    (profile) => !profile.isSuper && profile.name.toLowerCase().includes(needle)
   );
 
   function add(profileId: string) {
@@ -51,76 +53,205 @@ function MemberPicker({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 flex-col gap-2">
       <label className="font-semibold text-sm" htmlFor="group-agent-search">
-        Add agents
+        Agents
       </label>
-      <div className="flex flex-col gap-2">
-        <div className="flex min-h-12 flex-wrap items-center gap-2 rounded-xl border border-input px-2 py-1.5 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20">
-          {selected.map((profile) => (
-            <span
-              className="flex items-center gap-2 rounded-full bg-muted py-1 pr-2 pl-1"
-              key={profile.id}
+      <div className="flex min-h-12 flex-wrap items-center gap-1.5 rounded-xl border border-input px-2 py-1.5 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20">
+        {selected.map((profile) => (
+          <span
+            className="flex items-center gap-1.5 rounded-md bg-muted py-1 pr-2 pl-1"
+            key={profile.id}
+          >
+            <ProfileAvatar
+              className={UNCLIPPED_AVATAR}
+              profile={profile}
+              size="xs"
+            />
+            <span className="font-medium text-sm">{profile.name}</span>
+            <button
+              aria-label={`Remove ${profile.name}`}
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => onRemove(profile.id)}
+              type="button"
             >
-              <ProfileAvatar profile={profile} size="xs" />
-              <span className="text-sm">{profile.name}</span>
-              <button
-                aria-label={`Remove ${profile.name}`}
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => onRemove(profile.id)}
-                type="button"
-              >
-                <Cancel01Icon className="size-3.5" />
-              </button>
-            </span>
-          ))}
-          <input
-            className="min-w-24 flex-1 bg-transparent text-sm outline-none"
-            id="group-agent-search"
-            onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
+              <Cancel01Icon className="size-3.5" />
+            </button>
+          </span>
+        ))}
+        <input
+          className="h-8 min-w-28 flex-1 bg-transparent px-1 text-sm outline-none"
+          id="group-agent-search"
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              const next = matches.find((profile) => !chosen.has(profile.id));
 
-                if (matches[0]) {
-                  add(matches[0].id);
-                }
-              } else if (
-                event.key === "Backspace" &&
-                !search &&
-                selected.length > 0
-              ) {
-                onRemove(selected.at(-1)?.id ?? "");
+              if (next) {
+                add(next.id);
               }
-            }}
-            placeholder="Search agents"
-            value={search}
-          />
-        </div>
-        {matches.length > 0 ? (
-          <>
-            <span className="font-medium text-muted-foreground text-xs">
-              Available agents
-            </span>
-            <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-xl border border-input p-1.5 md:max-h-72">
-              {matches.map((profile, index) => (
-                <button
-                  className={`flex items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted ${index === 0 ? "bg-muted" : ""}`}
-                  key={profile.id}
-                  onClick={() => add(profile.id)}
-                  type="button"
-                >
-                  <ProfileAvatar profile={profile} size="sm" />
-                  <span className="min-w-0 truncate text-sm">
-                    {profile.name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
+            } else if (
+              event.key === "Backspace" &&
+              !search &&
+              selected.length > 0
+            ) {
+              onRemove(selected.at(-1)?.id ?? "");
+            }
+          }}
+          placeholder={selected.length > 0 ? "Add more" : "Search agents"}
+          value={search}
+        />
+      </div>
+      <div className="-mx-2 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+        {matches.map((profile) => {
+          const added = chosen.has(profile.id);
+
+          return (
+            <button
+              aria-pressed={added}
+              className="flex min-h-11 shrink-0 items-center gap-3 rounded-lg px-2 text-left hover:bg-muted"
+              key={profile.id}
+              onClick={() => (added ? onRemove(profile.id) : add(profile.id))}
+              type="button"
+            >
+              <ProfileAvatar
+                className={UNCLIPPED_AVATAR}
+                profile={profile}
+                size="sm"
+              />
+              <span className="min-w-0 flex-1 truncate font-medium text-sm">
+                {profile.name}
+              </span>
+              <span
+                className={cn(
+                  "flex h-7 min-w-16 items-center justify-center rounded-full px-3 font-semibold text-xs",
+                  added
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-input bg-background"
+                )}
+              >
+                {added ? "Added" : "Add"}
+              </span>
+            </button>
+          );
+        })}
+        {needle && matches.length === 0 ? (
+          <p className="py-4 text-center text-muted-foreground text-sm">
+            No agents match "{search.trim()}"
+          </p>
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** Where each stacked face sits in the preview (left, top, size), by face count. */
+const FACE_SPOTS = [
+  [],
+  [[16, 16, 64]],
+  [
+    [4, 4, 52],
+    [40, 40, 52],
+  ],
+  [
+    [22, 0, 48],
+    [0, 46, 48],
+    [46, 46, 48],
+  ],
+  [
+    [0, 0, 46],
+    [50, 0, 46],
+    [0, 50, 46],
+    [50, 50, 46],
+  ],
+] as const;
+
+/** How the group will look: photo or stacked faces, name, members, handles. */
+function GroupPreview({
+  handles,
+  memberIds,
+  name,
+  photo,
+  profiles,
+}: {
+  handles: AgentGroup["handles"];
+  memberIds: string[];
+  name: string;
+  photo: string | null;
+  profiles: ProfileSummary[];
+}) {
+  const roster = groupRoster({ handles, memberIds }, profiles);
+  const { members } = roster;
+  const faces = members.slice(0, 4);
+  const spots = FACE_SPOTS[faces.length] ?? [];
+  const extra = members.length - faces.length;
+  const names = members.map((member) => member.name);
+
+  let memberLine = "No agents yet";
+
+  if (names.length > 3) {
+    memberLine = `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+  } else if (names.length > 0) {
+    memberLine = names.join(", ");
+  }
+
+  return (
+    <aside
+      aria-label="Preview"
+      className="flex flex-col items-center justify-center gap-3 border-l bg-muted px-6 py-10 text-center max-md:hidden"
+    >
+      {photo ? (
+        <img alt="" className="size-24 rounded-2xl object-cover" src={photo} />
+      ) : (
+        <span className="relative block size-24">
+          {faces.map((profile, index) => {
+            const [left, top, size] = spots[index] ?? [0, 0, 0];
+
+            return (
+              <span
+                className="absolute"
+                key={profile.id}
+                style={{ height: size, left, top, width: size }}
+              >
+                <ProfileAvatar
+                  className={cn("size-full", UNCLIPPED_AVATAR)}
+                  profile={profile}
+                />
+              </span>
+            );
+          })}
+          {extra > 0 ? (
+            <span className="absolute -right-1.5 -bottom-1.5 flex h-7 min-w-7 items-center justify-center rounded-full bg-primary px-1.5 font-semibold text-primary-foreground text-xs ring-3 ring-muted">
+              +{extra}
+            </span>
+          ) : null}
+        </span>
+      )}
+      <p
+        className={cn(
+          "max-w-full truncate font-semibold text-xl",
+          name.trim() ? "" : "text-muted-foreground"
+        )}
+      >
+        {name.trim() || "Group name"}
+      </p>
+      <p className="text-muted-foreground text-sm">{memberLine}</p>
+      {members.length > 0 ? (
+        <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+          {["all", ...members.map((member) => roster.handleOf(member.id))].map(
+            (handle) => (
+              <span
+                className="rounded-full border bg-background px-2.5 py-1 font-medium text-xs"
+                key={handle}
+              >
+                @{handle}
+              </span>
+            )
+          )}
+        </div>
+      ) : null}
+    </aside>
   );
 }
 
@@ -164,6 +295,57 @@ function PhotoPicker({
   );
 }
 
+/** Photo, name and the photo's error, on one row. */
+function NameRow({
+  hasImage,
+  imageError,
+  name,
+  onChoose,
+  onNameChange,
+  onRemovePhoto,
+  photo,
+}: {
+  hasImage: boolean;
+  imageError: string | null;
+  name: string;
+  onChoose: (file: File | undefined) => void;
+  onNameChange: (name: string) => void;
+  onRemovePhoto: () => void;
+  photo: string | null;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2 rounded-xl border border-input p-1.5">
+        <PhotoPicker hasImage={hasImage} onChoose={onChoose} src={photo} />
+        <Input
+          aria-label="Group name"
+          autoFocus
+          className="h-10 border-0 bg-transparent text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
+          maxLength={80}
+          onChange={(event) => onNameChange(event.target.value)}
+          placeholder="Group name"
+          value={name}
+        />
+        {hasImage ? (
+          <Button
+            onClick={onRemovePhoto}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Remove
+          </Button>
+        ) : null}
+      </div>
+      {imageError ? (
+        <p className="text-destructive text-sm" role="alert">
+          {imageError}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 /** Whether the group has a photo once the pending change is applied. */
 function hasGroupImage(
   image: ImageAttachment | null | undefined,
@@ -195,6 +377,7 @@ export function GroupDialog({
   const [preview, setPreview] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const hasImage = hasGroupImage(image, group);
+  const photo = preview ?? (hasImage && group ? groupAvatarUrl(group) : null);
 
   async function chooseImage(file: File | undefined) {
     if (!file) {
@@ -247,12 +430,9 @@ export function GroupDialog({
       }}
       open
     >
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{group ? "Edit group" : "New group"}</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="gap-0 p-0 sm:max-w-4xl md:grid-cols-[minmax(0,1fr)_20rem]">
         <form
-          className="grid gap-4 md:grid-cols-2 md:gap-x-6"
+          className="flex min-w-0 flex-col gap-4 p-4 sm:p-6 sm:pb-4"
           id="group-form"
           onSubmit={(event) => {
             event.preventDefault();
@@ -272,76 +452,48 @@ export function GroupDialog({
             );
           }}
         >
-          <div className="flex min-w-0 flex-col gap-4 md:order-1">
-            <div className="flex items-center gap-2 rounded-xl border border-input p-1.5">
-              <PhotoPicker
-                hasImage={hasImage}
-                onChoose={(file) => void chooseImage(file)}
-                src={
-                  preview ?? (hasImage && group ? groupAvatarUrl(group) : null)
-                }
-              />
-              <Input
-                aria-label="Group name"
-                autoFocus
-                className="h-10 border-0 bg-transparent text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
-                maxLength={80}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Group name"
-                value={name}
-              />
-              {hasImage ? (
-                <Button
-                  onClick={() => {
-                    setImage(group?.avatarVersion ? null : undefined);
-                    setPreview(null);
-                    setImageError(null);
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Remove
-                </Button>
-              ) : null}
-            </div>
-            {imageError ? (
-              <p className="text-destructive text-sm" role="alert">
-                {imageError}
-              </p>
-            ) : null}
-            <div className="flex flex-col gap-2">
-              <label className="font-semibold text-sm" htmlFor="group-brief">
-                Brief
-              </label>
-              <Textarea
-                className="max-h-64 min-h-32 overflow-y-auto"
-                id="group-brief"
-                maxLength={4000}
-                onChange={(event) => setBrief(event.target.value)}
-                placeholder="What is this group for? Every agent reads it."
-                rows={3}
-                value={brief}
-              />
-            </div>
-          </div>
-          <div className="min-w-0 md:order-2">
-            <MemberPicker
-              memberIds={memberIds}
-              onAdd={addMember}
-              onRemove={removeMember}
-              profiles={profiles}
+          <DialogHeader>
+            <DialogTitle>{group ? "Edit group" : "New group"}</DialogTitle>
+          </DialogHeader>
+          <NameRow
+            hasImage={hasImage}
+            imageError={imageError}
+            name={name}
+            onChoose={(file) => void chooseImage(file)}
+            onNameChange={setName}
+            onRemovePhoto={() => {
+              setImage(group?.avatarVersion ? null : undefined);
+              setPreview(null);
+              setImageError(null);
+            }}
+            photo={photo}
+          />
+          <div className="flex flex-col gap-2">
+            <label className="font-semibold text-sm" htmlFor="group-brief">
+              Brief
+            </label>
+            <Textarea
+              className="max-h-40 min-h-20 overflow-y-auto"
+              id="group-brief"
+              maxLength={4000}
+              onChange={(event) => setBrief(event.target.value)}
+              placeholder="What is this group for? Every agent reads it."
+              rows={3}
+              value={brief}
             />
           </div>
+          <MemberPicker
+            memberIds={memberIds}
+            onAdd={addMember}
+            onRemove={removeMember}
+            profiles={profiles}
+          />
           {save.error ? (
-            <p
-              className="text-destructive text-sm md:order-3 md:col-span-2"
-              role="alert"
-            >
+            <p className="text-destructive text-sm" role="alert">
               {formatError(save.error)}
             </p>
           ) : null}
-          <DialogFooter className="md:order-4 md:col-span-2">
+          <DialogFooter className="mt-auto bg-transparent sm:-mx-6 sm:-mb-4 sm:px-6 md:rounded-br-none">
             <Button onClick={onClose} type="button" variant="outline">
               Cancel
             </Button>
@@ -358,6 +510,13 @@ export function GroupDialog({
             </Button>
           </DialogFooter>
         </form>
+        <GroupPreview
+          handles={group?.handles ?? {}}
+          memberIds={memberIds}
+          name={name}
+          photo={photo}
+          profiles={profiles}
+        />
       </DialogContent>
     </Dialog>
   );

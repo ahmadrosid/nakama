@@ -59,16 +59,14 @@ import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 const sectionTabClass =
-  "whitespace-nowrap rounded-full px-2 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
+  "shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-center text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:font-medium data-[active]:text-foreground data-[active]:shadow-sm";
 
 function ProfilePromptPanel({
   state,
-  canPack,
   canCreateProfile,
   profileId,
 }: {
   state: ProfilesPageState;
-  canPack: boolean;
   canCreateProfile: boolean;
   profileId: string;
 }) {
@@ -80,32 +78,30 @@ function ProfilePromptPanel({
   return (
     <>
       <ProfileSystemPromptCard state={state} />
-      {canPack || isOwner ? (
-        <section className="space-y-3" id="profile-prompt">
-          <div className="flex items-center justify-between gap-3">
-            {showFiles ? (
-              <h2 className="font-medium text-foreground/80 text-sm">
-                Agent prompt
-              </h2>
-            ) : null}
-            <button
-              aria-haspopup="dialog"
-              className="ml-auto flex h-8 items-center gap-1 rounded-md font-medium text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => setHistoryOpen(true)}
-              type="button"
-            >
-              Change history
-              <ArrowRight01Icon aria-hidden="true" className="size-3.5" />
-            </button>
-          </div>
-          {showFiles ? <SoulTab profileId={profileId} /> : null}
-          <ProfileHistorySheet
-            onOpenChange={setHistoryOpen}
-            open={historyOpen}
-            profileId={profileId}
-          />
-        </section>
-      ) : null}
+      <section className="space-y-2" id="profile-prompt">
+        <div className="flex items-center justify-between gap-3">
+          {showFiles ? (
+            <h2 className="font-medium text-muted-foreground text-sm">
+              Agent prompt
+            </h2>
+          ) : null}
+          <button
+            aria-haspopup="dialog"
+            className="ml-auto flex h-8 items-center gap-1 rounded-md pr-4 text-amber-800 text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring dark:text-primary"
+            onClick={() => setHistoryOpen(true)}
+            type="button"
+          >
+            Change history
+            <ArrowRight01Icon aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
+        {showFiles ? <SoulTab profileId={profileId} /> : null}
+        <ProfileHistorySheet
+          onOpenChange={setHistoryOpen}
+          open={historyOpen}
+          profileId={profileId}
+        />
+      </section>
     </>
   );
 }
@@ -141,7 +137,7 @@ function ProfileSectionTab({
     <Tabs.Tab className={sectionTabClass} value={value}>
       {label}
       {hint ? (
-        <span className="ml-1.5 hidden text-muted-foreground/70 text-xs tabular-nums sm:inline">
+        <span className="ml-1.5 hidden text-muted-foreground text-xs tabular-nums sm:inline">
           {hint}
         </span>
       ) : null}
@@ -154,18 +150,20 @@ function buildProfileSections({
   detail,
   showBehavior,
   showChannels,
+  showPrompt,
 }: {
   channels: { connected: boolean }[] | null;
   detail: NonNullable<ProfilesPageState["detail"]>;
   showBehavior: boolean;
   showChannels: boolean;
+  showPrompt: boolean;
 }) {
   const channelHint = channels
     ? `${channels.filter((channel) => channel.connected).length}/${channels.length}`
     : "";
 
   return [
-    { hint: "", label: "Prompt", value: "prompt" },
+    ...(showPrompt ? [{ hint: "", label: "Prompt", value: "prompt" }] : []),
     ...(showChannels
       ? [{ hint: channelHint, label: "Channels", value: "channels" }]
       : []),
@@ -203,9 +201,9 @@ function profileTabAccess(
   return {
     canCreateProfile,
     canManage: canCreateProfile || isOwner,
-    canPack,
     showBehavior: isOrgAdmin || isOwner,
     showChannels: (canPack || isOwner) && !detail.isSuper,
+    showPrompt: canPack || isOwner,
   };
 }
 
@@ -227,8 +225,13 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 
   const { busy, detail, selectedId } = state;
 
-  const { canCreateProfile, canManage, canPack, showBehavior, showChannels } =
-    profileTabAccess(detail, user, activeOrg?.role);
+  const {
+    canCreateProfile,
+    canManage,
+    showBehavior,
+    showChannels,
+    showPrompt,
+  } = profileTabAccess(detail, user, activeOrg?.role);
 
   const channelsReady = !(isPending || channelsError);
 
@@ -237,11 +240,12 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
     detail,
     showBehavior,
     showChannels,
+    showPrompt,
   });
 
   return (
     <div
-      className="mx-auto flex w-fit max-w-3xl flex-col gap-8"
+      className="mx-auto flex w-full max-w-3xl flex-col gap-8"
       id="profile-detail-panel-profile"
     >
       <ProfileConfigIdentitySection state={state} />
@@ -250,35 +254,38 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         key={detail.id}
         onValueChange={(value) => setSection(String(value))}
         value={
-          sections.some((item) => item.value === section) ? section : "prompt"
+          sections.some((item) => item.value === section)
+            ? section
+            : (sections[0]?.value ?? "tools")
         }
       >
         <Tabs.List
           aria-label="Agent sections"
-          className="mx-auto grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1 sm:w-fit"
+          className="no-scrollbar grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1"
         >
           {sections.map((item) => (
             <ProfileSectionTab key={item.value} {...item} />
           ))}
         </Tabs.List>
-        <Tabs.Panel className="w-0 min-w-full space-y-6" value="prompt">
-          <ProfilePromptPanel
-            canCreateProfile={canCreateProfile}
-            canPack={canPack}
-            profileId={detail.id}
-            state={state}
-          />
-          {(showChannels || canManage) && selectedId ? (
-            <ProfileFooterActions
-              onExport={() => setExportOpen(true)}
-              onMove={() => setMoveOpen(true)}
-              showAdmin={canManage}
-              showMove={canCreateProfile}
-              showPack={showChannels}
+        {showPrompt ? (
+          <Tabs.Panel className="w-0 min-w-full space-y-6" value="prompt">
+            <ProfilePromptPanel
+              canCreateProfile={canCreateProfile}
+              profileId={detail.id}
               state={state}
             />
-          ) : null}
-        </Tabs.Panel>
+            {(showChannels || canManage) && selectedId ? (
+              <ProfileFooterActions
+                onExport={() => setExportOpen(true)}
+                onMove={() => setMoveOpen(true)}
+                showAdmin={canManage}
+                showMove={canCreateProfile}
+                showPack={showChannels}
+                state={state}
+              />
+            ) : null}
+          </Tabs.Panel>
+        ) : null}
         {showChannels ? (
           <Tabs.Panel className="w-0 min-w-full" value="channels">
             <ChannelProfileContext.Provider
@@ -540,28 +547,35 @@ function ProfileFooterActions({
       : []),
   ];
 
-  // Two columns; an odd button out and the destructive one take a full row.
   const regular = actions.filter((action) => !action.destructive);
-  const fullRow = new Set(regular.length % 2 === 1 ? [regular.at(-1)] : []);
+  const destructive = actions.filter((action) => action.destructive);
 
   return (
-    <footer className="grid w-0 min-w-full grid-cols-2 gap-2">
-      {actions.map((action) => {
-        const { Icon, destructive, disabled, label, onClick } = action;
-
-        return (
-          <button
-            className={`flex h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 font-medium text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive || fullRow.has(action) ? "col-span-2" : ""} ${destructive ? "bg-destructive/10 text-destructive hover:bg-destructive/15" : "bg-muted text-foreground/80 hover:bg-muted/70 hover:text-foreground"}`}
-            disabled={disabled}
-            key={label}
-            onClick={onClick}
-            type="button"
-          >
-            <Icon aria-hidden className="size-4" />
-            {label}
-          </button>
-        );
-      })}
+    <footer className="flex w-0 min-w-full flex-wrap items-center gap-2 pt-5">
+      {regular.map(({ Icon, disabled, label, onClick }) => (
+        <button
+          className="flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-background px-3.5 font-medium text-foreground/90 text-sm shadow-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+          disabled={disabled}
+          key={label}
+          onClick={onClick}
+          type="button"
+        >
+          <Icon aria-hidden className="size-4" />
+          {label}
+        </button>
+      ))}
+      {destructive.map(({ Icon, disabled, label, onClick }) => (
+        <button
+          className="ml-auto flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-red-200 bg-background px-3.5 font-medium text-red-700 text-sm shadow-xs outline-none transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 dark:border-destructive/40 dark:text-destructive"
+          disabled={disabled}
+          key={label}
+          onClick={onClick}
+          type="button"
+        >
+          <Icon aria-hidden className="size-4" />
+          {label}
+        </button>
+      ))}
     </footer>
   );
 }

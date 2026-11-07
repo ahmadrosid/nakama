@@ -17,6 +17,10 @@ import type { ServerOptions } from "./context";
 import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
 import { createRateLimitMiddleware } from "./rate-limit-middleware";
+import { MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "./shared";
+
+export { MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "./shared";
+
 import { registerAcpMcpRoutes } from "./routes/acp-mcp";
 import { registerAgentGroupRoutes } from "./routes/agent-groups";
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
@@ -50,6 +54,7 @@ import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
 import { registerPluginRoutes } from "./routes/plugins";
 import { registerProfilePortabilityRoutes } from "./routes/profile-portability";
 import { registerProfileRoutes } from "./routes/profiles";
+import { registerRegressionCaseRoutes } from "./routes/regression-cases";
 import { registerSessionRoutes } from "./routes/sessions";
 import {
   assertSetupImportAllowed,
@@ -84,22 +89,26 @@ import type { HonoApp } from "./types";
 const THEME_BOOTSTRAP_SCRIPT_HASH =
   "sha256-ccmZA+DQW+fCYJWBEiKXptNNdt/GBPFOLMhetVtPmLA=";
 
-// Regular JSON can carry a 5 MiB attachment after base64 expansion. Full-data
-// imports accept a 100 MiB archive, which expands to roughly 134 MiB as base64.
+// Regular JSON can carry a 5 MiB attachment after base64 expansion.
 export const DEFAULT_HTTP_REQUEST_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
-
-export const MAX_HTTP_REQUEST_BODY_LIMIT_BYTES = 140 * 1024 * 1024;
 
 const LARGE_BODY_ROUTES = new Set([
   // File tools validate decoded bytes; JSON escaping can exceed the normal cap.
   "/v1/tools/tool_write_file/run",
   "/v1/tools/tool_edit_file/run",
+  "/v1/profiles/pack/import",
+  "/v1/profiles/pack/import/preview",
+]);
+
+/**
+ * Data imports spool the body to disk with their own byte counter. Hono's
+ * bodyLimit buffers chunked bodies in memory, so these routes skip it.
+ */
+const STREAMING_BODY_ROUTES = new Set([
   "/v1/auth/setup/import/preview",
   "/v1/auth/setup/import/restore",
   "/v1/platform/data/import/preview",
   "/v1/platform/data/import/restore",
-  "/v1/profiles/pack/import",
-  "/v1/profiles/pack/import/preview",
 ]);
 
 // The large body routes whose 413 gets the setup wizard's own message.
@@ -278,7 +287,7 @@ export function createHonoApp(options: ServerOptions) {
         "Content-Security-Policy",
         isArtifactDocument
           ? ARTIFACT_FRAME_CSP
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
+          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; worker-src 'self' blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );
 
       // Also true behind a TLS terminator, which is where HSTS matters most.
@@ -349,6 +358,10 @@ export function createHonoApp(options: ServerOptions) {
   });
 
   app.use("*", (c, next) => {
+    if (STREAMING_BODY_ROUTES.has(c.req.path)) {
+      return next();
+    }
+
     if (
       c.req.method === "POST" &&
       /^\/v1\/profiles\/[^/]+\/knowledge-base(?:\/import-zip)?$/.test(
@@ -461,6 +474,7 @@ export function createHonoApp(options: ServerOptions) {
   registerSessionRoutes(app, options);
   registerProfileRoutes(app, options);
   registerProfilePortabilityRoutes(app, options);
+  registerRegressionCaseRoutes(app, options);
   registerArtifactShareRoutes(app, options);
   registerMcpRoutes(app, options);
   registerSkillsMarketplaceRoutes(app);

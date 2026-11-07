@@ -126,6 +126,10 @@ function stepMetaTone(status: WorkflowStepView["status"]): string {
     return "text-red-600 dark:text-red-400";
   }
 
+  if (status === "skipped") {
+    return "text-muted-foreground";
+  }
+
   return "text-emerald-600 dark:text-emerald-400";
 }
 

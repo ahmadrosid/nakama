@@ -1383,7 +1383,7 @@ export function OrganizationPanel() {
       <OrganizationOverview />
       {canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role) && (
         <>
-          <h2 className="font-semibold text-xl">
+          <h2 className="mb-3 font-medium text-muted-foreground text-sm">
             {activeOrg?.parentOrgId
               ? "Current team settings"
               : "Organization settings"}

@@ -1,11 +1,6 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
+import { SettingsModelSelect } from "@/components/settings/settings-model-select";
 import { SettingsModelTile } from "@/components/settings/settings-model-tile";
 import {
   useModelsQuery,
@@ -23,7 +18,13 @@ import {
 
 const CLEAR_TRANSCRIPTION_MODEL_VALUE = "__transcription_unset__";
 
-export function TranscriptionSettingsCard() {
+const ADD_OPENAI_VALUE = "__add_openai__";
+
+export function TranscriptionSettingsCard({
+  onAddProvider,
+}: {
+  onAddProvider?: () => void;
+}) {
   const [formError, setFormError] = useState<string | null>(null);
   const [selection, setSelection] = useState<string>("");
   const [savedHint, setSavedHint] = useState<string | null>(null);
@@ -105,12 +106,20 @@ export function TranscriptionSettingsCard() {
       }
       title="Audio transcription model"
     >
-      <Select
+      <SettingsModelSelect
+        ariaLabel="Audio transcription model"
         disabled={
-          saveTranscriptionMutation.isPending || transcriptionUnavailable
+          saveTranscriptionMutation.isPending ||
+          (transcriptionUnavailable && !onAddProvider)
         }
         onValueChange={(value) => {
           if (!value) {
+            return;
+          }
+
+          if (value === ADD_OPENAI_VALUE) {
+            onAddProvider?.();
+
             return;
           }
 
@@ -121,6 +130,9 @@ export function TranscriptionSettingsCard() {
           setSelection(model ?? "");
           setSavedHint(null);
 
+          // A change can be undone from the toast.
+          const previous = transcriptionSettings?.model ?? null;
+
           saveTranscriptionMutation.mutate(model, {
             onError: (error) => {
               setSelection(transcriptionSettings?.model ?? "");
@@ -128,6 +140,18 @@ export function TranscriptionSettingsCard() {
             },
             onSuccess: (saved) => {
               setSelection(saved.model ?? "");
+
+              if (previous !== (saved.model ?? null)) {
+                toast("Audio transcription model changed.", 8000, {
+                  label: "Undo",
+                  onClick: () =>
+                    saveTranscriptionMutation.mutate(previous, {
+                      onSuccess: (restored) =>
+                        setSelection(restored.model ?? ""),
+                    }),
+                });
+              }
+
               setSavedHint(
                 saved.model
                   ? `Saved · ${profileModelLabel(saved.model, transcriptionModelGroups)}`
@@ -136,39 +160,29 @@ export function TranscriptionSettingsCard() {
             },
           });
         }}
+        options={[
+          { label: "None", value: CLEAR_TRANSCRIPTION_MODEL_VALUE },
+          ...(transcriptionUnavailable && onAddProvider
+            ? [{ label: "Add OpenAI provider…", value: ADD_OPENAI_VALUE }]
+            : []),
+          ...transcriptionModelGroups.flatMap((group) =>
+            group.models.map((model) => ({
+              label: `${model.name} · ${group.providerLabel}`,
+              name: model.name,
+              provider: { id: group.providerId, label: group.providerLabel },
+              value: encodeModelSelection(group.providerId, model.id),
+            }))
+          ),
+        ]}
+        triggerLabel={
+          selection
+            ? profileModelLabel(selection, transcriptionModelGroups, {
+                withProvider: true,
+              })
+            : "None"
+        }
         value={selectionValue}
-      >
-        <SelectTrigger
-          aria-label="Audio transcription model"
-          className="h-9 w-full"
-        >
-          <SelectValue placeholder="Select transcription model">
-            {selection
-              ? profileModelLabel(selection, transcriptionModelGroups)
-              : transcriptionUnavailable
-                ? "No OpenAI provider"
-                : "Not configured"}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent
-          alignItemWithTrigger={false}
-          className="w-max min-w-72 max-w-[min(24rem,92vw)]"
-        >
-          <SelectItem value={CLEAR_TRANSCRIPTION_MODEL_VALUE}>
-            Not configured
-          </SelectItem>
-          {transcriptionModelGroups.flatMap((group) =>
-            group.models.map((model) => (
-              <SelectItem
-                key={`${group.providerId}:${model.id}`}
-                value={encodeModelSelection(group.providerId, model.id)}
-              >
-                {group.providerLabel}: {model.name}
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
+      />
     </SettingsModelTile>
   );
 }

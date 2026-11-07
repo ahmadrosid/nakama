@@ -8,11 +8,23 @@
 <p align="center">
   <a href="https://github.com/ahmadrosid/nakama/releases"><img src="https://img.shields.io/github/v/release/ahmadrosid/nakama?display_name=tag&sort=semver" alt="Latest release"></a>
   <a href="https://github.com/ahmadrosid/nakama/graphs/contributors"><img src="https://img.shields.io/github/contributors/ahmadrosid/nakama?style=flat-square" alt="Contributors"></a>
+  <a href="https://github.com/ahmadrosid/nakama/pkgs/container/nakama"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2Fahmadrosid%2Fnakama%2Fnakama.json&query=%24.downloads&label=pulls&logo=docker&logoColor=white&style=flat-square" alt="Container pulls"></a>
   <a href="https://discord.gg/wG6FY4cKRx"><img src="https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
   <a href="https://trendshift.io/repositories/109713?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-109713" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/109713" alt="ahmadrosid%2Fnakama | Trendshift" width="250" height="55"/></a>
+</p>
+
+<p align="center">
+  <sub>Sponsors</sub><br />
+  <a href="https://netra.sh">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/netra-logo-white.svg" />
+      <img src="assets/netra-logo.svg" alt="Netra" height="28" />
+    </picture>
+  </a><br />
+  <sub>Thanks for supporting Nakama and the open source community.</sub>
 </p>
 
 # Nakama

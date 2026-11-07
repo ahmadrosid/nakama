@@ -17,6 +17,7 @@ import {
   fetchWithoutIdleTimeout,
   messagesIncludeUserDocuments,
   messagesIncludeUserImages,
+  normalizeBaseUrl,
   toOpenAIChatUserContent,
 } from "@nakama/core";
 import { z } from "zod";
@@ -141,10 +142,6 @@ export function createOpenAIProvider(
       });
     },
   };
-}
-
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "");
 }
 
 function providerLabel(providerName: ProviderName): string {

@@ -108,6 +108,42 @@ export interface AutomationUnreadSummary {
   totalUnread: number;
 }
 
+export type RegressionCaseSourceType = "session" | "automation_run";
+
+/** Where a saved case came from, with the path that opens it. */
+export interface RegressionCaseSource {
+  /** Set only for `automation_run` sources. */
+  automationId: string | null;
+  id: string;
+  /**
+   * Web path to the source run. Automation runs open on the automations page,
+   * which has no per-run route yet.
+   */
+  path: string;
+  type: RegressionCaseSourceType;
+}
+
+/** A finished run saved with the result a member expected from it. */
+export interface RegressionCase {
+  createdAt: string;
+  createdByUserId: string | null;
+  expectedResult: string;
+  id: string;
+  input: string;
+  profileId: string;
+  source: RegressionCaseSource;
+}
+
+export interface RegressionCaseResponse {
+  case: RegressionCase;
+}
+
+export interface ListRegressionCasesResponse {
+  cases: RegressionCase[];
+  /** Pass as `offset` for the next page; null when the page is the last one. */
+  nextOffset: number | null;
+}
+
 export const AGENT_CHANNELS = [
   "web",
   "cli",
@@ -491,6 +527,11 @@ export interface NakamaUpgradeResponse {
     state: "running" | "done" | "failed" | "rolled_back";
     version: string;
   } | null;
+}
+
+export interface BackupStatusResponse {
+  /** The last scheduled backup's 409, until the next good backup. */
+  lastError: { at: string; message: string } | null;
 }
 
 export interface WebPublicUrlSettingsResponse {
@@ -1199,6 +1240,8 @@ export interface BranchSessionRequest {
 }
 
 export interface BranchSessionResponse {
+  /** The source session's channel, which the branch keeps. */
+  channel: AgentChannel;
   sessionId: string;
 }
 
@@ -1480,9 +1523,13 @@ export type WorkflowStepKind =
   | "compare"
   | "assert"
   | "template"
+  | "agent"
   | "summarize";
 
 export type WorkflowCompareOp = "eq" | "near" | "contains";
+
+/** What a false compare or assert does: fail the run (default) or end it as skipped. */
+export type WorkflowCheckOnFail = "fail" | "skip";
 
 export interface WorkflowToolStep {
   id: string;
@@ -1495,6 +1542,7 @@ export interface WorkflowCompareStep {
   id: string;
   kind: "compare";
   left: unknown;
+  onFail?: WorkflowCheckOnFail;
   op: WorkflowCompareOp;
   right: unknown;
   tolerance?: number;
@@ -1504,6 +1552,7 @@ export interface WorkflowAssertStep {
   expected: unknown;
   id: string;
   kind: "assert";
+  onFail?: WorkflowCheckOnFail;
   path: string;
 }
 
@@ -1511,6 +1560,14 @@ export interface WorkflowTemplateStep {
   id: string;
   kind: "template";
   template: string;
+}
+
+export interface WorkflowAgentStep {
+  /** Output keys, each with a short note on what the agent puts there. */
+  fields: Record<string, string>;
+  id: string;
+  kind: "agent";
+  prompt: string;
 }
 
 export interface WorkflowSummarizeStep {
@@ -1524,6 +1581,7 @@ export type WorkflowStep =
   | WorkflowCompareStep
   | WorkflowAssertStep
   | WorkflowTemplateStep
+  | WorkflowAgentStep
   | WorkflowSummarizeStep;
 
 export interface WorkflowDefinition {
@@ -1543,7 +1601,7 @@ export interface StoredWorkflow extends WorkflowDefinition {
   updatedAt: string;
 }
 
-export type WorkflowRunStatus = "running" | "completed" | "failed";
+export type WorkflowRunStatus = "running" | "completed" | "failed" | "skipped";
 
 export type WorkflowRunStepStatus =
   | "pending"
@@ -2163,6 +2221,8 @@ export interface OpenRouterRoutingSettings {
 }
 
 export interface ProviderInstanceSummary {
+  /** The last 4 characters of the saved key, for admins only. */
+  apiKeyEnding?: string;
   baseUrl?: string | null;
   createdAt: string;
   customModels?: CustomModelEntry[];
@@ -2219,6 +2279,11 @@ export interface UpdateProviderRequest {
 
 export interface UpdateProviderResponse {
   provider: ProviderInstanceSummary;
+}
+
+/** What a live check of the saved key found. */
+export interface CheckProviderResponse {
+  status: "ok" | "rejected" | "needs-key" | "unreachable" | "unchecked";
 }
 
 export interface DeleteProviderResponse {

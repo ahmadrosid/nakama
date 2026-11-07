@@ -1,6 +1,8 @@
 import { inferArtifactMimeType } from "@nakama/core/artifact-mime";
 import type { ChatListItem } from "@/lib/chat-history";
 
+export const FILE_PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
+
 export {
   artifactCodeLanguage,
   inferArtifactMimeType,

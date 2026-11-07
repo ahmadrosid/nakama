@@ -3,7 +3,7 @@ import { Button } from "@nakama/ui/button";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import { Alert02Icon, Download04Icon, Upload04Icon } from "hugeicons-react";
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 import { useRef, useState } from "react";
 import {
   DataImportPreview,
@@ -15,25 +15,23 @@ import {
 } from "@/components/data-portability/TransferProgress";
 import {
   canRestoreDataImport,
-  useExportData,
+  useBackupStatusQuery,
   usePreviewDataImport,
   useRestoreDataImport,
 } from "@/hooks/use-data-portability";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 
-/** Trigger a browser download for an in-memory archive. */
-function downloadArchive(filename: string, data: ArrayBuffer): void {
-  const url = URL.createObjectURL(
-    new Blob([data], { type: "application/zip" })
+type SaveFilePicker = (options: {
+  suggestedName?: string;
+  types?: Array<{ accept: Record<string, string[]>; description: string }>;
+}) => Promise<{ createWritable: () => Promise<WritableStream<Uint8Array>> }>;
+
+function getSaveFilePicker(): SaveFilePicker | null {
+  // SAFETY: feature-detected before use; only Chromium defines it.
+  return (
+    (window as Window & { showSaveFilePicker?: SaveFilePicker })
+      .showSaveFilePicker ?? null
   );
-
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
 }
 
 const DownloadIcon = ({ className }: SVGProps<SVGSVGElement>) => (
@@ -53,17 +51,16 @@ export function DataPortabilityPanel() {
   );
 
   const [error, setError] = useState<string | null>(null);
-  const exportMutation = useExportData();
+  const backupStatus = useBackupStatusQuery();
+  const lastBackupError = backupStatus.data?.lastError;
+  const [exporting, setExporting] = useState(false);
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();
   // One per section, so each bar shows only under the action that started it.
-  const download = useTransferProgress();
   const upload = useTransferProgress();
 
   const isBusy =
-    exportMutation.isPending ||
-    previewMutation.isPending ||
-    restoreMutation.isPending;
+    exporting || previewMutation.isPending || restoreMutation.isPending;
 
   const restoreAvailable = canRestoreDataImport({
     pending: restoreMutation.isPending,
@@ -73,20 +70,53 @@ export function DataPortabilityPanel() {
 
   async function handleExport() {
     setError(null);
-    // The server zips everything before the first byte, so that wait gets a label.
-    download.begin("Preparing the backup on the server");
+
+    const picker = getSaveFilePicker();
+
+    if (!picker) {
+      // Browsers without the File System Access API stream the download natively.
+      window.location.assign("/v1/platform/data/export");
+
+      return;
+    }
+
+    setExporting(true);
 
     try {
-      const result = await exportMutation.mutateAsync(
-        download.track("Downloading the backup")
-      );
+      const handle = await picker({
+        suggestedName: "nakama-export.zip",
+        types: [
+          {
+            accept: { "application/zip": [".zip"] },
+            description: "ZIP archive",
+          },
+        ],
+      });
 
-      downloadArchive(result.filename, result.data);
+      const response = await client.exportDataResponse();
+
+      if (!response.ok) {
+        throw new Error(`Export failed with status ${response.status}.`);
+      }
+
+      if (!response.body) {
+        throw new Error("Export returned no data.");
+      }
+
+      const writable = await handle.createWritable();
+
+      try {
+        await response.body.pipeTo(writable);
+      } catch (err) {
+        await writable.abort().catch(() => undefined);
+        throw err;
+      }
+
       toast("Export ready.");
     } catch (err) {
       setError(formatError(err));
     } finally {
-      download.clear();
+      setExporting(false);
     }
   }
 
@@ -148,6 +178,16 @@ export function DataPortabilityPanel() {
 
   return (
     <div className="min-w-0 divide-y divide-border">
+      {lastBackupError ? (
+        <PanelError>
+          Last scheduled backup failed on{" "}
+          {new Date(lastBackupError.at).toLocaleString()}:{" "}
+          {lastBackupError.message}
+        </PanelError>
+      ) : null}
+      {backupStatus.isError ? (
+        <PanelError>Cannot check the last scheduled backup.</PanelError>
+      ) : null}
       <section className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <p className="text-balance font-medium text-foreground text-sm">
           Download backup
@@ -159,14 +199,9 @@ export function DataPortabilityPanel() {
           type="button"
           variant="outline"
         >
-          <PendingIcon idle={DownloadIcon} pending={exportMutation.isPending} />
+          <PendingIcon idle={DownloadIcon} pending={exporting} />
           Download
         </Button>
-        {download.transfer ? (
-          <div className="basis-full">
-            <TransferProgressBar {...download.transfer} />
-          </div>
-        ) : null}
       </section>
 
       <section className="space-y-3 px-4 py-3">
@@ -215,19 +250,24 @@ export function DataPortabilityPanel() {
         ) : null}
       </section>
 
-      {error ? (
-        <div className="px-4 py-3">
-          <div
-            className={cn(
-              "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
-              "border-destructive/30 bg-destructive/10 text-destructive"
-            )}
-          >
-            <Alert02Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
-            <span className="text-pretty">{error}</span>
-          </div>
-        </div>
-      ) : null}
+      {error ? <PanelError>{error}</PanelError> : null}
+    </div>
+  );
+}
+
+function PanelError({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-4 py-3">
+      <div
+        className={cn(
+          "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
+          "border-destructive/30 bg-destructive/10 text-destructive"
+        )}
+        role="alert"
+      >
+        <Alert02Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <span className="text-pretty">{children}</span>
+      </div>
     </div>
   );
 }

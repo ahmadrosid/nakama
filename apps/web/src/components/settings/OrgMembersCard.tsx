@@ -581,6 +581,7 @@ function OrgMembersTabs({
       ).map(([tab, label]) => (
         <Button
           aria-selected={value === tab}
+          className={value === tab ? undefined : "text-muted-foreground"}
           key={tab}
           onClick={() => onChange(tab)}
           role="tab"

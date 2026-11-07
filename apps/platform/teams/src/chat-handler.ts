@@ -9,15 +9,23 @@ import {
 } from "@nakama/core/channel-active-stream";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
+  type ChannelCommand,
+  channelCommandHelp,
+  createWaitingTurns,
+  describeChannelStatus,
+  parseChannelCommand,
+  runChannelCommand,
+} from "@nakama/core/channel-commands";
+import {
   type ChannelOwner,
+  containsPairingCode,
   hasActiveHandshakeCode,
   looksLikePairingCode,
-  pairingCodesMatch,
 } from "@nakama/core/channel-config-shared";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
   isTeamsUserAuthorized,
-  regenerateTeamsHandshake,
+  spendExposedTeamsHandshake,
   type TeamsConfigFile,
   verifyAndPairTeamsUser,
 } from "@nakama/core/teams-config";
@@ -63,15 +71,16 @@ const SEEN_ACTIVITY_LIMIT = 500;
 const TEAMS_MAX_MESSAGE_CHARS = 6000;
 
 // "!" and not "/": typing "/" in Teams opens its own command menu.
+// Status names the agent, model and session, which a channel would all read.
 const HELP_TEXT = [
   "Chat with me in this chat.",
   "In a channel, @mention me in a thread. I read only the message that mentions me, not the rest of the thread.",
   "",
-  "!new: start a fresh conversation",
-  "!clear: clear this conversation's history",
-  "!stop: stop the current reply",
-  "!status: server and model status (personal chat only)",
-  "!help: this message",
+  ...channelCommandHelp()
+    .split("\n")
+    .map((line) =>
+      line.startsWith("!status:") ? `${line} (personal chat only)` : line
+    ),
 ].join("\n");
 
 const CHANNEL_MESSAGE_PREFIX =
@@ -81,6 +90,10 @@ const CHANNEL_MESSAGE_PREFIX =
 const LINK_IN_PERSONAL_CHAT_REPLY =
   "I can't answer you yet. Link your account first: open a personal chat with me and send the pairing code from Connections → Teams there.";
 
+// True also when the spend failed: making a new code replaces the posted one.
+const CODE_EXPOSED_REPLY =
+  "Everyone in this channel can read that pairing code. Make a new one in Connections → Teams and send it to me in a personal chat.";
+
 const THREAD_SESSION_PREFIX = "teams-thread:";
 
 /**
@@ -89,25 +102,6 @@ const THREAD_SESSION_PREFIX = "teams-thread:";
  * the chat-sessions.json that each new session rewrites.
  */
 const MAX_THREAD_SESSIONS = 500;
-
-const COMMANDS = ["clear", "help", "new", "status", "stop"] as const;
-
-type TeamsCommand = (typeof COMMANDS)[number];
-
-/**
- * "!New please" is "new". Any other message is null and goes to the agent,
- * "!urgent summarise the report" included.
- */
-function parseCommand(text: string): TeamsCommand | null {
-  if (!text.startsWith("!")) {
-    return null;
-  }
-
-  // Phone keyboards capitalise the first letter of a message.
-  const word = (text.slice(1).split(/\s+/)[0] ?? "").toLowerCase();
-
-  return COMMANDS.find((command) => command === word) ?? null;
-}
 
 function isPersonal(activity: TeamsActivity): boolean {
   return activity.conversationType === "personal";
@@ -147,30 +141,8 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
   const seenActivities = new Set<string>();
   // Each turn from the moment it queues until the active-stream registry knows
   // it, which is only once it holds the chat lock, so !stop reaches the
-  // waiting ones through this map.
-  const waitingTurns = new Map<string, Set<AbortController>>();
-
-  function stopWaitingTurns(sessionKey: string): boolean {
-    const waiting = waitingTurns.get(sessionKey);
-
-    for (const turn of waiting ?? []) {
-      turn.abort();
-    }
-
-    waitingTurns.delete(sessionKey);
-
-    return (waiting?.size ?? 0) > 0;
-  }
-
-  function leaveWaiting(sessionKey: string, turn: AbortController): void {
-    const waiting = waitingTurns.get(sessionKey);
-
-    waiting?.delete(turn);
-
-    if (waiting?.size === 0) {
-      waitingTurns.delete(sessionKey);
-    }
-  }
+  // waiting ones here.
+  const waitingTurns = createWaitingTurns();
 
   async function resolveSession(
     scoped: NakamaClient,
@@ -184,6 +156,13 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     const existing = sessionStore.get(sessionKey);
 
     if (existing) {
+      // Kept in memory only: the next save writes it. The thread cap drops the
+      // sessions used longest ago, not the ones made first.
+      sessionStore.set(sessionKey, {
+        ...existing,
+        updatedAt: new Date().toISOString(),
+      });
+
       const hot = sessionStore.getHotSession<RemoteChatSession>(sessionKey);
 
       if (hot) {
@@ -219,7 +198,11 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       updatedAt: new Date().toISOString(),
     });
     sessionStore.setHotSession(sessionKey, session);
-    sessionStore.dropOldest(THREAD_SESSION_PREFIX, MAX_THREAD_SESSIONS);
+
+    if (sessionKey.startsWith(THREAD_SESSION_PREFIX)) {
+      sessionStore.dropOldest(THREAD_SESSION_PREFIX, MAX_THREAD_SESSIONS);
+    }
+
     await sessionStore.save();
 
     return session;
@@ -231,115 +214,61 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     }
   }
 
-  async function describeStatus(sessionKey: string): Promise<string> {
-    try {
-      const scoped = client.forOrg(owner.orgId);
-      const health = await scoped.health();
+  function describeStatus(sessionKey: string): Promise<string> {
+    const scoped = client.forOrg(owner.orgId);
 
-      const lines = [
-        `Server: ${health.ok ? "ok" : "degraded"}`,
-        `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
-      ];
+    return describeChannelStatus(scoped, {
+      findAgent: async () => {
+        const { profiles } = await scoped.listProfiles(owner.orgId);
 
-      if (health.providerConfigured) {
-        const [models, { profiles }] = await Promise.all([
-          scoped.getModels(),
-          scoped.listProfiles(owner.orgId),
-        ]);
-
-        const profile = profiles.find((entry) => entry.id === owner.profileId);
-
-        const modelLabel = profile?.model?.includes("::")
-          ? profile.model.slice(profile.model.indexOf("::") + 2)
-          : (profile?.model ?? "none");
-
-        lines.push(`Agent: ${profile?.name ?? owner.profileId}`);
-        lines.push(`Provider: ${models.provider ?? "unknown"}`);
-        lines.push(`Model: ${modelLabel}`);
-      } else {
-        lines.push("Chat runs in offline mode without an API key.");
-      }
-
-      const sessionId = sessionStore.get(sessionKey)?.sessionId;
-
-      if (sessionId) {
-        lines.push(`Session: ${sessionId.slice(0, 8)}`);
-      }
-
-      return lines.join("\n");
-    } catch (error) {
-      return formatClientError(error);
-    }
+        return {
+          agent: profiles.find((entry) => entry.id === owner.profileId),
+          id: owner.profileId,
+        };
+      },
+      label: "Agent",
+      sessionId: sessionStore.get(sessionKey)?.sessionId,
+    });
   }
 
   /** Answers a "!word" message. It never reaches the agent as a turn. */
-  async function handleCommand(
-    command: TeamsCommand,
+  function handleCommand(
+    command: ChannelCommand,
     activity: TeamsActivity,
     sessionKey: string
   ): Promise<void> {
-    const answer = (text: string) => reply(activity.conversationId, text);
+    const scoped = client.forOrg(owner.orgId);
 
-    switch (command) {
-      case "stop": {
-        // Not behind the lock: the turn it stops is holding it. Both are
-        // called, so the running turn and the queued ones all stop.
-        const stoppedWaiting = stopWaitingTurns(sessionKey);
-        const stoppedRunning = stopActiveStream(sessionKey);
-
-        await answer(
-          stoppedWaiting || stoppedRunning ? "Stopping…" : "Nothing to stop."
-        );
-
-        return;
-      }
-
-      case "help": {
-        await answer(HELP_TEXT);
-
-        return;
-      }
-
-      case "status": {
-        // Everyone in a channel would read the agent, model and session.
-        await answer(
-          isPersonal(activity)
-            ? await describeStatus(sessionKey)
-            : "Send !status to me in a personal chat."
-        );
-
-        return;
-      }
-
-      case "new":
-      case "clear": {
-        // A turn holds the chat lock until it ends, so stop it before
-        // queueing on the lock; otherwise this waits for the whole turn.
-        stopActiveStream(sessionKey);
-
-        await chatLock.withLock(sessionKey, async () => {
+    return runChannelCommand(command, {
+      clearSession: async () => {
+        await (await resolveSession(scoped, sessionKey)).clear();
+      },
+      helpText: HELP_TEXT,
+      reply: (text) => reply(activity.conversationId, text),
+      runLocked: (work) =>
+        chatLock.withLock(sessionKey, async () => {
           if (!allows(await loadConfig(), activity)) {
             return;
           }
 
-          try {
-            const scoped = client.forOrg(owner.orgId);
+          await work();
+        }),
+      startSession: async () => {
+        await createAndBindSession(scoped, sessionKey);
+      },
+      // Everyone in a channel would read the agent, model and session.
+      status: async () =>
+        isPersonal(activity)
+          ? describeStatus(sessionKey)
+          : "Send !status to me in a personal chat.",
+      // Both are called, so the running turn and the queued ones all stop.
+      stop: () => {
+        const stoppedWaiting = waitingTurns.stop(sessionKey);
+        const stoppedRunning = stopActiveStream(sessionKey);
 
-            if (command === "new") {
-              await createAndBindSession(scoped, sessionKey);
-              await answer("Started a new conversation.");
-            } else {
-              await (await resolveSession(scoped, sessionKey)).clear();
-              await answer("History cleared.");
-            }
-          } catch (error) {
-            await answer(formatClientError(error));
-          }
-        });
-
-        return;
-      }
-    }
+        return stoppedWaiting || stoppedRunning;
+      },
+    });
   }
 
   async function runTurn(
@@ -394,6 +323,39 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
     }
   }
 
+  /**
+   * True when the message carried the live code, also when the spend failed:
+   * the message is still turned away, so the code never reaches the agent.
+   * A failed spend leaves the code live, so that is logged, not hidden.
+   */
+  async function spendExposedCode(
+    text: string,
+    config: TeamsConfigFile
+  ): Promise<boolean> {
+    // Most messages carry no code, so they skip the pairing lock.
+    if (
+      !(
+        config.handshakeCode &&
+        hasActiveHandshakeCode(config) &&
+        containsPairingCode(text, config.handshakeCode)
+      )
+    ) {
+      return false;
+    }
+
+    try {
+      // False when the code was spent or replaced since the config was read.
+      await spendExposedTeamsHandshake(text, owner);
+    } catch (error) {
+      console.error(
+        "[teams] could not spend a pairing code posted in a channel:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+
+    return true;
+  }
+
   return async function handle(activity: TeamsActivity): Promise<void> {
     if (!isServedMessage(activity)) {
       return;
@@ -440,19 +402,23 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       : `${THREAD_SESSION_PREFIX}${activity.conversationId}:${activity.senderId.toLowerCase()}`;
 
     const text = activity.text.trim();
-    const command = parseCommand(text);
+    const command = parseChannelCommand(text);
+
+    // Everyone in the channel read the code, so it no longer pairs anyone,
+    // whoever posted it. It never reaches the agent, which could repeat it.
+    if (!isPersonal(activity) && (await spendExposedCode(text, config))) {
+      await send(
+        activity.conversationId,
+        allows(config, activity)
+          ? CODE_EXPOSED_REPLY
+          : LINK_IN_PERSONAL_CHAT_REPLY
+      );
+
+      return;
+    }
 
     if (!allows(config, activity)) {
       if (!isPersonal(activity)) {
-        // Everyone in the channel read the code, so it no longer pairs anyone.
-        if (
-          config.handshakeCode !== null &&
-          hasActiveHandshakeCode(config) &&
-          pairingCodesMatch(text, config.handshakeCode)
-        ) {
-          await regenerateTeamsHandshake(owner);
-        }
-
         await send(activity.conversationId, LINK_IN_PERSONAL_CHAT_REPLY);
 
         return;
@@ -490,11 +456,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       return;
     }
 
-    const queued = new AbortController();
-    const waiting = waitingTurns.get(sessionKey) ?? new Set<AbortController>();
-
-    waiting.add(queued);
-    waitingTurns.set(sessionKey, waiting);
+    const queued = waitingTurns.join(sessionKey);
 
     try {
       await chatLock.withLock(sessionKey, async () => {
@@ -511,7 +473,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
 
         // Left here, not when the turn ends: a !stop that comes while the
         // finished answer is still being posted has nothing to stop.
-        leaveWaiting(sessionKey, queued);
+        waitingTurns.leave(sessionKey, queued);
 
         if (queued.signal.aborted) {
           stopActiveStream(sessionKey);
@@ -521,7 +483,7 @@ export function createTeamsChatHandler(deps: TeamsChatHandlerDeps) {
       });
     } finally {
       // A turn turned away at the lock, or one whose access read failed.
-      leaveWaiting(sessionKey, queued);
+      waitingTurns.leave(sessionKey, queued);
     }
   };
 }

@@ -13,17 +13,16 @@ import {
   Upload04Icon,
   UserGroup02Icon,
 } from "hugeicons-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   isMoodstoneAvatar,
+  MOODSTONE_COLORS,
+  MOODSTONE_CUTS,
   moodstoneIndexes,
   moodstoneSvg,
 } from "@/components/moodstone";
-import {
-  moodstoneAvatars,
-  moodstoneColors,
-} from "@/components/moodstone-avatars";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import {
   type ProfileSaveStatus,
   profilesTagline,
@@ -139,6 +138,29 @@ export function EditableProfileAvatar({
     null
   );
 
+  const reducedMotion = useReducedMotion();
+
+  const cutPreviews = useMemo(
+    () =>
+      MOODSTONE_CUTS.map(
+        (_, cutIndex) =>
+          `data:image/svg+xml,${encodeURIComponent(
+            moodstoneSvg(cutIndex, colorIndex)
+          )}`
+      ),
+    [colorIndex]
+  );
+
+  const previewSrc = useMemo(
+    () =>
+      previewAvatarIndex === null
+        ? null
+        : `data:image/svg+xml,${encodeURIComponent(
+            moodstoneSvg(previewAvatarIndex, colorIndex, !reducedMotion)
+          )}`,
+    [previewAvatarIndex, colorIndex, reducedMotion]
+  );
+
   return (
     <>
       <Popover
@@ -174,9 +196,9 @@ export function EditableProfileAvatar({
         >
           <div
             className="relative mb-1 flex h-33 items-center justify-center rounded-lg transition-colors duration-150 ease-out"
-            style={{ backgroundColor: `${moodstoneColors[colorIndex].lit}4d` }}
+            style={{ backgroundColor: `${MOODSTONE_COLORS[colorIndex].lit}4d` }}
           >
-            {previewAvatarIndex === null ? (
+            {previewSrc === null ? (
               <ProfileAvatar
                 active
                 className="size-20 rounded-none outline-none"
@@ -188,18 +210,11 @@ export function EditableProfileAvatar({
                 alt="Avatar preview"
                 className="size-20"
                 height={80}
-                src={`data:image/svg+xml,${encodeURIComponent(
-                  moodstoneSvg(
-                    previewAvatarIndex,
-                    colorIndex,
-                    !window.matchMedia("(prefers-reduced-motion: reduce)")
-                      .matches
-                  )
-                )}`}
+                src={previewSrc}
                 width={80}
               />
             )}
-            {previewAvatarIndex === null ? null : (
+            {previewSrc === null ? null : (
               <Button
                 aria-label="Undo"
                 className="absolute top-2 left-2 bg-background/85 shadow-xs"
@@ -215,10 +230,10 @@ export function EditableProfileAvatar({
               className="absolute top-2 right-2 bg-background/85 shadow-xs"
               onClick={() => {
                 setPreviewAvatarIndex(
-                  Math.floor(Math.random() * moodstoneAvatars.length)
+                  Math.floor(Math.random() * MOODSTONE_CUTS.length)
                 );
                 setColorIndex(
-                  Math.floor(Math.random() * moodstoneColors.length)
+                  Math.floor(Math.random() * MOODSTONE_COLORS.length)
                 );
               }}
               size="icon"
@@ -228,16 +243,16 @@ export function EditableProfileAvatar({
             </Button>
           </div>
           <div className="grid grid-cols-7 gap-0.5 px-1.5 pt-0.5 pb-1">
-            {moodstoneAvatars.map((avatar, avatarIndex) => (
+            {MOODSTONE_CUTS.map((cut, avatarIndex) => (
               <button
-                aria-label={`Preview ${avatar.cut} avatar`}
+                aria-label={`Preview ${cut} avatar`}
                 aria-pressed={avatarIndex === previewAvatarIndex}
                 className={cn(
                   "flex h-9 cursor-pointer items-center justify-center rounded-lg transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   avatarIndex === previewAvatarIndex &&
                     "bg-muted ring-[1.5px] ring-foreground ring-inset"
                 )}
-                key={avatar.cut}
+                key={cut}
                 onClick={() => setPreviewAvatarIndex(avatarIndex)}
                 type="button"
               >
@@ -245,16 +260,14 @@ export function EditableProfileAvatar({
                   alt=""
                   className="size-7"
                   height={28}
-                  src={`data:image/svg+xml,${encodeURIComponent(
-                    moodstoneSvg(avatarIndex, colorIndex)
-                  )}`}
+                  src={cutPreviews[avatarIndex]}
                   width={28}
                 />
               </button>
             ))}
           </div>
           <div className="grid grid-cols-12 justify-items-center gap-0.5 px-2 pt-1 pb-2">
-            {moodstoneColors.map((color, index) => (
+            {MOODSTONE_COLORS.map((color, index) => (
               <button
                 aria-label={`${color.name} color`}
                 aria-pressed={index === colorIndex}
