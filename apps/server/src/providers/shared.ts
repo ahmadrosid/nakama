@@ -5,7 +5,11 @@ import type {
   ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
-import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
+import {
+  MODEL_CONNECTION_CLOSED_MESSAGE,
+  NakamaApiError,
+  ProviderStreamInterruptedError,
+} from "@nakama/core";
 import { z } from "zod";
 
 export type ProviderJsonValue =
@@ -287,9 +291,7 @@ async function readStreamChunk(
       throw error;
     }
 
-    throw new ProviderStreamInterruptedError(
-      "The model connection closed before the reply finished. Try again."
-    );
+    throw new ProviderStreamInterruptedError(MODEL_CONNECTION_CLOSED_MESSAGE);
   }
 }
 
