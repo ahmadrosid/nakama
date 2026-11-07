@@ -602,6 +602,7 @@ function boundToolResult(value: JsonValue): JsonValue {
   // Fitted images are already capped by MODEL_IMAGE_MAX_BASE64 each.
   const { images: _images, ...rest } =
     value instanceof Object && !Array.isArray(value) ? value : { value };
+
   const size = JSON.stringify(rest).length;
 
   return size > MAX_TOOL_RESULT_CHARS
@@ -654,9 +655,11 @@ function isJsonValue<T>(
   }
 
   seen.add(value);
+
   const valid = Object.values(value).every((entry) =>
     isJsonValue(entry, seen, depth + 1)
   );
+
   seen.delete(value);
 
   return valid;

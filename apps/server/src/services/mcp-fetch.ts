@@ -18,6 +18,7 @@ function isLinkLocal(address: string): boolean {
 
 export async function assertNotLinkLocal(hostname: string): Promise<void> {
   const bare = hostname.replace(/^\[|\]$/g, "");
+
   const addresses = isIP(bare)
     ? [bare]
     : (await lookup(bare, { all: true })).map((record) => record.address);
