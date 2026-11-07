@@ -487,7 +487,7 @@ function GroupDraft({
           />
           <div className="flex flex-wrap justify-center gap-2 px-4">
             <button
-              className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm hover:bg-muted"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
               onClick={() => void sendFirst("@all introduce yourselves")}
               type="button"
             >
@@ -496,7 +496,7 @@ function GroupDraft({
             </button>
             {members.slice(0, 2).map((member) => (
               <button
-                className="inline-flex items-center gap-2 rounded-full border border-border py-1.5 pr-3 pl-1.5 text-sm hover:bg-muted"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background py-1.5 pr-3 pl-1.5 text-sm hover:bg-muted"
                 key={member.id}
                 onClick={() =>
                   void sendFirst(

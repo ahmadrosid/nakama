@@ -24,7 +24,7 @@ import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 const IMAGE_TYPES = "image/png,image/jpeg,image/gif,image/webp";
 
 /** Show agent avatars in their own shape, not cut to a circle. */
-const NATURAL_SHAPE = "rounded-none outline-none";
+const UNCLIPPED_AVATAR = "rounded-none outline-none";
 
 /** Chips for the chosen agents in the search field, and every agent below it. */
 function MemberPicker({
@@ -64,7 +64,7 @@ function MemberPicker({
             key={profile.id}
           >
             <ProfileAvatar
-              className={NATURAL_SHAPE}
+              className={UNCLIPPED_AVATAR}
               profile={profile}
               size="xs"
             />
@@ -116,7 +116,7 @@ function MemberPicker({
               type="button"
             >
               <ProfileAvatar
-                className={NATURAL_SHAPE}
+                className={UNCLIPPED_AVATAR}
                 profile={profile}
                 size="sm"
               />
@@ -146,26 +146,26 @@ function MemberPicker({
   );
 }
 
-/** Where each stacked face sits in the preview, by how many there are. */
-const FACE_SPOTS: Record<number, [left: number, top: number, size: number][]> =
-  {
-    1: [[16, 16, 64]],
-    2: [
-      [4, 4, 52],
-      [40, 40, 52],
-    ],
-    3: [
-      [22, 0, 48],
-      [0, 46, 48],
-      [46, 46, 48],
-    ],
-    4: [
-      [0, 0, 46],
-      [50, 0, 46],
-      [0, 50, 46],
-      [50, 50, 46],
-    ],
-  };
+/** Where each stacked face sits in the preview (left, top, size), by face count. */
+const FACE_SPOTS = [
+  [],
+  [[16, 16, 64]],
+  [
+    [4, 4, 52],
+    [40, 40, 52],
+  ],
+  [
+    [22, 0, 48],
+    [0, 46, 48],
+    [46, 46, 48],
+  ],
+  [
+    [0, 0, 46],
+    [50, 0, 46],
+    [0, 50, 46],
+    [50, 50, 46],
+  ],
+] as const;
 
 /** How the group will look: photo or stacked faces, name, members, handles. */
 function GroupPreview({
@@ -215,7 +215,7 @@ function GroupPreview({
                 style={{ height: size, left, top, width: size }}
               >
                 <ProfileAvatar
-                  className={cn("size-full", NATURAL_SHAPE)}
+                  className={cn("size-full", UNCLIPPED_AVATAR)}
                   profile={profile}
                 />
               </span>
