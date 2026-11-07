@@ -27,6 +27,7 @@ import type {
   UploadOrganizationKnowledgeBaseResponse,
   WorkspaceEntry,
 } from "@nakama/core/contract";
+import { readBoundedFile } from "./client-helpers";
 import { ProfilesClient } from "./client-profiles";
 
 /** An agent's soul, workspace files, artifacts, and knowledge base. */
@@ -238,62 +239,10 @@ export class ProfileFilesClient extends ProfilesClient {
     if (options.maxBytes === undefined) {
       data = await response.arrayBuffer();
     } else {
-      const maxBytes = options.maxBytes;
-
-      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
-        await response.body?.cancel();
-        throw new Error("maxBytes must be a nonnegative integer.");
-      }
-
-      const reader = response.body?.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-
-      const onAbort = () => {
-        void reader?.cancel().catch(() => {});
-      };
-
-      options.signal?.addEventListener("abort", onAbort, { once: true });
-
-      try {
-        if (Number(response.headers.get("Content-Length")) > maxBytes) {
-          throw new Error("Artifact exceeds the download byte budget.");
-        }
-
-        while (reader) {
-          options.signal?.throwIfAborted();
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
-          }
-
-          size += value.byteLength;
-
-          if (size > maxBytes) {
-            throw new Error("Artifact exceeds the download byte budget.");
-          }
-
-          chunks.push(value);
-        }
-
-        options.signal?.throwIfAborted();
-        const bytes = new Uint8Array(size);
-        let offset = 0;
-
-        for (const chunk of chunks) {
-          bytes.set(chunk, offset);
-          offset += chunk.byteLength;
-        }
-
-        data = bytes.buffer;
-      } catch (error) {
-        await reader?.cancel().catch(() => {});
-        throw error;
-      } finally {
-        options.signal?.removeEventListener("abort", onAbort);
-        reader?.releaseLock();
-      }
+      data = await readBoundedFile(response, {
+        maxBytes: options.maxBytes,
+        signal: options.signal,
+      });
     }
 
     return {

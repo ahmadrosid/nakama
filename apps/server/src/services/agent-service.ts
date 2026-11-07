@@ -232,6 +232,7 @@ import {
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
+import { isDocxFile, isLegacyDocFile } from "@nakama/core/artifact-mime";
 import {
   type ChannelConfigScope,
   isChannelOwner,
@@ -241,6 +242,7 @@ import {
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "@nakama/core/discovery-providers";
+import { convertDocxToMarkdown } from "@nakama/core/docx-text";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
 import {
@@ -2840,7 +2842,8 @@ export class AgentService {
   async readChatAttachment(
     orgId: string,
     attachmentId: string,
-    access: ChatProfileAccess
+    access: ChatProfileAccess,
+    options: { preview?: boolean; render?: "markdown" } = {}
   ): Promise<LoadedAttachmentBytes | null> {
     const record = await this.db.getAttachment(attachmentId);
 
@@ -2867,10 +2870,38 @@ export class AgentService {
 
     await this.assertSessionOwner(sessionRecord, access);
 
-    return createAttachmentLoader(this.db, {
+    const renderWord =
+      options.render === "markdown" &&
+      (isDocxFile(record.filename ?? "", record.mediaType) ||
+        isLegacyDocFile(record.filename ?? "", record.mediaType));
+
+    if (options.preview && !renderWord && record.sizeBytes > 8 * 1024 * 1024) {
+      throw new NakamaApiError(
+        "This file exceeds the 8 MB preview limit. Download it instead.",
+        413
+      );
+    }
+
+    const attachment = await createAttachmentLoader(this.db, {
       orgId,
       profileId: record.profileId,
     })(attachmentId);
+
+    if (attachment && renderWord) {
+      const markdown = await convertDocxToMarkdown(
+        Buffer.from(attachment.bytes)
+      );
+
+      const bytes = Buffer.from(markdown, "utf8");
+
+      if (bytes.byteLength > 8 * 1024 * 1024) {
+        throw new NakamaApiError("Preview exceeds the byte limit.", 413);
+      }
+
+      return { ...attachment, bytes, mediaType: "text/markdown" };
+    }
+
+    return attachment;
   }
 
   private assertChatProfileAccess(

@@ -1,5 +1,6 @@
 import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mode-toggle";
 import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
+import { isXlsxFile } from "@/lib/artifact-spreadsheet";
 import {
   artifactCodeLanguage,
   isDelimitedSpreadsheetFile,
@@ -32,7 +33,11 @@ export function artifactPanelDefaultWidth(
     isDocxFile(filename, mimeType) || isLegacyDocFile(filename, mimeType);
 
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
-  const isSpreadsheet = isDelimitedSpreadsheetFile(filename, mimeType);
+
+  const isSpreadsheet =
+    isDelimitedSpreadsheetFile(filename, mimeType) ||
+    isXlsxFile(filename, mimeType);
+
   const language = artifactCodeLanguage(filename);
 
   const baseWidth = isVideo

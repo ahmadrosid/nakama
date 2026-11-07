@@ -166,3 +166,65 @@ export function readContentDispositionFilename(
 function isBlobLike(value: Blob | BufferSource): value is Blob {
   return typeof Blob !== "undefined" && value instanceof Blob;
 }
+
+export async function readBoundedFile(
+  response: Response,
+  options: { maxBytes: number; signal?: AbortSignal }
+): Promise<ArrayBuffer> {
+  const { maxBytes, signal } = options;
+
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    await response.body?.cancel();
+    throw new Error("maxBytes must be a nonnegative integer.");
+  }
+
+  const reader = response.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+
+  const onAbort = () => {
+    void reader?.cancel().catch(() => {});
+  };
+
+  signal?.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    if (Number(response.headers.get("Content-Length")) > maxBytes) {
+      throw new Error("Artifact exceeds the download byte budget.");
+    }
+
+    while (reader) {
+      signal?.throwIfAborted();
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      size += value.byteLength;
+
+      if (size > maxBytes) {
+        throw new Error("Artifact exceeds the download byte budget.");
+      }
+
+      chunks.push(value);
+    }
+
+    signal?.throwIfAborted();
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    return bytes.buffer;
+  } catch (error) {
+    await reader?.cancel().catch(() => {});
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    reader?.releaseLock();
+  }
+}

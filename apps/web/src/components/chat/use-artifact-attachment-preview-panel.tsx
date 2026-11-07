@@ -1,6 +1,6 @@
 import { DropdownMenuItem } from "@nakama/ui/dropdown-menu";
 import { toast } from "@nakama/ui/toast";
-import { Pdf01Icon, PencilEdit01Icon } from "hugeicons-react";
+import { Pdf01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
@@ -11,7 +11,6 @@ import {
   artifactPanelHeaderMeta,
   downloadActionLabel,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
-import { ArtifactMarkdownEditor } from "@/components/chat/artifact-markdown-editor";
 import {
   type ArtifactPreviewMode,
   ArtifactPreviewModeToggle,
@@ -20,7 +19,7 @@ import {
   ArtifactShareMenuItem,
   ArtifactSharePublishDialogFromState,
 } from "@/components/chat/artifact-share-controls";
-import { ArtifactSpreadsheetEditor } from "@/components/chat/artifact-spreadsheet-editor";
+import { ArtifactWorkbookPreview } from "@/components/chat/artifact-workbook-preview";
 import { useArtifactPreviewContent } from "@/components/chat/use-artifact-preview-content";
 import {
   type ArtifactShareControlsState,
@@ -28,15 +27,16 @@ import {
 } from "@/components/chat/use-artifact-share-controls";
 import { useAuth } from "@/context/use-auth";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
-import { useWriteArtifactMutation } from "@/hooks/use-resource-mutations";
 import {
   printArtifactHtml,
   resolveArtifactHtmlAssets,
 } from "@/lib/artifact-html-preview";
+import { isXlsxFile } from "@/lib/artifact-spreadsheet";
 import {
   artifactCodeLanguage,
   buildArtifactContentUrl,
   type ChatArtifactRef,
+  FILE_PREVIEW_MAX_BYTES,
   isDelimitedSpreadsheetFile,
   isDocxFile,
   isHtmlArtifactMimeType,
@@ -50,11 +50,8 @@ import {
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 
-type EditMode = null | "markdown" | "spreadsheet";
-
 function ArtifactAttachmentPreviewHeaderActions({
   artifactPath,
-  canEdit,
   content,
   copied,
   copyDisabled,
@@ -65,12 +62,10 @@ function ArtifactAttachmentPreviewHeaderActions({
   loading,
   onCopy,
   onDownloadPdf,
-  onEdit,
   onToggleFullscreen,
   share,
 }: {
   artifactPath: string;
-  canEdit: boolean;
   content: string | null;
   copied: boolean;
   copyDisabled: boolean;
@@ -81,7 +76,6 @@ function ArtifactAttachmentPreviewHeaderActions({
   loading: boolean;
   onCopy: () => void;
   onDownloadPdf: (() => void) | null;
-  onEdit: () => void;
   onToggleFullscreen: () => void;
   share: ArtifactShareControlsState;
 }) {
@@ -98,16 +92,6 @@ function ArtifactAttachmentPreviewHeaderActions({
               >
                 <Pdf01Icon aria-hidden />
                 Download as PDF
-              </DropdownMenuItem>
-            ) : null}
-            {canEdit ? (
-              <DropdownMenuItem
-                className="cursor-pointer"
-                disabled={loading || content === null}
-                onClick={onEdit}
-              >
-                <PencilEdit01Icon aria-hidden />
-                Edit artifact
               </DropdownMenuItem>
             ) : null}
             <ArtifactShareMenuItem share={share} />
@@ -164,6 +148,7 @@ async function copyArtifactContent({
         artifactPath,
         {
           inline: true,
+          maxBytes: FILE_PREVIEW_MAX_BYTES,
           render: isWordDocument ? "markdown" : undefined,
         }
       );
@@ -204,11 +189,7 @@ export function useArtifactAttachmentPreviewPanel({
   const [previewMode, setPreviewMode] =
     useState<ArtifactPreviewMode>("preview");
 
-  const [editMode, setEditMode] = useState<EditMode>(null);
-  const [draft, setDraft] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
   const { activeOrg } = useAuth();
-  const writeArtifact = useWriteArtifactMutation();
   const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path)}`;
 
   const mimeType = resolveArtifactMimeType(
@@ -227,6 +208,7 @@ export function useArtifactAttachmentPreviewPanel({
 
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
   const isSpreadsheet = isDelimitedSpreadsheetFile(artifact.filename, mimeType);
+  const isWorkbook = isXlsxFile(artifact.filename, mimeType);
 
   const showPreviewToggle = artifactCanTogglePreviewSource({
     isHtml,
@@ -254,9 +236,6 @@ export function useArtifactAttachmentPreviewPanel({
 
   const downloadLabel = downloadActionLabel(mimeType);
 
-  const canEdit =
-    ((isMarkdown && !isWordDocument) || isSpreadsheet) && Boolean(activeOrg);
-
   const {
     loading,
     error,
@@ -267,7 +246,7 @@ export function useArtifactAttachmentPreviewPanel({
     setContent,
   } = useArtifactPreviewContent({
     artifact,
-    canPreview,
+    canPreview: canPreview && !isWorkbook,
     isHtml,
     isImage,
     isPdf,
@@ -286,26 +265,6 @@ export function useArtifactAttachmentPreviewPanel({
 
     return () => window.clearTimeout(timeout);
   }, [copied]);
-
-  async function saveDraft(nextContent: string) {
-    if (editMode === null) {
-      return;
-    }
-
-    setSaveError(null);
-
-    try {
-      await writeArtifact.mutateAsync({
-        artifactPath: artifact.path,
-        content: nextContent,
-        profileId,
-      });
-      setContent(nextContent);
-      setEditMode(null);
-    } catch (mutationError) {
-      setSaveError(formatError(mutationError));
-    }
-  }
 
   async function downloadPdf() {
     if (content === null) {
@@ -335,34 +294,12 @@ export function useArtifactAttachmentPreviewPanel({
     loadingOverride?: boolean,
     mode: ArtifactPreviewMode = previewMode
   ) {
-    if (editMode === "spreadsheet" && content !== null) {
+    if (isWorkbook) {
       return (
-        <ArtifactSpreadsheetEditor
-          busy={writeArtifact.isPending}
-          content={content}
-          error={saveError}
-          filename={artifact.filename}
-          onCancel={() => {
-            setEditMode(null);
-            setSaveError(null);
-          }}
-          onSave={(nextContent) => void saveDraft(nextContent)}
-        />
-      );
-    }
-
-    if (editMode === "markdown") {
-      return (
-        <ArtifactMarkdownEditor
-          busy={writeArtifact.isPending}
-          draft={draft}
-          error={saveError}
-          onCancel={() => {
-            setEditMode(null);
-            setSaveError(null);
-          }}
-          onChange={setDraft}
-          onSave={() => void saveDraft(draft)}
+        <ArtifactWorkbookPreview
+          artifact={artifact}
+          key={`${activeOrg?.id}:${profileId}:${artifact.path}`}
+          profileId={profileId}
         />
       );
     }
@@ -454,26 +391,22 @@ export function useArtifactAttachmentPreviewPanel({
 
   function buildPanelConfig(mode: ArtifactPreviewMode = previewMode) {
     return {
-      bodyClassName:
-        editMode === null
-          ? artifactPanelBodyClassName({
-              isHtml,
-              isImage,
-              isMarkdown,
-              isSpreadsheet,
-              isVideo,
-              previewMode: mode,
-            })
-          : "flex flex-col overflow-hidden p-0",
+      bodyClassName: artifactPanelBodyClassName({
+        isHtml,
+        isImage,
+        isMarkdown,
+        isSpreadsheet: isSpreadsheet || isWorkbook,
+        isVideo,
+        previewMode: mode,
+      }),
       content: buildPanelBody(undefined, mode),
       fullscreen,
       headerActions: (
         <ArtifactAttachmentPreviewHeaderActions
           artifactPath={artifact.path}
-          canEdit={canEdit}
           content={content}
           copied={copied}
-          copyDisabled={isImage || isVideo || isPdf}
+          copyDisabled={isImage || isVideo || isPdf || isWorkbook}
           downloadLabel={downloadLabel}
           downloadUrl={downloadUrl}
           filename={artifact.filename}
@@ -492,26 +425,13 @@ export function useArtifactAttachmentPreviewPanel({
             })
           }
           onDownloadPdf={isHtml ? () => void downloadPdf() : null}
-          onEdit={() => {
-            setSaveError(null);
-
-            if (isSpreadsheet) {
-              setEditMode("spreadsheet");
-
-              return;
-            }
-
-            setDraft(content ?? "");
-            setEditMode("markdown");
-          }}
           onToggleFullscreen={() => setFullscreen((current) => !current)}
           share={share}
         />
       ),
-      leading:
-        showPreviewToggle && editMode === null ? (
-          <ArtifactPreviewModeToggle mode={mode} onChange={setPreviewMode} />
-        ) : null,
+      leading: showPreviewToggle ? (
+        <ArtifactPreviewModeToggle mode={mode} onChange={setPreviewMode} />
+      ) : null,
       resizable: !fullscreen,
       subtitle: header.subtitle,
       title: header.title,
@@ -540,6 +460,7 @@ export function useArtifactAttachmentPreviewPanel({
     isVideo,
     isMarkdown,
     isSpreadsheet,
+    isWorkbook,
     language,
     mimeType,
     loading,
@@ -555,11 +476,6 @@ export function useArtifactAttachmentPreviewPanel({
     share.busy,
     share.publishDialogOpen,
     previewMode,
-    canEdit,
-    editMode,
-    draft,
-    saveError,
-    writeArtifact.isPending,
     showPreviewToggle,
     header.subtitle,
     header.title,
@@ -570,8 +486,6 @@ export function useArtifactAttachmentPreviewPanel({
     setFullscreen(false);
     setCopied(false);
     setPreviewMode("preview");
-    setEditMode(null);
-    setSaveError(null);
   }
 
   function showPanel() {
