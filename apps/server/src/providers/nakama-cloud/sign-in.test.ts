@@ -304,7 +304,17 @@ test("the team's model list is reloaded from the cloud, at most every few minute
 
   try {
     await agent.getModels();
-    await Bun.sleep(50);
+    // The reload runs in the background; slow CI runners need more than a
+    // fixed sleep.
+    const deadline = performance.now() + 5000;
+
+    while (
+      (await savedModels())?.length !== 2 &&
+      performance.now() < deadline
+    ) {
+      await Bun.sleep(20);
+    }
+
     expect(await savedModels()).toEqual([
       "openai-main::gpt-4o-mini",
       "anthropic-main::claude-sonnet-4-5",
