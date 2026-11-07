@@ -1,4 +1,9 @@
-import type { ThinkingEffort, ThinkingSettings } from "@nakama/core/contract";
+import type {
+  ProviderModelOption,
+  ThinkingEffort,
+  ThinkingSettings,
+} from "@nakama/core/contract";
+import { extraThinkingEfforts } from "@nakama/core/thinking-effort";
 
 export const DEFAULT_THINKING_EFFORT: ThinkingEffort = "medium";
 
@@ -10,6 +15,23 @@ export const THINKING_EFFORT_OPTIONS: Array<{
   { label: "Medium", value: "medium" },
   { label: "High", value: "high" },
 ];
+
+const EXTRA_THINKING_EFFORT_LABELS = { max: "Max", xhigh: "Extra high" };
+
+/** Low/medium/high plus the higher levels the active model accepts. */
+export function thinkingEffortOptionsFor(
+  model: Pick<ProviderModelOption, "id"> | undefined
+): Array<{ label: string; value: ThinkingEffort }> {
+  const extra = model ? extraThinkingEfforts(model.id) : [];
+
+  return [
+    ...THINKING_EFFORT_OPTIONS,
+    ...extra.map((value) => ({
+      label: EXTRA_THINKING_EFFORT_LABELS[value],
+      value,
+    })),
+  ];
+}
 
 export function shouldShowThinkingEffort(
   activeModelSupportsThinking: boolean | undefined

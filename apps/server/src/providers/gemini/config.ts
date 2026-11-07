@@ -175,7 +175,10 @@ function buildGeminiThinkingConfig(
     return;
   }
 
-  const effort = normalizeThinkingEffort(providerOptions?.thinking?.effort);
+  const effort = normalizeThinkingEffort(
+    providerOptions?.thinking?.effort,
+    model
+  );
 
   if (model.includes("gemini-3") || model.includes("3-")) {
     return {

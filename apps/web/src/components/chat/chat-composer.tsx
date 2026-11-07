@@ -1294,6 +1294,8 @@ function shortEffortLabel(effort: string, fullLabel: string): string {
       return "Low";
     case "medium":
       return "Med";
+    case "xhigh":
+      return "X-High";
     default:
       return fullLabel;
   }
@@ -1485,7 +1487,7 @@ function ChatModelEffortRow({
   options: Array<{ label: string; value: string }>;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-border/60 border-t p-2 pl-3">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-border/60 border-t p-2 pl-3">
       <span aria-hidden className="font-medium text-muted-foreground text-xs">
         Thinking effort
       </span>

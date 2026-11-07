@@ -286,8 +286,12 @@ export async function continueAnthropicUntilDone(
     };
   }
 
+  const effort = thinkingRequest.output_config?.effort;
+
   const requestBase: Omit<MessageCreateParams, "stream"> = {
-    max_tokens: 4096,
+    // Adaptive thinking at xhigh/max would spend the whole 4096 on reasoning.
+    // 16000 stays under the SDK's non-streaming limit (~21333 tokens).
+    max_tokens: effort === "xhigh" || effort === "max" ? 16_000 : 4096,
     messages: apiMessages,
     model: options.model,
     system: options.system,
@@ -592,7 +596,7 @@ export function buildAnthropicThinkingRequest(
 
     return {
       output_config: {
-        effort: normalizeThinkingEffort(providerOptions.thinking.effort),
+        effort: normalizeThinkingEffort(providerOptions.thinking.effort, model),
       },
       // SAFETY: The SDK type omits documented adaptive binding fields for these models.
       thinking: {
@@ -613,7 +617,10 @@ export function buildAnthropicThinkingRequest(
     return providerOptions?.thinking?.enabled
       ? {
           output_config: {
-            effort: normalizeThinkingEffort(providerOptions.thinking.effort),
+            effort: normalizeThinkingEffort(
+              providerOptions.thinking.effort,
+              model
+            ),
           },
           thinking,
         }
@@ -633,7 +640,10 @@ export function buildAnthropicThinkingRequest(
     return { thinking: { budget_tokens: 1024, type: "enabled" } };
   }
 
-  const effort = normalizeThinkingEffort(providerOptions.thinking.effort);
+  const effort = normalizeThinkingEffort(
+    providerOptions.thinking.effort,
+    model
+  );
 
   return {
     output_config: { effort },

@@ -178,17 +178,19 @@ describe("user config multi-provider", () => {
           wireApi: "responses",
         },
       ],
-      thinkingEffort: "medium",
+      thinkingEffort: "xhigh",
       thinkingEnabled: true,
       timezone: "UTC",
     });
 
     const raw = await readFile(getUserConfigPath(), "utf8");
+    expect(raw).toContain("thinking_effort=xhigh");
     expect(raw).toContain(`[provider.${openaiId}]`);
     expect(raw).toContain("label=Ollama");
     expect(raw).toContain("default_provider_id=");
 
     const loaded = await loadUserConfig();
+    expect(loaded?.thinkingEffort).toBe("xhigh");
     expect(loaded?.providers).toHaveLength(2);
     expect(loaded?.defaultProviderId).toBe(openaiId);
     expect(loaded?.providers[1]?.baseUrl).toBe("http://localhost:11434/v1");

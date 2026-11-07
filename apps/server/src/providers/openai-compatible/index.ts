@@ -8,6 +8,7 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   StreamChatHandlers,
+  ThinkingEffort,
   WireApi,
 } from "@nakama/core";
 import {
@@ -274,12 +275,21 @@ function buildThinkingBody(
   OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
   "reasoning_effort"
 > & {
-  reasoning?: { effort?: "low" | "medium" | "high"; enabled?: boolean };
+  reasoning?: { effort?: ThinkingEffort; enabled?: boolean };
 } {
   if (options.netra) {
-    return thinking?.enabled
-      ? { reasoning: { effort: thinking.effort === "low" ? "low" : "high" } }
-      : { reasoning: { enabled: false } };
+    if (!thinking?.enabled) {
+      return { reasoning: { enabled: false } };
+    }
+
+    // Netra's V4.1 Flash has low/high/max tiers, so medium and xhigh go to high.
+    const effort = normalizeThinkingEffort(thinking.effort, options.model);
+
+    return {
+      reasoning: {
+        effort: effort === "low" || effort === "max" ? effort : "high",
+      },
+    };
   }
 
   if (
@@ -302,7 +312,7 @@ function buildThinkingBody(
     return {};
   }
 
-  const effort = normalizeThinkingEffort(thinking.effort);
+  const effort = normalizeThinkingEffort(thinking.effort, options.model);
 
   return {
     reasoning: { effort },
