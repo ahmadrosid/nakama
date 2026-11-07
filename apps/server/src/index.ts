@@ -213,6 +213,7 @@ if (process.env.NAKAMA_SECRETS_KEY_NEXT) {
 }
 
 setToolSecrets(managedSecrets);
+
 await installMcpSecretStore(database.adapter, managedSecrets);
 
 setManagedSecretResolver(

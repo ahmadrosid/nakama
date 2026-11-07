@@ -7,6 +7,7 @@ import {
   test,
 } from "bun:test";
 import path from "node:path";
+import type { NakamaClient } from "@nakama/client";
 import {
   hasActiveStreams,
   resetActiveStreamsForTests,
@@ -2451,29 +2452,26 @@ describe("concurrent chats in different orgs", () => {
       // Each client scope tracks its own org, and the shared base does too,
       // so the test sees which org a createSession would have sent.
       const sessionOrgs: Array<string | null> = [];
-      const base = client as unknown as Record<string, unknown>;
       let baseOrg: string | null = null;
-      const baseSetOrgId = base.setOrgId as (orgId: string | null) => void;
-      const baseCreateSession = base.createSession as (
-        ...args: unknown[]
-      ) => Promise<unknown>;
-      const baseListProfiles = base.listProfiles as (
-        ...args: unknown[]
-      ) => Promise<unknown>;
+      const baseSetOrgId = client.setOrgId.bind(client);
+      const baseCreateSession = client.createSession.bind(client);
+      const baseListProfiles = client.listProfiles.bind(client);
 
       let releaseFirst: () => void = () => {};
+
       const firstWaits = new Promise<void>((resolve) => {
         releaseFirst = resolve;
       });
+
       let listCalls = 0;
       let orgSets = 0;
 
       const track = (
-        target: Record<string, unknown>,
+        target: NakamaClient,
         getOrg: () => string | null,
         setOrg: (orgId: string | null) => void
       ) => {
-        target.setOrgId = (orgId: string | null) => {
+        target.setOrgId = (orgId) => {
           setOrg(orgId);
           baseSetOrgId(orgId);
           orgSets += 1;
@@ -2482,7 +2480,8 @@ describe("concurrent chats in different orgs", () => {
             releaseFirst();
           }
         };
-        target.createSession = (...args: unknown[]) => {
+
+        target.createSession = (...args) => {
           sessionOrgs.push(getOrg());
 
           return baseCreateSession(...args);
@@ -2490,13 +2489,14 @@ describe("concurrent chats in different orgs", () => {
       };
 
       track(
-        base,
+        client,
         () => baseOrg,
         (orgId) => {
           baseOrg = orgId;
         }
       );
-      base.listProfiles = async (...args: unknown[]) => {
+
+      client.listProfiles = async (...args) => {
         listCalls += 1;
 
         // The first chat waits here until the second chat has set its org.
@@ -2506,9 +2506,12 @@ describe("concurrent chats in different orgs", () => {
 
         return baseListProfiles(...args);
       };
-      base.forOrg = () => {
-        const scoped = Object.create(base) as Record<string, unknown>;
+
+      client.forOrg = () => {
+        // The scope inherits every mock method from the base client.
+        const scoped: NakamaClient = Object.create(client);
         let scopedOrg: string | null = baseOrg;
+
         track(
           scoped,
           () => scopedOrg,

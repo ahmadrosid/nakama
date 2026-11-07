@@ -139,9 +139,11 @@ export async function runSqliteTool(
       for (const row of statement.iterate(...params)) {
         // SAFETY: SQLite query rows contain only SQLite cell values under this statement API.
         const cells = row as SqliteRow;
-        chars += JSON.stringify(cells, (_key, value) =>
-          typeof value === "bigint" ? value.toString() : value
-        ).length;
+        chars += JSON.stringify(cells, (_key, value) => {
+          const integer = z.bigint().safeParse(value);
+
+          return integer.success ? integer.data.toString() : value;
+        }).length;
 
         if (rows.length >= MAX_RESULT_ROWS || chars > MAX_RESULT_CHARS) {
           return { columns: statement.columnNames, rows, truncated: true };

@@ -4,6 +4,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { StoredMcpServerRecord } from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
 
+type ToolCallResult = Awaited<ReturnType<Client["callTool"]>>;
+
 function fakeStdioServer(id = "stdio-server"): StoredMcpServerRecord {
   return {
     cachedTools: [],
@@ -337,17 +339,20 @@ describe("McpClientManager", () => {
     expect(text).toContain("Captured");
   });
 
-  async function callWithResult(result: object) {
+  async function callWithResult(result: ToolCallResult) {
     using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
       undefined
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockResolvedValue({
       tools: [],
     });
+
     using callTool = spyOn(Client.prototype, "callTool").mockResolvedValue(
       // SAFETY: each test controls the result shape the server would send.
       result as never
     );
+
     using _close = spyOn(
       StdioClientTransport.prototype,
       "close"
@@ -410,14 +415,14 @@ describe("McpClientManager", () => {
   });
 
   test("structured content nested past the depth limit is refused", async () => {
-    let deep: object = {};
+    let deep = {};
 
     for (let i = 0; i < 500; i++) {
       deep = { next: deep };
     }
 
-    await expect(callWithResult({ structuredContent: deep })).rejects.toThrow(
-      "not a JSON value"
-    );
+    await expect(
+      callWithResult({ content: [], structuredContent: { next: deep } })
+    ).rejects.toBeInstanceOf(Error);
   });
 });

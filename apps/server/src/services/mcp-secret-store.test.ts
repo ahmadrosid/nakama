@@ -83,8 +83,9 @@ describe("MCP secret store", () => {
     const big = server("mcp_big");
     const jwt = "x".repeat(12_000);
     big.config = {
-      ...(big.config as object),
+      headers: { Authorization: `Bearer ${TOKEN}` },
       oauth: { tokens: { access_token: jwt, token_type: "Bearer" } },
+      url: "https://mcp.example.com/mcp",
     };
 
     await db.upsertMcpServer(big);

@@ -1,4 +1,5 @@
 import type { DatabaseAdapter, StoredMcpServerRecord } from "@nakama/db";
+import { z } from "zod";
 import type { ManagedSecrets } from "./managed-secrets";
 
 /** Config fields that carry credentials: OAuth grant, HTTP headers, stdio env. */
@@ -11,12 +12,14 @@ const MAX_SECRET_CHARS = 65_536;
 /** Marks a stored config whose secret fields live in managed secrets. */
 const SECRET_REF = "secretRef";
 
-type Config = Record<string, unknown>;
+const ConfigSchema = z.record(z.string(), z.json().optional());
 
-function asConfig(config: unknown): Config | null {
-  return config instanceof Object && !Array.isArray(config)
-    ? (config as Config)
-    : null;
+type Config = z.infer<typeof ConfigSchema>;
+
+function asConfig(config: StoredMcpServerRecord["config"]): Config | null {
+  const parsed = ConfigSchema.safeParse(config);
+
+  return parsed.success ? parsed.data : null;
 }
 
 /**
@@ -55,7 +58,7 @@ export async function installMcpSecretStore(
 
     try {
       const { value } = await secrets.resolve(SECRET_SCOPE, record.id);
-      stored = value ? (JSON.parse(value) as Config) : {};
+      stored = value ? ConfigSchema.parse(JSON.parse(value)) : {};
     } catch {
       // A key that no longer decrypts leaves the server signed out, as a
       // restored backup does for provider keys.
