@@ -2811,6 +2811,32 @@ export class AgentService {
     }
   }
 
+  /** Throws 403 when the caller cannot use the profile in chat. */
+  async assertProfileChatAccess(
+    orgId: string,
+    profileId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    this.assertChatProfileAccess(
+      await this.requireProfile(orgId, profileId),
+      access
+    );
+  }
+
+  /**
+   * Whether saving this session as a case would move a private chat out of its
+   * owner's hands. Shared messaging history stays team-visible.
+   */
+  async sessionHistoryPrivacy(
+    record: StoredSessionRecord
+  ): Promise<{ isPrivate: boolean; ownerUserId: string | null }> {
+    if (isSharedHistory(record) || (await this.isChildOfSharedChat(record))) {
+      return { isPrivate: false, ownerUserId: null };
+    }
+
+    return { isPrivate: true, ownerUserId: record.userId ?? null };
+  }
+
   async readChatAttachment(
     orgId: string,
     attachmentId: string,
