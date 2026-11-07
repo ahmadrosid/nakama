@@ -220,15 +220,19 @@ describe("agent chat provider retry", () => {
     };
 
     const session = createAgentChatSession({ provider });
-    const caught = await session.sendStream("Hello", { onChunk() {} }).then(
-      () => null,
-      (error: unknown) => error
-    );
+    let caught: Error | null = null;
+
+    try {
+      await session.sendStream("Hello", { onChunk() {} });
+    } catch (error) {
+      caught = error instanceof Error ? error : null;
+    }
 
     expect(caught).toMatchObject({ message: MODEL_CONNECTION_CLOSED_MESSAGE });
 
     const messages: string[] = [];
     let current: unknown = caught;
+
     while (current instanceof Error) {
       messages.push(current.message);
       current = current.cause;
