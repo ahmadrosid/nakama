@@ -551,7 +551,7 @@ function ProfileFooterActions({
   const destructive = actions.filter((action) => action.destructive);
 
   return (
-    <footer className="flex w-0 min-w-full flex-wrap items-center gap-2 border-border border-t pt-5">
+    <footer className="flex w-0 min-w-full flex-wrap items-center gap-2 pt-5">
       {regular.map(({ Icon, disabled, label, onClick }) => (
         <button
           className="flex h-9 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-background px-3.5 font-medium text-foreground/90 text-sm shadow-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
