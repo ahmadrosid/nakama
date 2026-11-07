@@ -1651,11 +1651,6 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
-    const body = await readJson<RequestPasswordResetRequest>(
-      c.req.raw,
-      requestPasswordResetSchema
-    );
-
     const auth = await authenticateRequest(
       c.req.raw,
       authService,
@@ -1667,6 +1662,13 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     if (allowManualToken && auth) {
       assertBrowserCsrf(c.req.raw, auth, authService);
     }
+
+    assertJsonRequest(c.req.raw);
+
+    const body = await readJson<RequestPasswordResetRequest>(
+      c.req.raw,
+      requestPasswordResetSchema
+    );
 
     // Public routes skip the auth middleware. Keep a signed-in caller so the
     // audit row names who asked for the reset.

@@ -445,7 +445,10 @@ describe("direct org member provisioning", () => {
     const requestResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/password-reset/request", {
         body: JSON.stringify({ email: "admin@acme.com" }),
-        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
         method: "POST",
       })
     );
