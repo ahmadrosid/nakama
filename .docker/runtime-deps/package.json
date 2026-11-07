@@ -2,6 +2,10 @@
   "name": "nakama-runtime-deps",
   "private": true,
   "description": "Production runtime dependencies baked into the Nakama container image. Installed from the committed bun.lock so the image resolves the same bytes on every build.",
+  "overrides": {
+    "js-yaml": "4.3.2",
+    "zod": "4.6.6"
+  },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.88.0",
     "@agentclientprotocol/codex-acp": "2.1.1",
@@ -9,6 +13,6 @@
     "@vscode/ripgrep": "1.18.0",
     "opencode-ai": "1.19.5",
     "pm2": "7.0.4",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   }
 }
