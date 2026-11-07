@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { getGroupSharedDir } from "@nakama/core";
 import type { AgentGroupInput } from "@nakama/core/agent-groups";
 import type { DocumentAttachment } from "@nakama/core/contract";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
@@ -295,5 +298,29 @@ describe("agent group routes", () => {
     expect(
       (await send("GET", `/v1/agent-groups/${group.id}/files/content`)).status
     ).toBe(400);
+  });
+
+  test("an inline group file keeps the route sandbox policy", async () => {
+    const { send } = await createScenario();
+
+    const group = await (
+      await send("POST", "/v1/agent-groups", GOOD_GROUP)
+    ).json();
+
+    const sharedDir = getGroupSharedDir(ORG_ID, group.id);
+    await mkdir(sharedDir, { recursive: true });
+    await writeFile(
+      join(sharedDir, "poc.html"),
+      '<script src="poc.js"></script>',
+      "utf8"
+    );
+
+    const response = await send(
+      "GET",
+      `/v1/agent-groups/${group.id}/files/content?path=poc.html&inline=1`
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Security-Policy")).toBe("sandbox");
   });
 });
