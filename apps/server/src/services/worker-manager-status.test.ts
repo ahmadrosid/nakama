@@ -251,7 +251,9 @@ describe("WorkerManagerService", () => {
 
       for (const [env, starts] of [
         [{}, 1],
-        [{ NAKAMA_WORKER_ENV: "2" }, 0],
+        // 2 read the bot token only from config.ini.
+        [{ NAKAMA_WORKER_ENV: "2" }, 1],
+        [{ NAKAMA_WORKER_ENV: "3" }, 0],
       ] as const) {
         const mockPm2 = createMockPm2();
         mockPm2.list = mock((cb: Parameters<Pm2Client["list"]>[0]) =>

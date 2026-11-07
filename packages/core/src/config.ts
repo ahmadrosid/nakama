@@ -46,11 +46,12 @@ export function resolveManagedSecret(
   return managedSecretResolver(scope, name, envNames);
 }
 
-type ManagedSecretWriter = (
-  scope: string,
-  name: string,
-  value: string
-) => Promise<void>;
+/** The slice of the server's ManagedSecrets that channel config writes through. */
+export type ManagedSecretWriter = {
+  delete(scope: string, name: string): Promise<void>;
+  migrate(scope: string, name: string, value: string): Promise<void>;
+  save(scope: string, name: string, value: string): Promise<void>;
+};
 
 let managedSecretWriter: ManagedSecretWriter | null = null;
 

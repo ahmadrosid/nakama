@@ -183,11 +183,7 @@ try {
   await managedSecrets.migrateLegacyFiles();
 
   if (process.env.NAKAMA_SECRETS_KEY) {
-    const secrets = managedSecrets;
-    setManagedSecretWriter((scope, name, value) =>
-      secrets.save(scope, name, value)
-    );
-    await migrateChannelBotTokens();
+    setManagedSecretWriter(managedSecrets);
   }
 } catch (error) {
   // Saved keys stay in config.ini until the migration succeeds, so print the
@@ -591,6 +587,7 @@ const app = createHonoApp({
     await database.reopen();
     await agent.reloadAfterDataRestore();
     await googleMeetService.reopen();
+    await migrateChannelBotTokens();
     await workerManager.recoverDesiredWorkers();
   },
   orgMemoryService,
@@ -648,6 +645,8 @@ void initializeOptionalServices({
 try {
   workerRecovery = (async () => {
     await workerManager.recoverDesiredWorkers();
+    // After recovery restarted workers that read the token only from config.ini.
+    await migrateChannelBotTokens();
     await pluginService.recoverPluginWorkers();
   })();
   await workerRecovery;

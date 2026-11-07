@@ -42,6 +42,7 @@ import {
   getChannelConfigDir,
   isChannelOwner,
   listChannelOwners,
+  moveBotTokenToSecrets,
   removeChannelConnection,
 } from "@nakama/core/channel-config-shared";
 import { resolveDiscordApplicationId } from "@nakama/core/discord-config";
@@ -115,10 +116,11 @@ interface Pm2SchemaRule {
 }
 
 /**
- * Marks a worker whose env was built by `pm2StartOptions`. Recovery restarts
- * an online worker without it, because an older server gave it PM2 options.
+ * Marks a worker started by this server version. Recovery restarts an online
+ * worker without it: an older server gave it PM2 options (2), or its code reads
+ * the bot token only from config.ini (3).
  */
-const WORKER_ENV_VERSION = "2";
+const WORKER_ENV_VERSION = "3";
 
 function hasCurrentWorkerEnv(process: Pm2ProcessDescription | undefined) {
   return process?.pm2_env?.NAKAMA_WORKER_ENV === WORKER_ENV_VERSION;
@@ -503,6 +505,15 @@ export class WorkerManagerService {
     }
 
     await rename(source, target);
+
+    if (platform === "telegram" || platform === "discord") {
+      try {
+        await moveBotTokenToSecrets(platform, owner);
+      } catch (error) {
+        console.warn(`The claimed ${platform} bot token stays in config.ini`, error);
+      }
+    }
+
     await setWorkerDesiredRunning(platform, false, scope);
     await setWorkerDesiredRunning(platform, desired, owner);
   }

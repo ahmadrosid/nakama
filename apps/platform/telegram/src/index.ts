@@ -14,7 +14,7 @@ import {
 } from "@nakama/core/ensure-server";
 import { readBotTokensFromServer } from "@nakama/core/channel-config-shared";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
-import { resolveServerUrl, resolveWebPublicUrl } from "@nakama/core/runtime";
+import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { getTelegramConfigDir } from "@nakama/core/telegram-config";
 import { createTelegramWorkerHeartbeat } from "@nakama/core/telegram-worker";
 import { TelegramAuthStore } from "./auth-store";
@@ -50,12 +50,14 @@ registerCleanupHandlers(async () => {
 });
 
 try {
+  const authToken =
+    (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined;
+
   // The token is encrypted on disk; the server reads it for us.
-  readBotTokensFromServer({
-    authToken:
-      (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined,
-    baseUrl: resolveServerUrl(),
-  });
+  const tokenClient = new NakamaClient({ authToken });
+  readBotTokensFromServer((secret) =>
+    tokenClient.getChannelBotToken(secret.scope, secret.name)
+  );
 
   const identities = await loadTelegramIdentities();
 
@@ -64,9 +66,6 @@ try {
   });
 
   spawnedChild = child;
-
-  const authToken =
-    (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined;
 
   const probe = new NakamaClient({
     authToken,

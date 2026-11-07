@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { NakamaApiError } from "./api-error";
 import {
   getChannelConfigDir,
   migrateChannelBotTokens,
   readBotTokensFromServer,
+  removeChannelConnection,
 } from "./channel-config-shared";
 import { asTestFetch } from "./channel-test-helpers";
 import {
@@ -23,16 +25,29 @@ import { withTempHomedir } from "./testing/channel-config-fixtures";
 const owner = { orgId: "org_a", profileId: "agent_a" };
 
 // Stands in for ManagedSecrets: the server sets both hooks when it has a key.
-function useSecretStore(): Map<string, string> {
+function useSecretStore() {
   const store = new Map<string, string>();
-  setManagedSecretWriter(async (scope, name, value) => {
-    store.set(`${scope}/${name}`, value);
+  const saves: string[] = [];
+
+  setManagedSecretWriter({
+    delete: async (scope, name) => {
+      store.delete(`${scope}/${name}`);
+    },
+    migrate: async (scope, name, value) => {
+      if (!store.has(`${scope}/${name}`)) {
+        store.set(`${scope}/${name}`, value);
+      }
+    },
+    save: async (scope, name, value) => {
+      saves.push(name);
+      store.set(`${scope}/${name}`, value);
+    },
   });
   setManagedSecretResolver(
     async (scope, name) => store.get(`${scope}/${name}`) ?? null
   );
 
-  return store;
+  return { saves, store };
 }
 
 function configPath(platform: "telegram" | "discord"): string {
@@ -51,11 +66,13 @@ afterEach(() => {
 });
 
 describe("bot tokens with NAKAMA_SECRETS_KEY", () => {
-  test("a saved token goes to managed secrets, not config.ini", async () => {
+  test("a saved token goes to managed secrets once, not config.ini", async () => {
     await withTempHomedir("nakama-bot-token-save-", async () => {
-      const store = useSecretStore();
+      const { saves, store } = useSecretStore();
 
       await saveTelegramConfig(owner, { botToken: "111:AAA" });
+      // Same token again, as an allowlist edit does: no re-encrypt.
+      await saveTelegramConfig(owner, { allowedUserIds: "7" });
       const originalFetch = globalThis.fetch;
       // Saving a Discord token looks up its application id first.
       globalThis.fetch = asTestFetch(async () =>
@@ -68,33 +85,28 @@ describe("bot tokens with NAKAMA_SECRETS_KEY", () => {
         globalThis.fetch = originalFetch;
       }
 
-      expect(await readFile(configPath("telegram"), "utf8")).not.toContain(
-        "111:AAA"
-      );
+      const raw = await readFile(configPath("telegram"), "utf8");
+      expect(raw).not.toContain("111:AAA");
+      expect(raw).toContain("bot_token_ref=managed");
       expect(await readFile(configPath("discord"), "utf8")).not.toContain(
         "discord-token"
       );
-      expect([...store.entries()]).toEqual([
-        ["org_a/telegram-bot:agent_a", "111:AAA"],
-        ["org_a/discord-bot:agent_a", "discord-token"],
-      ]);
+      expect(saves).toEqual(["telegram-bot:agent_a", "discord-bot:agent_a"]);
+      expect(store.get("org_a/telegram-bot:agent_a")).toBe("111:AAA");
       expect((await loadTelegramConfigFile(owner))?.botToken).toBe("111:AAA");
     });
   });
 
   test("a worker pairing a user does not write the token back", async () => {
     await withTempHomedir("nakama-bot-token-pair-", async () => {
-      const store = useSecretStore();
+      const { store } = useSecretStore();
       const saved = await saveTelegramConfig(owner, { botToken: "111:AAA" });
 
       // The worker process: no key, so no writer, and the token comes from the server.
       setManagedSecretWriter(null);
-      readBotTokensFromServer({
-        baseUrl: "http://nakama.test",
-        fetch: asTestFetch(async () =>
-          Response.json({ token: store.get("org_a/telegram-bot:agent_a") })
-        ),
-      });
+      readBotTokensFromServer(
+        async (secret) => store.get(`${secret.scope}/${secret.name}`) ?? null
+      );
 
       const result = await verifyAndPairTelegramUser(
         owner,
@@ -105,30 +117,54 @@ describe("bot tokens with NAKAMA_SECRETS_KEY", () => {
       const raw = await readFile(configPath("telegram"), "utf8");
       expect(result.ok).toBe(true);
       expect(raw).toContain("paired_user_ids=42");
-      expect(raw).not.toContain("bot_token");
+      expect(raw).toContain("bot_token_ref=managed");
+      expect(raw).not.toContain("bot_token=");
     });
   });
 
-  test("start-up moves an existing plaintext token out of config.ini", async () => {
+  test("start-up moves a plaintext token out and skips a bad entry", async () => {
     await withTempHomedir("nakama-bot-token-migrate-", async () => {
       await saveTelegramConfig(owner, {
         allowedUserIds: "7",
         botToken: "111:AAA",
       });
+      // Not an agent id, so listing owners throws on it.
+      await writeFile(
+        join(getChannelConfigDir("telegram", owner), "..", "..", ".DS_Store"),
+        ""
+      );
       expect(await readFile(configPath("telegram"), "utf8")).toContain(
         "bot_token=111:AAA"
       );
 
-      const store = useSecretStore();
-      await migrateChannelBotTokens();
+      const { store } = useSecretStore();
+      const originalWarn = console.warn;
+      console.warn = () => undefined;
+
+      try {
+        await migrateChannelBotTokens();
+      } finally {
+        console.warn = originalWarn;
+      }
 
       const raw = await readFile(configPath("telegram"), "utf8");
-      expect(raw).not.toContain("bot_token");
+      expect(raw).not.toContain("bot_token=");
       expect(raw).toContain("allowed_user_ids=7");
       expect(store.get("org_a/telegram-bot:agent_a")).toBe("111:AAA");
       expect((await loadTelegramConfigFile(owner))?.allowedUserIds).toEqual([
         7,
       ]);
+    });
+  });
+
+  test("disconnecting deletes the stored token", async () => {
+    await withTempHomedir("nakama-bot-token-remove-", async () => {
+      const { store } = useSecretStore();
+      await saveTelegramConfig(owner, { botToken: "111:AAA" });
+
+      await removeChannelConnection("telegram", owner);
+
+      expect(store.size).toBe(0);
     });
   });
 
@@ -147,59 +183,58 @@ describe("bot tokens with NAKAMA_SECRETS_KEY", () => {
 
 describe("readBotTokensFromServer", () => {
   async function loadWith(
-    fetchImpl: Parameters<typeof asTestFetch>[0],
+    fetchToken: () => Promise<string | null>,
     waits: number[]
   ) {
-    await writeFile(configPath("telegram"), "profile_id=agent_a\n");
-    readBotTokensFromServer({
-      authToken: "local-token",
-      baseUrl: "http://nakama.test",
-      fetch: asTestFetch(fetchImpl),
-      wait: async (ms) => {
-        waits.push(ms);
-      },
+    await writeFile(
+      configPath("telegram"),
+      "bot_token_ref=managed\nprofile_id=agent_a\n"
+    );
+    readBotTokensFromServer(fetchToken, async (ms) => {
+      waits.push(ms);
     });
 
     return loadTelegramConfigFile(owner);
   }
 
-  test("waits with backoff until the server answers", async () => {
+  test("waits out a starting or busy server, then reads once", async () => {
     await withTempHomedir("nakama-bot-token-retry-", async () => {
       await saveTelegramConfig(owner, { botToken: "111:AAA" });
       const waits: number[] = [];
-      const requests: Request[] = [];
       let calls = 0;
 
-      const config = await loadWith(async (url, init) => {
-        requests.push(new Request(url, init));
+      const fetchToken = async () => {
         calls += 1;
 
-        if (calls < 3) {
-          throw new Error("connect ECONNREFUSED");
+        if (calls === 1) {
+          throw new TypeError("fetch failed");
         }
 
-        return Response.json({ token: "111:AAA" });
-      }, waits);
+        if (calls === 2) {
+          throw new NakamaApiError("Too many requests", 429);
+        }
 
-      expect(config?.botToken).toBe("111:AAA");
+        return "111:AAA";
+      };
+
+      expect((await loadWith(fetchToken, waits))?.botToken).toBe("111:AAA");
+      expect((await loadTelegramConfigFile(owner))?.botToken).toBe("111:AAA");
       expect(waits).toEqual([500, 1000]);
-      expect(new URL(requests[0]!.url).searchParams.get("name")).toBe(
-        "telegram-bot:agent_a"
-      );
-      expect(requests[0]!.headers.get("Authorization")).toBe(
-        "Bearer local-token"
-      );
+      expect(calls).toBe(3);
     });
   });
 
-  test("stops at a refusal instead of retrying", async () => {
+  test("stops at an error that will not heal", async () => {
     await withTempHomedir("nakama-bot-token-refused-", async () => {
       await saveTelegramConfig(owner, { botToken: "111:AAA" });
       const waits: number[] = [];
+      const refusal = new NakamaApiError("Decrypt failed", 500);
 
       await expect(
-        loadWith(async () => Response.json({}, { status: 401 }), waits)
-      ).rejects.toThrow();
+        loadWith(async () => {
+          throw refusal;
+        }, waits)
+      ).rejects.toMatchObject({ cause: refusal });
       expect(waits).toEqual([]);
     });
   });
@@ -211,7 +246,7 @@ describe("readBotTokensFromServer", () => {
 
       await expect(
         loadWith(async () => {
-          throw new Error("connect ECONNREFUSED");
+          throw new TypeError("fetch failed");
         }, waits)
       ).rejects.toThrow();
       expect(waits.reduce((sum, ms) => sum + ms, 0)).toBe(65_500);
