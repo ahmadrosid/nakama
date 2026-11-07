@@ -240,36 +240,54 @@ describe("createHonoApp", () => {
 
   for (const tc of secureCookieCases) {
     test(tc.name, async () => {
-      await withNodeEnv(tc.nodeEnv, async () => {
-        const options = createServerOptions();
-        const app = createHonoApp(options);
+      const previousTrustProxy = process.env.NAKAMA_TRUST_PROXY;
 
-        const setupResponse = await app.fetch(
-          new Request(tc.url, {
-            body: JSON.stringify(
-              buildSetupAuthBody("admin@example.com", {
-                admin: { password: "secret123" },
-              })
-            ),
-            headers: { ...tc.headers },
-            method: "POST",
-          })
-        );
+      const forwardedHttps =
+        "X-Forwarded-Proto" in tc.headers &&
+        tc.headers["X-Forwarded-Proto"] === "https";
 
-        expect(setupResponse.status).toBe(201);
-        const setCookies = extractSetCookies(setupResponse);
-        expectCookiesSecure(setCookies, tc.expectSecure);
+      if (forwardedHttps) {
+        process.env.NAKAMA_TRUST_PROXY = "true";
+      }
 
-        if ("verifySession" in tc && tc.verifySession) {
-          const meResponse = await app.fetch(
-            new Request("http://localhost:4310/v1/auth/me", {
-              headers: { Cookie: cookieHeaderFromSetCookies(setCookies) },
+      try {
+        await withNodeEnv(tc.nodeEnv, async () => {
+          const options = createServerOptions();
+          const app = createHonoApp(options);
+
+          const setupResponse = await app.fetch(
+            new Request(tc.url, {
+              body: JSON.stringify(
+                buildSetupAuthBody("admin@example.com", {
+                  admin: { password: "secret123" },
+                })
+              ),
+              headers: { ...tc.headers },
+              method: "POST",
             })
           );
 
-          expect(meResponse.status).toBe(200);
+          expect(setupResponse.status).toBe(201);
+          const setCookies = extractSetCookies(setupResponse);
+          expectCookiesSecure(setCookies, tc.expectSecure);
+
+          if ("verifySession" in tc && tc.verifySession) {
+            const meResponse = await app.fetch(
+              new Request("http://localhost:4310/v1/auth/me", {
+                headers: { Cookie: cookieHeaderFromSetCookies(setCookies) },
+              })
+            );
+
+            expect(meResponse.status).toBe(200);
+          }
+        });
+      } finally {
+        if (previousTrustProxy === undefined) {
+          delete process.env.NAKAMA_TRUST_PROXY;
+        } else {
+          process.env.NAKAMA_TRUST_PROXY = previousTrustProxy;
         }
-      });
+      }
     });
   }
 
@@ -337,16 +355,26 @@ describe("createHonoApp", () => {
 
   test("sends HSTS behind a TLS terminator", async () => {
     const app = createHonoApp(createServerOptions());
+    const previousTrustProxy = process.env.NAKAMA_TRUST_PROXY;
+    process.env.NAKAMA_TRUST_PROXY = "true";
 
-    const response = await app.fetch(
-      new Request("http://localhost:4310/health", {
-        headers: { "X-Forwarded-Proto": "https" },
-      })
-    );
+    try {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/health", {
+          headers: { "X-Forwarded-Proto": "https" },
+        })
+      );
 
-    expect(response.headers.get("Strict-Transport-Security")).toContain(
-      "max-age="
-    );
+      expect(response.headers.get("Strict-Transport-Security")).toContain(
+        "max-age="
+      );
+    } finally {
+      if (previousTrustProxy === undefined) {
+        delete process.env.NAKAMA_TRUST_PROXY;
+      } else {
+        process.env.NAKAMA_TRUST_PROXY = previousTrustProxy;
+      }
+    }
   });
 
   test("setup rejects a body that is not application/json", async () => {

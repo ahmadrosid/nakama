@@ -1,6 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { parseOptionalQueryEnum, readJson, readOptionalJson } from "./shared";
+import {
+  isSecureRequest,
+  parseOptionalQueryEnum,
+  readJson,
+  readOptionalJson,
+} from "./shared";
 
 const URL = "http://localhost:4310/test";
 
@@ -85,5 +90,47 @@ describe("parseOptionalQueryEnum", () => {
     expect(() =>
       parseOptionalQueryEnum("unknown", ["pending", "applied"])
     ).toThrow();
+  });
+});
+
+describe("isSecureRequest", () => {
+  const originalTrustProxy = process.env.NAKAMA_TRUST_PROXY;
+
+  afterEach(() => {
+    if (originalTrustProxy === undefined) {
+      delete process.env.NAKAMA_TRUST_PROXY;
+    } else {
+      process.env.NAKAMA_TRUST_PROXY = originalTrustProxy;
+    }
+  });
+
+  test("ignores x-forwarded-proto without NAKAMA_TRUST_PROXY", () => {
+    delete process.env.NAKAMA_TRUST_PROXY;
+
+    const request = new Request(URL, {
+      headers: { "x-forwarded-proto": "https" },
+    });
+
+    expect(isSecureRequest(request)).toBe(false);
+  });
+
+  test("trusts x-forwarded-proto with NAKAMA_TRUST_PROXY", () => {
+    process.env.NAKAMA_TRUST_PROXY = "true";
+
+    const request = new Request(URL, {
+      headers: { "x-forwarded-proto": "https" },
+    });
+
+    expect(isSecureRequest(request)).toBe(true);
+  });
+
+  test("never downgrades an https request URL", () => {
+    process.env.NAKAMA_TRUST_PROXY = "true";
+
+    const request = new Request("https://example.com/", {
+      headers: { "x-forwarded-proto": "http" },
+    });
+
+    expect(isSecureRequest(request)).toBe(true);
   });
 });
