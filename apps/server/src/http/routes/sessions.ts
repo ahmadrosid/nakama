@@ -198,7 +198,7 @@ export function registerSessionRoutes(
     .openapi("AcpSessionSettingRequest");
 
   const branchSessionResponseSchema = z
-    .object({ sessionId: z.string() })
+    .object({ channel: agentChannelSchema, sessionId: z.string() })
     .openapi("BranchSessionResponse");
 
   const updateSessionRequestSchema = z
