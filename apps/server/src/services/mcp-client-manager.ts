@@ -26,9 +26,18 @@ const CONNECT_TIMEOUT_MS = 30_000;
  * token only when `onprogress` is set.
  */
 const CALL_TOOL_OPTIONS: RequestOptions = {
+  // Progress resets the per-request timeout, so without a ceiling a server
+  // that keeps reporting progress holds the turn forever.
+  maxTotalTimeout: 30 * 60_000,
   onprogress: () => {},
   resetTimeoutOnProgress: true,
 };
+
+/** Past this, a tool result is replaced by a note instead of reaching the model. */
+const MAX_TOOL_RESULT_CHARS = 1_000_000;
+
+/** Nesting deeper than any real tool result; recursion past it is refused. */
+const MAX_JSON_DEPTH = 100;
 
 // Tool image limits, as pi's tool-result image pass: longest side and base64 size.
 const MODEL_IMAGE_MAX_SIDE = 2000;
@@ -36,6 +45,9 @@ const MODEL_IMAGE_MAX_SIDE = 2000;
 const MODEL_IMAGE_MAX_BASE64 = 4.5 * 1024 * 1024;
 
 const MODEL_IMAGE_JPEG_QUALITIES = [80, 85, 70, 55, 40];
+
+/** Larger images are not decoded at all: decoding is where the memory goes. */
+const MODEL_IMAGE_MAX_INPUT_BASE64 = 32 * 1024 * 1024;
 
 export type JsonValue =
   | boolean
@@ -263,20 +275,20 @@ export class McpClientManager {
     );
 
     if ("toolResult" in result) {
-      return parseJsonValue(result.toolResult);
+      return boundToolResult(parseJsonValue(result.toolResult));
     }
 
     if (result.isError) {
-      return {
+      return boundToolResult({
         error: formatToolContent(result.content),
-      };
+      });
     }
 
     if (result.structuredContent !== undefined) {
-      return parseJsonValue(result.structuredContent);
+      return boundToolResult(parseJsonValue(result.structuredContent));
     }
 
-    return await formatToolContentResult(result.content);
+    return boundToolResult(await formatToolContentResult(result.content));
   }
 
   async testConnection(
@@ -371,20 +383,20 @@ export class McpClientManager {
     );
 
     if ("toolResult" in result) {
-      return parseJsonValue(result.toolResult);
+      return boundToolResult(parseJsonValue(result.toolResult));
     }
 
     if (result.isError) {
-      return {
+      return boundToolResult({
         error: formatToolContent(result.content),
-      };
+      });
     }
 
     if (result.structuredContent !== undefined) {
-      return parseJsonValue(result.structuredContent);
+      return boundToolResult(parseJsonValue(result.structuredContent));
     }
 
-    return await formatToolContentResult(result.content);
+    return boundToolResult(await formatToolContentResult(result.content));
   }
 
   async disconnectHttpEndpoint(connectionKey: string): Promise<void> {
@@ -580,10 +592,28 @@ function parseJsonValue<T>(value: T): JsonValue {
   return value;
 }
 
+function boundToolResult(value: JsonValue): JsonValue {
+  // Fitted images are already capped by MODEL_IMAGE_MAX_BASE64 each.
+  const { images: _images, ...rest } =
+    value instanceof Object && !Array.isArray(value) ? value : { value };
+  const size = JSON.stringify(rest).length;
+
+  return size > MAX_TOOL_RESULT_CHARS
+    ? {
+        error: `MCP tool result was ${size} characters, over the ${MAX_TOOL_RESULT_CHARS} limit, and was dropped.`,
+      }
+    : value;
+}
+
 function isJsonValue<T>(
   value: T,
-  seen = new WeakSet<object>()
+  seen = new WeakSet<object>(),
+  depth = 0
 ): value is T & JsonValue {
+  if (depth > MAX_JSON_DEPTH) {
+    return false;
+  }
+
   if (value === null || value === true || value === false || isString(value)) {
     return true;
   }
@@ -601,7 +631,7 @@ function isJsonValue<T>(
     }
 
     seen.add(value);
-    const valid = value.every((entry) => isJsonValue(entry, seen));
+    const valid = value.every((entry) => isJsonValue(entry, seen, depth + 1));
     seen.delete(value);
 
     return valid;
@@ -618,7 +648,9 @@ function isJsonValue<T>(
   }
 
   seen.add(value);
-  const valid = Object.values(value).every((entry) => isJsonValue(entry, seen));
+  const valid = Object.values(value).every((entry) =>
+    isJsonValue(entry, seen, depth + 1)
+  );
   seen.delete(value);
 
   return valid;
@@ -654,10 +686,17 @@ async function formatToolContentResult(
       isString(part.data) &&
       isString(part.mimeType)
     ) {
-      const { note, ...image } = await fitImageForModel(
-        part.data,
-        part.mimeType
-      );
+      const fitted = await fitImageForModel(part.data, part.mimeType);
+
+      if (!fitted) {
+        const note = `[Image dropped: ${part.data.length} base64 characters could not be fitted under the model limit.]`;
+        parts.push({ text: note, type: "text" });
+        notes.push(note);
+
+        continue;
+      }
+
+      const { note, ...image } = fitted;
 
       images.push(image);
       parts.push({ mimeType: image.mediaType, type: "image" });
@@ -680,11 +719,18 @@ async function formatToolContentResult(
     : { content: parts, text };
 }
 
-/** Scale down and re-encode until the image fits; PNG first, then JPEG. */
+/**
+ * Scale down and re-encode until the image fits; PNG first, then JPEG.
+ * Returns null when the image cannot be brought under the limit.
+ */
 async function fitImageForModel(
   data: string,
   mimeType: string
-): Promise<ModelImage> {
+): Promise<ModelImage | null> {
+  if (data.length > MODEL_IMAGE_MAX_INPUT_BASE64) {
+    return null;
+  }
+
   try {
     const bytes = Buffer.from(data, "base64");
     const { height, width } = await new Bun.Image(bytes).metadata();
@@ -730,15 +776,17 @@ async function fitImageForModel(
       }
 
       if (targetWidth === 1 && targetHeight === 1) {
-        return { data, mediaType: mimeType };
+        return null;
       }
 
       targetWidth = Math.max(1, Math.floor(targetWidth * 0.75));
       targetHeight = Math.max(1, Math.floor(targetHeight * 0.75));
     }
   } catch {
-    // A format Bun cannot decode goes out as the tool sent it.
-    return { data, mediaType: mimeType };
+    // A format Bun cannot decode goes out as the tool sent it, if it fits.
+    return data.length < MODEL_IMAGE_MAX_BASE64
+      ? { data, mediaType: mimeType }
+      : null;
   }
 }
 
