@@ -12,6 +12,7 @@ import {
 import { join, relative, resolve, sep } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
+import { getManagedSecretWriter, resolveManagedSecret } from "./config";
 import {
   parseIni,
   readDirectoryOrEmpty,
@@ -421,12 +422,146 @@ export function resolveHandshakeOnSave<TId extends string | number>(
   return toHandshakeSecret(createPairingCodeSecret());
 }
 
+export type BotTokenSecretRef = { name: string; scope: string };
+
+/** Where a bot token lives in managed secrets once NAKAMA_SECRETS_KEY is set. */
+export function botTokenSecretRef(
+  platform: "telegram" | "discord",
+  scope: ChannelConfigScope
+): BotTokenSecretRef {
+  if (isChannelOwner(scope)) {
+    return { name: `${platform}-bot:${scope.profileId}`, scope: scope.orgId };
+  }
+
+  return { name: `${platform}-bot`, scope: scope ?? "global" };
+}
+
+/**
+ * Returns whether the token still belongs in config.ini. The server saves it
+ * encrypted when it has a key. A worker has no key, so it keeps a file that
+ * already lost its token that way, or the next pairing would write it back.
+ */
+async function storeBotToken(
+  secret: BotTokenSecretRef,
+  botToken: string,
+  configPath: string
+): Promise<boolean> {
+  const write = getManagedSecretWriter();
+
+  if (write) {
+    await write(secret.scope, secret.name, botToken);
+
+    return false;
+  }
+
+  const raw = await readTextOrNull(configPath);
+
+  return raw === null || Boolean(parseIni(raw).bot_token?.trim());
+}
+
+/**
+ * Moves every agent's plaintext bot_token into managed secrets, then drops it
+ * from config.ini. The file stays: it marks the connection. Legacy org-level
+ * files are left alone, since claiming one copies its token to the agent.
+ */
+export async function migrateChannelBotTokens(): Promise<void> {
+  const write = getManagedSecretWriter();
+
+  if (!write) {
+    return;
+  }
+
+  for (const platform of ["telegram", "discord"] as const) {
+    for (const owner of await listChannelOwners(platform)) {
+      const path = join(getChannelConfigDir(platform, owner), "config.ini");
+      const raw = await readTextOrNull(path);
+      const token = raw ? parseIni(raw).bot_token?.trim() : "";
+
+      if (!(raw && token)) {
+        continue;
+      }
+
+      const secret = botTokenSecretRef(platform, owner);
+      await write(secret.scope, secret.name, token);
+      await writeTextFile(
+        path,
+        raw
+          .split("\n")
+          .filter((line) => !/^\s*bot_token\s*=/.test(line))
+          .join("\n")
+      );
+    }
+  }
+}
+
+const readBotTokenInProcess = (secret: BotTokenSecretRef) =>
+  resolveManagedSecret(secret.scope, secret.name);
+
+let readBotToken = readBotTokenInProcess;
+
+const BotTokenResponseSchema = z.object({ token: z.string().nullable() });
+
+/**
+ * Worker side of the bot token: ask the server, which holds the key. Waits
+ * with backoff while the server is still starting. Pass null to read in
+ * process again.
+ */
+export function readBotTokensFromServer(
+  options: {
+    authToken?: string;
+    baseUrl: string;
+    fetch?: typeof fetch;
+    wait?: (ms: number) => Promise<void>;
+  } | null
+): void {
+  if (!options) {
+    readBotToken = readBotTokenInProcess;
+
+    return;
+  }
+
+  const fetchToken = options.fetch ?? fetch;
+  const wait = options.wait ?? sleep;
+
+  readBotToken = async ({ name, scope }) => {
+    const url = new URL("/v1/internal/channel-bot-token", options.baseUrl);
+    url.searchParams.set("scope", scope);
+    url.searchParams.set("name", name);
+
+    // 0.5s doubling to 10s, ten pauses: about 65s before giving up.
+    for (let attempt = 0; ; attempt += 1) {
+      const response = await fetchToken(url, {
+        headers: options.authToken
+          ? { Authorization: `Bearer ${options.authToken}` }
+          : {},
+      }).catch(() => null);
+
+      if (response?.ok) {
+        return BotTokenResponseSchema.parse(await response.json()).token;
+      }
+
+      if (response && response.status < 500) {
+        throw new Error(
+          `The server refused the bot token request (${response.status}).`
+        );
+      }
+
+      if (attempt === 10) {
+        throw new Error("The Nakama server did not answer for the bot token.");
+      }
+
+      await wait(Math.min(500 * 2 ** attempt, 10_000));
+    }
+  };
+}
+
 export async function loadBotChannelIniConfig<
   TId extends string | number,
 >(options: {
   configPath: string;
   defaultProfileId: string;
   parseUserIds: (raw: string) => TId[];
+  secret?: BotTokenSecretRef;
 }): Promise<BotChannelConfigFile<TId> | null> {
   const raw = await readTextOrNull(options.configPath);
 
@@ -435,7 +570,11 @@ export async function loadBotChannelIniConfig<
   }
 
   const values = parseIni(raw);
-  const botToken = values.bot_token?.trim() ?? "";
+
+  const botToken =
+    values.bot_token?.trim() ||
+    (options.secret ? ((await readBotToken(options.secret)) ?? "") : "");
+
   const profileId = values.profile_id?.trim() || options.defaultProfileId;
   const handshakeCode = values.handshake_code?.trim() || null;
   const handshakeExpiresAt = values.handshake_expires_at?.trim() || null;
@@ -463,12 +602,17 @@ export async function writeBotChannelIniConfig<
   configDir: string;
   configPath: string;
   label: string;
+  secret?: BotTokenSecretRef;
 }): Promise<void> {
-  const { config } = options;
+  const { config, secret } = options;
+
+  const keepTokenInFile = secret
+    ? await storeBotToken(secret, config.botToken, options.configPath)
+    : true;
 
   const lines = [
     `# Nakama ${options.label} bridge`,
-    `bot_token=${config.botToken}`,
+    ...(keepTokenInFile ? [`bot_token=${config.botToken}`] : []),
     `profile_id=${config.profileId}`,
     ...(config.handshakeCode
       ? [

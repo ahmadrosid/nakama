@@ -46,6 +46,25 @@ export function resolveManagedSecret(
   return managedSecretResolver(scope, name, envNames);
 }
 
+type ManagedSecretWriter = (
+  scope: string,
+  name: string,
+  value: string
+) => Promise<void>;
+
+let managedSecretWriter: ManagedSecretWriter | null = null;
+
+/** Set by the server when NAKAMA_SECRETS_KEY is configured; unset means plaintext. */
+export function setManagedSecretWriter(
+  writer: ManagedSecretWriter | null
+): void {
+  managedSecretWriter = writer;
+}
+
+export function getManagedSecretWriter(): ManagedSecretWriter | null {
+  return managedSecretWriter;
+}
+
 export interface AppConfig {
   databaseUrl: string;
 }

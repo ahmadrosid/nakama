@@ -36,6 +36,7 @@ import {
 import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { registerGoogleMeetRoutes } from "./routes/google-meet";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
+import { registerInternalChannelTokenRoutes } from "./routes/internal-channel-tokens";
 import { registerInternalCuratorRoutes } from "./routes/internal-curator";
 import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
 import { registerModelRoutes } from "./routes/models";
@@ -418,6 +419,7 @@ export function createHonoApp(options: ServerOptions) {
 
   app.use("*", createAuthMiddleware(options));
   registerInternalAutomationRoutes(app, options);
+  registerInternalChannelTokenRoutes(app);
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
   registerAcpMcpRoutes(app);

@@ -46,8 +46,10 @@ import {
   loadConfig,
   NAKAMA_API_VERSION,
   setManagedSecretResolver,
+  setManagedSecretWriter,
   writeRuntimeServerUrl,
 } from "@nakama/core";
+import { migrateChannelBotTokens } from "@nakama/core/channel-config-shared";
 import {
   createDatabase,
   type Database,
@@ -179,6 +181,14 @@ let managedSecrets: ManagedSecrets;
 try {
   managedSecrets = new ManagedSecrets(database.adapter);
   await managedSecrets.migrateLegacyFiles();
+
+  if (process.env.NAKAMA_SECRETS_KEY) {
+    const secrets = managedSecrets;
+    setManagedSecretWriter((scope, name, value) =>
+      secrets.save(scope, name, value)
+    );
+    await migrateChannelBotTokens();
+  }
 } catch (error) {
   // Saved keys stay in config.ini until the migration succeeds, so print the
   // fix instead of a stack trace and let the operator restart.
