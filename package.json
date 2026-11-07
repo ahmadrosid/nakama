@@ -42,7 +42,10 @@
   },
   "overrides": {
     "@peculiar/asn1-schema": "2.9.5",
-    "libsignal": "6.0.0"
+    "js-yaml": "4.3.2",
+    "libsignal": "6.0.0",
+    "nodemailer": "10.1.4",
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
