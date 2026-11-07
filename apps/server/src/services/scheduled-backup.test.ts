@@ -7,6 +7,7 @@ import {
   realpath,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -243,6 +244,59 @@ describe("scheduled backups", () => {
       // Only the failed cleanup is logged: no failed run, no record attempt
       expect(errors).toHaveBeenCalledTimes(1);
       expect(await readdir(dir)).toHaveLength(2);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  test("a written backup is not reported as failed when old backups cannot be removed", async () => {
+    const dir = await tempDir();
+    const old = new Date("2000-01-01T00:00:00Z");
+
+    // Seven old "backups" that are folders: unlink refuses them, so rotation fails
+    for (let day = 1; day <= 7; day += 1) {
+      const path = join(dir, `nakama-2000-01-0${day}T000000Z.zip.enc`);
+      await mkdir(path);
+      await utimes(path, old, old);
+    }
+
+    await writeFile(
+      join(dir, "scheduled-backup-error.json"),
+      JSON.stringify({ at: old.toISOString(), message: "old failure" })
+    );
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await runOnce(dir, async () => Buffer.from("zip"));
+
+      expect(await readBackupError(dir)).toBeNull();
+      expect(errors).toHaveBeenCalledTimes(1);
+      expect(await readdir(dir)).toHaveLength(8);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  test("a failure it cannot write to disk still replaces the old record", async () => {
+    const dir = await tempDir();
+    const file = join(dir, "scheduled-backup-error.json");
+
+    await writeFile(
+      file,
+      JSON.stringify({ at: new Date().toISOString(), message: "old failure" })
+    );
+    // A folder with content where the temp record goes: the record write fails
+    await mkdir(join(`${file}.tmp`, "x"), { recursive: true });
+
+    const blocked = new NakamaApiError("disk is full", 409);
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await runOnce(dir, () => Promise.reject(blocked));
+      expect((await readBackupError(dir))?.message).toBe(blocked.message);
+
+      await runOnce(dir, async () => Buffer.from("zip"));
+      expect(await readBackupError(dir)).toBeNull();
     } finally {
       errors.mockRestore();
     }

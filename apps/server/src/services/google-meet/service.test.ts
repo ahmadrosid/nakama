@@ -231,7 +231,10 @@ test("queued capture blocks snapshots and disabling invalidates its token", asyn
   expect(
     (await fetch(address.replace(capture.capture.token, "invalid"))).status
   ).toBe(401);
-  await expect(service.withSnapshot(async () => true)).rejects.toThrow();
+  // A 409, so a scheduled backup keeps this reason for Settings
+  await expect(service.withSnapshot(async () => true)).rejects.toEqual(
+    expect.objectContaining({ status: 409 })
+  );
   await service.invoke("a", "configure", { enabled: false }, admin);
   expect((await fetch(address)).status).toBe(401);
   expect(await service.withSnapshot(async () => true)).toBe(true);
