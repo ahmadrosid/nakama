@@ -15,6 +15,9 @@
     "screenshots:self-improving-skills": "./scripts/capture-self-improving-skills-screenshots.sh",
     "screenshots:telegram": "./scripts/capture-telegram-screenshots.sh"
   },
+  "overrides": {
+    "compression": "1.8.2"
+  },
   "dependencies": {
     "fumadocs-core": "^16.17.10",
     "fumadocs-mdx": "^15.4.10",
