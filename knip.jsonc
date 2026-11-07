@@ -15,6 +15,8 @@
     },
     "apps/desktop": {
       "entry": ["preload.cjs", "tests/smoke.mjs"],
+      // Build output of the desktop runtime bundle.
+      "ignore": ["dist/**"],
       // PowerShell 7 is supplied by the Windows build host.
       "ignoreBinaries": ["pwsh"],
       "project": ["*.mjs", "*.cjs", "tests/*.mjs", "scripts/*.mjs"]
