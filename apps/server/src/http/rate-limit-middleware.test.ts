@@ -134,6 +134,25 @@ describe("createRateLimitMiddleware", () => {
     ).toBe(200);
   });
 
+  test("a client-supplied first hop does not buy a fresh budget", async () => {
+    const app = buildApp({ max: 1, trustProxy: true });
+
+    expect(
+      (
+        await call(app, "/v1/anything", "10.0.0.1", {
+          "x-forwarded-for": "198.51.100.1, 203.0.113.9",
+        })
+      ).status
+    ).toBe(200);
+    expect(
+      (
+        await call(app, "/v1/anything", "10.0.0.1", {
+          "x-forwarded-for": "198.51.100.2, 203.0.113.9",
+        })
+      ).status
+    ).toBe(429);
+  });
+
   test("lets the request through when no address can be resolved", async () => {
     const app = buildApp({ max: 1 });
 

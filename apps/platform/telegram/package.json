@@ -9,6 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@grammyjs/runner": "2.0.3",
     "@nakama/client": "workspace:*",
     "@nakama/core": "workspace:*",
     "grammy": "^1.46.0"

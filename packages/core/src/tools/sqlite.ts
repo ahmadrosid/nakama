@@ -66,7 +66,14 @@ function toJsonSqliteValue(
 interface SqliteRowsResult {
   columns: string[];
   rows: SqliteRow[];
+  /** More rows matched than the row or size limit lets through. */
+  truncated?: boolean;
 }
+
+/** One tool call must not be able to pull a whole table into server memory. */
+const MAX_RESULT_ROWS = 1000;
+
+const MAX_RESULT_CHARS = 1_000_000;
 
 interface SqliteRunResult {
   changes: number;
@@ -126,10 +133,24 @@ export async function runSqliteTool(
     const statement = db.query(sql);
 
     if (isRowsStatement(sql)) {
-      // SAFETY: SQLite query rows contain only SQLite cell values under this statement API.
-      const rows = (
-        params.length > 0 ? statement.all(...params) : statement.all()
-      ) as SqliteRow[];
+      const rows: SqliteRow[] = [];
+      let chars = 0;
+
+      for (const row of statement.iterate(...params)) {
+        // SAFETY: SQLite query rows contain only SQLite cell values under this statement API.
+        const cells = row as SqliteRow;
+        chars += JSON.stringify(cells, (_key, value) => {
+          const integer = z.bigint().safeParse(value);
+
+          return integer.success ? integer.data.toString() : value;
+        }).length;
+
+        if (rows.length >= MAX_RESULT_ROWS || chars > MAX_RESULT_CHARS) {
+          return { columns: statement.columnNames, rows, truncated: true };
+        }
+
+        rows.push(cells);
+      }
 
       return { columns: statement.columnNames, rows };
     }

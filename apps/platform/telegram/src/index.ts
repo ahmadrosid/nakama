@@ -6,6 +6,7 @@ import {
   log,
 } from "@nakama/core";
 import { hasActiveStreams } from "@nakama/core/channel-active-stream";
+import { readBotTokensFromServer } from "@nakama/core/channel-config-shared";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import {
@@ -26,7 +27,7 @@ void installErrorTrackingSink();
 
 type StartedIdentity = {
   clearHeartbeat: () => Promise<void>;
-  stop: () => void;
+  stop: () => Promise<void>;
   writeHeartbeat: () => Promise<void>;
 };
 
@@ -49,6 +50,15 @@ registerCleanupHandlers(async () => {
 });
 
 try {
+  const authToken =
+    (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined;
+
+  // The token is encrypted on disk; the server reads it for us.
+  const tokenClient = new NakamaClient({ authToken });
+  readBotTokensFromServer((secret) =>
+    tokenClient.getChannelBotToken(secret.scope, secret.name)
+  );
+
   const identities = await loadTelegramIdentities();
 
   const { serverUrl, spawnedChild: child } = await ensureServerRunning({
@@ -56,9 +66,6 @@ try {
   });
 
   spawnedChild = child;
-
-  const authToken =
-    (await loadLocalAuthToken("telegram@nakama.internal")) ?? undefined;
 
   const probe = new NakamaClient({
     authToken,
@@ -180,7 +187,7 @@ async function startIdentity(
   const authStore = new TelegramAuthStore(config.owner ?? config.orgId ?? null);
   await authStore.reload();
 
-  const bot = await createBot(config, {
+  const { bot, start } = await createBot(config, {
     authStore,
     client,
     orgStore,
@@ -190,26 +197,29 @@ async function startIdentity(
   const writeHeartbeat = () =>
     heartbeat.write({ pid: process.pid, updatedAt: new Date().toISOString() });
 
+  try {
+    await writeHeartbeat();
+  } catch (error) {
+    await heartbeat.clear();
+    throw error;
+  }
+
+  const polling = start();
+
   started.push({
     clearHeartbeat: heartbeat.clear,
-    stop: () => bot.stop(),
+    stop: polling.stop,
     writeHeartbeat,
   });
-
-  await writeHeartbeat();
 
   const authConfig = authStore.getConfig();
   console.log(
     `${label}: profile ${config.profileId} · paired ${authConfig?.pairedUserIds.length ?? 0} · pending handshake ${authConfig?.handshakeCode ? "yes" : "no"}`
   );
 
-  return {
-    running: bot.start({
-      onStart: (info) => {
-        console.log(`Bot @${info.username} is listening for ${label}.`);
-      },
-    }),
-  };
+  console.log(`Bot @${bot.botInfo.username} is listening for ${label}.`);
+
+  return { running: polling.running };
 }
 
 async function stopAll(): Promise<void> {
@@ -219,10 +229,12 @@ async function stopAll(): Promise<void> {
   }
 
   await Promise.all(
-    started.map((identity) => {
-      identity.stop();
-
-      return identity.clearHeartbeat();
+    started.map(async (identity) => {
+      try {
+        await identity.stop();
+      } finally {
+        await identity.clearHeartbeat();
+      }
     })
   );
 }

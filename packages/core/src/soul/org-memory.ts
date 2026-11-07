@@ -6,7 +6,18 @@
  * testable and lets the service layer own all filesystem access.
  */
 
-import { type MemorySection, trimTrailingNewlines } from "./memory-archive";
+import type { MemorySection } from "./memory-archive";
+
+/** Drop trailing newlines with a scan; `/\n+$/` is quadratic on long newline runs. */
+export function trimTrailingNewlines(text: string): string {
+  let end = text.length;
+
+  while (end > 0 && text[end - 1] === "\n") {
+    end--;
+  }
+
+  return text.slice(0, end);
+}
 
 export const ORG_MEMORY_HEADER = "## Org Memory";
 

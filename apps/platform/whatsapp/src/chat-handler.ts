@@ -106,6 +106,14 @@ export interface ChatHandlerDeps {
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
+  // Each message owns its API client. The lock is per chat, so two chats run
+  // at once, and a shared client's setOrgId would send one chat's requests to
+  // the other chat's org.
+  return (data: Parameters<ReturnType<typeof createScopedChatHandler>>[0]) =>
+    createScopedChatHandler({ ...deps, client: deps.client.forOrg() })(data);
+}
+
+function createScopedChatHandler(deps: ChatHandlerDeps) {
   const {
     client,
     config,

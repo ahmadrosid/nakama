@@ -13,6 +13,20 @@ export function isSecretEnvKey(key: string): boolean {
   );
 }
 
+/**
+ * Nakama's own credentials, by name shape, plus the secrets above. Bash,
+ * coding agents and CLI installs never need them. Channel workers do, which
+ * is why `isSecretEnvKey` stays the narrower list.
+ */
+export function isToolHiddenEnvKey(key: string): boolean {
+  return (
+    isSecretEnvKey(key) ||
+    key === "TELEGRAM_MANAGER_WEBHOOK_SECRET" ||
+    (key.startsWith("NAKAMA_") &&
+      /_(?:TOKEN|SECRET|PASSWORD|PASSWORD_HASH)(?:_FILE)?$/.test(key))
+  );
+}
+
 /** Mask all but the last 4 characters; empty → null; short → full bullets. */
 export function maskTrailingSecret(secret: string): string | null {
   const trimmed = secret.trim();
