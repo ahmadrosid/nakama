@@ -2426,3 +2426,112 @@ test("owned connection discards foreign hot sessions and never switches or falls
     expect(calls.createSession).toBe(1);
   });
 });
+
+describe("concurrent chats in different orgs", () => {
+  test("a chat's session is created in its own org while another chat switches org", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [1001, 1002],
+      });
+
+      const { client, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        { orgs: createMultiTestOrgs() }
+      );
+
+      await handler(
+        createMessageContext({ chatId: 1001, text: "1", userId: 1001 }).ctx
+      );
+      await handler(
+        createMessageContext({ chatId: 1002, text: "2", userId: 1002 }).ctx
+      );
+
+      // Each client scope tracks its own org, and the shared base does too,
+      // so the test sees which org a createSession would have sent.
+      const sessionOrgs: Array<string | null> = [];
+      const base = client as unknown as Record<string, unknown>;
+      let baseOrg: string | null = null;
+      const baseSetOrgId = base.setOrgId as (orgId: string | null) => void;
+      const baseCreateSession = base.createSession as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      const baseListProfiles = base.listProfiles as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+
+      let releaseFirst: () => void = () => {};
+      const firstWaits = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let listCalls = 0;
+      let orgSets = 0;
+
+      const track = (
+        target: Record<string, unknown>,
+        getOrg: () => string | null,
+        setOrg: (orgId: string | null) => void
+      ) => {
+        target.setOrgId = (orgId: string | null) => {
+          setOrg(orgId);
+          baseSetOrgId(orgId);
+          orgSets += 1;
+
+          if (orgSets === 2) {
+            releaseFirst();
+          }
+        };
+        target.createSession = (...args: unknown[]) => {
+          sessionOrgs.push(getOrg());
+
+          return baseCreateSession(...args);
+        };
+      };
+
+      track(
+        base,
+        () => baseOrg,
+        (orgId) => {
+          baseOrg = orgId;
+        }
+      );
+      base.listProfiles = async (...args: unknown[]) => {
+        listCalls += 1;
+
+        // The first chat waits here until the second chat has set its org.
+        if (listCalls === 1) {
+          await firstWaits;
+        }
+
+        return baseListProfiles(...args);
+      };
+      base.forOrg = () => {
+        const scoped = Object.create(base) as Record<string, unknown>;
+        let scopedOrg: string | null = baseOrg;
+        track(
+          scoped,
+          () => scopedOrg,
+          (orgId) => {
+            scopedOrg = orgId;
+          }
+        );
+
+        return scoped;
+      };
+
+      await Promise.all([
+        handler(
+          createMessageContext({ chatId: 1001, text: "hello", userId: 1001 })
+            .ctx
+        ),
+        handler(
+          createMessageContext({ chatId: 1002, text: "hello", userId: 1002 })
+            .ctx
+        ),
+      ]);
+
+      expect(sessionOrgs.toSorted()).toEqual(["org_a", "org_b"]);
+    });
+  });
+});

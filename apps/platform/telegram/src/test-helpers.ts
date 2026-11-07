@@ -330,6 +330,7 @@ export function createMockClient(
 
       return session;
     },
+    forOrg: () => client,
     getModels: async () => ({
       currentProviderId: null,
       displayName: null,

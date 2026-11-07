@@ -1570,7 +1570,14 @@ describe("createChatHandler artifact delivery", () => {
       let pinnedOrg: string | null = null;
       let reads = 0;
       const readContent = ctx.client.readProfileArtifactContent;
+      const messageClient = ctx.client;
       ctx.client.forOrg = (orgId) => {
+        // The handler scopes each message with forOrg() first; only the
+        // delivery pins an explicit org.
+        if (orgId === undefined) {
+          return messageClient;
+        }
+
         pinnedOrg = orgId;
 
         // SAFETY: This client override only replaces the method used by the test.
