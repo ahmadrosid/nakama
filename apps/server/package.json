@@ -9,7 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "0.88.0",
+    "@agentclientprotocol/claude-agent-acp": "0.100.0",
     "@agentclientprotocol/codex-acp": "2.1.1",
     "@agentclientprotocol/sdk": "2.0.2",
     "@anthropic-ai/sdk": "^0.135.0",
@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@types/pacote": "^11.1.8",
-    "@types/yauzl": "2.10.3",
+    "@types/yauzl": "3.4.0",
     "msw": "^2.15.0"
   }
 }
