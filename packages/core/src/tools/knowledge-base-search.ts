@@ -573,7 +573,7 @@ async function runLexicalSearchTargets(
 
         return {
           matches: rows.slice(0, parsed.maxResults).flatMap((row) => {
-            const snippet = extractSnippet(row.marked, 16_000);
+            const { snippet } = row;
 
             return scopeSearchMatch(collection.target, {
               file:
@@ -695,13 +695,18 @@ const HIGHLIGHT_OPEN = "\u0002";
 
 const HIGHLIGHT_CLOSE = "\u0003";
 
+/**
+ * `highlight()` returns the whole document per hit, so each row is reduced to
+ * its snippet before the next one is read. Collecting the rows first held
+ * every matching document in memory at once.
+ */
 function queryCollection(
   db: Database,
   collection: IndexedCollection,
   ftsQuery: string,
   limit: number
-): RankedRow[] {
-  return db
+): Array<{ path: string; snippet: SnippetResult }> {
+  const rows = db
     .query<RankedRow, [string, string, string, string, string, number]>(
       `SELECT d.path AS path, highlight(docs_fts, 0, ?, ?) AS marked
        FROM docs_fts
@@ -712,7 +717,7 @@ function queryCollection(
        ORDER BY bm25(docs_fts)
        LIMIT ?`
     )
-    .all(
+    .iterate(
       HIGHLIGHT_OPEN,
       HIGHLIGHT_CLOSE,
       ftsQuery,
@@ -720,6 +725,11 @@ function queryCollection(
       JSON.stringify(collection.paths),
       limit
     );
+
+  return Array.from(rows, (row) => ({
+    path: row.path,
+    snippet: extractSnippet(row.marked, 16_000),
+  }));
 }
 
 type FtsOperator = "AND" | "OR";
