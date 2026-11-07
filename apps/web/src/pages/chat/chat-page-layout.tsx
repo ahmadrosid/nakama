@@ -133,7 +133,7 @@ function rippleWave(
   return wave;
 }
 
-function ChatDitherBackground() {
+export function ChatDitherBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
