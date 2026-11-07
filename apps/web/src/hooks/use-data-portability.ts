@@ -4,12 +4,11 @@ import { client } from "@/lib/client";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
-/** Read once when Settings opens; a scheduled backup runs at most once a day. */
+/** Read each time Settings opens, so a cleared or new failure shows. */
 export function useBackupStatusQuery() {
   return useQuery({
     queryFn: () => client.getBackupStatus(),
     queryKey: queryKeys.backupStatus,
-    staleTime: Number.POSITIVE_INFINITY,
   });
 }
 
