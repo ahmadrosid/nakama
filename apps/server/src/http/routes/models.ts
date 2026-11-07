@@ -1885,8 +1885,16 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/models/discover", async (c) => {
-    requireOrgAdminOrPlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const body = await readJson(c.req.raw, discoverModelsRequestSchema);
+
+    // Saving a provider is platform-admin-only, and a caller-chosen base URL is
+    // the same outbound authority. Org admins keep providerId discovery, which
+    // fetches a stored URL.
+    if (body.baseUrl?.trim() && !auth.isPlatformAdmin) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+
     const result = await agent.discoverModels(body);
 
     return json<ModelsResponse>(result);
