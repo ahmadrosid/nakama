@@ -6,17 +6,18 @@ import {
   log,
 } from "@nakama/core";
 import { hasActiveStreams } from "@nakama/core/channel-active-stream";
-import { channelOwnerFromEnv } from "@nakama/core/channel-config-shared";
+import {
+  channelOwnerFromEnv,
+  readBotTokensFromServer,
+} from "@nakama/core/channel-config-shared";
 import { ChannelOrgStore } from "@nakama/core/channel-org";
 import { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { getDiscordConfigDir } from "@nakama/core/discord-config";
 import { createDiscordWorkerHeartbeat } from "@nakama/core/discord-worker";
-
 import {
   ensureServerRunning,
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
-import { readBotTokensFromServer } from "@nakama/core/channel-config-shared";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { DiscordAuthStore } from "./auth-store";
