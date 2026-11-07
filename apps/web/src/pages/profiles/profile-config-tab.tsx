@@ -514,7 +514,7 @@ function ProfileFooterActions({
           },
         ]
       : []),
-    ...(showAdmin && !state.detail?.sharedAgent
+    ...(showAdmin && !(state.detail?.sharedAgent || state.detail?.isSuper)
       ? [
           ...(showMove
             ? [
