@@ -3118,7 +3118,7 @@ test.each([
   }
 );
 
-test("Super Nakama hides Move agent and Duplicate", async () => {
+test("Super Nakama hides Move agent, Duplicate and Delete agent", async () => {
   const { container, render, profile, queries } = observeProfileActions(false);
   const superProfile = { ...profile, isSuper: true };
 
@@ -3133,6 +3133,7 @@ test("Super Nakama hides Move agent and Duplicate", async () => {
 
   expect(labels).not.toContain("Duplicate");
   expect(labels).not.toContain("Move agent");
+  expect(labels).not.toContain("Delete agent");
 });
 
 for (const action of ["Duplicate", "Move agent"] as const) {

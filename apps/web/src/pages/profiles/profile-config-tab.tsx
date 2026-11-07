@@ -534,7 +534,7 @@ function ProfileFooterActions({
           },
         ]
       : []),
-    ...(showAdmin
+    ...(showAdmin && !state.detail?.isSuper
       ? [
           {
             destructive: true,
@@ -546,6 +546,10 @@ function ProfileFooterActions({
         ]
       : []),
   ];
+
+  if (actions.length === 0) {
+    return null;
+  }
 
   const regular = actions.filter((action) => !action.destructive);
   const destructive = actions.filter((action) => action.destructive);
