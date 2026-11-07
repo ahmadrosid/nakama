@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import {
   assertChannelPath,
+  botTokenSecretRef,
   type ChannelConfigScope,
   claimChannelIdentity,
   createPairingCodeSecret,
@@ -10,7 +11,6 @@ import {
   isBotChannelUserAuthorized,
   isChannelOwner,
   listChannelOwners,
-  botTokenSecretRef,
   loadBotChannelIniConfig,
   maskBotToken,
   releaseChannelClaims,

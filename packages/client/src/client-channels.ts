@@ -53,7 +53,10 @@ export class ChannelsClient extends AutomationsClient {
   }
 
   /** Workers only: the server decrypts the bot token for the local token holder. */
-  async getChannelBotToken(scope: string, name: string): Promise<string | null> {
+  async getChannelBotToken(
+    scope: string,
+    name: string
+  ): Promise<string | null> {
     const response = await this.request<{ token: string | null }>(
       `/v1/internal/channel-bot-token?scope=${encodeURIComponent(scope)}&name=${encodeURIComponent(name)}`,
       // A server that takes the socket and stalls must not wedge the worker.

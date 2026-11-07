@@ -510,7 +510,10 @@ export class WorkerManagerService {
       try {
         await moveBotTokenToSecrets(platform, owner);
       } catch (error) {
-        console.warn(`The claimed ${platform} bot token stays in config.ini`, error);
+        console.warn(
+          `The claimed ${platform} bot token stays in config.ini`,
+          error
+        );
       }
     }
 
