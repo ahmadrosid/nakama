@@ -43,6 +43,10 @@ export class NakamaAuthExpiredError extends NakamaApiError {
   }
 }
 
+/** What members see when the model connection drops mid-turn. */
+export const MODEL_CONNECTION_CLOSED_MESSAGE =
+  "The model connection closed before the reply finished. Try again.";
+
 /** A provider stream broke after it started. One more try can work. */
 export class ProviderStreamInterruptedError extends NakamaApiError {
   constructor(message: string) {

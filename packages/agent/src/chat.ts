@@ -19,6 +19,7 @@ import type {
 } from "@nakama/core";
 import {
   createId,
+  MODEL_CONNECTION_CLOSED_MESSAGE,
   NakamaApiError,
   ProviderStreamInterruptedError,
 } from "@nakama/core";
@@ -925,6 +926,18 @@ async function runConversation(
         continue;
       }
 
+      // A dropped connection reaches the user in plain words, on every
+      // surface; the runtime's text stays on `cause` for the logs.
+      if (
+        error instanceof ProviderStreamInterruptedError ||
+        isTransientConnectionError(error)
+      ) {
+        throw Object.assign(
+          new ProviderStreamInterruptedError(MODEL_CONNECTION_CLOSED_MESSAGE),
+          { cause: error }
+        );
+      }
+
       throw error;
     } finally {
       // The hold covers one provider call. Usage is on the ledger by now if the
@@ -1462,8 +1475,11 @@ async function generateReply(
         (content || thinking || pendingToolInputs.size > 0) &&
         isTransientConnectionError(error) &&
         !(error instanceof ProviderStreamInterruptedError)
-          ? new ProviderStreamInterruptedError(
-              error instanceof Error ? error.message : String(error)
+          ? Object.assign(
+              new ProviderStreamInterruptedError(
+                MODEL_CONNECTION_CLOSED_MESSAGE
+              ),
+              { cause: error }
             )
           : error;
 
