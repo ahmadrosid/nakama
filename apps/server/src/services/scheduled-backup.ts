@@ -33,6 +33,9 @@ const ERROR_FILE = "scheduled-backup-error.json";
 // A record is one short message; anything bigger is not ours.
 const MAX_ERROR_FILE_BYTES = 16 * 1024;
 
+// Fits MAX_ERROR_FILE_BYTES even when JSON escapes each character to 6 bytes.
+const MAX_ERROR_MESSAGE_CHARS = 2000;
+
 const backupErrorSchema = z.object({
   at: z.iso.datetime(),
   message: z.string(),
@@ -60,7 +63,7 @@ export async function readBackupError(
   try {
     info = await lstat(path);
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    if (isMissing(error)) {
       return null;
     }
 
@@ -77,11 +80,23 @@ export async function readBackupError(
     );
   }
 
-  const parsed = backupErrorSchema.safeParse(
-    await readFile(path, "utf8")
-      .then(JSON.parse)
-      .catch(() => null)
-  );
+  let raw: string;
+
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (error) {
+    // A good backup removed it after the lstat
+    if (isMissing(error)) {
+      return null;
+    }
+
+    throw new NakamaApiError(
+      `Cannot read ${ERROR_FILE}: ${describe(error)}`,
+      500
+    );
+  }
+
+  const parsed = backupErrorSchema.safeParse(parseJsonOrNull(raw));
 
   if (!parsed.success) {
     throw new NakamaApiError(
@@ -391,7 +406,7 @@ export async function startScheduledBackups(options: {
       // Only a NakamaApiError is written for an admin; other details stay in the log.
       const message =
         error instanceof NakamaApiError
-          ? error.message
+          ? error.message.slice(0, MAX_ERROR_MESSAGE_CHARS)
           : "The scheduled backup failed. The server log has the details.";
 
       const record = { at: new Date().toISOString(), message };
@@ -411,11 +426,16 @@ export async function startScheduledBackups(options: {
 
   const schedule = (delay: number) => {
     timer = setTimeout(() => {
-      running = run().then(() => {
-        if (!stopped) {
-          schedule(DAY_MS);
-        }
-      });
+      // A run that throws must not stop the daily schedule
+      running = run()
+        .catch((error) => {
+          console.error("Nakama backup run failed:", error);
+        })
+        .then(() => {
+          if (!stopped) {
+            schedule(DAY_MS);
+          }
+        });
     }, delay);
     timer.unref();
   };
@@ -427,6 +447,19 @@ export async function startScheduledBackups(options: {
     clearTimeout(timer);
     await running;
   };
+}
+
+/** Null for text that is not JSON, so the schema check rejects it. */
+function parseJsonOrNull(raw: string) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function isMissing<T>(error: T): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 function describe<T>(error: T): string {

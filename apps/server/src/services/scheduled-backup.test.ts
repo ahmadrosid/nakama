@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { randomBytes } from "node:crypto";
+import * as fsPromises from "node:fs/promises";
 import {
   mkdir,
   mkdtemp,
@@ -292,7 +293,7 @@ describe("scheduled backups", () => {
     const errors = spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      await runOnce(dir, async () => Buffer.from("zip"));
+      await runOnce(dir, () => makeExportFile("zip"));
 
       expect(await readBackupError(dir)).toBeNull();
       expect(errors).toHaveBeenCalledTimes(1);
@@ -320,7 +321,7 @@ describe("scheduled backups", () => {
       await runOnce(dir, () => Promise.reject(blocked));
       expect((await readBackupError(dir))?.message).toBe(blocked.message);
 
-      await runOnce(dir, async () => Buffer.from("zip"));
+      await runOnce(dir, () => makeExportFile("zip"));
       expect(await readBackupError(dir)).toBeNull();
     } finally {
       errors.mockRestore();
@@ -398,6 +399,66 @@ describe("scheduled backups", () => {
     );
     await symlink(target, file);
     await expect(readBackupError(dir)).rejects.toEqual(unreadable);
+  });
+
+  test("a record removed between the checks reads as no failure; other read errors still fail", async () => {
+    const dir = await tempDir();
+    const file = join(dir, "scheduled-backup-error.json");
+
+    await writeFile(
+      file,
+      JSON.stringify({ at: new Date().toISOString(), message: "x" })
+    );
+
+    const realReadFile = fsPromises.readFile;
+    let code = "ENOENT";
+
+    const readMock = spyOn(fsPromises, "readFile").mockImplementation(
+      // SAFETY: the wrapper forwards its arguments to the real readFile unchanged.
+      (async (...args: Parameters<typeof realReadFile>) => {
+        if (args[0] === file) {
+          throw Object.assign(new Error("read failed"), { code });
+        }
+
+        return await realReadFile(...args);
+      }) as typeof realReadFile
+    );
+
+    try {
+      expect(await readBackupError(dir)).toBeNull();
+
+      code = "EACCES";
+      await expect(readBackupError(dir)).rejects.toEqual(
+        expect.objectContaining({ status: 500 })
+      );
+    } finally {
+      readMock.mockRestore();
+    }
+  });
+
+  test("a long failure message is cut so the record stays readable", async () => {
+    const dir = await tempDir();
+
+    await runOnce(dir, () =>
+      Promise.reject(new NakamaApiError("x".repeat(20_000), 413))
+    );
+
+    const record = await readBackupError(dir);
+    expect(record?.message.length).toBeGreaterThan(0);
+    expect(record?.message.length).toBeLessThan(20_000);
+  });
+
+  test("a run that throws does not make stop reject", async () => {
+    const dir = await tempDir();
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      // String() cannot convert this, so describe throws inside the catch
+      await runOnce(dir, () => Promise.reject(Object.create(null)));
+      expect(errors).toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
 
