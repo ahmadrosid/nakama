@@ -37,6 +37,12 @@ import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { registerGoogleMeetRoutes } from "./routes/google-meet";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerInternalCuratorRoutes } from "./routes/internal-curator";
+import {
+  registerComputerRoutes,
+  registerLlmRoutes,
+  registerNakamaCloudSignInRoutes,
+} from "./routes/llm";
+import { DESKTOP_CHAT_BODY_LIMIT_BYTES } from "./routes/llm-request-safety";
 import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
 import { registerModelRoutes } from "./routes/models";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
@@ -344,6 +350,13 @@ export function createHonoApp(options: ServerOptions) {
     onError: rejectOversizedBody,
   });
 
+  // Nakama Desktop sends the whole chat, with images inline, on each call.
+  // llm.ts also caps how many such bodies are held at once.
+  const desktopChatBodyLimit = bodyLimit({
+    maxSize: DESKTOP_CHAT_BODY_LIMIT_BYTES,
+    onError: rejectOversizedBody,
+  });
+
   app.use("*", (c, next) => {
     if (STREAMING_BODY_ROUTES.has(c.req.path)) {
       return next();
@@ -356,6 +369,10 @@ export function createHonoApp(options: ServerOptions) {
       )
     ) {
       return knowledgeBodyLimit(c, next);
+    }
+
+    if (c.req.method === "POST" && c.req.path === "/v1/llm/chat") {
+      return desktopChatBodyLimit(c, next);
     }
 
     const limit = LARGE_BODY_ROUTES.has(c.req.path)
@@ -421,6 +438,22 @@ export function createHonoApp(options: ServerOptions) {
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
   registerAcpMcpRoutes(app);
+
+  registerLlmRoutes(app, options);
+
+  // This computer's own Cloud sign-in: it runs before setup, when the
+  // desktop has no org yet, so it is not behind the org check. It changes
+  // the default provider, so it is audited like other provider changes.
+  if (options.databaseAdapter) {
+    const auditLog = createAuditLogMiddleware(options.databaseAdapter);
+
+    app.use("*", (c, next) =>
+      c.req.path.startsWith("/v1/nakama-cloud") ? auditLog(c, next) : next()
+    );
+  }
+
+  registerNakamaCloudSignInRoutes(app, options);
+
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));
@@ -437,6 +470,7 @@ export function createHonoApp(options: ServerOptions) {
   registerModelRoutes(app, options);
   registerTeamsRoutes(app, options);
   registerUserContextRoutes(app, options);
+  registerComputerRoutes(app, options);
   registerSessionRoutes(app, options);
   registerProfileRoutes(app, options);
   registerProfilePortabilityRoutes(app, options);

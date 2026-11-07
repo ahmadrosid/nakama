@@ -82,7 +82,8 @@ export function parseProviderName(
     normalized === "meta" ||
     normalized === "qwen" ||
     normalized === "qwen_cn" ||
-    normalized === "vercel_ai_gateway"
+    normalized === "vercel_ai_gateway" ||
+    normalized === "nakama_cloud"
   ) {
     return normalized;
   }
@@ -128,6 +129,8 @@ export function apiKeyEnvVarForProvider(
       return "CLOUDFLARE_API_KEY";
     case "xai_oauth":
     case "chatgpt":
+    // Signs in with the computer's device key, not an API key.
+    case "nakama_cloud":
       return null;
     case "minimax":
       return "MINIMAX_API_KEY";

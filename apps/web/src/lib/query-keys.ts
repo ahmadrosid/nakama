@@ -48,6 +48,7 @@ export const queryKeys = {
     settings: ["composio", "settings"] as const,
     toolkits: ["composio", "toolkits"] as const,
   },
+  computers: ["computers"] as const,
   discord: {
     settings: ["discord", "settings"] as const,
   },
@@ -72,6 +73,7 @@ export const queryKeys = {
     registry: (query: string) => ["mcp", "registry", query] as const,
   },
   models: ["models"] as const,
+  nakamaCloud: ["nakamaCloud"] as const,
   nakamaUpgrade: ["system", "upgrade"] as const,
   nakamaVersion: ["system", "version"] as const,
   notificationDestinations: (orgId: string) =>

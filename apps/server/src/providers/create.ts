@@ -34,6 +34,11 @@ import {
 import { FIREWORKS_INFERENCE_BASE_URL } from "./fireworks";
 import { createGeminiProvider } from "./gemini";
 import { resolveModel } from "./models";
+import {
+  activeNakamaCloudPasses,
+  createNakamaCloudProvider,
+  type NakamaCloudPasses,
+} from "./nakama-cloud";
 import { createOllamaProvider } from "./ollama";
 import { createOpenAIProvider } from "./openai";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
@@ -73,7 +78,7 @@ interface CreateProviderOptions {
   apiKey: string;
   instance?: ProviderInstance | null;
   model?: string;
-  provider: Exclude<ProviderName, "chatgpt" | "xai_oauth">;
+  provider: Exclude<ProviderName, "chatgpt" | "nakama_cloud" | "xai_oauth">;
 }
 
 function createProvider(options: CreateProviderOptions): ProviderClient {
@@ -396,6 +401,8 @@ export function readApiKeyForInstance(
 }
 
 export interface CreateProviderForInstanceOptions {
+  /** This computer's passes for a Nakama Cloud instance; null when signed out. */
+  nakamaCloudPasses?: (instance: ProviderInstance) => NakamaCloudPasses | null;
   onChatgptTokenRefresh?: (
     instanceId: string,
     oauth: ChatgptOAuthCredentials
@@ -457,6 +464,16 @@ export function createProviderForInstance(
     }
 
     return createChatgptProvider(providerOptions);
+  }
+
+  if (instance.type === "nakama_cloud") {
+    const passes =
+      options?.nakamaCloudPasses?.(instance) ??
+      activeNakamaCloudPasses(instance);
+
+    return passes && instance.baseUrl
+      ? createNakamaCloudProvider({ baseUrl: instance.baseUrl, model, passes })
+      : null;
   }
 
   const apiKey = readApiKeyForInstance(instance, env);

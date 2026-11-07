@@ -43,6 +43,8 @@ const SHORTLIST_RESOLVERS: Partial<Record<ProviderName, DefaultModelResolver>> =
 // Built-in catalog providers where saved custom models narrow the choice.
 const CUSTOM_SHORTLIST_PROVIDERS: ReadonlySet<ProviderName> = new Set([
   "openai",
+  // The team's models, saved at sign-in as "<cloud provider>::<model>".
+  "nakama_cloud",
   "chatgpt",
   "anthropic",
   "gemini",

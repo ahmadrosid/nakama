@@ -1,4 +1,7 @@
-import type { BrowserSessionSummary } from "@nakama/core/contract";
+import type {
+  BrowserSessionSummary,
+  ComputerSummary,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
@@ -98,6 +101,150 @@ export function BrowserSessionsCard() {
             )}
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function describeComputer(computer: ComputerSummary): string {
+  return computer.lastSeenAt
+    ? `Last used ${formatSessionRelativeTime(computer.lastSeenAt)}`
+    : `Connected ${formatSessionRelativeTime(computer.createdAt)}`;
+}
+
+/** Computers that run Nakama Desktop with this account. Same shape as sessions. */
+export function ComputersCard() {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const computersQuery = useQuery({
+    queryFn: () => client.listComputers(),
+    queryKey: queryKeys.computers,
+  });
+
+  const remove = useMutation({
+    mutationFn: (computerId: string) => client.removeComputer(computerId),
+    onError: (mutationError) => setError(formatError(mutationError)),
+    onSuccess: async () => {
+      setError(null);
+      await invalidateQueries(queryClient, queryKeys.computers);
+    },
+  });
+
+  const computers = computersQuery.data?.computers ?? [];
+
+  return (
+    <Card className="w-full shadow-none">
+      <CardContent className="divide-y divide-border p-0">
+        <div className="space-y-0.5 px-4 py-3">
+          <p className="font-medium text-foreground text-sm">Computers</p>
+          {error ? (
+            <p className="text-destructive text-xs" role="status">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        {computersQuery.isLoading ? (
+          <div className="px-4 py-3">
+            <Spinner />
+          </div>
+        ) : null}
+
+        {computersQuery.isError ? (
+          <p className="px-4 py-3 text-destructive text-xs">
+            {formatError(computersQuery.error)}
+          </p>
+        ) : null}
+
+        {computersQuery.isSuccess && computers.length === 0 ? (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            No computers
+          </p>
+        ) : null}
+
+        {computers.map((computer) => (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+            key={computer.id}
+          >
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-foreground text-sm">{computer.name}</p>
+              <p className="text-muted-foreground text-xs">
+                {describeComputer(computer)}
+              </p>
+            </div>
+            <Button
+              aria-label={`Remove ${computer.name}`}
+              disabled={remove.isPending}
+              onClick={() => remove.mutate(computer.id)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** On Nakama Desktop: the Nakama Cloud account whose models this computer uses. */
+export function NakamaCloudCard() {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const statusQuery = useQuery({
+    queryFn: () => client.getNakamaCloudStatus(),
+    queryKey: queryKeys.nakamaCloud,
+    retry: false,
+  });
+
+  const signOut = useMutation({
+    mutationFn: () => client.signOutNakamaCloud(),
+    onError: (mutationError) => setError(formatError(mutationError)),
+    onSuccess: async () => {
+      setError(null);
+      await invalidateQueries(queryClient, queryKeys.nakamaCloud);
+    },
+  });
+
+  const status = statusQuery.data;
+
+  if (!status?.signedIn) {
+    return null;
+  }
+
+  const who = [status.account, status.orgName].filter(Boolean).join(" · ");
+
+  return (
+    <Card className="w-full shadow-none">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="min-w-0 space-y-0.5">
+          <p className="font-medium text-foreground text-sm">
+            {status.needsSignIn
+              ? "Sign in to Nakama Cloud again"
+              : "Signed in to Nakama Cloud"}
+          </p>
+          <p className="text-muted-foreground text-xs">{who}</p>
+          {error ? (
+            <p className="text-destructive text-xs" role="status">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <Button
+          disabled={signOut.isPending}
+          onClick={() => signOut.mutate()}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {/* Signing out reopens the sign-in page on Nakama Desktop. */}
+          {status.needsSignIn ? "Sign in again" : "Sign out"}
+        </Button>
       </CardContent>
     </Card>
   );

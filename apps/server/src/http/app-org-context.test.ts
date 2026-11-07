@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { loadLocalAuthToken } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
@@ -7,6 +8,7 @@ import { createHonoApp } from "./app";
 import {
   buildSetupAuthBody,
   createPlatformAdminUser,
+  seedLocalClientUser,
   withOrgId,
 } from "./test-org-helpers";
 import {
@@ -407,4 +409,90 @@ describe("createHonoApp", () => {
       expect(body.totpEnabled).toBeUndefined();
     });
   });
+});
+
+test("Nakama Desktop starts its Cloud sign-in before it has an org", async () => {
+  const options = createServerOptions();
+
+  options.agent.nakamaCloudStatus = () => ({
+    account: null,
+    cloudUrl: null,
+    needsSignIn: false,
+    orgName: null,
+    otherProviders: 0,
+    signedIn: false,
+  });
+  options.agent.signOutNakamaCloud = async () => undefined;
+
+  // A fresh desktop: the local user exists, no org yet (setup comes later).
+  await seedLocalClientUser(options.databaseAdapter);
+  const app = createHonoApp(options);
+  const headers = { Authorization: `Bearer ${await loadLocalAuthToken()}` };
+
+  const status = await app.fetch(
+    new Request("http://localhost:4310/v1/nakama-cloud", { headers })
+  );
+
+  expect(status.status).toBe(200);
+
+  const signOut = await app.fetch(
+    new Request("http://localhost:4310/v1/nakama-cloud", {
+      headers,
+      method: "DELETE",
+    })
+  );
+
+  expect(signOut.status).toBe(204);
+
+  // It changes the default provider, so it is audited like other changes.
+  expect(
+    (await options.databaseAdapter.listAuditEvents()).map(
+      (event) => event.action
+    )
+  ).toContain("provider.nakama_cloud_sign_out");
+});
+
+test("the desktop's Cloud status works for a local token in two or more orgs", async () => {
+  const options = createServerOptions();
+
+  options.agent.nakamaCloudStatus = () => ({
+    account: null,
+    cloudUrl: null,
+    needsSignIn: false,
+    orgName: null,
+    otherProviders: 1,
+    signedIn: false,
+  });
+
+  await seedLocalClientUser(options.databaseAdapter);
+
+  // Two orgs: an org route needs X-Org-Id from this caller.
+  for (const id of ["org_one", "org_two"]) {
+    const now = new Date().toISOString();
+
+    await options.databaseAdapter.upsertOrganization({
+      allowedInviteDomains: [],
+      createdAt: now,
+      id,
+      name: id,
+      slug: id,
+      updatedAt: now,
+    });
+    await options.databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: id,
+      role: "admin",
+      userId: "user_local_client",
+    });
+  }
+
+  const app = createHonoApp(options);
+  const headers = { Authorization: `Bearer ${await loadLocalAuthToken()}` };
+
+  const status = await app.fetch(
+    new Request("http://localhost:4310/v1/nakama-cloud", { headers })
+  );
+
+  expect(status.status).toBe(200);
+  expect(await status.json()).toMatchObject({ otherProviders: 1 });
 });

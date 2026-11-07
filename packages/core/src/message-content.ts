@@ -278,9 +278,7 @@ function estimateBase64DecodedLength(base64: string): number {
  * part type this build does not know still yields its text.
  */
 export function getUserMessageText(
-  content:
-    | string
-    | Array<{ text?: string; type: string } | MessageContentPart>
+  content: string | Array<{ text?: string; type: string } | MessageContentPart>
 ): string {
   if (!Array.isArray(content)) {
     return content;

@@ -7,6 +7,7 @@ mock.module("electron", () => ({
   app: { getPath: () => join(root, "userData") },
   BrowserWindow: {},
   dialog: {},
+  ipcMain: {},
   Menu: {},
   nativeTheme: {},
   safeStorage: {

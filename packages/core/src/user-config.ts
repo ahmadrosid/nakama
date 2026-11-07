@@ -48,6 +48,15 @@ export {
   resolveProvider,
 } from "./provider-resolution";
 
+/** The Nakama Cloud account this computer signed in with. */
+export interface NakamaCloudAccount {
+  /** The person's email, shown as "Signed in as …". */
+  account: string;
+  computerId: string;
+  orgId: string;
+  orgName: string;
+}
+
 export interface ProviderInstance {
   apiKey: string;
   baseUrl?: string;
@@ -60,6 +69,7 @@ export interface ProviderInstance {
   hostMode?: import("./contract").OllamaHostMode;
   id: string;
   label: string;
+  nakamaCloud?: NakamaCloudAccount;
   openRouterRouting?: OpenRouterRoutingSettings;
   type: UserProviderName;
   wireApi?: import("./contract").WireApi;
@@ -119,6 +129,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   mistral: "Mistral",
   moonshot: "Moonshot Kimi",
   moonshot_cn: "Moonshot Kimi (CN)",
+  nakama_cloud: "Nakama Cloud",
   netra: "Netra Runtime",
   ollama: "Ollama",
   openai: "OpenAI",
@@ -889,6 +900,15 @@ function loadProvidersFromSections(
       provider.chatgptTokenExpiresAt = values.chatgpt_token_expires_at.trim();
     }
 
+    if (type === "nakama_cloud" && values.nakama_computer_id?.trim()) {
+      provider.nakamaCloud = {
+        account: values.nakama_account?.trim() ?? "",
+        computerId: values.nakama_computer_id.trim(),
+        orgId: values.nakama_org_id?.trim() ?? "",
+        orgName: values.nakama_org_name?.trim() ?? "",
+      };
+    }
+
     if (baseUrl) {
       provider.baseUrl = baseUrl;
     }
@@ -978,6 +998,13 @@ function buildProviderSectionValues(
     values.chatgpt_token_expires_at = provider.chatgptTokenExpiresAt.trim();
   }
 
+  if (provider.nakamaCloud) {
+    values.nakama_account = provider.nakamaCloud.account;
+    values.nakama_computer_id = provider.nakamaCloud.computerId;
+    values.nakama_org_id = provider.nakamaCloud.orgId;
+    values.nakama_org_name = provider.nakamaCloud.orgName;
+  }
+
   return values;
 }
 
@@ -1037,16 +1064,24 @@ function buildConfigIniLines(
   lines.push("");
 
   for (const [sectionName, values] of Object.entries(sections)) {
-    lines.push(`[${sectionName}]`);
+    lines.push(`[${oneIniLine(sectionName)}]`);
 
     for (const [key, value] of Object.entries(values)) {
-      lines.push(`${key}=${value}`);
+      lines.push(`${oneIniLine(key)}=${oneIniLine(value)}`);
     }
 
     lines.push("");
   }
 
   return lines;
+}
+
+/**
+ * Section values can come from outside, such as an org name from Nakama
+ * Cloud. A line break in one would start a new key or section in the file.
+ */
+function oneIniLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
 }
 
 function readThinkingSettings(
