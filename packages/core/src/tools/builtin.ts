@@ -346,11 +346,17 @@ function buildFileGuardOptions(
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
   const { orgId } = requireProfileScope(context);
 
+  // The org tools directory holds executable modules. Only an admin may reach
+  // it from a profile chat: a member who could write there would replace a
+  // registered tool's code and run it with the server UID on the next call.
+  const canManageOrgCode =
+    context.isPlatformAdmin === true || context.orgRole === "admin";
+
   return {
     ...defaultGuardOptions,
     allowedDirs: [
       workspaceRoot,
-      getCustomToolsDir(orgId),
+      ...(canManageOrgCode ? [getCustomToolsDir(orgId)] : []),
       ...(context.sharedDir ? [context.sharedDir] : []),
     ],
     cwd: workspaceRoot,
