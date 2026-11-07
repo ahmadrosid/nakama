@@ -9,6 +9,7 @@ import {
   hasActiveHandshakeCode,
   isBotChannelUserAuthorized,
   isChannelOwner,
+  botTokenSecretRef,
   loadBotChannelIniConfig,
   maskBotToken,
   releaseChannelClaims,
@@ -202,6 +203,7 @@ async function loadDiscordConfigFile(
     configPath: getDiscordConfigPath(scope),
     defaultProfileId: DEFAULT_DISCORD_PROFILE_ID,
     parseUserIds: parseAllowedUserIds,
+    secret: botTokenSecretRef("discord", scope),
   });
 }
 
@@ -253,6 +255,7 @@ async function writeDiscordConfigFile(
     configDir: getDiscordConfigDir(scope),
     configPath: getDiscordConfigPath(scope),
     label: "Discord",
+    secret: botTokenSecretRef("discord", scope),
   });
 }
 

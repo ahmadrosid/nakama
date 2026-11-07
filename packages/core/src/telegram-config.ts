@@ -10,6 +10,7 @@ import {
   isBotChannelUserAuthorized,
   isChannelOwner,
   listChannelOwners,
+  botTokenSecretRef,
   loadBotChannelIniConfig,
   maskBotToken,
   releaseChannelClaims,
@@ -136,6 +137,7 @@ export async function loadTelegramConfigFile(
     configPath: getTelegramConfigPath(orgId),
     defaultProfileId: DEFAULT_TELEGRAM_PROFILE_ID,
     parseUserIds: parseAllowedUserIds,
+    secret: botTokenSecretRef("telegram", orgId),
   });
 }
 
@@ -199,6 +201,7 @@ async function writeTelegramConfigFile(
     configDir: getTelegramConfigDir(orgId),
     configPath: getTelegramConfigPath(orgId),
     label: "Telegram",
+    secret: botTokenSecretRef("telegram", orgId),
   });
 }
 

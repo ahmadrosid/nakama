@@ -46,8 +46,10 @@ import {
   loadConfig,
   NAKAMA_API_VERSION,
   setManagedSecretResolver,
+  setManagedSecretWriter,
   writeRuntimeServerUrl,
 } from "@nakama/core";
+import { migrateChannelBotTokens } from "@nakama/core/channel-config-shared";
 import {
   createDatabase,
   type Database,
@@ -179,6 +181,10 @@ let managedSecrets: ManagedSecrets;
 try {
   managedSecrets = new ManagedSecrets(database.adapter);
   await managedSecrets.migrateLegacyFiles();
+
+  if (process.env.NAKAMA_SECRETS_KEY) {
+    setManagedSecretWriter(managedSecrets);
+  }
 } catch (error) {
   // Saved keys stay in config.ini until the migration succeeds, so print the
   // fix instead of a stack trace and let the operator restart.
@@ -581,6 +587,7 @@ const app = createHonoApp({
     await database.reopen();
     await agent.reloadAfterDataRestore();
     await googleMeetService.reopen();
+    await migrateChannelBotTokens();
     await workerManager.recoverDesiredWorkers();
   },
   orgMemoryService,
@@ -638,6 +645,8 @@ void initializeOptionalServices({
 try {
   workerRecovery = (async () => {
     await workerManager.recoverDesiredWorkers();
+    // After recovery restarted workers that read the token only from config.ini.
+    await migrateChannelBotTokens();
     await pluginService.recoverPluginWorkers();
   })();
   await workerRecovery;

@@ -16,6 +16,7 @@ import {
   ensureServerRunning,
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
+import { readBotTokensFromServer } from "@nakama/core/channel-config-shared";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveWebPublicUrl } from "@nakama/core/runtime";
 import { DiscordAuthStore } from "./auth-store";
@@ -64,6 +65,15 @@ registerCleanupHandlers(async () => {
 });
 
 try {
+  const authToken =
+    (await loadLocalAuthToken("discord@nakama.internal")) ?? undefined;
+
+  // The token is encrypted on disk; the server reads it for us.
+  const tokenClient = new NakamaClient({ authToken });
+  readBotTokensFromServer((secret) =>
+    tokenClient.getChannelBotToken(secret.scope, secret.name)
+  );
+
   const config = await loadConfig();
   await heartbeat.acquire();
 
@@ -74,8 +84,7 @@ try {
   spawnedChild = child;
 
   const client = new NakamaClient({
-    authToken:
-      (await loadLocalAuthToken("discord@nakama.internal")) ?? undefined,
+    authToken,
     baseUrl: serverUrl,
     clientOrigin: resolveWebPublicUrl(),
     orgId: owner.orgId,
