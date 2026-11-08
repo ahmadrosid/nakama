@@ -270,7 +270,7 @@ export function CompactFileCard({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 max-w-full items-center gap-3 rounded-2xl border border-border bg-background py-2 pr-1 pl-2",
+        "flex w-full min-w-0 max-w-full items-center gap-3 rounded-2xl border border-border bg-background py-2 pr-1 pl-2 dark:bg-secondary",
         className
       )}
     >
