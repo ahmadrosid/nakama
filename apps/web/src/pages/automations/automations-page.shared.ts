@@ -123,6 +123,10 @@ export function summarizeAutomationListMeta(
     return "One-time run";
   }
 
+  if (automation.trigger.type === "webhook") {
+    return "Webhook automation";
+  }
+
   return "Scheduled automation";
 }
 
@@ -262,6 +266,10 @@ export function schedulePresetTrigger(
 ): AutomationTrigger {
   if (frequency === "manual") {
     return { type: "manual" };
+  }
+
+  if (frequency === "webhook") {
+    return { type: "webhook" };
   }
 
   const preset = readSchedulePreset(trigger);

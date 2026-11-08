@@ -6,6 +6,7 @@ import {
   previewAutomationSchedule,
   readSchedulePreset,
   schedulePresetTrigger,
+  summarizeAutomationListMeta,
 } from "./automations-page.shared";
 
 test("run conversations retain tools and text and only animate a running run", () => {
@@ -89,10 +90,33 @@ test("a webhook trigger is not treated as a schedule", () => {
 
   expect(describeTrigger(trigger).label).toBe("On webhook");
   expect(previewAutomationSchedule(trigger, "UTC")).toBeNull();
-  expect(schedulePresetTrigger("daily", trigger)).toMatchObject({
+  expect(schedulePresetTrigger("daily", trigger)).toEqual({
+    cron: "0 7 * * *",
     timezone: undefined,
     type: "schedule",
   });
+  expect(
+    schedulePresetTrigger("webhook", {
+      cron: "0 7 * * *",
+      timezone: "Asia/Jakarta",
+      type: "schedule",
+    })
+  ).toEqual({ type: "webhook" });
+  expect(
+    summarizeAutomationListMeta({
+      createdAt: "2026-10-01T00:00:00Z",
+      description: "",
+      enabled: true,
+      id: "automation",
+      name: "Task",
+      profileId: "agent",
+      prompt: "Run task",
+      steps: [],
+      trigger,
+      updatedAt: "2026-10-01T00:00:00Z",
+      version: 1,
+    })
+  ).toBe("Webhook automation");
 });
 
 test("schedule presets recognize supported frequencies without changing custom schedules", () => {

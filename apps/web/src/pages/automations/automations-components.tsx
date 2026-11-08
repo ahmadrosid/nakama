@@ -4,6 +4,7 @@ import type {
   AutomationRunRecord,
   AutomationRunStatus,
   AutomationToolLimit,
+  AutomationTrigger,
   ProfileSummary,
   StoredAutomation,
 } from "@nakama/core/contract";
@@ -248,12 +249,14 @@ export function AutomationEditorForm({
   busy,
   onChange,
   profiles,
+  savedTrigger,
   toolOptions,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
   profiles: ProfileSummary[];
+  savedTrigger?: AutomationTrigger;
   toolOptions?: AutomationToolOptions;
 }) {
   const scheduleTrigger =
@@ -315,6 +318,7 @@ export function AutomationEditorForm({
         automation={automation}
         busy={busy}
         onChange={onChange}
+        savedTrigger={savedTrigger}
       />
       <DeliverySettingsFields
         busy={busy}
@@ -427,10 +431,12 @@ function AutomationScheduleFields({
   automation,
   busy,
   onChange,
+  savedTrigger,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
+  savedTrigger?: AutomationTrigger;
 }) {
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
@@ -438,8 +444,9 @@ function AutomationScheduleFields({
   const preset = readSchedulePreset(automation.trigger);
 
   const frequency =
-    automation.trigger.type === "manual"
-      ? "manual"
+    automation.trigger.type === "manual" ||
+    automation.trigger.type === "webhook"
+      ? automation.trigger.type
       : (preset?.frequency ?? "custom");
 
   return (
@@ -455,6 +462,7 @@ function AutomationScheduleFields({
               ["weekdays", "Weekdays"],
               ["weekly", "Weekly"],
               ["monthly", "Monthly"],
+              ["webhook", "On webhook"],
             ] as const
           ).map(([value, label]) => (
             <Button
@@ -581,6 +589,15 @@ function AutomationScheduleFields({
               </SelectContent>
             </Select>
           </Field>
+        ) : null}
+        {savedTrigger?.type === "webhook" &&
+        automation.trigger.type !== "webhook" ? (
+          <p
+            className="text-pretty text-amber-700 text-xs dark:text-amber-400"
+            role="alert"
+          >
+            Saving deletes the webhook secret. Webhook calls stop working.
+          </p>
         ) : null}
         {frequency === "custom" ? (
           <p className="text-muted-foreground text-sm">
@@ -909,6 +926,11 @@ function RunHistoryRow({
             aria-label="Unread"
             className="size-1.5 shrink-0 rounded-full bg-primary"
           />
+        ) : null}
+        {run.source === "webhook" ? (
+          <span className="shrink-0 rounded bg-muted px-1.5 text-muted-foreground text-xs">
+            Webhook
+          </span>
         ) : null}
         <span
           className={cn(

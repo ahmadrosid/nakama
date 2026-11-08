@@ -17,6 +17,7 @@ import type { AutomationsPageState } from "@/pages/automations/use-automations-p
 
 type AutomationsDialogsProps = Pick<
   AutomationsPageState,
+  | "automations"
   | "busy"
   | "editDraft"
   | "setEditDraft"
@@ -31,6 +32,7 @@ type AutomationsDialogsProps = Pick<
 >;
 
 export function AutomationsDialogs({
+  automations,
   busy,
   editDraft,
   setEditDraft,
@@ -78,6 +80,10 @@ export function AutomationsDialogs({
                     busy={busy}
                     onChange={updateEditDraft}
                     profiles={profiles}
+                    savedTrigger={
+                      automations.find((item) => item.id === editDraft.id)
+                        ?.trigger
+                    }
                     toolOptions={toolOptions}
                   />
                 </div>
