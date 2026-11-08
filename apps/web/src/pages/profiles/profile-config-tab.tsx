@@ -261,7 +261,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       >
         <Tabs.List
           aria-label="Agent sections"
-          className="no-scrollbar grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1"
+          className="no-scrollbar grid w-full max-w-full auto-cols-[minmax(max-content,1fr)] grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1"
         >
           {sections.map((item) => (
             <ProfileSectionTab key={item.value} {...item} />
