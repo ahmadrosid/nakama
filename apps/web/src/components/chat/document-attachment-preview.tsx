@@ -132,6 +132,7 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
 
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
+
   const {
     canPreview,
     isHtml,
