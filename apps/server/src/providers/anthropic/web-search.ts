@@ -20,6 +20,7 @@ import type {
 } from "@nakama/core";
 import { toAnthropicUserContent, WEB_SEARCH_TOOL_NAME } from "@nakama/core";
 import { z } from "zod";
+import { resolveModelLimits } from "../models";
 import {
   buildTokenUsage,
   normalizeThinkingEffort,
@@ -287,12 +288,11 @@ export async function continueAnthropicUntilDone(
     };
   }
 
-  const effort = thinkingRequest.output_config?.effort;
-
   const requestBase: Omit<MessageCreateParams, "stream"> = {
-    // Adaptive thinking at xhigh/max would spend the whole 4096 on reasoning.
-    // 16000 stays under the SDK's non-streaming limit (~21333 tokens).
-    max_tokens: effort === "xhigh" || effort === "max" ? 16_000 : 4096,
+    max_tokens: maxTokensForEffort(
+      thinkingRequest.output_config?.effort,
+      options
+    ),
     messages: apiMessages,
     model: options.model,
     system: options.system,
@@ -578,6 +578,32 @@ async function readAnthropicStream(
     contentBlocks: normalizedContent,
     stopReason,
   };
+}
+
+// Adaptive thinking at xhigh/max would spend a 4096 cap on reasoning. A stream
+// can use the model's own output limit; a plain request stays under the SDK's
+// non-streaming limit (~21333 tokens).
+function maxTokensForEffort(
+  effort: string | null | undefined,
+  options: Pick<
+    ContinueAnthropicUntilDoneOptions,
+    "model" | "provider" | "stream"
+  >
+): number {
+  if (effort !== "xhigh" && effort !== "max") {
+    return 4096;
+  }
+
+  if (!options.stream) {
+    return 16_000;
+  }
+
+  const limits = resolveModelLimits(
+    options.provider ?? "anthropic",
+    options.model
+  );
+
+  return Math.max(16_000, limits.maxOutputTokens);
 }
 
 export function buildAnthropicThinkingRequest(
