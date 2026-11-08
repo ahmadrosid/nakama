@@ -13,3 +13,25 @@ test("rejects a genuine legacy OLE .doc payload", async () => {
     /Convert the file to \.docx/
   );
 });
+
+test("reads bare WordprocessingML paragraphs and headings", async () => {
+  const xml = [
+    '<w:document xmlns:w="x"><w:body>',
+    '<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Title</w:t></w:r></w:p>',
+    "<w:p/>",
+    '<w:p><w:r><w:t xml:space="preserve">Fish &amp; </w:t><w:tab/><w:t>chips</w:t></w:r></w:p>',
+    "</w:body></w:document>",
+  ].join("");
+
+  expect(await convertDocxToMarkdown(Buffer.from(xml))).toBe(
+    "## Title\n\nFish & chips"
+  );
+});
+
+test("bare WordprocessingML without close tags stays fast", async () => {
+  const xml = `<w:document>${"<w:p><w:t>".repeat(50_000)}`;
+  const started = performance.now();
+
+  expect(await convertDocxToMarkdown(Buffer.from(xml))).toBe("");
+  expect(performance.now() - started).toBeLessThan(1000);
+});

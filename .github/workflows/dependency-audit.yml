@@ -1,0 +1,76 @@
+name: Dependency audit
+
+# The image installs `.docker/runtime-deps/bun.lock` and the docs site has its
+# own lockfile, so `bun audit` at the root misses shipped bytes and docs bytes.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  # A PR that touches no dependency manifest cannot change the audit result.
+  # Main pushes and the weekly run always audit, so drift is still caught.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      lockfiles: ${{ steps.scope.outputs.lockfiles }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Check changed lockfiles
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          lockfiles=true
+          if [ "$EVENT" = "pull_request" ]; then
+            lockfiles=false
+            files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+            while IFS= read -r file; do
+              case "$file" in
+                bun.lock|package.json|docs/website/bun.lock|docs/website/package.json|.docker/*/bun.lock|.docker/*/package.json)
+                  lockfiles=true
+                  break
+                  ;;
+              esac
+            done <<< "$files"
+          fi
+          echo "lockfiles=$lockfiles" >> "$GITHUB_OUTPUT"
+
+  audit:
+    needs: changes
+    if: needs.changes.outputs.lockfiles == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      # basic-ftp is blocked by get-uri's ^5 range, not accepted silently.
+      # Remove the ignore as soon as get-uri accepts the fixed version.
+      - name: Audit root lockfile
+        run: >-
+          bun audit --production --audit-level=high
+          --ignore=GHSA-c475-qrg2-pj4r
+
+      - name: Audit shipped image lockfile
+        working-directory: .docker/runtime-deps
+        run: bun audit --audit-level=high --ignore=GHSA-c475-qrg2-pj4r
+
+      - name: Audit docs website lockfile
+        working-directory: docs/website
+        run: bun audit --audit-level=high

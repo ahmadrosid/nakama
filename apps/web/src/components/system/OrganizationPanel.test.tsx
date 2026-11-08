@@ -3118,6 +3118,24 @@ test.each([
   }
 );
 
+test("Super Nakama hides Move agent, Duplicate and Delete agent", async () => {
+  const { container, render, profile, queries } = observeProfileActions(false);
+  const superProfile = { ...profile, isSuper: true };
+
+  queries.setQueryData(queryKeys.profiles.all, [superProfile]);
+  queries.setQueryData(queryKeys.profiles.detail(profile.id), superProfile);
+
+  await render({ ...organization("team-a"), role: "admin" });
+
+  const labels = [
+    ...container.querySelectorAll<HTMLButtonElement>("footer button"),
+  ].map((button) => button.textContent);
+
+  expect(labels).not.toContain("Duplicate");
+  expect(labels).not.toContain("Move agent");
+  expect(labels).not.toContain("Delete agent");
+});
+
 for (const action of ["Duplicate", "Move agent"] as const) {
   test(`${action} dialog closes when its local profile becomes shared`, async () => {
     const { container, render, profile, queries, clone, move } =

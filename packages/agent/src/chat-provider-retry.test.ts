@@ -4,7 +4,11 @@ import type {
   GenerateChatInput,
   ProviderClient,
 } from "@nakama/core";
-import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
+import {
+  MODEL_CONNECTION_CLOSED_MESSAGE,
+  NakamaApiError,
+  ProviderStreamInterruptedError,
+} from "@nakama/core";
 import { createAgentChatSession } from "./index";
 
 function createFlakyProvider(failures: Error[], replies: string[]) {
@@ -151,9 +155,14 @@ describe("agent chat provider retry", () => {
 
     const session = createAgentChatSession({ provider });
 
-    await expect(
-      session.sendStream("Hello", { onChunk() {} })
-    ).rejects.toBeInstanceOf(TypeError);
+    const failure = session.sendStream("Hello", { onChunk() {} });
+
+    await expect(failure).rejects.toBeInstanceOf(
+      ProviderStreamInterruptedError
+    );
+    await expect(failure).rejects.toMatchObject({
+      message: MODEL_CONNECTION_CLOSED_MESSAGE,
+    });
     expect(getCallCount()).toBe(2);
   });
 
@@ -170,8 +179,68 @@ describe("agent chat provider retry", () => {
 
     await expect(
       session.sendStream("Hello", { onChunk() {} })
-    ).rejects.toBeInstanceOf(ProviderStreamInterruptedError);
+    ).rejects.toMatchObject({ message: MODEL_CONNECTION_CLOSED_MESSAGE });
     expect(getCallCount()).toBe(2);
+  });
+
+  test("a second dropped socket fails with plain words, not the fetch text", async () => {
+    const dropped = () =>
+      Object.assign(
+        new TypeError(
+          "The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
+        ),
+        { code: "ECONNRESET" }
+      );
+
+    const { provider } = createFlakyProvider([dropped(), dropped()], []);
+    const session = createAgentChatSession({ provider });
+    const failure = session.sendStream("Hello", { onChunk() {} });
+
+    await expect(failure).rejects.toMatchObject({
+      message: MODEL_CONNECTION_CLOSED_MESSAGE,
+    });
+  });
+
+  test("keeps the raw socket error on the cause chain after a mid-stream drop", async () => {
+    const provider: ProviderClient = {
+      generateChat() {
+        throw new Error("streamChat only in this test");
+      },
+      generateText() {
+        return Promise.resolve({ content: "{}" });
+      },
+      name: "openai",
+      streamChat(_input: GenerateChatInput, handlers) {
+        handlers.onChunk("partial ");
+        throw Object.assign(
+          new TypeError("The socket connection was closed unexpectedly. RAW"),
+          { code: "ECONNRESET" }
+        );
+      },
+    };
+
+    const session = createAgentChatSession({ provider });
+    let caught: Error | null = null;
+
+    try {
+      await session.sendStream("Hello", { onChunk() {} });
+    } catch (error) {
+      caught = error instanceof Error ? error : null;
+    }
+
+    expect(caught).toMatchObject({ message: MODEL_CONNECTION_CLOSED_MESSAGE });
+
+    const messages: string[] = [];
+    let current: unknown = caught;
+
+    while (current instanceof Error) {
+      messages.push(current.message);
+      current = current.cause;
+    }
+
+    expect(messages.at(-1)).toBe(
+      "The socket connection was closed unexpectedly. RAW"
+    );
   });
 
   test("retries a connection reset named by code once and succeeds", async () => {

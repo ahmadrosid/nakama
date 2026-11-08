@@ -9,7 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@microsoft/teams.apps": "2.1.1",
+    "@microsoft/teams.apps": "2.2.0",
     "@nakama/client": "workspace:*",
     "@nakama/core": "workspace:*",
     "zod": "^4.6.5"
