@@ -25,10 +25,10 @@ const EXTRA_EFFORTS_BY_MODEL: [RegExp, ExtraThinkingEffort[]][] = [
     /^claude-(opus-4[.-][78]|opus-5|sonnet-5|haiku-5|fable|mythos)/,
     ["xhigh", "max"],
   ],
-  [/^gpt-5[.-][2-5]/, ["xhigh"]],
-  [/^gpt-(5[.-][6-9]|6)/, ["xhigh", "max"]],
+  [/^gpt-5\.[2-5]/, ["xhigh"]],
+  [/^gpt-(5\.[6-9]|6)/, ["xhigh", "max"]],
   [/^grok-4[.-][6-9]/, ["xhigh"]],
-  [/^(deepseek-v4|deepseek-flash|(zai-)?glm-5[.-][2-9]|kimi-k3)/, ["max"]],
+  [/^(deepseek-v4|deepseek-flash|(zai-)?glm-5[.p][2-9]|kimi-k3)/, ["max"]],
 ];
 
 export function isThinkingEffort(value: unknown): value is ThinkingEffort {
