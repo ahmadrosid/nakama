@@ -49,6 +49,40 @@ describe("Anthropic provider streaming", () => {
     );
   });
 
+  test("streams xhigh with the model's own output limit", async () => {
+    let maxTokens: unknown;
+
+    const provider = createAnthropicProvider({
+      apiKey: "sk-ant-test",
+      fetch: asTestFetch(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          maxTokens = JSON.parse(String(init?.body)).max_tokens;
+
+          return new Response(
+            streamFromChunks([
+              'event: message_start\r\ndata:{"type":"message_start","message":{"usage":{"input_tokens":4}}}\r\n\r\n',
+              'event: content_block_start\r\ndata:{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"OK"}}\r\n\r\n',
+              'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}\r\n\r\n',
+            ]),
+            { headers: { "Content-Type": "text/event-stream" } }
+          );
+        }
+      ),
+      model: "claude-opus-5-5",
+    });
+
+    await provider.streamChat(
+      {
+        messages: [{ content: "Hello", role: "user" }],
+        providerOptions: { thinking: { effort: "xhigh", enabled: true } },
+        system: "Be helpful.",
+      },
+      { onChunk: () => undefined }
+    );
+
+    expect(maxTokens).toBe(128_000);
+  });
+
   test("sends Opus 5.5 binding controls on streamed requests", async () => {
     const provider = createAnthropicProvider({
       apiKey: "sk-ant-test",

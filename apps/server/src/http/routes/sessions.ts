@@ -20,6 +20,7 @@ import {
   MAX_SESSION_SEARCH_LENGTH,
   NakamaApiError,
 } from "@nakama/core";
+import { THINKING_EFFORTS } from "@nakama/core/thinking-effort";
 import { compress } from "hono/compress";
 import {
   getUserBrowser,
@@ -78,7 +79,7 @@ export function registerSessionRoutes(
     .openapi("ApiErrorResponse");
 
   const agentChannelSchema = z.enum(AGENT_CHANNELS).openapi("AgentChannel");
-  const thinkingEffortSchema = z.enum(["low", "medium", "high"]);
+  const thinkingEffortSchema = z.enum(THINKING_EFFORTS);
 
   const createSessionRequestSchema = z
     .object({

@@ -39,6 +39,7 @@ import {
   parseProviderName,
   type UserProviderName,
 } from "./provider-resolution";
+import { THINKING_EFFORTS } from "./thinking-effort";
 
 export type { UserProviderName } from "./provider-resolution";
 
@@ -1061,10 +1062,7 @@ function readThinkingSettings(
 }
 
 function validateThinkingEffort(value: string | undefined): ThinkingEffort {
-  return z
-    .enum(["low", "medium", "high"])
-    .catch(DEFAULT_THINKING_EFFORT)
-    .parse(value);
+  return z.enum(THINKING_EFFORTS).catch(DEFAULT_THINKING_EFFORT).parse(value);
 }
 
 function readTimezone(values: Record<string, string>): string | undefined {

@@ -174,6 +174,8 @@ export async function generateOpenAIResponsesChat(options: {
    * ids the heuristic has never seen, and it answers false for those.
    */
   supportsThinking?: boolean;
+  /** The host, for the effort levels it accepts. Defaults to OpenAI. */
+  provider?: string;
 }): Promise<ChatCompletionResult> {
   const label = options.label ?? "OpenAI";
   const baseUrl = options.baseUrl ?? DEFAULT_OPENAI_RESPONSES_BASE_URL;
@@ -184,7 +186,8 @@ export async function generateOpenAIResponsesChat(options: {
     options.stream,
     options.customModels,
     options.supportsThinking,
-    options.jsonOutput
+    options.jsonOutput,
+    options.provider
   );
 
   const response = await fetchWithoutIdleTimeout(`${baseUrl}/responses`, {
@@ -225,7 +228,8 @@ async function buildResponsesRequestBody(
   stream: boolean,
   customModels?: CustomModelEntry[],
   supportsThinking?: boolean,
-  jsonOutput?: boolean
+  jsonOutput?: boolean,
+  provider = "openai"
 ): Promise<OpenAIResponsesRequestBody> {
   const tools = buildResponsesTools(
     input.tools,
@@ -246,6 +250,7 @@ async function buildResponsesRequestBody(
   const reasoning = buildOpenAIReasoningRequest(
     model,
     input,
+    provider,
     customModels,
     supportsThinking
   );
@@ -268,6 +273,7 @@ async function buildResponsesRequestBody(
 function buildOpenAIReasoningRequest(
   model: string,
   input: GenerateChatInput,
+  provider: string,
   customModels?: CustomModelEntry[],
   supportsThinking?: boolean
 ): { effort: ThinkingEffort; summary: "auto" } | undefined {
@@ -279,7 +285,11 @@ function buildOpenAIReasoningRequest(
   }
 
   return {
-    effort: normalizeThinkingEffort(input.providerOptions.thinking.effort),
+    effort: normalizeThinkingEffort(
+      input.providerOptions.thinking.effort,
+      model,
+      provider
+    ),
     summary: "auto",
   };
 }

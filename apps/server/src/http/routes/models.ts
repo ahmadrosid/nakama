@@ -49,6 +49,7 @@ import {
   saveSlackConfig,
   validateSlackTokens,
 } from "@nakama/core/slack-config";
+import { THINKING_EFFORTS } from "@nakama/core/thinking-effort";
 import type { Context, MiddlewareHandler } from "hono";
 import {
   completeChatgptOAuthDeviceSession,
@@ -477,7 +478,7 @@ export function registerModelRoutes(
   const updateThinkingRequestSchema = z
     .object({
       enabled: z.boolean(),
-      effort: z.enum(["low", "medium", "high"]).optional(),
+      effort: z.enum(THINKING_EFFORTS).optional(),
     })
     .passthrough()
     .openapi("UpdateThinkingRequest");

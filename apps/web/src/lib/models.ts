@@ -756,6 +756,39 @@ export function knownModelSelection(
   return match ? encodeModelSelection(match.providerId, modelId) : null;
 }
 
+/** The option a selection points at, looked up in its own provider first. */
+function findModelMatch(
+  selection: string | null | undefined,
+  groups: ReturnType<typeof groupModelsByProvider>
+) {
+  if (!selection) {
+    return;
+  }
+
+  const decoded = decodeModelSelection(selection);
+  const resolvedModelId = decoded?.modelId ?? selection;
+
+  if (decoded && decoded.providerId !== "__unknown__") {
+    const group = groups.find(
+      (entry) => entry.providerId === decoded.providerId
+    );
+
+    const model = group?.models.find((entry) => entry.id === resolvedModelId);
+
+    if (group && model) {
+      return { group, inSelectedProvider: true, model };
+    }
+  }
+
+  for (const group of groups) {
+    const model = group.models.find((entry) => entry.id === resolvedModelId);
+
+    if (model) {
+      return { group, inSelectedProvider: false, model };
+    }
+  }
+}
+
 export function profileModelLabel(
   modelId: string | null,
   groups: ReturnType<typeof groupModelsByProvider>,
@@ -765,33 +798,16 @@ export function profileModelLabel(
     return "Select model";
   }
 
-  const decoded = decodeModelSelection(modelId);
-  const resolvedModelId = decoded?.modelId ?? modelId;
+  const match = findModelMatch(modelId, groups);
 
-  if (decoded && decoded.providerId !== "__unknown__") {
-    const group = groups.find(
-      (entry) => entry.providerId === decoded.providerId
-    );
-
-    const match = group?.models.find((model) => model.id === resolvedModelId);
-
-    if (match) {
-      // Match the menu items, which name the provider too.
-      return options.withProvider && group
-        ? `${match.name} · ${group.providerLabel}`
-        : match.name;
-    }
+  if (!match) {
+    return decodeModelSelection(modelId)?.modelId ?? modelId;
   }
 
-  for (const group of groups) {
-    const match = group.models.find((model) => model.id === resolvedModelId);
-
-    if (match) {
-      return match.name;
-    }
-  }
-
-  return resolvedModelId;
+  // Match the menu items, which name the provider too.
+  return options.withProvider && match.inSelectedProvider
+    ? `${match.model.name} · ${match.group.providerLabel}`
+    : match.model.name;
 }
 
 export function effectiveProfileModelSelection(
@@ -813,41 +829,17 @@ export function effectiveProfileModelSelection(
     : null;
 }
 
-export function resolveModelThinkingSupport(
+/** The model option a picker selection points at, in its provider first. */
+export function findSelectedModel(
   selection: string | null | undefined,
   groups: ReturnType<typeof groupModelsByProvider>
+): ProviderModelOption | undefined {
+  return findModelMatch(selection, groups)?.model;
+}
+
+export function resolveModelThinkingSupport(
+  model: ProviderModelOption | undefined
 ): boolean | undefined {
-  if (!selection) {
-    return;
-  }
-
-  const decoded = decodeModelSelection(selection);
-  const resolvedModelId = decoded?.modelId ?? selection;
-
-  const findModel = () => {
-    if (decoded && decoded.providerId !== "__unknown__") {
-      const group = groups.find(
-        (entry) => entry.providerId === decoded.providerId
-      );
-
-      const match = group?.models.find((model) => model.id === resolvedModelId);
-
-      if (match) {
-        return match;
-      }
-    }
-
-    for (const group of groups) {
-      const match = group.models.find((model) => model.id === resolvedModelId);
-
-      if (match) {
-        return match;
-      }
-    }
-  };
-
-  const model = findModel();
-
   if (!model) {
     return;
   }

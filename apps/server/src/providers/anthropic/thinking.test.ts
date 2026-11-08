@@ -161,6 +161,44 @@ describe("Anthropic thinking requests", () => {
       }
     }
   });
+
+  test("sends xhigh/max only where the model accepts it, with room to answer", async () => {
+    const cases = [
+      ["claude-opus-5-5", "xhigh", "xhigh", 16_000],
+      ["claude-opus-5-5", "max", "max", 16_000],
+      ["claude-sonnet-4-6", "xhigh", "high", 4096],
+      ["claude-sonnet-4-6", "max", "max", 16_000],
+    ] as const;
+
+    for (const [model, effort, sentEffort, maxTokens] of cases) {
+      let body: CapturedAnthropicRequest = { messages: [] };
+
+      const provider = createAnthropicProvider({
+        apiKey: "test-key",
+        fetch: asTestFetch(
+          async (_input: RequestInfo | URL, init?: RequestInit) => {
+            body = JSON.parse(String(init?.body));
+
+            return Response.json({
+              content: [{ text: "Hello.", type: "text" }],
+              stop_reason: "end_turn",
+              usage: { input_tokens: 3, output_tokens: 2 },
+            });
+          }
+        ),
+        model,
+      });
+
+      await provider.generateChat({
+        messages: [{ content: "Hello", role: "user" }],
+        providerOptions: { thinking: { effort, enabled: true } },
+        system: "Be helpful.",
+      });
+
+      expect(body.output_config).toEqual({ effort: sentEffort });
+      expect(body.max_tokens).toBe(maxTokens);
+    }
+  });
 });
 
 test("Sonnet 5.5 generateText uses between-tools without binding fields", async () => {
