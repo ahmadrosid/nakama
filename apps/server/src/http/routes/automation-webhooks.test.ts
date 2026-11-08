@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import { AutomationRunner } from "../../services/automation-runner";
 import { ManagedSecrets } from "../../services/managed-secrets";
@@ -184,7 +184,8 @@ describe("automation webhook", () => {
 
     const secret = await fixture.automationService.createWebhookSecret(
       automation.id,
-      ORG_A
+      ORG_A,
+      "user_a"
     );
 
     const response = await postWebhook(fixture, automation.id, { secret });
@@ -207,14 +208,16 @@ describe("automation webhook", () => {
 
     const secret = await fixture.automationService.createWebhookSecret(
       automation.id,
-      ORG_A
+      ORG_A,
+      "user_a"
     );
 
     const foreign = await seedWebhookAutomation(fixture, ORG_B);
 
     const foreignSecret = await fixture.automationService.createWebhookSecret(
       foreign.id,
-      ORG_B
+      ORG_B,
+      "user_a"
     );
 
     const deliveryId = "delivery-1";
@@ -250,7 +253,8 @@ describe("automation webhook", () => {
 
     const archivedSecret = await fixture.automationService.createWebhookSecret(
       archived.id,
-      ORG_B
+      ORG_B,
+      "user_a"
     );
 
     const org = await fixture.databaseAdapter.getOrganizationById(ORG_B);
@@ -282,7 +286,8 @@ describe("automation webhook", () => {
 
     const secret = await fixture.automationService.createWebhookSecret(
       automation.id,
-      ORG_A
+      ORG_A,
+      "user_a"
     );
 
     const first = await postWebhook(fixture, automation.id, {
@@ -310,7 +315,8 @@ describe("automation webhook", () => {
 
     const secret = await fixture.automationService.createWebhookSecret(
       automation.id,
-      ORG_A
+      ORG_A,
+      "user_a"
     );
 
     expect((await postWebhook(fixture, automation.id, { secret })).status).toBe(
@@ -340,7 +346,8 @@ describe("automation webhook", () => {
 
     const secret = await fixture.automationService.createWebhookSecret(
       automation.id,
-      ORG_A
+      ORG_A,
+      "user_a"
     );
 
     const deliveryId = "delivery-1";
@@ -379,7 +386,8 @@ describe("automation webhook", () => {
 
     const secret = await fixture.automationService.createWebhookSecret(
       automation.id,
-      ORG_A
+      ORG_A,
+      "user_a"
     );
 
     const cases: Array<[Parameters<typeof postWebhook>[2], number]> = [
@@ -412,13 +420,14 @@ describe("automation webhook", () => {
     ).toHaveLength(0);
   });
 
-  test("answers 503 when a saved secret cannot be read without NAKAMA_SECRETS_KEY", async () => {
+  test("answers the same 401 as an unknown id when a saved secret cannot be read", async () => {
     const keyed = createWebhookFixture();
     const automation = await seedWebhookAutomation(keyed, ORG_A);
 
     const secret = await keyed.automationService.createWebhookSecret(
       automation.id,
-      ORG_A
+      ORG_A,
+      "user_a"
     );
 
     const keyless = createFixture({
@@ -427,9 +436,18 @@ describe("automation webhook", () => {
       secrets: (db) => new ManagedSecrets(db, ""),
     });
 
-    expect((await postWebhook(keyless, automation.id, { secret })).status).toBe(
-      503
-    );
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+
+    const real = await postWebhook(keyless, automation.id, { secret });
+    expect(logged).toHaveBeenCalledTimes(1);
+    logged.mockRestore();
+
+    const unknown = await postWebhook(keyless, "automation_unknown", {
+      secret,
+    });
+
+    expect(real.status).toBe(401);
+    expect(await real.json()).toEqual(await unknown.json());
   });
 
   test("a member creates a secret shown once for a webhook automation", async () => {
@@ -458,11 +476,18 @@ describe("automation webhook", () => {
         prompt: "Review the pull request.",
         trigger: { type: "webhook" },
       },
-      PROFILE_ID
+      PROFILE_ID,
+      { orgRole: "admin", userId: "user_other" }
     );
+
+    const runAsUserId = async () =>
+      (await fixture.automationService.get(automation.id, orgId))?.runAsUserId;
+
+    expect(await runAsUserId()).toBe("user_other");
 
     const response = await call(automation.id);
     expect(response.status).toBe(200);
+    expect(await runAsUserId()).toBe("user_route_member");
     // SAFETY: The 200 response body is `{ secret }` per the route contract.
     const { secret } = (await response.json()) as { secret: string };
 

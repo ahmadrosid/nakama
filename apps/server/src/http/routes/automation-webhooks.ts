@@ -5,7 +5,7 @@ import {
   requireActiveOrgIdFromContext,
   requireOrgMemberFromContext,
 } from "../org-guards";
-import { errorResponse, getRequestAuth, json } from "../shared";
+import { errorResponse, json } from "../shared";
 import type { HonoApp } from "../types";
 
 const WEBHOOK_MAX_BODY_BYTES = 256 * 1024;
@@ -92,10 +92,6 @@ export function registerAutomationWebhookRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
-        503: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
       },
       summary:
         "Start an automation from a signed webhook (X-Hub-Signature-256)",
@@ -104,9 +100,8 @@ export function registerAutomationWebhookRoutes(
   );
 
   app.post("/v1/automations/:automationId/webhook-secret", async (c) => {
-    requireOrgMemberFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const auth = getRequestAuth(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
     const automation = await automationService.get(automationId, orgId);
 
@@ -121,7 +116,8 @@ export function registerAutomationWebhookRoutes(
 
     const secret = await automationService.createWebhookSecret(
       automationId,
-      orgId
+      orgId,
+      auth.user.id
     );
 
     return json<CreateAutomationWebhookSecretResponse>({ secret });
@@ -169,7 +165,7 @@ export function registerAutomationWebhookRoutes(
     } catch (error) {
       console.error("Automation webhook secret could not be read:", error);
 
-      return errorResponse("Webhook secrets are unavailable.", 503);
+      return unauthorized();
     }
 
     if (!verified) {

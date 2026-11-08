@@ -26,6 +26,7 @@ import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
 import { z } from "zod";
 import {
+  deleteWebhookSecretOrLog,
   saveNewWebhookSecret,
   type WebhookSecretStore,
   webhookSignatureMatches,
@@ -290,7 +291,8 @@ export class AutomationService {
       prompt !== existing.prompt ||
       profileId !== existing.profileId ||
       JSON.stringify(delivery) !== JSON.stringify(existing.delivery) ||
-      JSON.stringify(toolLimit) !== JSON.stringify(existing.toolLimit);
+      JSON.stringify(toolLimit) !== JSON.stringify(existing.toolLimit) ||
+      (trigger.type === "webhook" && existing.trigger.type !== "webhook");
 
     const updated: StoredAutomation = {
       ...existing,
@@ -308,18 +310,29 @@ export class AutomationService {
       version: existing.version + 1,
     };
 
-    if (existing.trigger.type === "webhook" && trigger.type !== "webhook") {
-      await this.deleteWebhookSecret(updated);
+    // Before the save: a failed delete keeps the row, so no old secret revives.
+    if (existing.trigger.type !== "webhook" && trigger.type === "webhook") {
+      await this.secrets?.delete(orgId, automationWebhookSecretName(id));
     }
 
     await this.store.save(updated);
+
+    // After the save: a failed save keeps the secret.
+    if (existing.trigger.type === "webhook" && trigger.type !== "webhook") {
+      await deleteWebhookSecretOrLog(this.secrets, updated);
+    }
+
     await this.notifyChange();
 
     return this.enrichAutomation(updated);
   }
 
-  /** Makes a new webhook secret; the old one stops working at once. */
-  async createWebhookSecret(id: string, orgId: string): Promise<string> {
+  /** New secret; the old one stops at once. Runs now use the caller's sign-ins. */
+  async createWebhookSecret(
+    id: string,
+    orgId: string,
+    userId: string
+  ): Promise<string> {
     const automation = await this.get(id, orgId);
 
     if (!automation) {
@@ -335,6 +348,15 @@ export class AutomationService {
         "Set NAKAMA_SECRETS_KEY before saving secrets.",
         400
       );
+    }
+
+    if (automation.runAsUserId !== userId) {
+      await this.store.save({
+        ...automation,
+        runAsUserId: userId,
+        updatedAt: new Date().toISOString(),
+        version: automation.version + 1,
+      });
     }
 
     return saveNewWebhookSecret(this.secrets, orgId, id);
@@ -369,15 +391,6 @@ export class AutomationService {
     return this.db.releaseAutomationWebhookDelivery(automationId, deliveryId);
   }
 
-  private async deleteWebhookSecret(automation: StoredAutomation) {
-    if (this.secrets && automation.orgId) {
-      await this.secrets.delete(
-        automation.orgId,
-        automationWebhookSecretName(automation.id)
-      );
-    }
-  }
-
   async delete(id: string, orgId: string): Promise<boolean> {
     const existing = await this.get(id, orgId);
 
@@ -385,11 +398,10 @@ export class AutomationService {
       return false;
     }
 
-    await this.deleteWebhookSecret(existing);
-
     const deleted = await this.store.delete(id);
 
     if (deleted) {
+      await deleteWebhookSecretOrLog(this.secrets, existing);
       await this.notifyChange();
     }
 
