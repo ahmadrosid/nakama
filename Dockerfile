@@ -76,24 +76,20 @@ RUN set -eu; \
 FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS runtime
 WORKDIR /app
 
-# Chrome is not installed by default. Agent PDF export (services/html-pdf.ts)
-# needs it; the INSTALL_MEET_DEPS build below adds Chromium.
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg-binaries /ffmpeg /ffprobe /usr/local/bin/
 
-# Optional Google Meet audio-capture runtime. Chromium remains sandboxed and
-# runs as the existing non-root Nakama user. The manifest and lockfile are
-# copied unconditionally (two small files) so the install below can be
-# frozen; the packages themselves only land when the build arg is true.
+# Chrome is not installed by default. INSTALL_CHROMIUM=true adds Chromium for
+# agent PDF export (services/html-pdf.ts). INSTALL_MEET_DEPS is the old name and
+# still works. Docker's default seccomp profile blocks Chromium's sandbox for the
+# non-root Nakama user, so run this image with NAKAMA_CHROME_NO_SANDBOX=true.
+ARG INSTALL_CHROMIUM=false
 ARG INSTALL_MEET_DEPS=false
-COPY .docker/meet-deps/package.json .docker/meet-deps/bun.lock /opt/nakama-meet/
-RUN if [ "$INSTALL_MEET_DEPS" = "true" ]; then \
+RUN if [ "$INSTALL_CHROMIUM" = "true" ] || [ "$INSTALL_MEET_DEPS" = "true" ]; then \
       apt-get update && apt-get install -y --no-install-recommends \
-        chromium pulseaudio pulseaudio-utils fonts-liberation xvfb \
-      && rm -rf /var/lib/apt/lists/* \
-      && cd /opt/nakama-meet \
-      && bun install --frozen-lockfile --production --ignore-scripts; \
+        chromium fonts-liberation \
+      && rm -rf /var/lib/apt/lists/*; \
     fi
 
 # A named volume copies this owner on first mount, so uid 1000 can write
