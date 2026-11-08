@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import type {
   AutomationRunRecord,
   StoredAutomation,
@@ -15,6 +15,7 @@ import {
 } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
+import { AutomationDetailPanel } from "./automation-detail-panel";
 import { AutomationEditorForm, RunHistoryList } from "./automations-components";
 import {
   type AutomationsPageState,
@@ -882,5 +883,203 @@ test("run history marks runs that a webhook started", async () => {
     expect(rows.map(badges)).toEqual([1, 0]);
   } finally {
     await act(async () => root.unmount());
+  }
+});
+
+function renderDetailPanel(
+  root: ReturnType<typeof createRoot>,
+  queryClient: QueryClient,
+  automation: StoredAutomation
+) {
+  return act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <AutomationDetailPanel
+          busy={false}
+          handleRun={async () => {}}
+          handleToggleEnabled={async () => {}}
+          key={automation.id}
+          openEdit={() => {}}
+          runningId={null}
+          runs={[]}
+          runsLoading={false}
+          selected={automation}
+          selectedProfileName="Agent"
+          selectedRunSummary={{
+            completed: 0,
+            failed: 0,
+            running: 0,
+            unread: 0,
+          }}
+          setDeleteTarget={() => {}}
+        />
+      </QueryClientProvider>
+    )
+  );
+}
+
+function buttonByLabel(label: string) {
+  return Array.from(document.querySelectorAll("button")).find(
+    (item) => item.textContent?.trim() === label
+  );
+}
+
+test("detail panel shows the webhook URL and a new secret only once", async () => {
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const createSecret = spyOn(client, "createAutomationWebhookSecret")
+    .mockResolvedValueOnce("new-secret-value")
+    .mockRejectedValueOnce(new Error("Set NAKAMA_SECRETS_KEY"));
+
+  const codes = () =>
+    Array.from(container.querySelectorAll("code")).map(
+      (code) => code.textContent
+    );
+
+  try {
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "manual" }, "a/b")
+    );
+    expect(codes()).toEqual([]);
+    expect(buttonByLabel("New secret")).toBeUndefined();
+
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" }, "a/b")
+    );
+    expect(codes()).toEqual([
+      `${window.location.origin}/v1/automations/a%2Fb/webhook`,
+    ]);
+
+    await act(async () => buttonByLabel("New secret")!.click());
+    await act(async () => {
+      buttonByLabel("Make secret")!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(createSecret).toHaveBeenLastCalledWith("a/b");
+    expect(codes()).toContain("new-secret-value");
+
+    await act(async () => buttonByLabel("New secret")!.click());
+    await act(async () => {
+      buttonByLabel("Make secret")!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(createSecret).toHaveBeenCalledTimes(2);
+    expect(
+      document.querySelector('[role="dialog"] [role="alert"]')
+    ).not.toBeNull();
+    expect(codes()).toContain("new-secret-value");
+
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" }, "other")
+    );
+    expect(codes()).not.toContain("new-secret-value");
+  } finally {
+    createSecret.mockRestore();
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});
+
+test("a double click on Make secret sends one request", async () => {
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  let resolveSecret: (value: string) => void = () => {};
+
+  const createSecret = spyOn(
+    client,
+    "createAutomationWebhookSecret"
+  ).mockReturnValue(
+    new Promise<string>((resolve) => {
+      resolveSecret = resolve;
+    })
+  );
+
+  try {
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" })
+    );
+    await act(async () => buttonByLabel("New secret")!.click());
+    await act(async () => {
+      const confirm = buttonByLabel("Make secret")!;
+      confirm.click();
+      confirm.click();
+    });
+    expect(createSecret).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSecret("pending-secret");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain("pending-secret");
+  } finally {
+    createSecret.mockRestore();
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});
+
+test("copy button shows copied, or a failure when the clipboard is missing", async () => {
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  const writeText = mock(async (_text: string) => {});
+
+  function setClipboard(value: { writeText: typeof writeText } | undefined) {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value,
+    });
+  }
+
+  try {
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" })
+    );
+
+    setClipboard({ writeText });
+    await act(async () => buttonByLabel("Copy")!.click());
+    expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/v1/automations/automation/webhook`
+    );
+    expect(buttonByLabel("Copied")).toBeDefined();
+
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" }, "other")
+    );
+    setClipboard(undefined);
+    await act(async () => buttonByLabel("Copy")!.click());
+    expect(buttonByLabel("Copy failed")).toBeDefined();
+  } finally {
+    if (original) {
+      Object.defineProperty(navigator, "clipboard", original);
+    } else {
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
+
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
   }
 });
