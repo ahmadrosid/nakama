@@ -20,9 +20,9 @@ const EXTRA_THINKING_EFFORT_LABELS = { max: "Max", xhigh: "Extra high" };
 
 /** Low/medium/high plus the higher levels the active model accepts. */
 export function thinkingEffortOptionsFor(
-  model: Pick<ProviderModelOption, "id"> | undefined
+  model: Pick<ProviderModelOption, "id" | "provider"> | undefined
 ): Array<{ label: string; value: ThinkingEffort }> {
-  const extra = model ? extraThinkingEfforts(model.id) : [];
+  const extra = model ? extraThinkingEfforts(model.id, model.provider) : [];
 
   return [
     ...THINKING_EFFORT_OPTIONS,

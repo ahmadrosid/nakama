@@ -558,7 +558,11 @@ async function buildChatCompletionRequestBody(options: {
   // Muse Spark rejects "none" and reasons when the field is omitted.
   if (provider === "meta") {
     body.reasoning_effort = options.thinking?.enabled
-      ? normalizeThinkingEffort(options.thinking.effort, options.model)
+      ? normalizeThinkingEffort(
+          options.thinking.effort,
+          options.model,
+          provider
+        )
       : "minimal";
   }
 
@@ -572,7 +576,11 @@ async function buildChatCompletionRequestBody(options: {
 
   if (provider === "vercel_ai_gateway" && options.thinking?.enabled) {
     body.reasoning = {
-      effort: normalizeThinkingEffort(options.thinking.effort, options.model),
+      effort: normalizeThinkingEffort(
+        options.thinking.effort,
+        options.model,
+        provider
+      ),
       enabled: true,
     };
   }
@@ -580,7 +588,8 @@ async function buildChatCompletionRequestBody(options: {
   if (provider === "perplexity" && options.thinking?.enabled) {
     body.reasoning_effort = normalizeThinkingEffort(
       options.thinking.effort,
-      options.model
+      options.model,
+      provider
     );
   }
 
@@ -640,7 +649,7 @@ function buildDeepSeekThinkingBody(
     return {};
   }
 
-  const effort = normalizeThinkingEffort(thinking.effort, model);
+  const effort = normalizeThinkingEffort(thinking.effort, model, "deepseek");
   // DeepSeek accepts low/high/max; map medium → high for compatibility.
   const reasoningEffort = effort === "medium" ? "high" : effort;
 

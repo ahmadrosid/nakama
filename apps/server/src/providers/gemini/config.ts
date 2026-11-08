@@ -177,7 +177,8 @@ function buildGeminiThinkingConfig(
 
   const effort = normalizeThinkingEffort(
     providerOptions?.thinking?.effort,
-    model
+    model,
+    "gemini"
   );
 
   if (model.includes("gemini-3") || model.includes("3-")) {

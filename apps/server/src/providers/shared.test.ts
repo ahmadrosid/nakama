@@ -145,18 +145,25 @@ describe("provider shared helpers", () => {
   });
 
   test("normalizeThinkingEffort falls back to medium", () => {
-    expect(normalizeThinkingEffort("low", "gpt-5.4")).toBe("low");
-    expect(normalizeThinkingEffort("high", "gpt-5.4")).toBe("high");
-    expect(normalizeThinkingEffort(undefined, "gpt-5.4")).toBe("medium");
+    expect(normalizeThinkingEffort("low", "gpt-5.4", "openai")).toBe("low");
+    expect(normalizeThinkingEffort("high", "gpt-5.4", "openai")).toBe("high");
+    expect(normalizeThinkingEffort(undefined, "gpt-5.4", "openai")).toBe(
+      "medium"
+    );
   });
 
-  test("normalizeThinkingEffort lowers xhigh/max to what the model accepts", () => {
-    expect(normalizeThinkingEffort("max", "gpt-6-luna")).toBe("max");
-    expect(normalizeThinkingEffort("max", "gpt-5.4")).toBe("xhigh");
-    expect(normalizeThinkingEffort("xhigh", "deepseek-v4.1-flash")).toBe(
-      "high"
-    );
-    expect(normalizeThinkingEffort("max", "gemini-3.6-flash")).toBe("high");
+  test("normalizeThinkingEffort lowers xhigh/max to what the host and model accept", () => {
+    expect(normalizeThinkingEffort("max", "gpt-6-luna", "openai")).toBe("max");
+    expect(normalizeThinkingEffort("max", "gpt-5.4", "openai")).toBe("xhigh");
+    expect(
+      normalizeThinkingEffort("xhigh", "deepseek-v4.1-flash", "deepseek")
+    ).toBe("high");
+    expect(
+      normalizeThinkingEffort("max", "gemini-3.6-flash", "openrouter")
+    ).toBe("high");
+    expect(
+      normalizeThinkingEffort("max", "deepseek-v4-flash:cloud", "ollama")
+    ).toBe("high");
   });
 
   const user = (content: string): ChatMessage => ({ content, role: "user" });

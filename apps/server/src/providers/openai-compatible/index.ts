@@ -89,6 +89,7 @@ export function createOpenAICompatibleProvider(
           input,
           label,
           model,
+          provider: options.providerName ?? "openai_compatible",
           stream: false,
           supportsThinking: options.supportsThinking,
         });
@@ -98,6 +99,7 @@ export function createOpenAICompatibleProvider(
         messages: input.messages,
         model,
         netra: options.providerName === "netra",
+        provider: options.providerName ?? "openai_compatible",
         resolveMaxOutputTokens: options.resolveMaxOutputTokens,
         signal: input.signal,
         system: input.system,
@@ -167,6 +169,7 @@ export function createOpenAICompatibleProvider(
           input,
           label,
           model,
+          provider: options.providerName ?? "openai_compatible",
           stream: true,
           supportsThinking: options.supportsThinking,
         });
@@ -180,6 +183,7 @@ export function createOpenAICompatibleProvider(
         messages: input.messages,
         model,
         netra: options.providerName === "netra",
+        provider: options.providerName ?? "openai_compatible",
         resolveMaxOutputTokens: options.resolveMaxOutputTokens,
         signal: input.signal,
         system: input.system,
@@ -270,7 +274,12 @@ function readReasoningDetails<ProviderPayload>(
 
 function buildThinkingBody(
   thinking: ProviderChatOptions["thinking"] | undefined,
-  options: { model: string; hasTools: boolean; netra?: boolean }
+  options: {
+    model: string;
+    hasTools: boolean;
+    netra?: boolean;
+    provider: string;
+  }
 ): Pick<
   OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
   "reasoning_effort"
@@ -283,7 +292,11 @@ function buildThinkingBody(
     }
 
     // Netra's V4.1 Flash has low/high/max tiers, so medium and xhigh go to high.
-    const effort = normalizeThinkingEffort(thinking.effort, options.model);
+    const effort = normalizeThinkingEffort(
+      thinking.effort,
+      options.model,
+      options.provider
+    );
 
     return {
       reasoning: {
@@ -312,7 +325,11 @@ function buildThinkingBody(
     return {};
   }
 
-  const effort = normalizeThinkingEffort(thinking.effort, options.model);
+  const effort = normalizeThinkingEffort(
+    thinking.effort,
+    options.model,
+    options.provider
+  );
 
   return {
     reasoning: { effort },
@@ -333,6 +350,7 @@ async function requestChatCompletion(
     tools?: LlmToolDefinition[];
     thinking?: ProviderChatOptions["thinking"];
     netra?: boolean;
+    provider: string;
   }
 ): Promise<ChatCompletionResult> {
   try {
@@ -347,6 +365,7 @@ async function requestChatCompletion(
         hasTools: Boolean(options.tools?.length),
         model: options.model,
         netra: options.netra,
+        provider: options.provider,
       }),
     };
 
@@ -414,6 +433,7 @@ async function streamChatCompletion(options: {
   tools?: LlmToolDefinition[];
   thinking?: ProviderChatOptions["thinking"];
   netra?: boolean;
+  provider: string;
   handlers: StreamChatHandlers;
   signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
@@ -430,6 +450,7 @@ async function streamChatCompletion(options: {
       hasTools: Boolean(options.tools?.length),
       model: options.model,
       netra: options.netra,
+      provider: options.provider,
     }),
   };
 

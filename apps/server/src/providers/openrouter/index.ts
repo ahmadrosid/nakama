@@ -269,7 +269,11 @@ function buildOpenRouterReasoningRequest(
   }
 
   const reasoning: ChatRequestReasoning = {
-    effort: normalizeThinkingEffort(providerOptions.thinking.effort, model),
+    effort: normalizeThinkingEffort(
+      providerOptions.thinking.effort,
+      model,
+      "openrouter"
+    ),
     summary: "auto",
   };
 

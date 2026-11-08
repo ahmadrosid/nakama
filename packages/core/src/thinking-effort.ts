@@ -1,6 +1,7 @@
 /**
- * Which thinking effort levels a model accepts, shared by the server (which
- * clamps the request) and the web app (which decides what the picker offers).
+ * Which thinking effort levels a host and model accept, shared by the server
+ * (which clamps the request) and the web app (which decides what the picker
+ * offers).
  */
 
 import type { ThinkingEffort } from "./contract";
@@ -14,6 +15,21 @@ export const THINKING_EFFORTS = [
 ] as const satisfies readonly ThinkingEffort[];
 
 type ExtraThinkingEffort = "xhigh" | "max";
+
+// Hosts that pass the effort through to an API that takes these levels. The
+// rest send no effort (OpenCode Go, Together), reject the higher values
+// (Ollama), or are unknown endpoints, so they stop at high.
+const EXTRA_EFFORT_HOSTS = new Set([
+  "anthropic",
+  "cerebras",
+  "chatgpt",
+  "deepseek",
+  "fireworks",
+  "netra",
+  "openai",
+  "openrouter",
+  "xai_oauth",
+]);
 
 // Levels above "high" per model family, from each vendor's API docs. Vendors
 // disagree on aliases (DeepSeek reads xhigh as high, Cloudflare as max), so
@@ -38,10 +54,15 @@ export function isThinkingEffort(value: unknown): value is ThinkingEffort {
   return THINKING_EFFORTS.some((effort) => effort === value);
 }
 
-/** Levels above "high" the model accepts; low, medium and high are implied. */
+/** Levels above "high" the host and model accept; lower ones are implied. */
 export function extraThinkingEfforts(
-  model: string
+  model: string,
+  provider: string
 ): readonly ExtraThinkingEffort[] {
+  if (!EXTRA_EFFORT_HOSTS.has(provider)) {
+    return [];
+  }
+
   const id = model.trim().toLowerCase().split("/").at(-1) ?? "";
 
   return (
@@ -49,16 +70,17 @@ export function extraThinkingEfforts(
   );
 }
 
-/** The highest level the model accepts that is not above `effort`. */
+/** The highest level the host and model accept that is not above `effort`. */
 export function clampThinkingEffort(
   effort: ThinkingEffort,
-  model: string
+  model: string,
+  provider: string
 ): ThinkingEffort {
   if (effort !== "xhigh" && effort !== "max") {
     return effort;
   }
 
-  const extra = extraThinkingEfforts(model);
+  const extra = extraThinkingEfforts(model, provider);
 
   if (extra.includes(effort)) {
     return effort;

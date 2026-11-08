@@ -116,7 +116,8 @@ export function useChatComposerControls({
           sessionThinkingEffort ??
             thinkingSettingsEffort ??
             DEFAULT_THINKING_EFFORT,
-          activeModel?.id ?? ""
+          activeModel?.id ?? "",
+          activeModel?.provider ?? ""
         ),
         visible: shouldShowThinkingEffort(activeModelSupportsThinking),
       };

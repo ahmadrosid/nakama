@@ -244,7 +244,8 @@ export async function continueAnthropicUntilDone(
 
   const thinkingRequest = buildAnthropicThinkingRequest(
     options.thinking,
-    options.model
+    options.model,
+    options.provider
   );
 
   const replay: AnthropicReplay = {
@@ -581,7 +582,8 @@ async function readAnthropicStream(
 
 export function buildAnthropicThinkingRequest(
   providerOptions: GenerateChatInput["providerOptions"],
-  model: string
+  model: string,
+  provider: ProviderName = "anthropic"
 ): Pick<MessageCreateParams, "thinking" | "output_config"> {
   if (model === "claude-sonnet-5-5") {
     if (!providerOptions?.thinking?.enabled) {
@@ -596,7 +598,11 @@ export function buildAnthropicThinkingRequest(
 
     return {
       output_config: {
-        effort: normalizeThinkingEffort(providerOptions.thinking.effort, model),
+        effort: normalizeThinkingEffort(
+          providerOptions.thinking.effort,
+          model,
+          provider
+        ),
       },
       // SAFETY: The SDK type omits documented adaptive binding fields for these models.
       thinking: {
@@ -619,7 +625,8 @@ export function buildAnthropicThinkingRequest(
           output_config: {
             effort: normalizeThinkingEffort(
               providerOptions.thinking.effort,
-              model
+              model,
+              provider
             ),
           },
           thinking,
@@ -642,7 +649,8 @@ export function buildAnthropicThinkingRequest(
 
   const effort = normalizeThinkingEffort(
     providerOptions.thinking.effort,
-    model
+    model,
+    provider
   );
 
   return {

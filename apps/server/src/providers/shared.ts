@@ -452,13 +452,14 @@ export function readRecord<Value>(value: Value): ProviderJsonRecord {
   return value as ProviderJsonRecord;
 }
 
-/** Defaults a missing effort to medium and lowers it to what `model` accepts. */
+/** Defaults a missing effort to medium and lowers it to what the host and model accept. */
 export function normalizeThinkingEffort(
   effort: ThinkingEffort | undefined,
-  model: string
+  model: string,
+  provider: string
 ): ThinkingEffort {
   return isThinkingEffort(effort)
-    ? clampThinkingEffort(effort, model)
+    ? clampThinkingEffort(effort, model, provider)
     : "medium";
 }
 

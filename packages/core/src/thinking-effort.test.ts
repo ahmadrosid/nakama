@@ -33,7 +33,24 @@ describe("extraThinkingEfforts", () => {
   ];
 
   test.each(cases)("%s", (model, expected) => {
-    expect<readonly string[]>(extraThinkingEfforts(model)).toEqual(expected);
+    expect<readonly string[]>(
+      extraThinkingEfforts(model, "openrouter")
+    ).toEqual(expected);
+  });
+
+  const hosts: [string, string, string[]][] = [
+    ["netra", "deepseek/deepseek-v4.1-flash", ["max"]],
+    ["fireworks", "accounts/fireworks/models/glm-5p2", ["max"]],
+    ["ollama", "deepseek-v4-flash:cloud", []],
+    ["openai_compatible", "deepseek-v4.1-flash", []],
+    ["together", "deepseek-ai/DeepSeek-V4-Pro", []],
+    ["opencode_go", "kimi-k3", []],
+  ];
+
+  test.each(hosts)("%s serving %s", (provider, model, expected) => {
+    expect<readonly string[]>(extraThinkingEfforts(model, provider)).toEqual(
+      expected
+    );
   });
 });
 
@@ -50,7 +67,13 @@ describe("clampThinkingEffort", () => {
     ["google/gemini-3.6-flash", "low", "low"],
     ["llama-3.3-70b", "medium", "medium"],
   ] as const)("%s at %s -> %s", (model, effort, expected) => {
-    expect(clampThinkingEffort(effort, model)).toBe(expected);
+    expect(clampThinkingEffort(effort, model, "openrouter")).toBe(expected);
+  });
+
+  test("a host that stops at high lowers max even for a model that takes it", () => {
+    expect(
+      clampThinkingEffort("max", "deepseek-v4-flash:cloud", "ollama")
+    ).toBe("high");
   });
 });
 
