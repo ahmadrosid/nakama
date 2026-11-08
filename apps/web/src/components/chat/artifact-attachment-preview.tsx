@@ -9,12 +9,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
+  Csv02Icon,
   Download04Icon,
   File01Icon,
   Globe02Icon,
   Image01Icon,
+  LinkSquare02Icon,
   Video01Icon,
   ViewIcon,
+  Xls02Icon,
 } from "hugeicons-react";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { isXlsxFile } from "@/lib/artifact-spreadsheet";
@@ -106,21 +109,12 @@ export function ArtifactAttachmentPreview({
   );
 }
 
-export function FilePreviewCard({
-  artifact,
-  className,
-  isImage,
-  isVideo,
-  onOpen,
-  onDownload,
-}: {
-  artifact: ChatArtifactRef;
-  className?: string;
-  isImage: boolean;
-  isVideo: boolean;
-  onOpen: () => void;
-  onDownload: () => void;
-}) {
+/** The label, icon and icon color a file card shows for one file. */
+function fileCardKind(
+  artifact: ChatArtifactRef,
+  isImage: boolean,
+  isVideo: boolean
+) {
   const excel = isXlsxFile(artifact.filename, artifact.mimeType);
   const extension = artifact.filename.split(".").pop()?.toLowerCase() ?? "";
 
@@ -164,6 +158,26 @@ export function FilePreviewCard({
       ["Excel", "text-emerald-600 dark:text-emerald-400"],
       ["Website", "text-sky-500"],
     ]).get(label) ?? "text-muted-foreground";
+
+  return { excel, extension, Icon, iconColor, label };
+}
+
+export function FilePreviewCard({
+  artifact,
+  className,
+  isImage,
+  isVideo,
+  onOpen,
+  onDownload,
+}: {
+  artifact: ChatArtifactRef;
+  className?: string;
+  isImage: boolean;
+  isVideo: boolean;
+  onOpen: () => void;
+  onDownload: () => void;
+}) {
+  const { Icon, iconColor, label } = fileCardKind(artifact, isImage, isVideo);
 
   return (
     <div
@@ -225,6 +239,80 @@ export function FilePreviewCard({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+    </div>
+  );
+}
+
+/** A small card with one open button, for files the user sent. */
+export function CompactFileCard({
+  artifact,
+  className,
+  isImage,
+  isVideo,
+  onOpen,
+}: {
+  artifact: ChatArtifactRef;
+  className?: string;
+  isImage: boolean;
+  isVideo: boolean;
+  onOpen: () => void;
+}) {
+  const { excel, extension, Icon, iconColor, label } = fileCardKind(
+    artifact,
+    isImage,
+    isVideo
+  );
+
+  const sheet = excel || label === "CSV" || label === "TSV";
+  const FileIcon = label === "CSV" ? Csv02Icon : sheet ? Xls02Icon : Icon;
+  const { filename } = artifact;
+
+  return (
+    <div
+      className={cn(
+        "flex w-full min-w-0 max-w-full items-center gap-3 rounded-2xl border border-border bg-background py-2 pr-1 pl-2",
+        className
+      )}
+    >
+      <button
+        aria-label={`Preview ${filename}`}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onOpen}
+        type="button"
+      >
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-xl",
+            sheet
+              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+              : cn("bg-muted", iconColor)
+          )}
+        >
+          <FileIcon aria-hidden className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span
+            className="block truncate font-medium text-foreground text-sm"
+            title={filename}
+          >
+            {filename}
+          </span>
+          <span className="block text-muted-foreground text-xs">
+            {sheet && extension
+              ? `Spreadsheet · ${extension.toUpperCase()}`
+              : label}
+          </span>
+        </span>
+      </button>
+      <Button
+        aria-label={`Open ${filename}`}
+        className="size-11 shrink-0 text-muted-foreground"
+        onClick={onOpen}
+        size="icon"
+        variant="ghost"
+      >
+        <LinkSquare02Icon aria-hidden className="size-4.5" />
+      </Button>
     </div>
   );
 }

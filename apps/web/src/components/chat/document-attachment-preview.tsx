@@ -10,7 +10,7 @@ import {
   artifactPanelBodyClassName,
   artifactPanelDefaultWidth,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
-import { FilePreviewCard } from "@/components/chat/artifact-attachment-preview";
+import { CompactFileCard } from "@/components/chat/artifact-attachment-preview";
 import { WorkbookGrid } from "@/components/chat/artifact-workbook-preview";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -336,7 +336,7 @@ export function DocumentAttachmentPreview({
   useEffect(() => () => hide?.(panelId), [hide, panelId]);
 
   return (
-    <FilePreviewCard
+    <CompactFileCard
       artifact={{
         filename: file.filename,
         mimeType: mime,
@@ -347,7 +347,6 @@ export function DocumentAttachmentPreview({
       className={className}
       isImage={isImageArtifactMimeType(mime)}
       isVideo={isVideoArtifactMimeType(mime)}
-      onDownload={() => downloadFile(file)}
       onOpen={() => {
         setFullscreen(false);
         show?.({

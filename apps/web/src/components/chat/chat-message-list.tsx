@@ -22,7 +22,7 @@ import {
   Edit03Icon,
   GitBranchIcon,
   MoreHorizontalIcon,
-  Rotate02Icon,
+  RefreshIcon,
 } from "hugeicons-react";
 import {
   forwardRef,
@@ -1218,7 +1218,7 @@ function ChatMessageRow({
     >
       <UserMessageAttachments message={message} />
       {message.content || message.questionnaireAnswers?.length ? (
-        <MessageContent className="ml-auto min-w-0 max-w-full overflow-visible group-[.is-user]:ml-auto">
+        <MessageContent className="ml-auto min-w-0 max-w-full overflow-visible group-[.is-user]:ml-auto group-[.is-user]:rounded-2xl">
           <UserMessageContent message={message} />
         </MessageContent>
       ) : null}
@@ -1373,7 +1373,7 @@ function AssistantMessageActions({
           title="Try again"
           type="button"
         >
-          <Rotate02Icon aria-hidden className="size-4" />
+          <RefreshIcon aria-hidden className="size-4" />
         </button>
       ) : null}
       {onBranchMessage && branchCreatedAt ? (

@@ -743,9 +743,11 @@ function ToolOnlyWorkGroup({
             {singleToolLabel(tools) ?? (
               <span className={thinkingStyles.verb}>{toolLabel}</span>
             )}
-            {elapsedSeconds === null
-              ? null
-              : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
+            {elapsedSeconds === null ? null : (
+              <span className={cn(tools.length === 1 && thinkingStyles.verb)}>
+                {` · ${formatElapsedSeconds(elapsedSeconds)}`}
+              </span>
+            )}
           </span>
         ) : (
           <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>

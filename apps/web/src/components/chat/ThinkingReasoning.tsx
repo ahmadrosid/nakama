@@ -291,7 +291,9 @@ function ThinkingReasoningHeader({
         {done ? (
           <>
             {doneLabel}
-            {durationLabel}
+            <span className={cn(stepLabelOverride ? styles.verb : undefined)}>
+              {durationLabel}
+            </span>
           </>
         ) : (
           `${liveLabel}${liveStepLabel}`
