@@ -31,6 +31,12 @@ export const KERNEL_BROWSER_SECRET = "kernel-browser";
 
 export const KERNEL_API_KEY_ENV = "KERNEL_API_KEY";
 
+export const AUTOMATION_WEBHOOK_SECRET_PREFIX = "automation-webhook:";
+
+export function automationWebhookSecretName(automationId: string): string {
+  return `${AUTOMATION_WEBHOOK_SECRET_PREFIX}${automationId}`;
+}
+
 export function providerSecretEnvNames(
   providerId: string,
   type: UserProviderName
@@ -239,7 +245,12 @@ export class ManagedSecrets {
     const hash = createHash("sha256");
     const rows = await this.db.listManagedSecrets();
 
-    for (const row of rows.sort((a, b) =>
+    // Chat sessions never read webhook secrets, so rotating one must not reset them.
+    const sessionRows = rows.filter(
+      (row) => !row.name.startsWith(AUTOMATION_WEBHOOK_SECRET_PREFIX)
+    );
+
+    for (const row of sessionRows.sort((a, b) =>
       `${a.scope}:${a.name}`.localeCompare(`${b.scope}:${b.name}`)
     )) {
       hash.update(

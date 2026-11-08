@@ -25,6 +25,12 @@ import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
 import { z } from "zod";
+import {
+  saveNewWebhookSecret,
+  type WebhookSecretStore,
+  webhookSignatureMatches,
+} from "./automation-webhook-secrets";
+import { automationWebhookSecretName } from "./managed-secrets";
 
 const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
 
@@ -40,6 +46,7 @@ export interface AutomationServiceOptions {
   canSendEmail?: (profileId: string, orgId: string) => Promise<boolean>;
   getUserTimezone: () => Promise<string>;
   onChange?: () => void | Promise<void>;
+  secrets?: WebhookSecretStore;
 }
 
 export class AutomationService {
@@ -55,6 +62,7 @@ export class AutomationService {
     orgId: string
   ) => Promise<boolean>;
   private onChange?: () => void | Promise<void>;
+  private readonly secrets?: AutomationServiceOptions["secrets"];
 
   constructor(db: DatabaseAdapter, options: AutomationServiceOptions) {
     this.db = db;
@@ -62,6 +70,7 @@ export class AutomationService {
     this.getUserTimezone = options.getUserTimezone;
     this.canSendEmail = options.canSendEmail;
     this.onChange = options.onChange;
+    this.secrets = options.secrets;
   }
 
   setOnChange(onChange: () => void | Promise<void>): void {
@@ -299,10 +308,74 @@ export class AutomationService {
       version: existing.version + 1,
     };
 
+    if (existing.trigger.type === "webhook" && trigger.type !== "webhook") {
+      await this.deleteWebhookSecret(updated);
+    }
+
     await this.store.save(updated);
     await this.notifyChange();
 
     return this.enrichAutomation(updated);
+  }
+
+  /** Makes a new webhook secret; the old one stops working at once. */
+  async createWebhookSecret(id: string, orgId: string): Promise<string> {
+    const automation = await this.get(id, orgId);
+
+    if (!automation) {
+      throw new NakamaApiError("Automation not found.", 404);
+    }
+
+    if (automation.trigger.type !== "webhook") {
+      throw new NakamaApiError("Set the trigger to webhook first.", 400);
+    }
+
+    if (!this.secrets) {
+      throw new NakamaApiError(
+        "Set NAKAMA_SECRETS_KEY before saving secrets.",
+        400
+      );
+    }
+
+    return saveNewWebhookSecret(this.secrets, orgId, id);
+  }
+
+  /** Checks a GitHub-style `X-Hub-Signature-256` header against the raw body. */
+  verifyWebhookSignature(
+    automation: StoredAutomation,
+    body: Uint8Array,
+    header: string | undefined
+  ): Promise<boolean> {
+    return this.secrets
+      ? webhookSignatureMatches(this.secrets, automation, body, header)
+      : Promise.resolve(false);
+  }
+
+  claimWebhookDelivery(
+    automationId: string,
+    deliveryId: string
+  ): Promise<boolean> {
+    return this.db.claimAutomationWebhookDelivery(
+      automationId,
+      deliveryId,
+      new Date().toISOString()
+    );
+  }
+
+  releaseWebhookDelivery(
+    automationId: string,
+    deliveryId: string
+  ): Promise<void> {
+    return this.db.releaseAutomationWebhookDelivery(automationId, deliveryId);
+  }
+
+  private async deleteWebhookSecret(automation: StoredAutomation) {
+    if (this.secrets && automation.orgId) {
+      await this.secrets.delete(
+        automation.orgId,
+        automationWebhookSecretName(automation.id)
+      );
+    }
   }
 
   async delete(id: string, orgId: string): Promise<boolean> {
@@ -311,6 +384,8 @@ export class AutomationService {
     if (!existing) {
       return false;
     }
+
+    await this.deleteWebhookSecret(existing);
 
     const deleted = await this.store.delete(id);
 
@@ -406,18 +481,22 @@ export class AutomationService {
     return run ? toRunRecord(run) : null;
   }
 
-  async createRun(automationId: string): Promise<AutomationRunRecord> {
+  async createRun(
+    automationId: string,
+    webhook?: { input: string }
+  ): Promise<AutomationRunRecord> {
     const run = {
       automationId,
       completedAt: null,
       error: null,
       id: createId("run"),
       output: null,
+      source: webhook ? ("webhook" as const) : null,
       startedAt: new Date().toISOString(),
       status: "running" as const,
     };
 
-    await this.db.insertAutomationRun(run);
+    await this.db.insertAutomationRun({ ...run, input: webhook?.input });
 
     return toRunRecord(run);
   }
@@ -602,6 +681,7 @@ function toRunRecord(
     error: string | null;
     deliveryStatus?: string | null;
     deliveryError?: string | null;
+    source?: "webhook" | null;
   },
   readThroughAt?: string | null
 ): AutomationRunRecord {
@@ -617,6 +697,10 @@ function toRunRecord(
     startedAt: run.startedAt,
     status: run.status,
   };
+
+  if (run.source === "webhook") {
+    record.source = "webhook";
+  }
 
   if (readThroughAt !== undefined) {
     record.read = !isAutomationRunUnread(record, readThroughAt);

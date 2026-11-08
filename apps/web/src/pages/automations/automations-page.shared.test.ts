@@ -84,6 +84,17 @@ test("daily cron reads as plain words and other triggers stay readable", () => {
   expect(describeTrigger({ type: "manual" }).label).toBe("Manual only");
 });
 
+test("a webhook trigger is not treated as a schedule", () => {
+  const trigger = { type: "webhook" } as const;
+
+  expect(describeTrigger(trigger).label).toBe("On webhook");
+  expect(previewAutomationSchedule(trigger, "UTC")).toBeNull();
+  expect(schedulePresetTrigger("daily", trigger)).toMatchObject({
+    timezone: undefined,
+    type: "schedule",
+  });
+});
+
 test("schedule presets recognize supported frequencies without changing custom schedules", () => {
   for (const [cron, frequency] of [
     ["15 * * * *", "hourly"],

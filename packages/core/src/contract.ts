@@ -18,7 +18,8 @@ export type JsonValue =
 export type AutomationTrigger =
   | { type: "manual" }
   | { type: "schedule"; cron: string; timezone?: string }
-  | { type: "runAt"; at: string; timezone?: string };
+  | { type: "runAt"; at: string; timezone?: string }
+  | { type: "webhook" };
 
 export interface AutomationStep {
   id: string;
@@ -99,6 +100,8 @@ export interface AutomationRunRecord {
   progress?: ChatMessage[];
   /** Present when the API resolves read state for the current user. */
   read?: boolean;
+  /** Set when a signed webhook started the run. */
+  source?: "webhook";
   startedAt: string;
   status: AutomationRunStatus;
 }
@@ -1450,6 +1453,11 @@ export interface UpdateAutomationRequest {
 
 export interface RunAutomationResponse {
   run: AutomationRunRecord;
+}
+
+/** The secret is shown only in this response. */
+export interface CreateAutomationWebhookSecretResponse {
+  secret: string;
 }
 
 export interface ListAutomationRunsResponse {

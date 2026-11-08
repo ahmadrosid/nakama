@@ -603,7 +603,10 @@ function AutomationScheduleFields({
 function AutomationNextRun({ automation }: { automation: StoredAutomation }) {
   const { data: userTimezone, isError } = useUserTimezone();
 
-  if (automation.trigger.type === "manual") {
+  if (
+    automation.trigger.type === "manual" ||
+    automation.trigger.type === "webhook"
+  ) {
     return null;
   }
 

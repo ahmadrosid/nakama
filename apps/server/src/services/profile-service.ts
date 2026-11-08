@@ -108,6 +108,7 @@ import {
   parseToolEnvDeclarations,
   readToolEnvDeclarations,
 } from "./custom-tool-shared";
+import { automationWebhookSecretName } from "./managed-secrets";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -721,6 +722,7 @@ export class ProfileService {
     ];
 
     const moved: [string, string][] = [];
+    const automationIds = await this.listProfileAutomationIds(orgId, profileId);
 
     try {
       for (const [source, targetPath] of paths) {
@@ -749,7 +751,28 @@ export class ProfileService {
       throw error;
     }
 
+    // Moved automations are disabled; the owner makes a new secret in the new org.
+    await this.deleteWebhookSecrets(orgId, automationIds);
+
     return this.getProfile(destination, profileId);
+  }
+
+  private async listProfileAutomationIds(
+    orgId: string,
+    profileId: string
+  ): Promise<string[]> {
+    return (await this.db.listAutomationsForOrg(orgId))
+      .filter((automation) => automation.profileId === profileId)
+      .map((automation) => automation.id);
+  }
+
+  private async deleteWebhookSecrets(
+    orgId: string,
+    automationIds: string[]
+  ): Promise<void> {
+    for (const id of automationIds) {
+      await this.db.deleteManagedSecret(orgId, automationWebhookSecretName(id));
+    }
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
@@ -786,6 +809,8 @@ export class ProfileService {
 
     await this.beforeChannelOwnerDelete?.(orgId, profileId);
 
+    const automationIds = await this.listProfileAutomationIds(orgId, profileId);
+
     const deleted = await deleteProfileWithHistoryArchives(
       this.db,
       orgId,
@@ -796,6 +821,8 @@ export class ProfileService {
     if (!deleted) {
       throw new Error("Profile not found.");
     }
+
+    await this.deleteWebhookSecrets(orgId, automationIds);
   }
 
   async listTools(orgId: string): Promise<ListToolsResponse> {

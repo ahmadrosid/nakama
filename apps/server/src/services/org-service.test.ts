@@ -1590,7 +1590,7 @@ describe("OrgService", () => {
   });
 
   test("permanent deletion removes tool secrets from the global config", async () => {
-    const { orgService, authService } = createOrgService();
+    const { authService, databaseAdapter: db, orgService } = createOrgService();
 
     const bootstrapped = await orgService.bootstrapInitialSetup({
       admin: {
@@ -1648,6 +1648,18 @@ describe("OrgService", () => {
       sessionId: "session_kept_org",
     });
 
+    for (const [scope, name] of [
+      [bootstrapped.organization.id, "automation-webhook:auto_deleted"],
+      [kept.organization.id, "automation-webhook:auto_kept"],
+    ] as const) {
+      await db.putManagedSecret({
+        encryptedValue: "enc",
+        name,
+        scope,
+        source: "settings",
+      });
+    }
+
     await orgService.archiveOrganization(
       bootstrapped.organization.id,
       bootstrapped.user.id
@@ -1656,6 +1668,11 @@ describe("OrgService", () => {
       bootstrapped.organization.id
     );
 
+    expect(
+      (await db.listManagedSecrets())
+        .map((secret) => secret.name)
+        .filter((name) => name.startsWith("automation-webhook:"))
+    ).toEqual(["automation-webhook:auto_kept"]);
     expect(
       await loadToolApiKey(bootstrapped.organization.id, "tool_deleted_org")
     ).toBeUndefined();

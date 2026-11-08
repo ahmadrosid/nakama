@@ -84,6 +84,7 @@ import {
   loadToolEnv,
   readHandlerConfig,
 } from "./custom-tool-shared";
+import { AUTOMATION_WEBHOOK_SECRET_PREFIX } from "./managed-secrets";
 import { namespacedMcpToolName } from "./mcp-tool-bridge";
 import { loadMfaPolicy } from "./mfa-config";
 import {
@@ -1109,6 +1110,7 @@ export class OrgService {
     // Keep the database row available for a safe retry if disk cleanup fails.
     await rm(getOrgConfigDir(orgId), { force: true, recursive: true });
     await deleteOrgToolCredentials(orgId, this.databaseAdapter);
+    await this.deleteOrgWebhookSecrets(orgId);
     await rm(join(getUserConfigDir(), "retired-app-users", orgId), {
       force: true,
       recursive: true,
@@ -1117,6 +1119,17 @@ export class OrgService {
 
     if (!deleted) {
       throw new NakamaApiError("Not found", 404);
+    }
+  }
+
+  private async deleteOrgWebhookSecrets(orgId: string): Promise<void> {
+    for (const secret of await this.databaseAdapter.listManagedSecrets()) {
+      if (
+        secret.scope === orgId &&
+        secret.name.startsWith(AUTOMATION_WEBHOOK_SECRET_PREFIX)
+      ) {
+        await this.databaseAdapter.deleteManagedSecret(orgId, secret.name);
+      }
     }
   }
 
