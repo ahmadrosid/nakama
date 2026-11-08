@@ -16,7 +16,7 @@ export const THINKING_EFFORT_OPTIONS: Array<{
   { label: "High", value: "high" },
 ];
 
-const EXTRA_THINKING_EFFORT_LABELS = { max: "Max", xhigh: "Extra high" };
+const EXTRA_THINKING_EFFORT_LABELS = { max: "Max", xhigh: "X-High" };
 
 /** Low/medium/high plus the higher levels the active model accepts. */
 export function thinkingEffortOptionsFor(
