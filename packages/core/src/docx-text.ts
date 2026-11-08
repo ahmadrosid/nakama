@@ -52,13 +52,58 @@ function decodeXmlEntities(value: string): string {
  * is not a valid `.docx`, but it is still a document we can read: pull the text out
  * of each `<w:p>` and promote heading styles to Markdown headings.
  */
+/**
+ * Bodies of each `<w:NAME ...>...</w:NAME>` element, found with `indexOf` so the
+ * scan stays linear on hostile input (a lazy regex goes quadratic when close tags
+ * are missing). `<w:NAMEx` tags such as `<w:pPr>` or `<w:tab/>` are skipped, and a
+ * self-closing `<w:NAME/>` has no body.
+ */
+function elementBodies(xml: string, name: string): string[] {
+  const open = `<w:${name}`;
+  const close = `</w:${name}>`;
+  const bodies: string[] = [];
+  let pos = 0;
+
+  for (;;) {
+    const start = xml.indexOf(open, pos);
+    if (start === -1) {
+      break;
+    }
+
+    const next = xml[start + open.length] ?? "";
+    if (next !== ">" && next !== "/" && !/\s/.test(next)) {
+      pos = start + open.length;
+      continue;
+    }
+
+    const tagEnd = xml.indexOf(">", start);
+    if (tagEnd === -1) {
+      break;
+    }
+
+    if (xml[tagEnd - 1] === "/") {
+      pos = tagEnd + 1;
+      continue;
+    }
+
+    const end = xml.indexOf(close, tagEnd + 1);
+    if (end === -1) {
+      break;
+    }
+
+    bodies.push(xml.slice(tagEnd + 1, end));
+    pos = end + close.length;
+  }
+
+  return bodies;
+}
+
 function convertWordprocessingXmlToMarkdown(xml: string): string {
   const blocks: string[] = [];
 
-  for (const match of xml.match(/<w:p[\s>][\s\S]*?<\/w:p>|<w:p\s*\/>/gi) ??
-    []) {
-    const text = [...match.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/gi)]
-      .map((run) => decodeXmlEntities(run[1] ?? ""))
+  for (const paragraph of elementBodies(xml, "p")) {
+    const text = elementBodies(paragraph, "t")
+      .map(decodeXmlEntities)
       .join("")
       .trim();
 
@@ -66,7 +111,7 @@ function convertWordprocessingXmlToMarkdown(xml: string): string {
       continue;
     }
 
-    const styleMatch = match.match(/<w:pStyle\s+w:val="Heading(\d)"/i);
+    const styleMatch = paragraph.match(/<w:pStyle\s+w:val="Heading(\d)"/i);
     const level = styleMatch ? Number(styleMatch[1]) : 0;
     blocks.push(
       level >= 1 && level <= 6 ? `${"#".repeat(level)} ${text}` : text
