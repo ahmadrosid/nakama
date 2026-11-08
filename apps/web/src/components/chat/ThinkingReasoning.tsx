@@ -22,6 +22,8 @@ export interface ThinkingReasoningProps {
   text: string;
   thinkingDurationMs?: number;
   toolCount?: number;
+  /** Replaces "1 step" when the only step is one tool call. */
+  toolLabel?: string;
 }
 
 function useThinkingElapsed(
@@ -241,6 +243,7 @@ function ThinkingReasoningHeader({
   hasChildren,
   isThinkingStreaming,
   stepCount,
+  stepLabelOverride,
   onToggle,
 }: {
   activityLabel?: string;
@@ -250,10 +253,12 @@ function ThinkingReasoningHeader({
   hasChildren: boolean;
   isThinkingStreaming: boolean;
   stepCount: number;
+  stepLabelOverride?: string;
   onToggle: () => void;
 }) {
   const stepLabel = `${stepCount} ${stepCount === 1 ? "step" : "steps"}`;
-  const doneLabel = stepCount > 0 ? stepLabel : "Activity";
+  const doneLabel =
+    stepLabelOverride ?? (stepCount > 0 ? stepLabel : "Activity");
 
   const durationLabel =
     elapsedSeconds === null
@@ -376,6 +381,7 @@ export function ThinkingReasoning({
   className,
   children,
   toolCount = 0,
+  toolLabel,
 }: ThinkingReasoningProps) {
   const displayText = useRafCoalescedValue(text, isThinkingStreaming);
   const trimmed = displayText.trim();
@@ -420,6 +426,9 @@ export function ThinkingReasoning({
         isThinkingStreaming={isThinkingStreaming}
         onToggle={toggle}
         stepCount={stepCount}
+        stepLabelOverride={
+          stepCount === 1 && toolCount === 1 ? toolLabel : undefined
+        }
       />
       <ThinkingReasoningBody
         expanded={expanded}

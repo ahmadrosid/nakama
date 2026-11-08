@@ -106,3 +106,39 @@ for (const withThinking of [false, true]) {
     }
   });
 }
+
+test("one finished tool call names its target in the activity header", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <AssistantTurnSegmentView
+          segment={{
+            active: false,
+            kind: "work",
+            tools: [
+              {
+                content: "",
+                id: "tool",
+                role: "tool",
+                tool: "read_file",
+                toolInput: { path: "uploads/verify-bs-inventory.xls" },
+                toolStatus: "done",
+              },
+            ],
+          }}
+        />
+      )
+    );
+
+    const header = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Toggle activity"]'
+    );
+
+    expect(header?.textContent).toContain("verify-bs-inventory.xls");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

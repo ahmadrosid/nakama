@@ -595,6 +595,7 @@ function OtherWorkGroup({
         tools.length === 0 && !active ? thinking.thinkingDurationMs : undefined
       }
       toolCount={tools.length}
+      toolLabel={singleToolLabel(tools)}
     >
       <ToolStepList
         modelLabel={modelLabel}
@@ -603,6 +604,15 @@ function OtherWorkGroup({
       />
     </ThinkingReasoning>
   );
+}
+
+/** One finished tool call reads as its action, e.g. "Read report.xls". */
+function singleToolLabel(tools: ChatListItem[]): string | undefined {
+  const [tool] = tools;
+
+  return tools.length === 1 && tool
+    ? formatToolActionLabel(tool.tool, tool.toolInput)
+    : undefined;
 }
 
 function toolActivityLabel(tool: string | undefined): string {
@@ -664,7 +674,9 @@ function ToolOnlyWorkGroup({
       >
         {done ? (
           <span className={thinkingStyles.label}>
-            <span className={thinkingStyles.verb}>{toolLabel}</span>
+            <span className={thinkingStyles.verb}>
+              {singleToolLabel(tools) ?? toolLabel}
+            </span>
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
