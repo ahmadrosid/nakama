@@ -487,13 +487,18 @@ function buildProviderFieldsFromRequest(
     return { customModels };
   }
 
+  const pickedModel = request.model?.trim();
+
+  // The Add form sends only the picked model for discovery providers.
   const customModels = request.customModels?.length
     ? type === "cloudflare"
       ? validateCloudflareCustomModels(request.customModels)
       : keepsUserModelList(type)
         ? validateCustomModels(request.customModels)
         : undefined
-    : undefined;
+    : pickedModel && isDiscoveryModelProvider(type)
+      ? validateCustomModels([{ default: true, id: pickedModel }])
+      : undefined;
 
   const rawBaseUrl = request.baseUrl?.trim();
 
