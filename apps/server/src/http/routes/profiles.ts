@@ -2020,6 +2020,7 @@ export function registerProfileRoutes(
   );
 
   app.get("/v1/profiles/:profileId/avatar", async (c) => {
+    await requireProfileRead(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const avatar = await agent.getProfileAvatar(orgId, profileId);
