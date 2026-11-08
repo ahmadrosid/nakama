@@ -223,6 +223,7 @@ async function createPrivateProfileScenario() {
   });
 
   const { app } = createMinimalHonoApp({ agent, databaseAdapter });
+
   return { app, databaseAdapter };
 }
 
