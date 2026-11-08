@@ -72,7 +72,7 @@ Prefer role and text locators. Add `data-testid` only when labels collide.
 
 One container: API + web + platform workers. Data at `/nakama/data` (`NAKAMA_CONFIG_DIR`), dashboard on `4310`. Run and build steps: [README](./README.md). Build from source: `./scripts/docker-build-run.sh`; fresh start: `./scripts/docker-destroy.sh` first.
 
-Runtime deps come from committed lockfiles. To change them, edit the manifest in `.docker/runtime-deps` (or `.docker/meet-deps`), run `bun install --lockfile-only --os=linux --cpu='*'`, and commit both files.
+Runtime deps come from committed lockfiles. To change them, edit the manifest in `.docker/runtime-deps`, run `bun install --lockfile-only --os=linux --cpu='*'`, and commit both files.
 
 ## Packages & server
 

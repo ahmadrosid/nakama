@@ -14,6 +14,7 @@ import {
   lazy,
   type ReactNode,
   Suspense,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -24,11 +25,15 @@ import { BrowserLiveViewPanelBridge } from "@/components/chat/browser-live-view-
 import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
+import type { AgentActivity } from "@/components/moodstone";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
-import { formatSessionChannelLabel } from "@/lib/chat-history";
+import {
+  type ChatListItem,
+  formatSessionChannelLabel,
+} from "@/lib/chat-history";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { extractModelId } from "@/lib/models";
 import {
@@ -37,7 +42,10 @@ import {
   ChatSetupFinding,
   ChatSetupPill,
 } from "@/pages/chat/chat-onboarding";
-import { shouldShowCognitoControl } from "@/pages/chat/chat-page.shared";
+import {
+  deriveAgentActivity,
+  shouldShowCognitoControl,
+} from "@/pages/chat/chat-page.shared";
 import {
   ChatPageColumn,
   ChatSessionBar,
@@ -57,6 +65,48 @@ import type { ChatPageState } from "@/pages/chat/use-chat-page";
 const ProviderSetupForm = lazy(async () => ({
   default: (await import("@/components/ProviderSetupForm")).ProviderSetupForm,
 }));
+
+/** Long enough to see the celebration, short enough not to look stuck. */
+const DONE_ACTIVITY_MS = 2400;
+
+function useAgentActivity(
+  busy: boolean,
+  messages: ChatListItem[],
+  lastSuccessfulTurnAt: number | null,
+  sessionId: string
+): AgentActivity {
+  const [celebrating, setCelebrating] = useState(false);
+  const seen = useRef({ sessionId, turnAt: lastSuccessfulTurnAt });
+
+  useEffect(() => {
+    // The timestamp survives a session change: opening another chat must not
+    // replay the flash of the one that just finished.
+    if (seen.current.sessionId !== sessionId) {
+      seen.current = { sessionId, turnAt: lastSuccessfulTurnAt };
+      setCelebrating(false);
+
+      return;
+    }
+
+    if (
+      lastSuccessfulTurnAt === null ||
+      seen.current.turnAt === lastSuccessfulTurnAt
+    ) {
+      return;
+    }
+
+    seen.current.turnAt = lastSuccessfulTurnAt;
+    setCelebrating(true);
+    const timer = setTimeout(() => setCelebrating(false), DONE_ACTIVITY_MS);
+
+    return () => clearTimeout(timer);
+  }, [lastSuccessfulTurnAt, sessionId]);
+
+  return useMemo(
+    () => deriveAgentActivity(busy, messages, celebrating),
+    [busy, messages, celebrating]
+  );
+}
 
 export function ChatPageContent({
   below,
@@ -377,6 +427,7 @@ function ChatConversation({
     handleBranchMessage,
     handleEditMessage,
     handleTryAgainMessage,
+    lastSuccessfulTurnAt,
     messages,
     profileId,
     queuedMessages,
@@ -388,6 +439,13 @@ function ChatConversation({
     showThinking,
     turnStartedAt,
   } = state;
+
+  const agentActivity = useAgentActivity(
+    busy,
+    messages,
+    lastSuccessfulTurnAt,
+    session?.id ?? "new"
+  );
 
   // Cognito chats are not kept, so neither is their open panel.
   const rememberId = session && !cognito ? session.id : undefined;
@@ -440,7 +498,9 @@ function ChatConversation({
                   <ChatStatusButton />
                 </>
               }
+              activity={agentActivity}
               cognito={cognito}
+              profile={activeProfile}
               profileId={profileId}
               sessionId={session.id}
             />

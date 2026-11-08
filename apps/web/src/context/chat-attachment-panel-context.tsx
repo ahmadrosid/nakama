@@ -134,7 +134,10 @@ function ChatPanelColumn({
   return (
     <div
       className={cn(
-        "flex min-h-0 shrink-0 flex-col max-sm:w-full max-sm:flex-1",
+        "flex min-h-0 shrink-0 flex-col max-md:w-full max-md:flex-1",
+        // The saved width is capped by the window, not the chat area, so with
+        // the sidebar open the chat could shrink to ~200px. Keep 24rem for it.
+        !fullscreen && "md:max-w-[max(20rem,calc(100%-24rem))]",
         "[&>aside+aside]:border-t [&>aside]:min-h-0 [&>aside]:flex-1 [&>aside]:overflow-hidden",
         sized &&
           "[&>aside+aside>[role=separator]]:hidden [&>aside+aside]:relative [&>aside]:w-full! [&>aside]:max-w-none",

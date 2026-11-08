@@ -12,6 +12,8 @@ import {
 import { join, relative, resolve, sep } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
+import { NakamaApiError } from "./api-error";
+import { getManagedSecretWriter, resolveManagedSecret } from "./config";
 import {
   parseIni,
   readDirectoryOrEmpty,
@@ -66,6 +68,8 @@ export function isChannelOwner(
   return ChannelOwnerSchema.safeParse(scope).success;
 }
 
+const PROFILE_ID_PATTERN = /^[A-Za-z0-9][\w.-]{0,127}$/;
+
 export function getChannelConfigDir(
   platform: ChannelPlatform,
   scope: ChannelConfigScope
@@ -77,7 +81,7 @@ export function getChannelConfigDir(
     );
   }
 
-  if (!/^[A-Za-z0-9][\w.-]{0,127}$/.test(scope.profileId)) {
+  if (!PROFILE_ID_PATTERN.test(scope.profileId)) {
     throw new Error("Invalid profile id");
   }
 
@@ -132,6 +136,11 @@ export async function listChannelOwners(
     for (const profileId of await readDirectoryOrEmpty(
       join(getOrgConfigDir(orgId), "channels")
     )) {
+      // A stray file such as .DS_Store is not an agent.
+      if (!PROFILE_ID_PATTERN.test(profileId)) {
+        continue;
+      }
+
       const owner = { orgId, profileId };
       const path = join(getChannelConfigDir(platform, owner), "config.ini");
       assertChannelPath(path);
@@ -250,6 +259,12 @@ export async function removeChannelConnection(
     force: true,
     recursive: true,
   });
+
+  if (platform === "telegram" || platform === "discord") {
+    const secret = botTokenSecretRef(platform, owner);
+    await getManagedSecretWriter()?.delete(secret.scope, secret.name);
+  }
+
   await releaseChannelClaims(platform, owner);
 }
 
@@ -361,6 +376,8 @@ export type HandshakeSecret = {
 export type BotChannelConfigFile<TId extends string | number> = {
   allowedUserIds: TId[];
   botToken: string;
+  /** config.ini holds `bot_token_ref=managed`: the server keeps the token encrypted. */
+  botTokenManaged?: boolean;
   handshakeCode: string | null;
   handshakeExpiresAt: string | null;
   pairedUserIds: TId[];
@@ -421,12 +438,162 @@ export function resolveHandshakeOnSave<TId extends string | number>(
   return toHandshakeSecret(createPairingCodeSecret());
 }
 
+export type BotTokenSecretRef = { name: string; scope: string };
+
+/** Where a bot token lives in managed secrets once NAKAMA_SECRETS_KEY is set. */
+export function botTokenSecretRef(
+  platform: "telegram" | "discord",
+  scope: ChannelConfigScope
+): BotTokenSecretRef {
+  if (isChannelOwner(scope)) {
+    return { name: `${platform}-bot:${scope.profileId}`, scope: scope.orgId };
+  }
+
+  return { name: `${platform}-bot`, scope: scope ?? "global" };
+}
+
+const MANAGED_BOT_TOKEN_LINE = "bot_token_ref=managed";
+
+/**
+ * Moves one agent's plaintext bot_token into managed secrets and leaves the
+ * managed marker in its place. The file stays: it marks the connection.
+ */
+export async function moveBotTokenToSecrets(
+  platform: "telegram" | "discord",
+  owner: ChannelOwner
+): Promise<void> {
+  const secrets = getManagedSecretWriter();
+
+  if (!secrets) {
+    return;
+  }
+
+  const configDir = getChannelConfigDir(platform, owner);
+  const path = join(configDir, "config.ini");
+
+  // A worker pairing a user rewrites this file; hold its lock so that pairing survives.
+  await withPairingConfigLock(configDir, async () => {
+    const raw = await readTextOrNull(path);
+    const token = raw ? parseIni(raw).bot_token?.trim() : "";
+
+    if (!(raw && token)) {
+      return;
+    }
+
+    const secret = botTokenSecretRef(platform, owner);
+    await secrets.migrate(secret.scope, secret.name, token);
+
+    // migrate keeps a row that already exists, so drop the file copy only when they agree.
+    if ((await resolveManagedSecret(secret.scope, secret.name)) !== token) {
+      throw new Error("A different bot token is already saved for this agent.");
+    }
+
+    await writeTextFile(
+      path,
+      raw.replace(/^\s*bot_token\s*=.*$/m, MANAGED_BOT_TOKEN_LINE)
+    );
+  });
+}
+
+/**
+ * Runs at start-up and after a restore. Legacy org-level files are left alone:
+ * claiming one moves its token then. One bad entry only skips that entry.
+ */
+export async function migrateChannelBotTokens(): Promise<void> {
+  if (!getManagedSecretWriter()) {
+    return;
+  }
+
+  for (const platform of ["telegram", "discord"] as const) {
+    let owners: ChannelOwner[];
+
+    try {
+      owners = await listChannelOwners(platform);
+    } catch (error) {
+      console.warn(`Could not list ${platform} connections to encrypt`, error);
+      continue;
+    }
+
+    for (const owner of owners) {
+      try {
+        await moveBotTokenToSecrets(platform, owner);
+      } catch (error) {
+        console.warn(
+          `The ${platform} bot token of ${owner.orgId}/${owner.profileId} stays in config.ini`,
+          error
+        );
+      }
+    }
+  }
+}
+
+const readBotTokenInProcess = (secret: BotTokenSecretRef) =>
+  resolveManagedSecret(secret.scope, secret.name);
+
+let readBotToken = readBotTokenInProcess;
+
+/**
+ * Worker side of the bot token: ask the server, which holds the key. Each
+ * token is read once, since a token change restarts the worker. Waits with
+ * backoff while the server starts or rate limits. Pass null to read in
+ * process again.
+ */
+export function readBotTokensFromServer(
+  fetchToken: ((secret: BotTokenSecretRef) => Promise<string | null>) | null,
+  wait: (ms: number) => Promise<void> = sleep
+): void {
+  if (!fetchToken) {
+    readBotToken = readBotTokenInProcess;
+
+    return;
+  }
+
+  const tokens = new Map<string, string>();
+
+  readBotToken = async (secret) => {
+    const key = `${secret.scope}/${secret.name}`;
+    const cached = tokens.get(key);
+
+    if (cached) {
+      return cached;
+    }
+
+    // 0.5s doubling to 10s, ten pauses: about 65s before giving up.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const token = await fetchToken(secret);
+
+        if (token) {
+          tokens.set(key, token);
+        }
+
+        return token;
+      } catch (error) {
+        // No answer or 429/503 can heal; any other status will not.
+        const status = error instanceof NakamaApiError ? error.status : null;
+
+        if (
+          attempt === 10 ||
+          (status !== null && status !== 429 && status !== 503)
+        ) {
+          throw new Error("Could not read the bot token from the server.", {
+            cause: error,
+          });
+        }
+      }
+
+      await wait(Math.min(500 * 2 ** attempt, 10_000));
+    }
+  };
+}
+
 export async function loadBotChannelIniConfig<
   TId extends string | number,
 >(options: {
   configPath: string;
   defaultProfileId: string;
   parseUserIds: (raw: string) => TId[];
+  secret?: BotTokenSecretRef;
 }): Promise<BotChannelConfigFile<TId> | null> {
   const raw = await readTextOrNull(options.configPath);
 
@@ -435,7 +602,14 @@ export async function loadBotChannelIniConfig<
   }
 
   const values = parseIni(raw);
-  const botToken = values.bot_token?.trim() ?? "";
+  const botTokenManaged = values.bot_token_ref?.trim() === "managed";
+
+  const botToken =
+    values.bot_token?.trim() ||
+    (botTokenManaged && options.secret
+      ? ((await readBotToken(options.secret)) ?? "")
+      : "");
+
   const profileId = values.profile_id?.trim() || options.defaultProfileId;
   const handshakeCode = values.handshake_code?.trim() || null;
   const handshakeExpiresAt = values.handshake_expires_at?.trim() || null;
@@ -449,6 +623,7 @@ export async function loadBotChannelIniConfig<
   return {
     allowedUserIds: allowlistRaw ? options.parseUserIds(allowlistRaw) : [],
     botToken,
+    botTokenManaged,
     handshakeCode,
     handshakeExpiresAt,
     pairedUserIds: pairedRaw ? options.parseUserIds(pairedRaw) : [],
@@ -463,12 +638,16 @@ export async function writeBotChannelIniConfig<
   configDir: string;
   configPath: string;
   label: string;
+  secret?: BotTokenSecretRef;
 }): Promise<void> {
-  const { config } = options;
+  const { config, secret } = options;
+  const secrets = secret ? getManagedSecretWriter() : null;
+  // A worker has no key: it keeps the marker of a file the server made token-less.
+  const managed = Boolean(secrets || (secret && config.botTokenManaged));
 
   const lines = [
     `# Nakama ${options.label} bridge`,
-    `bot_token=${config.botToken}`,
+    managed ? MANAGED_BOT_TOKEN_LINE : `bot_token=${config.botToken}`,
     `profile_id=${config.profileId}`,
     ...(config.handshakeCode
       ? [
@@ -490,6 +669,16 @@ export async function writeBotChannelIniConfig<
   await writeTextFile(options.configPath, lines.join("\n"), {
     ensureDir: options.configDir,
   });
+
+  // After the file: a failed write must not pair a new bot with the old file.
+  // An unchanged token is not re-encrypted, which would bump the fingerprint.
+  if (
+    secrets &&
+    secret &&
+    (await resolveManagedSecret(secret.scope, secret.name)) !== config.botToken
+  ) {
+    await secrets.save(secret.scope, secret.name, config.botToken);
+  }
 }
 
 /**

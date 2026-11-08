@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  escapeTelegramMarkdown,
   renderTelegramRichText,
   splitTelegramRichChunks,
 } from "./telegram-rich-text";
@@ -73,6 +74,18 @@ describe("renderTelegramRichText", () => {
   test("does not italicize bullet markers", () => {
     expect(renderTelegramRichText("* one *two*\n* three")).toBe(
       "* one <i>two</i>\n* three"
+    );
+  });
+
+  test("keeps escaped markdown literal", () => {
+    expect(
+      renderTelegramRichText(escapeTelegramMarkdown("__weekly__ *digest*"))
+    ).toBe("__weekly__ *digest*");
+  });
+
+  test("keeps braces in escaped text", () => {
+    expect(renderTelegramRichText(escapeTelegramMarkdown("{amount}"))).toBe(
+      "{amount}"
     );
   });
 

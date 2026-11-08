@@ -13,13 +13,6 @@ export function useBackupStatusQuery() {
   });
 }
 
-export function useExportData() {
-  return useMutation({
-    mutationFn: (onProgress?: TransferProgress) =>
-      client.exportData({ onProgress }),
-  });
-}
-
 export function usePreviewDataImport() {
   return useMutation({
     mutationFn: ({

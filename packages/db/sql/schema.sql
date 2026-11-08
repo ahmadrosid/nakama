@@ -656,6 +656,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_active_path_unique
   ON artifact_shares (org_id, profile_id, source_path)
   WHERE revoked_at IS NULL;
 
+-- A finished chat session or automation run saved with the result a member
+-- expected, so a later profile change can be checked against it.
+CREATE TABLE IF NOT EXISTS regression_cases (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  source_type TEXT NOT NULL CHECK(source_type IN ('session', 'automation_run')),
+  source_id TEXT NOT NULL,
+  source_automation_id TEXT,
+  input TEXT NOT NULL,
+  expected_result TEXT NOT NULL,
+  created_by_user_id TEXT,
+  -- Set when the source chat was private; only this user and platform admins read it.
+  private_to_user_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL,
+  FOREIGN KEY (private_to_user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS regression_cases_profile_created
+  ON regression_cases (org_id, profile_id, created_at DESC);
+
 -- Security audit ledger. Deliberately has no foreign keys so account or org
 -- erasure cannot remove the historical record.
 CREATE TABLE IF NOT EXISTS audit_events (

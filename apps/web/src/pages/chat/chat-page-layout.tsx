@@ -18,6 +18,8 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChatProfileSwitcher } from "@/components/chat/chat-profile-switcher";
+import type { AgentActivity } from "@/components/moodstone";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import {
   RecentChatsDialogs,
   type SessionTarget,
@@ -131,7 +133,7 @@ function rippleWave(
   return wave;
 }
 
-function ChatDitherBackground() {
+export function ChatDitherBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -313,7 +315,7 @@ export function ChatPageColumn({
           : "flex-1 px-3 sm:px-6",
         // No room for two columns on a phone, so an open panel takes over.
         attachmentPanel.isOpen &&
-          "max-sm:pointer-events-none max-sm:w-0 max-sm:flex-none max-sm:overflow-hidden max-sm:px-0 max-sm:opacity-0",
+          "max-md:pointer-events-none max-md:w-0 max-md:flex-none max-md:overflow-hidden max-md:px-0 max-md:opacity-0",
         centered && "justify-center"
       )}
     >
@@ -406,12 +408,16 @@ export function ChatWelcome({
  */
 export function ChatSessionBar({
   actions,
+  activity,
   cognito,
+  profile,
   profileId,
   sessionId,
 }: {
   actions?: ReactNode;
+  activity?: AgentActivity;
   cognito: boolean;
+  profile?: ProfileSummary;
   profileId: string;
   sessionId: string;
 }) {
@@ -426,7 +432,16 @@ export function ChatSessionBar({
 
   return (
     <div className="-mx-6 flex h-12 shrink-0 items-center gap-2 border-border border-b px-4 max-sm:hidden">
-      <div className="flex h-7 min-w-0 flex-1 items-center">
+      <div className="flex h-7 min-w-0 flex-1 items-center gap-2">
+        {profile ? (
+          <ProfileAvatar
+            active
+            activity={activity}
+            className="outline-none"
+            profile={profile}
+            size="sm"
+          />
+        ) : null}
         {cognito ? (
           <h1 className="truncate px-2.5 font-medium text-sm">Cognito chat</h1>
         ) : (

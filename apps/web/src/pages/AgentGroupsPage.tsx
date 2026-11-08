@@ -26,6 +26,7 @@ import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { useAgentGroupsQuery, useDeleteGroup } from "@/hooks/use-agent-groups";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import { groupPath } from "@/lib/navigation";
+import { ChatDitherBackground } from "@/pages/chat/chat-page-layout";
 
 const MINUTE_MS = 60_000;
 
@@ -227,7 +228,8 @@ function ChatExample() {
 function GroupsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="@container my-6" id="agent-groups-empty">
-      <div className="relative flex @4xl:min-h-[40rem] flex-col items-center @4xl:justify-center gap-8 overflow-hidden px-4 @4xl:py-0 py-10">
+      <div className="relative isolate flex @4xl:min-h-[40rem] flex-col items-center @4xl:justify-center gap-8 overflow-hidden px-4 @4xl:py-0 py-10">
+        <ChatDitherBackground />
         <section className="relative z-10 flex max-w-lg flex-col items-center gap-5 text-center">
           <h2 className="text-balance font-semibold text-2xl tracking-tight">
             Your agents, working as a team

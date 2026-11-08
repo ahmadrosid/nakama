@@ -1,8 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
+import { useArtifactPreviewContent } from "@/components/chat/use-artifact-preview-content";
 import {
   AuthContext,
   type AuthContextValue,
@@ -11,6 +12,60 @@ import {
   type ChatAttachmentPanelConfig,
   ChatAttachmentPanelContext,
 } from "@/context/chat-attachment-panel-context-shared";
+import { client } from "@/lib/client";
+
+test("Word preview budgets converted content instead of original file size", async () => {
+  const root = createRoot(document.createElement("div"));
+  const scoped = spyOn(client, "forOrg").mockReturnValue(client);
+
+  const read = spyOn(client, "readProfileArtifactContent").mockResolvedValue({
+    contentType: "text/markdown",
+    data: new TextEncoder().encode("# Report").buffer,
+  });
+
+  function Preview() {
+    useArtifactPreviewContent({
+      artifact: {
+        filename: "report.docx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        path: "report.docx",
+        savedAt: "",
+        sizeBytes: 12 * 1024 * 1024,
+      },
+      canPreview: true,
+      isHtml: false,
+      isImage: false,
+      isPdf: false,
+      isVideo: false,
+      isWordDocument: true,
+      open: true,
+      profileId: "profile",
+    });
+
+    return null;
+  }
+
+  // SAFETY: This hook reads only activeOrg from auth.
+  const auth = { activeOrg: null } as AuthContextValue;
+
+  try {
+    await act(async () =>
+      root.render(
+        <AuthContext.Provider value={auth}>
+          <Preview />
+        </AuthContext.Provider>
+      )
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[0]?.[2]?.maxBytes).toBe(8 * 1024 * 1024);
+    expect(read.mock.calls[0]?.[2]?.render).toBe("markdown");
+  } finally {
+    await act(async () => root.unmount());
+    read.mockRestore();
+    scoped.mockRestore();
+  }
+});
 
 test("opening an artifact preview does not update the panel on every render", async () => {
   const queryClient = new QueryClient();

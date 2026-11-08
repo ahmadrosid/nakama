@@ -4,6 +4,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { StoredMcpServerRecord } from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
 
+type ToolCallResult = Awaited<ReturnType<Client["callTool"]>>;
+
 function fakeStdioServer(id = "stdio-server"): StoredMcpServerRecord {
   return {
     cachedTools: [],
@@ -335,5 +337,92 @@ describe("McpClientManager", () => {
     });
 
     expect(text).toContain("Captured");
+  });
+
+  async function callWithResult(result: ToolCallResult) {
+    using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
+      undefined
+    );
+
+    using _listTools = spyOn(Client.prototype, "listTools").mockResolvedValue({
+      tools: [],
+    });
+
+    using callTool = spyOn(Client.prototype, "callTool").mockResolvedValue(
+      // SAFETY: each test controls the result shape the server would send.
+      result as never
+    );
+
+    using _close = spyOn(
+      StdioClientTransport.prototype,
+      "close"
+    ).mockResolvedValue(undefined);
+
+    const manager = new McpClientManager();
+    const server = fakeStdioServer("stdio-bounds");
+    await manager.ensureConnected(server, "org_1", "profile_1");
+
+    try {
+      const value = await manager.callTool(
+        server.id,
+        "stdio",
+        "tool",
+        {},
+        "profile_1",
+        "org_1"
+      );
+
+      return { options: callTool.mock.calls[0]?.[2], value };
+    } finally {
+      await manager.disconnectAll();
+    }
+  }
+
+  test("a tool call has a total deadline even while it reports progress", async () => {
+    const { options } = await callWithResult({
+      content: [{ text: "ok", type: "text" }],
+    });
+
+    expect(options?.resetTimeoutOnProgress).toBe(true);
+    expect(options?.maxTotalTimeout).toBeGreaterThan(0);
+  });
+
+  test("an oversized text result is replaced by an error", async () => {
+    const { value } = await callWithResult({
+      content: [{ text: "x".repeat(2_000_000), type: "text" }],
+    });
+
+    expect(JSON.stringify(value).length).toBeLessThan(1000);
+    expect(value).toMatchObject({ error: expect.stringContaining("limit") });
+  });
+
+  test("an image that cannot be fitted is dropped, not passed through", async () => {
+    const { value } = await callWithResult({
+      content: [
+        {
+          data: "A".repeat(6 * 1024 * 1024),
+          mimeType: "image/png",
+          type: "image",
+        },
+      ],
+    });
+
+    // SAFETY: the result shape is asserted field by field below.
+    const { images, text } = value as { images?: unknown[]; text: string };
+
+    expect(images).toBeUndefined();
+    expect(text).toContain("Image dropped");
+  });
+
+  test("structured content nested past the depth limit is refused", async () => {
+    let deep = {};
+
+    for (let i = 0; i < 500; i++) {
+      deep = { next: deep };
+    }
+
+    await expect(
+      callWithResult({ content: [], structuredContent: { next: deep } })
+    ).rejects.toBeInstanceOf(Error);
   });
 });

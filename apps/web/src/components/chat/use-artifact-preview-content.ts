@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/use-auth";
 import {
   type ChatArtifactRef,
+  FILE_PREVIEW_MAX_BYTES,
   isHtmlArtifactMimeType,
   isImageArtifactMimeType,
   isTextArtifactMimeType,
@@ -31,7 +33,10 @@ export function useAuthenticatedImagePreview(
     setError(null);
 
     void client
-      .readProfileArtifactContent(profileId, artifactPath, { inline: true })
+      .readProfileArtifactContent(profileId, artifactPath, {
+        inline: true,
+        maxBytes: FILE_PREVIEW_MAX_BYTES,
+      })
       .then((result) => {
         if (cancelled) {
           return;
@@ -71,22 +76,24 @@ export function useAuthenticatedImagePreview(
 }
 
 function useBlobObjectUrl(blob: Blob | null) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ blob: Blob; url: string } | null>(
+    null
+  );
 
   useEffect(() => {
     if (!blob) {
-      setUrl(null);
+      setPreview(null);
 
       return;
     }
 
     const nextUrl = URL.createObjectURL(blob);
-    setUrl(nextUrl);
+    setPreview({ blob, url: nextUrl });
 
     return () => URL.revokeObjectURL(nextUrl);
   }, [blob]);
 
-  return url;
+  return preview?.blob === blob ? preview.url : null;
 }
 
 export function useArtifactPreviewContent({
@@ -110,39 +117,53 @@ export function useArtifactPreviewContent({
   profileId: string;
   artifact: ChatArtifactRef;
 }) {
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id;
+  const key = `${orgId}:${profileId}:${artifact.path}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
   const mediaPreviewUrl = useBlobObjectUrl(mediaBlob);
-  const isBinaryMedia = isImage || isVideo || isPdf;
   // Load image bytes eagerly so chat chips can show a real thumbnail before the panel opens.
-  const shouldLoad = open || isImage;
+  const shouldLoad = open;
 
   useEffect(() => {
+    setLoadedKey(key);
+    setContent(null);
+    setMediaBlob(null);
+    setError(null);
+
     if (!(shouldLoad && canPreview)) {
+      setLoading(false);
+
       return;
     }
 
-    if (isBinaryMedia) {
-      if (mediaBlob !== null) {
-        return;
-      }
-    } else if (content !== null) {
+    if (!isWordDocument && artifact.sizeBytes > FILE_PREVIEW_MAX_BYTES) {
+      setError(
+        "This file exceeds the 8 MB preview limit. Download it instead."
+      );
+      setLoading(false);
+
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
 
     void client
+      .forOrg(orgId ?? null)
       .readProfileArtifactContent(profileId, artifact.path, {
         inline: true,
+        maxBytes: FILE_PREVIEW_MAX_BYTES,
         render: isWordDocument ? "markdown" : undefined,
+        signal: controller.signal,
       })
       .then((result) => {
-        if (cancelled) {
+        if (controller.signal.aborted) {
           return;
         }
 
@@ -222,25 +243,22 @@ export function useArtifactPreviewContent({
         setContent(new TextDecoder().decode(result.data));
       })
       .catch((fetchError) => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setError(formatError(fetchError));
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setLoading(false);
         }
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [
     shouldLoad,
     canPreview,
-    content,
-    mediaBlob,
-    isBinaryMedia,
     isHtml,
     isImage,
     isVideo,
@@ -249,15 +267,18 @@ export function useArtifactPreviewContent({
     profileId,
     artifact.path,
     artifact.filename,
+    artifact.sizeBytes,
+    orgId,
+    key,
   ]);
 
   return {
-    content,
-    error,
-    imagePreviewUrl: isImage ? mediaPreviewUrl : null,
+    content: loadedKey === key ? content : null,
+    error: loadedKey === key ? error : null,
+    imagePreviewUrl: isImage && loadedKey === key ? mediaPreviewUrl : null,
     loading,
-    pdfPreviewUrl: isPdf ? mediaPreviewUrl : null,
+    pdfPreviewUrl: isPdf && loadedKey === key ? mediaPreviewUrl : null,
     setContent,
-    videoPreviewUrl: isVideo ? mediaPreviewUrl : null,
+    videoPreviewUrl: isVideo && loadedKey === key ? mediaPreviewUrl : null,
   };
 }

@@ -23,7 +23,7 @@ import type {
   UserContextStatusResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
-import { createApiError } from "./client-helpers";
+import { createApiError, readBoundedFile } from "./client-helpers";
 import { ProfileFilesClient } from "./client-profile-files";
 import {
   normalizeStreamHandlers,
@@ -60,12 +60,43 @@ export class ChatClient extends ProfileFilesClient {
     return this.createChatSession(response.sessionId, channel);
   }
 
-  async readAttachmentContent(attachmentId: string): Promise<Blob> {
+  async readAttachmentContent(
+    attachmentId: string,
+    options: {
+      maxBytes?: number;
+      signal?: AbortSignal;
+      render?: "markdown";
+    } = {}
+  ): Promise<Blob> {
+    const query = new URLSearchParams();
+
+    if (options.maxBytes !== undefined) {
+      query.set("preview", "1");
+    }
+
+    if (options.render) {
+      query.set("render", options.render);
+    }
+
+    const suffix = query.size ? `?${query}` : "";
+
     const response = await this.fetchRaw(
-      `/v1/attachments/${encodeURIComponent(attachmentId)}/content`
+      `/v1/attachments/${encodeURIComponent(attachmentId)}/content${suffix}`,
+      { signal: options.signal }
     );
 
-    return response.blob();
+    if (options.maxBytes === undefined) {
+      return response.blob();
+    }
+
+    const data = await readBoundedFile(response, {
+      maxBytes: options.maxBytes,
+      signal: options.signal,
+    });
+
+    return new Blob([data], {
+      type: response.headers.get("Content-Type") ?? "application/octet-stream",
+    });
   }
 
   async getSessionMessages(

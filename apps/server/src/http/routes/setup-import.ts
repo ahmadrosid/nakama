@@ -10,8 +10,9 @@ import {
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   MAX_IMPORT_ARCHIVE_BYTES,
-  previewNakamaDataImport,
-  restoreNakamaDataImport,
+  previewNakamaDataImportFile,
+  restoreNakamaDataImportFile,
+  SETUP_IMPORT_LIMITS,
 } from "../../services/data-portability";
 import type { ServerOptions } from "../context";
 import {
@@ -19,6 +20,7 @@ import {
   errorResponse,
   isArchiveRequest,
   json,
+  MAX_HTTP_REQUEST_BODY_LIMIT_BYTES,
   readJson,
 } from "../shared";
 import type { HonoApp } from "../types";
@@ -30,7 +32,7 @@ import {
 
 // The body limit in app.ts and the archive size check. Settings has the same cap
 // (#2257), so the way past it is outside Nakama.
-export const SETUP_BACKUP_TOO_LARGE = `This backup is over the ${MAX_IMPORT_ARCHIVE_BYTES / (1024 * 1024)} MB restore limit, which Settings has too. Restore the data folder from a filesystem or volume backup instead.`;
+export const SETUP_BACKUP_TOO_LARGE = `This backup is over the ${MAX_IMPORT_ARCHIVE_BYTES / (1024 * 1024)} MB first-run restore limit. Sign in and restore it from Settings, or restore the data folder from a filesystem or volume backup instead.`;
 
 export function registerSetupImportRoutes(
   app: HonoApp,
@@ -158,18 +160,28 @@ export function registerSetupImportRoutes(
     await assertSetupImportAllowed(databaseAdapter);
 
     // Read outside the catch so an oversized archive keeps its 413.
-    const { archive } = await readImportRequest(
+    const archive = await readImportRequest(
       c.req.raw,
-      () => readJson<PreviewDataImportRequest>(c.req.raw, importRequestSchema),
+      () =>
+        readJson<PreviewDataImportRequest>(
+          c.req.raw,
+          importRequestSchema,
+          MAX_HTTP_REQUEST_BODY_LIMIT_BYTES
+        ),
+      SETUP_IMPORT_LIMITS,
       SETUP_BACKUP_TOO_LARGE
     );
 
     try {
-      const preview = await previewNakamaDataImport(archive);
+      const preview = await previewNakamaDataImportFile(archive.path, {
+        limits: SETUP_IMPORT_LIMITS,
+      });
 
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatServerError(error), 400);
+    } finally {
+      await archive.cleanup();
     }
   });
 
@@ -182,39 +194,50 @@ export function registerSetupImportRoutes(
 
     await assertSetupImportAllowed(databaseAdapter);
 
-    const { archive, confirm } = await readImportRequest(
+    const archive = await readImportRequest(
       c.req.raw,
-      () => readJson<RestoreDataImportRequest>(c.req.raw, restoreRequestSchema),
+      () =>
+        readJson<RestoreDataImportRequest>(
+          c.req.raw,
+          restoreRequestSchema,
+          MAX_HTTP_REQUEST_BODY_LIMIT_BYTES
+        ),
+      SETUP_IMPORT_LIMITS,
       SETUP_BACKUP_TOO_LARGE
     );
 
-    let restore;
-
     try {
-      restore = await restoreNakamaDataImport(archive, {
-        afterFailedReplace: options.onDataRestored,
-        beforeReplace: options.onBeforeDataRestore,
-        confirm,
-      });
-    } catch (error) {
-      return errorResponse(formatServerError(error), 400);
-    }
+      let restore;
 
-    let requiresRestart = !options.onDataRestored;
-
-    if (options.onDataRestored) {
       try {
-        await options.onDataRestored();
-        requiresRestart = false;
-      } catch {
-        requiresRestart = true;
+        restore = await restoreNakamaDataImportFile(archive.path, {
+          afterFailedReplace: options.onDataRestored,
+          beforeReplace: options.onBeforeDataRestore,
+          confirm: archive.confirm,
+          limits: SETUP_IMPORT_LIMITS,
+        });
+      } catch (error) {
+        return errorResponse(formatServerError(error), 400);
       }
-    }
 
-    return json<SetupRestoreDataImportResponse>({
-      ...restore,
-      requiresRestart,
-    });
+      let requiresRestart = !options.onDataRestored;
+
+      if (options.onDataRestored) {
+        try {
+          await options.onDataRestored();
+          requiresRestart = false;
+        } catch {
+          requiresRestart = true;
+        }
+      }
+
+      return json<SetupRestoreDataImportResponse>({
+        ...restore,
+        requiresRestart,
+      });
+    } finally {
+      await archive.cleanup();
+    }
   });
 }
 

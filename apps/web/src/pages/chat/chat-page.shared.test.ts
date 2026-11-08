@@ -7,6 +7,7 @@ import {
 } from "@/lib/chat-history";
 import {
   appendFailedTurnIfNeeded,
+  deriveAgentActivity,
   editedPromptText,
   findFailedRetryPrompt,
   markStreamingTurnFailed,
@@ -216,6 +217,95 @@ describe("nextSuccessfulTurnAt", () => {
 
   test("stays monotonic when wall clock moves backwards", () => {
     expect(nextSuccessfulTurnAt(1000, 999)).toBe(1001);
+  });
+});
+
+describe("deriveAgentActivity", () => {
+  const runningTool = (): ChatListItem => ({
+    content: "",
+    id: "tool-running",
+    role: "tool",
+    toolStatus: "running",
+  });
+
+  test("a failed turn shows error", () => {
+    expect(
+      deriveAgentActivity(false, [
+        user("hello"),
+        assistant("Rate limited", { failed: true }),
+      ])
+    ).toBe("error");
+  });
+
+  test("a failure stays visible when a later tool message ended the turn", () => {
+    expect(
+      deriveAgentActivity(false, [
+        user("hello"),
+        assistant("", { failed: true, streaming: false }),
+        {
+          content: "stopped",
+          id: "tool-done",
+          role: "tool",
+          toolStatus: "done",
+        },
+      ])
+    ).toBe("error");
+  });
+
+  test("an older failed turn does not mark the current turn", () => {
+    expect(
+      deriveAgentActivity(false, [
+        user("first"),
+        assistant("Failed", { failed: true }),
+        user("second"),
+        assistant("Done", { streaming: false }),
+      ])
+    ).toBe("idle");
+  });
+
+  test("a running tool outranks the reply it belongs to", () => {
+    expect(
+      deriveAgentActivity(true, [
+        user("hello"),
+        assistant("", { streaming: true }),
+        runningTool(),
+      ])
+    ).toBe("tool");
+  });
+
+  test("reasoning tokens show thinking", () => {
+    expect(
+      deriveAgentActivity(true, [
+        user("hello"),
+        assistant("", { streaming: true, thinkingStreaming: true }),
+      ])
+    ).toBe("thinking");
+  });
+
+  test("streamed text shows responding", () => {
+    expect(
+      deriveAgentActivity(true, [
+        user("hello"),
+        assistant("Working on it", { streaming: true }),
+      ])
+    ).toBe("responding");
+  });
+
+  test("a turn waiting on the model is still thinking", () => {
+    expect(deriveAgentActivity(true, [user("hello")])).toBe("thinking");
+  });
+
+  test("a finished turn is idle", () => {
+    expect(
+      deriveAgentActivity(false, [
+        user("hello"),
+        assistant("Done", { streaming: false }),
+      ])
+    ).toBe("idle");
+  });
+
+  test("a successful turn celebrates until the flash ends", () => {
+    expect(deriveAgentActivity(false, [user("hello")], true)).toBe("done");
   });
 });
 

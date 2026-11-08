@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ListProvidersResponse, OrgRole } from "@nakama/core";
+import type {
+  ListProvidersResponse,
+  ModelsResponse,
+  OrgRole,
+} from "@nakama/core";
 import {
   loadWhatsAppConfigFile,
   syncWhatsAppOwnerPairing,
@@ -321,6 +325,25 @@ function createApp(systemStatus?: SystemStatusStub) {
       getProfileAccess: async (_orgId: string, profileId: string) => ({
         isSuper: profileId === "super_nakama",
         ownerUserId: null,
+      }),
+      getModels: async () => ({
+        baseUrl: "https://operator-upstream.example.com/v1",
+        currentProviderId: "provider_1",
+        customModels: [{ id: "internal-model", name: "Internal" }],
+        displayName: "Operator Plan",
+        models: [],
+        provider: "openai_compatible",
+        providers: [
+          {
+            baseUrl: "https://operator-upstream.example.com/v1",
+            createdAt: "now",
+            hasApiKey: true,
+            id: "provider_1",
+            label: "Operator Plan",
+            modelCount: 3,
+            type: "openai_compatible",
+          },
+        ],
       }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       listProviders: async () => ({
@@ -1012,5 +1035,49 @@ describe("profile detail and history reads follow the chat list visibility", () 
     });
 
     expect(response.status).toBe(500);
+  });
+});
+
+describe("the model list read is scoped by role", () => {
+  test("a plain member does not see the provider endpoint or key status", async () => {
+    const { app, session } = await login("member");
+
+    const response = await callRoute(app, session, {
+      method: "GET",
+      path: "/v1/models",
+    });
+
+    expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.baseUrl).toBeUndefined();
+    expect(body.customModels).toBeUndefined();
+    expect(body.currentProviderId).toBe("provider_1");
+    expect(body.providers).toEqual([
+      {
+        createdAt: "now",
+        id: "provider_1",
+        label: "Operator Plan",
+        modelCount: 3,
+        type: "openai_compatible",
+      },
+    ]);
+  });
+
+  test("a platform admin gets the full model response", async () => {
+    const { app, session } = await login("member", true);
+
+    const response = await callRoute(app, session, {
+      method: "GET",
+      path: "/v1/models",
+    });
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const body = (await response.json()) as ModelsResponse;
+
+    expect(body.baseUrl).toBe("https://operator-upstream.example.com/v1");
+    expect(body.providers[0]).toMatchObject({ hasApiKey: true });
   });
 });

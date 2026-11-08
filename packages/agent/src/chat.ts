@@ -11,6 +11,7 @@ import type {
   MessageContentPart,
   ProviderChatOptions,
   ProviderClient,
+  RehydrateMessagesOptions,
   SendMessageInput,
   ToolCall,
   ToolContext,
@@ -18,6 +19,7 @@ import type {
 } from "@nakama/core";
 import {
   createId,
+  MODEL_CONNECTION_CLOSED_MESSAGE,
   NakamaApiError,
   ProviderStreamInterruptedError,
 } from "@nakama/core";
@@ -216,7 +218,8 @@ export interface AgentChatSessionOptions {
     content: string | MessageContentPart[]
   ) => Promise<string | MessageContentPart[]>;
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[]
+    messages: readonly ChatMessage[],
+    options: RehydrateMessagesOptions
   ) => Promise<ChatMessage[]>;
   resolvePromptContext?: (
     context?: ResolvePromptContextInput
@@ -580,7 +583,8 @@ async function sendMessage(
       content: string | MessageContentPart[]
     ) => Promise<string | MessageContentPart[]>;
     rehydrateMessagesForProvider?: (
-      messages: readonly ChatMessage[]
+      messages: readonly ChatMessage[],
+      options: RehydrateMessagesOptions
     ) => Promise<ChatMessage[]>;
     signal?: AbortSignal;
     whatsappMessage?: ToolContext["whatsappMessage"];
@@ -782,7 +786,8 @@ async function runConversation(
   handlers?: StreamHandlers,
   toolContext?: ToolContext,
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[]
+    messages: readonly ChatMessage[],
+    options: RehydrateMessagesOptions
   ) => Promise<ChatMessage[]>,
   onContextUsage?: (
     usedTokens: number,
@@ -919,6 +924,18 @@ async function runConversation(
           setTimeout(resolve, PROVIDER_RETRY_DELAY_MS)
         );
         continue;
+      }
+
+      // A dropped connection reaches the user in plain words, on every
+      // surface; the runtime's text stays on `cause` for the logs.
+      if (
+        error instanceof ProviderStreamInterruptedError ||
+        isTransientConnectionError(error)
+      ) {
+        throw Object.assign(
+          new ProviderStreamInterruptedError(MODEL_CONNECTION_CLOSED_MESSAGE),
+          { cause: error }
+        );
       }
 
       throw error;
@@ -1313,7 +1330,8 @@ async function generateReply(
   mode: "send" | "stream",
   handlers?: StreamHandlers,
   rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[]
+    messages: readonly ChatMessage[],
+    options: RehydrateMessagesOptions
   ) => Promise<ChatMessage[]>,
   signal?: AbortSignal,
   toolGroupId?: string
@@ -1328,8 +1346,13 @@ async function generateReply(
   );
 
   let attachments: MessageContentPart[] = [];
+  let turnStartIndex: number | undefined;
 
   for (const [index, message] of history.entries()) {
+    if (index === lastUserIndex) {
+      turnStartIndex = expanded.length;
+    }
+
     if (message.role === "tool" && message.attachments?.length) {
       const { attachments: parts, ...toolMessage } = message;
       expanded.push(toolMessage);
@@ -1358,7 +1381,10 @@ async function generateReply(
   const messages =
     rehydrateMessagesForProvider === undefined
       ? expanded
-      : await rehydrateMessagesForProvider(expanded);
+      : await rehydrateMessagesForProvider(expanded, {
+          toolNames: tools?.map((tool) => tool.name) ?? [],
+          turnStartIndex,
+        });
 
   const input = {
     messages,
@@ -1449,8 +1475,11 @@ async function generateReply(
         (content || thinking || pendingToolInputs.size > 0) &&
         isTransientConnectionError(error) &&
         !(error instanceof ProviderStreamInterruptedError)
-          ? new ProviderStreamInterruptedError(
-              error instanceof Error ? error.message : String(error)
+          ? Object.assign(
+              new ProviderStreamInterruptedError(
+                MODEL_CONNECTION_CLOSED_MESSAGE
+              ),
+              { cause: error }
             )
           : error;
 

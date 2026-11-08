@@ -15,6 +15,7 @@ import { NakamaApiError } from "@nakama/core";
 import { decodeArchiveRequestData } from "./data-portability";
 import {
   assertBackupDirOutsideRoot,
+  type BackupExportFile,
   encryptBackup,
   readBackupError,
   startScheduledBackups,
@@ -32,6 +33,30 @@ async function tempDir(): Promise<string> {
   dirs.push(dir);
 
   return dir;
+}
+
+async function makeExportFile(contents: string) {
+  const path = join(await tempDir(), "export.zip");
+  await writeFile(path, contents);
+
+  return { cleanup: async () => undefined, path };
+}
+
+// A scheduled run is async and slow on Windows CI, so wait for its result, not a fixed time
+async function waitFor(check: () => boolean | Promise<boolean>) {
+  const deadline = Date.now() + 5000;
+
+  while (!(await check())) {
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for the scheduled backup");
+    }
+
+    await Bun.sleep(10);
+  }
+}
+
+async function hasBackup(dir: string) {
+  return (await readdir(dir)).some((name) => name.endsWith(".zip.enc"));
 }
 
 afterEach(async () => {
@@ -66,7 +91,7 @@ describe("scheduled backups", () => {
     for (let day = 1; day <= 9; day += 1) {
       await writeBackup({
         dir,
-        exportZip: async () => Buffer.from(`day ${day}`),
+        exportFile: () => makeExportFile(`day ${day}`),
         key,
         now: new Date(Date.UTC(2026, 9, day)),
       });
@@ -139,16 +164,16 @@ describe("scheduled backups", () => {
 
     const stop = await startScheduledBackups({
       dir: missing,
-      exportZip: async () => {
+      exportFile: async () => {
         exports += 1;
 
-        return Buffer.from("zip");
+        return await makeExportFile("zip");
       },
       key,
     });
 
     try {
-      await Bun.sleep(50);
+      await waitFor(() => hasBackup(missing));
       expect(exports).toBe(1);
       expect(await realpath(missing)).toBe(
         await realpath(join(external, "new", "daily"))
@@ -163,10 +188,10 @@ describe("scheduled backups", () => {
   test("a restart writes at once only when no recent backup exists", async () => {
     let exports = 0;
 
-    const exportZip = async () => {
+    const exportFile = async () => {
       exports += 1;
 
-      return Buffer.from("zip");
+      return await makeExportFile("zip");
     };
 
     const recent = await tempDir();
@@ -174,7 +199,7 @@ describe("scheduled backups", () => {
 
     const stopRecent = await startScheduledBackups({
       dir: recent,
-      exportZip,
+      exportFile,
       key,
     });
 
@@ -182,11 +207,11 @@ describe("scheduled backups", () => {
 
     const stopEmpty = await startScheduledBackups({
       dir: empty,
-      exportZip,
+      exportFile,
       key,
     });
 
-    await Bun.sleep(50);
+    await waitFor(() => hasBackup(empty));
     stopRecent();
     stopEmpty();
 
@@ -198,11 +223,20 @@ describe("scheduled backups", () => {
   test("keeps a 409 for Settings until the next good backup", async () => {
     const dir = await tempDir();
 
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
     // With no backup in the dir, the first run starts at once.
-    const run = async (exportZip: () => Promise<Uint8Array>) => {
-      const stop = await startScheduledBackups({ dir, exportZip, key });
-      await Bun.sleep(50);
-      stop();
+    const run = async (
+      exportFile: () => Promise<BackupExportFile>,
+      done: () => boolean | Promise<boolean>
+    ) => {
+      const stop = await startScheduledBackups({ dir, exportFile, key });
+
+      try {
+        await waitFor(done);
+      } finally {
+        stop();
+      }
     };
 
     const blocked = new NakamaApiError(
@@ -210,18 +244,30 @@ describe("scheduled backups", () => {
       409
     );
 
-    await run(() => Promise.reject(new Error("disk full")));
-    expect(await readBackupError(dir)).toBeNull();
+    try {
+      await run(
+        () => Promise.reject(new Error("disk full")),
+        () => errors.mock.calls.length > 0
+      );
+      expect(await readBackupError(dir)).toBeNull();
 
-    await run(() => Promise.reject(blocked));
-    expect(await readBackupError(dir)).toEqual({
-      at: expect.any(String),
-      message: blocked.message,
-    });
+      await run(
+        () => Promise.reject(blocked),
+        async () => (await readBackupError(dir)) !== null
+      );
+      expect(await readBackupError(dir)).toEqual({
+        at: expect.any(String),
+        message: blocked.message,
+      });
 
-    await run(async () => Buffer.from("zip"));
-    expect(await readBackupError(dir)).toBeNull();
-    expect(await readdir(dir)).toHaveLength(1);
+      await run(
+        () => makeExportFile("zip"),
+        async () => (await readBackupError(dir)) === null
+      );
+      expect(await readdir(dir)).toHaveLength(1);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   test("a written backup is not reported as failed when the old 409 cannot be cleared", async () => {
@@ -235,11 +281,12 @@ describe("scheduled backups", () => {
     try {
       const stop = await startScheduledBackups({
         dir,
-        exportZip: async () => Buffer.from("zip"),
+        exportFile: () => makeExportFile("zip"),
         key,
       });
 
-      await Bun.sleep(50);
+      // The failed clear is the last step of the run
+      await waitFor(() => errors.mock.calls.length > 0);
       stop();
 
       const logged = errors.mock.calls.map((call) => String(call[0]));

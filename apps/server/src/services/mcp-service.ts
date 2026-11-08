@@ -30,6 +30,7 @@ import {
   type McpToolArguments,
   toCachedMcpToolSummaries,
 } from "./mcp-client-manager";
+import { fetchMcpRemote } from "./mcp-fetch";
 import {
   type McpOAuthGrant,
   McpServerOAuthProvider,
@@ -37,6 +38,7 @@ import {
   type StoredMcpHttpConfig,
   serverAdvertisesOAuth,
 } from "./mcp-oauth";
+import { withClaimedOAuthState } from "./oauth-callback-claim";
 
 const INVALID_OAUTH_CALLBACK_MESSAGE =
   "This sign-in link is no longer valid. Start it again from the MCP page.";
@@ -98,7 +100,12 @@ async function signInBeforeConnect(
     return;
   }
 
-  if ((await auth(provider, { serverUrl })) === "REDIRECT") {
+  if (
+    (await auth(provider, {
+      fetchFn: fetchMcpRemote,
+      serverUrl,
+    })) === "REDIRECT"
+  ) {
     throw new UnauthorizedError();
   }
 }
@@ -417,7 +424,18 @@ export class McpService {
    * Finishes the browser half of the flow: the provider redirected the operator
    * back with a code, which is exchanged for tokens before reconnecting.
    */
-  async completeOAuth(
+  completeOAuth(
+    serverId: string,
+    options: { code: string; state: string; callbackBaseUrl: string }
+  ): Promise<McpServerResponse> {
+    return withClaimedOAuthState(
+      `mcp:${serverId}:${options.state}`,
+      () => new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400),
+      () => this.completeClaimedOAuth(serverId, options)
+    );
+  }
+
+  private async completeClaimedOAuth(
     serverId: string,
     options: { code: string; state: string; callbackBaseUrl: string }
   ): Promise<McpServerResponse> {
@@ -447,6 +465,7 @@ export class McpService {
 
     const result = await auth(provider, {
       authorizationCode: options.code,
+      fetchFn: fetchMcpRemote,
       serverUrl: config.url,
     });
 

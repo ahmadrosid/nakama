@@ -8,6 +8,7 @@ import type {
   OrgPluginSummary,
   OrgRole,
   PluginReleaseSummary,
+  RegressionCaseSourceType,
   ThinkingEffort,
 } from "@nakama/core";
 
@@ -127,6 +128,25 @@ export interface StoredProfileRecord {
   thinkingEffort?: ThinkingEffort | null;
   thinkingEnabled?: boolean | null;
   updatedAt: string;
+}
+
+export interface StoredRegressionCaseRecord {
+  createdAt: string;
+  createdByUserId: string | null;
+  expectedResult: string;
+  id: string;
+  input: string;
+  orgId: string;
+  /**
+   * Set when the source chat was private. Only this user and platform admins
+   * may read the copied input.
+   */
+  privateToUserId: string | null;
+  profileId: string;
+  /** Set only for `automation_run` sources, which need it to reach the run. */
+  sourceAutomationId: string | null;
+  sourceId: string;
+  sourceType: RegressionCaseSourceType;
 }
 
 export interface StoredToolRecord {
@@ -950,6 +970,9 @@ export interface DatabaseAdapter {
    * allocation and insertion stay atomic for concurrent callers.
    */
   createProfileIfAbsent(record: StoredProfileRecord): Promise<boolean>;
+
+  createRegressionCase(record: StoredRegressionCaseRecord): Promise<void>;
+
   createSharedAgentInstance(
     teamOrgId: string,
     publicationId: string,
@@ -1077,6 +1100,9 @@ export interface DatabaseAdapter {
     id: string
   ): Promise<StoredComposioUserConnectionRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
+  getLastUserMessageForSession(
+    sessionId: string
+  ): Promise<StoredSessionMessageRecord | null>;
 
   getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
   getManagedSecret(
@@ -1160,6 +1186,11 @@ export interface DatabaseAdapter {
     id: string,
     orgId: string
   ): Promise<StoredProfileRecord | null>;
+  getRegressionCase(
+    orgId: string,
+    profileId: string,
+    caseId: string
+  ): Promise<StoredRegressionCaseRecord | null>;
   getSession(id: string): Promise<StoredSessionRecord | null>;
   getSessionQuestionnaire(
     sessionId: string
@@ -1373,6 +1404,12 @@ export interface DatabaseAdapter {
   listProfiles(): Promise<StoredProfileRecord[]>;
   listProfilesForMcpServer(serverId: string): Promise<StoredProfileRecord[]>;
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;
+  /** Newest first. Org-scoped: another org's profile returns nothing. */
+  listRegressionCasesForProfile(
+    orgId: string,
+    profileId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<StoredRegressionCaseRecord[]>;
   /**
    * Newest first, pinned ahead. `after` is the last row of the previous page;
    * `sessionId` narrows the list to that one session. `userId` keeps the

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import {
   discoverOAuthProtectedResourceMetadata,
   type OAuthClientProvider,
@@ -16,6 +17,7 @@ import type { McpHttpConfig } from "@nakama/core";
 import { nanoid } from "@nakama/core";
 import type { StoredMcpServerRecord } from "@nakama/db";
 import { z } from "zod";
+import { fetchMcpRemote } from "./mcp-fetch";
 
 /**
  * OAuth grant for one HTTP MCP server. It lives inside the server's config
@@ -72,7 +74,7 @@ export async function serverAdvertisesOAuth(url: string): Promise<boolean> {
       url,
       undefined,
       (input, init) =>
-        fetch(input, {
+        fetchMcpRemote(input, {
           ...init,
           signal: AbortSignal.timeout(OAUTH_PROBE_TIMEOUT_MS),
         })
@@ -204,7 +206,14 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
 
   /** The stored `state` is single use: it is spent by the callback. */
   matchesPendingState(state: string): boolean {
-    return Boolean(this.grant.state) && this.grant.state === state;
+    const pending = Buffer.from(this.grant.state ?? "");
+    const given = Buffer.from(state);
+
+    return (
+      pending.length > 0 &&
+      pending.length === given.length &&
+      timingSafeEqual(pending, given)
+    );
   }
 
   private async update(patch: Partial<McpOAuthGrant>): Promise<void> {

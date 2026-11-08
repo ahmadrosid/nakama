@@ -363,4 +363,26 @@ describe("route error formatting", () => {
       error: "Provider name is required.",
     });
   });
+
+  test("a lone % in the path is a 400 and is not reported", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+
+    for (const path of ["/v1/profiles/%/avatar", "/v1/plugins/ui/%/x"]) {
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          headers: session.headers(),
+        })
+      );
+
+      expect({ path, status: response.status }).toEqual({ path, status: 400 });
+      await expect(response.json()).resolves.toEqual({
+        error: "Invalid URL encoding.",
+      });
+    }
+
+    expect(
+      reported.some((line) => line.startsWith("[nakama:http] server"))
+    ).toBe(false);
+  });
 });

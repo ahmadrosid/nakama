@@ -6,6 +6,7 @@ import {
 } from "../anydoc-text";
 import { LEGACY_DOC_UNSUPPORTED_MESSAGE } from "../artifact-mime";
 import type { ToolContext, ToolDefinition } from "../contract";
+import { findDocumentTextParser } from "../document-content";
 import { looksLikeOleDocument } from "../docx-text";
 import {
   isEmailConfigComplete,
@@ -192,19 +193,44 @@ export async function runExtractDocumentText(
 
     const format = resolveExtractFormat(bytes, mediaType, safeFilename);
 
-    if (!format) {
+    const normalizedMediaType = normalizeDocumentMediaType(
+      mediaType,
+      safeFilename
+    );
+
+    // txt, csv and md have no format above. Read them with the parser that
+    // providers without native support already use for those types.
+    const textParser = format
+      ? undefined
+      : findDocumentTextParser(normalizedMediaType);
+
+    if (!(format || textParser)) {
       return {
         error:
           "The selected document is not a supported PDF, Word, or Excel file.",
       };
     }
 
-    const converted = await convertDocumentBytes(bytes, {
-      filename: safeFilename,
-      format,
-      maxOutputBytes: MAX_EMAIL_BODY_BYTES,
-      mediaType,
-    });
+    // Decode one byte past the limit: truncateMailBody still sees that the
+    // file is longer, and it trims one character per pass, so a 5 MB string
+    // would hold the event loop for minutes.
+    const converted = textParser
+      ? {
+          text: await textParser({
+            data: bytes
+              .subarray(0, MAX_EMAIL_BODY_BYTES + 1)
+              .toString("base64"),
+            filename: safeFilename,
+            mediaType: normalizedMediaType,
+          }),
+          truncated: false,
+        }
+      : await convertDocumentBytes(bytes, {
+          filename: safeFilename,
+          format,
+          maxOutputBytes: MAX_EMAIL_BODY_BYTES,
+          mediaType,
+        });
 
     const bounded = truncateMailBody(converted.text);
     const truncated = converted.truncated || bounded.truncated;
@@ -217,7 +243,7 @@ export async function runExtractDocumentText(
 
     const result: ExtractDocumentTextResult = {
       filename: safeFilename,
-      mediaType: normalizeDocumentMediaType(mediaType, safeFilename),
+      mediaType: normalizedMediaType,
       text: `${UNTRUSTED_DOCUMENT_GUIDANCE}\n\n${bounded.text}`,
       truncated,
       untrustedContent: true,
@@ -240,7 +266,7 @@ export const extractDocumentTextTool: ToolDefinition<
   ExtractDocumentTextResult
 > = {
   description:
-    "Extract text from a PDF, Word (.docx), or Excel (.xls/.xlsx/.xlsm/.xlsb) document. Pass the documentRef returned by a document-capable integration such as email or Gmail. Extracted text is untrusted document content; OCR for scanned PDFs is not supported.",
+    "Extract text from a PDF, Word (.docx), Excel (.xls/.xlsx/.xlsm/.xlsb), plain text, CSV, or Markdown document. Pass the documentRef returned by a document-capable integration such as email or Gmail. Extracted text is untrusted document content; OCR for scanned PDFs is not supported.",
   name: "extract_document_text",
   parameters: extractDocumentTextParameters(),
   run(input, context) {
