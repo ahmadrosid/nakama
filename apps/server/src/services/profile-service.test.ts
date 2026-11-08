@@ -20,6 +20,7 @@ import {
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
+import { ManagedSecrets } from "./managed-secrets";
 import { ProfileService } from "./profile-service";
 import { sessionHistoryArchivePath } from "./session-persistence";
 import { sessionTurnRegistry } from "./session-turn-registry";
@@ -30,6 +31,41 @@ const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 const ORG_ID = "org_test";
+
+async function seedWebhookSecrets(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>,
+  orgId: string,
+  profileId: string
+) {
+  const now = new Date().toISOString();
+
+  const secrets = new ManagedSecrets(
+    db,
+    Buffer.alloc(32, 7).toString("base64")
+  );
+
+  await db.upsertAutomation({
+    createdAt: now,
+    definition: { trigger: { type: "webhook" } },
+    enabled: true,
+    id: "auto_webhook",
+    name: "Webhook",
+    orgId,
+    profileId,
+    updatedAt: now,
+    version: 1,
+  });
+  await secrets.save(orgId, "automation-webhook:auto_webhook", "s3cret");
+  await secrets.save(orgId, "provider:keep", "sk-keep");
+
+  return db;
+}
+
+async function webhookSecretNames(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>
+) {
+  return (await db.listManagedSecrets()).map((secret) => secret.name);
+}
 
 const PYTHON_ECHO_TOOL = `import json
 import sys
@@ -1303,8 +1339,11 @@ describe("profile service deleteProfile", () => {
     await mkdir(artifactDir, { recursive: true });
     await writeFile(path.join(artifactDir, "report.md"), "private data");
 
+    await seedWebhookSecrets(db, ORG_ID, removed.profile.id);
+
     await service.deleteProfile(ORG_ID, removed.profile.id);
 
+    expect(await webhookSecretNames(db)).toEqual(["provider:keep"]);
     expect(await db.getProfile(removed.profile.id)).toBeNull();
     await expect(access(removedDir)).rejects.toThrow();
     expect(
@@ -1825,6 +1864,7 @@ describe("profile organization transfer", () => {
     );
 
     await writeFile(path.join(sourceDir, "MEMORY.md"), "Remember me");
+    await seedWebhookSecrets(db, "source", profile.id);
     await db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
@@ -1838,6 +1878,7 @@ describe("profile organization transfer", () => {
     await service.moveProfile("source", profile.id, {
       organizationId: "destination",
     });
+    expect(await webhookSecretNames(db)).toEqual(["provider:keep"]);
     expect(await db.getProfileForOrg(profile.id, "source")).toBeNull();
     expect((await db.getProfileForOrg(profile.id, "destination"))?.name).toBe(
       "Moving bot"

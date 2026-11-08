@@ -37,8 +37,11 @@ export interface StoredAutomationRunRecord {
   deliveryStatus?: string | null;
   error: string | null;
   id: string;
+  /** Webhook request body, replayed on resume. Never returned in run lists. */
+  input?: string | null;
   output: string | null;
   progress?: ChatMessage[];
+  source?: "webhook" | null;
   startedAt: string;
   status: AutomationRunStatus;
 }
@@ -876,13 +879,23 @@ export interface DatabaseAdapter {
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
   /**
+   * Atomically claims a delivery ID for an automation webhook. Prunes rows
+   * older than the replay window, then returns true on first claim and false
+   * on replay within that window.
+   */
+  claimAutomationWebhookDelivery(
+    automationId: string,
+    deliveryId: string,
+    createdAt: string
+  ): Promise<boolean>;
+  /**
    * Automation runs left `running` by a dead process: those already resumed
    * `maxResumes` times are failed, the rest have their resume count raised and
    * are returned for the caller to continue.
    */
   claimInterruptedAutomationRuns(
     maxResumes: number
-  ): Promise<Array<{ automationId: string; id: string }>>;
+  ): Promise<Array<{ automationId: string; id: string; input?: string }>>;
   /**
    * Atomically claims an idempotency key for a notification webhook delivery.
    * Prunes rows older than the replay window, then returns true on first claim
@@ -1499,6 +1512,11 @@ export interface DatabaseAdapter {
     record: StoredOrgSharedResourceRecord
   ): Promise<StoredOrgSharedResourceRecord>;
   putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
+  /** Frees a claimed automation webhook delivery ID so a redelivery can run. */
+  releaseAutomationWebhookDelivery(
+    automationId: string,
+    deliveryId: string
+  ): Promise<void>;
   /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
   releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
 

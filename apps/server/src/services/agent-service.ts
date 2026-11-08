@@ -2615,6 +2615,17 @@ export class AgentService {
     return this.automationRunner.run(automationId);
   }
 
+  startAutomationFromWebhook(
+    automationId: string,
+    webhook: Parameters<AutomationRunner["startFromWebhook"]>[1]
+  ) {
+    if (!this.automationRunner) {
+      throw new Error("Automation runner is not configured.");
+    }
+
+    return this.automationRunner.startFromWebhook(automationId, webhook);
+  }
+
   get providerConfigured(): boolean {
     return this._providerConfigured;
   }

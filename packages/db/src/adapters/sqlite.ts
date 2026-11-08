@@ -122,6 +122,7 @@ interface AutomationRunRow {
   id: string;
   output: string | null;
   progress: string | null;
+  source: string | null;
   started_at: string;
   status: string;
 }
@@ -826,13 +827,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
 
   const insertAutomationRunStmt = db.prepare(`
-    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error, progress)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error, progress, source, input)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const updateAutomationRunStmt = db.prepare(`
     UPDATE automation_runs
-    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?, progress = ?
+    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?, progress = ?,
+      input = CASE WHEN ? = 'running' THEN input ELSE NULL END
     WHERE id = ?
   `);
 
@@ -889,7 +891,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const failExhaustedAutomationRunsStmt = db.prepare(`
     UPDATE automation_runs
-    SET status = 'failed', completed_at = ?, error = ?
+    SET status = 'failed', completed_at = ?, error = ?, input = NULL
     WHERE status = 'running' AND resume_count >= ?
   `);
 
@@ -897,13 +899,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     {
       automation_id: string;
       id: string;
+      input: string | null;
     },
     SQLQueryBindings[]
   >(`
     UPDATE automation_runs
     SET resume_count = resume_count + 1
     WHERE status = 'running'
-    RETURNING id, automation_id
+    RETURNING id, automation_id, input
   `);
 
   const insertAutomationRunStepStmt = db.prepare(`
@@ -2331,6 +2334,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const pruneNotificationWebhookDeliveriesStmt = db.prepare(`
     DELETE FROM notification_webhook_deliveries
     WHERE created_at < ?
+  `);
+
+  const claimAutomationWebhookDeliveryStmt = db.prepare(`
+    INSERT OR IGNORE INTO automation_webhook_deliveries (
+      automation_id,
+      delivery_id,
+      created_at
+    )
+    VALUES (?, ?, ?)
+  `);
+
+  const pruneAutomationWebhookDeliveriesStmt = db.prepare(`
+    DELETE FROM automation_webhook_deliveries
+    WHERE created_at < ?
+  `);
+
+  const releaseAutomationWebhookDeliveryStmt = db.prepare(`
+    DELETE FROM automation_webhook_deliveries
+    WHERE automation_id = ? AND delivery_id = ?
   `);
 
   const listComposioToolkitsForOrgStmt = db.prepare<
@@ -4575,10 +4597,34 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       statement.get();
     },
 
+    async claimAutomationWebhookDelivery(automationId, deliveryId, createdAt) {
+      const createdAtMs = Date.parse(createdAt);
+
+      if (Number.isFinite(createdAtMs)) {
+        pruneAutomationWebhookDeliveriesStmt.run(
+          new Date(
+            createdAtMs - NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS
+          ).toISOString()
+        );
+      }
+
+      return (
+        claimAutomationWebhookDeliveryStmt.run(
+          automationId,
+          deliveryId,
+          createdAt
+        ).changes > 0
+      );
+    },
+
     async claimInterruptedAutomationRuns(maxResumes) {
       return claimInterruptedAutomationRunsTransaction
         .immediate(maxResumes, new Date().toISOString())
-        .map((row) => ({ automationId: row.automation_id, id: row.id }));
+        .map((row) => ({
+          automationId: row.automation_id,
+          id: row.id,
+          input: row.input ?? undefined,
+        }));
     },
 
     async claimNotificationWebhookDelivery(destinationId, eventId, createdAt) {
@@ -5664,7 +5710,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.deliveryStatus ?? null,
         record.deliveryError ?? null,
-        record.progress ? JSON.stringify(record.progress) : null
+        record.progress ? JSON.stringify(record.progress) : null,
+        record.source ?? null,
+        record.input ?? null
       );
     },
 
@@ -6196,6 +6244,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async releaseAutomationWebhookDelivery(automationId, deliveryId) {
+      releaseAutomationWebhookDeliveryStmt.run(automationId, deliveryId);
+    },
+
     async releaseMonthlyLlmQuota(orgId, reservationId) {
       releaseMonthlyLlmQuotaStmt.run(reservationId, orgId);
     },
@@ -6374,6 +6426,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.deliveryStatus ?? null,
         record.deliveryError ?? null,
         record.progress ? JSON.stringify(record.progress) : null,
+        record.status,
         record.id
       );
     },
@@ -6759,6 +6812,7 @@ function toAutomationRunRecord(
     progress: row.progress
       ? (parseJson(row.progress) as StoredAutomationRunRecord["progress"])
       : undefined,
+    source: row.source === "webhook" ? "webhook" : null,
     startedAt: row.started_at,
     // SAFETY: The adapter writes this row value through its typed contract.
     status: row.status as StoredAutomationRunRecord["status"],

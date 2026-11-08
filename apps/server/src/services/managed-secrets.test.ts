@@ -305,4 +305,19 @@ describe("ManagedSecrets", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  test("fingerprint ignores webhook secrets but sees other secrets", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const secrets = new ManagedSecrets(db, randomBytes(32).toString("base64"));
+
+    await secrets.save("global", "provider:one", "sk-one");
+    const before = await secrets.fingerprint();
+
+    await secrets.save("org_1", "automation-webhook:auto_1", "secret-a");
+    await secrets.save("org_1", "automation-webhook:auto_1", "secret-b");
+    expect(await secrets.fingerprint()).toBe(before);
+
+    await secrets.save("global", "provider:one", "sk-two");
+    expect(await secrets.fingerprint()).not.toBe(before);
+  });
 });
