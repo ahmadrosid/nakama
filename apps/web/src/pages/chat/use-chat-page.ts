@@ -465,6 +465,7 @@ export function useChatPage() {
     activeModelSupportsThinking,
     currentModelSelection,
     providerModelGroups,
+    savedThinkingEffort,
     thinkingEffort,
     thinkingEffortDisabled,
     thinkingEffortOptions,
@@ -678,7 +679,7 @@ export function useChatPage() {
         return;
       }
 
-      if (!profileId || effort === thinkingEffort) {
+      if (!profileId || effort === savedThinkingEffort) {
         return;
       }
 
@@ -734,7 +735,7 @@ export function useChatPage() {
       acpProfile,
       canManageInstallSettings,
       profileId,
-      thinkingEffort,
+      savedThinkingEffort,
       busy,
       saveThinkingSettingsMutation,
       session,

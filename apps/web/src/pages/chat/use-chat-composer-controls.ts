@@ -93,6 +93,11 @@ export function useChatComposerControls({
 
   const activeModelSupportsThinking = resolveModelThinkingSupport(activeModel);
 
+  // This chat's own effort, else the install effort. The picker shows it
+  // lowered to what the active model takes, and saves compare against it.
+  const savedThinkingEffort =
+    sessionThinkingEffort ?? thinkingSettingsEffort ?? DEFAULT_THINKING_EFFORT;
+
   const workspaceEffortOptions = useMemo(
     () => thinkingEffortOptionsFor(activeModel),
     [activeModel]
@@ -113,13 +118,13 @@ export function useChatComposerControls({
           readOnlySession,
         options: workspaceEffortOptions,
         // Show what the server will send: Max saved on DeepSeek reads as High on Gemini.
-        value: clampThinkingEffort(
-          sessionThinkingEffort ??
-            thinkingSettingsEffort ??
-            DEFAULT_THINKING_EFFORT,
-          activeModel?.id ?? "",
-          activeModel?.provider ?? ""
-        ),
+        value: activeModel
+          ? clampThinkingEffort(
+              savedThinkingEffort,
+              activeModel.id,
+              activeModel.provider
+            )
+          : savedThinkingEffort,
         visible: shouldShowThinkingEffort(activeModelSupportsThinking),
       };
 
@@ -128,6 +133,7 @@ export function useChatComposerControls({
     activeModelSupportsThinking,
     currentModelSelection,
     providerModelGroups,
+    savedThinkingEffort,
     setAcpEffort: acp.setEffort,
     setAcpModel: acp.setModel,
     thinkingEffort: effort.value,
