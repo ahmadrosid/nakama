@@ -305,6 +305,30 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
   );
 }
 
+/**
+ * Reads and sets fullscreen on the panel itself. The list unmounts cards that
+ * leave the screen (fullscreen hides the whole list), so card state would go.
+ */
+function PanelFullscreenToggle({ panelId }: { panelId: string }) {
+  const panel = useOptionalChatAttachmentPanel();
+  const fullscreen = panel?.isFullscreen ?? false;
+
+  return (
+    <Button
+      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      onClick={() => panel?.update(panelId, { fullscreen: !fullscreen })}
+      size="icon-sm"
+      variant="ghost"
+    >
+      {fullscreen ? (
+        <ArrowShrink02Icon className="size-4" />
+      ) : (
+        <ArrowExpand01Icon className="size-4" />
+      )}
+    </Button>
+  );
+}
+
 /** Sent uploads use the same file cards and panel as saved artifacts. */
 export function DocumentAttachmentPreview({
   document: file,
@@ -316,11 +340,9 @@ export function DocumentAttachmentPreview({
   const panelId = useId();
   const panel = useOptionalChatAttachmentPanel();
   const { activeOrg } = useAuth();
-  const [fullscreen, setFullscreen] = useState(false);
   const open = panel?.activeId === panelId;
   const show = panel?.show;
   const update = panel?.update;
-  const hide = panel?.hide;
   const mime = resolveArtifactMimeType(file.mediaType, file.filename);
 
   const contentKey = useMemo(
@@ -342,7 +364,6 @@ export function DocumentAttachmentPreview({
       isVideo: isVideoArtifactMimeType(mime),
     }),
     content: <DocumentAttachmentPanelContent file={file} key={contentKey} />,
-    fullscreen,
     headerActions: (
       <>
         <Button
@@ -353,18 +374,7 @@ export function DocumentAttachmentPreview({
         >
           <Download04Icon className="size-4" />
         </Button>
-        <Button
-          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          onClick={() => setFullscreen((value) => !value)}
-          size="icon-sm"
-          variant="ghost"
-        >
-          {fullscreen ? (
-            <ArrowShrink02Icon className="size-4" />
-          ) : (
-            <ArrowExpand01Icon className="size-4" />
-          )}
-        </Button>
+        <PanelFullscreenToggle panelId={panelId} />
       </>
     ),
     title: file.filename,
@@ -376,8 +386,7 @@ export function DocumentAttachmentPreview({
     }
     // The panel functions are stable; file identity controls content remounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, update, panelId, fullscreen, contentKey]);
-  useEffect(() => () => hide?.(panelId), [hide, panelId]);
+  }, [open, update, panelId, contentKey]);
 
   return (
     <CompactFileCard
@@ -392,7 +401,6 @@ export function DocumentAttachmentPreview({
       isImage={isImageArtifactMimeType(mime)}
       isVideo={isVideoArtifactMimeType(mime)}
       onOpen={() => {
-        setFullscreen(false);
         show?.({
           ...config(),
           defaultWidth: artifactPanelDefaultWidth(file.filename, mime),
