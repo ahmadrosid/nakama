@@ -754,3 +754,133 @@ test("editor limits tools to what the user leaves ticked", async () => {
     queryClient.clear();
   }
 });
+
+function webhookAutomation(
+  trigger: StoredAutomation["trigger"],
+  id = "automation"
+): StoredAutomation {
+  return {
+    createdAt: "2026-10-01T00:00:00Z",
+    description: "",
+    enabled: true,
+    id,
+    name: "Task",
+    profileId: "agent",
+    prompt: "Run task",
+    steps: [],
+    trigger,
+    updatedAt: "2026-10-01T00:00:00Z",
+    version: 1,
+  };
+}
+
+test("editor shows the webhook trigger and warns before a save drops it", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { enabled: false } },
+  });
+
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const patches: Partial<StoredAutomation>[] = [];
+
+  function render(
+    trigger: StoredAutomation["trigger"],
+    savedTrigger?: StoredAutomation["trigger"]
+  ) {
+    return act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <AutomationEditorForm
+            automation={webhookAutomation(trigger)}
+            busy={false}
+            onChange={(patch) => patches.push(patch)}
+            profiles={[]}
+            savedTrigger={savedTrigger}
+          />
+        </QueryClientProvider>
+      )
+    );
+  }
+
+  function clickPill(label: string) {
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (item) => item.textContent === label
+    )!;
+
+    return act(async () => button.click());
+  }
+
+  try {
+    await render({ type: "webhook" }, { type: "webhook" });
+    expect(container.querySelector('[aria-pressed="true"]')?.textContent).toBe(
+      "On webhook"
+    );
+    expect(container.textContent).not.toContain("undefined");
+    expect(container.textContent).not.toContain("Custom schedule");
+    expect(container.textContent).not.toContain("Next run");
+    expect(container.querySelector('input[type="time"]')).toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    await clickPill("Every day");
+    expect(patches.pop()?.trigger).toEqual({
+      cron: "0 7 * * *",
+      timezone: undefined,
+      type: "schedule",
+    });
+
+    await render({ type: "manual" }, { type: "webhook" });
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+
+    await clickPill("On webhook");
+    expect(patches.pop()?.trigger).toEqual({ type: "webhook" });
+
+    await render({ type: "webhook" });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    await render({ type: "manual" });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    queryClient.clear();
+  }
+});
+
+test("run history marks runs that a webhook started", async () => {
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: null,
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <RunHistoryList
+          busy={false}
+          onRerun={() => {}}
+          profileId="profile"
+          running={false}
+          runs={[{ ...run, id: "hook", source: "webhook" }, run]}
+        />
+      )
+    );
+
+    const rows = Array.from(container.querySelectorAll("li"));
+
+    const badges = (row: Element) =>
+      Array.from(row.querySelectorAll("span")).filter(
+        (span) => span.textContent === "Webhook"
+      ).length;
+
+    expect(rows.map(badges)).toEqual([1, 0]);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
