@@ -66,17 +66,20 @@ function elementBodies(xml: string, name: string): string[] {
 
   for (;;) {
     const start = xml.indexOf(open, pos);
+
     if (start === -1) {
       break;
     }
 
     const next = xml[start + open.length] ?? "";
+
     if (next !== ">" && next !== "/" && !/\s/.test(next)) {
       pos = start + open.length;
       continue;
     }
 
     const tagEnd = xml.indexOf(">", start);
+
     if (tagEnd === -1) {
       break;
     }
@@ -87,6 +90,7 @@ function elementBodies(xml: string, name: string): string[] {
     }
 
     const end = xml.indexOf(close, tagEnd + 1);
+
     if (end === -1) {
       break;
     }
