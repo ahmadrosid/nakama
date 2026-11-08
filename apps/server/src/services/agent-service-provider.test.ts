@@ -2,10 +2,11 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type {
-  ChatCompletionResult,
-  ProviderClient,
-  ProviderInstance,
+import {
+  type ChatCompletionResult,
+  loadUserConfig,
+  type ProviderClient,
+  type ProviderInstance,
 } from "@nakama/core";
 import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
 import {
@@ -148,6 +149,42 @@ describe("discoverModelsForProvider", () => {
     ]);
     expect(fetchMock).toHaveBeenCalled();
   });
+});
+
+describe("saving Command Code models", () => {
+  setupTestConfigDir("nakama-command-code-models-");
+
+  const customModels = [{ default: true, id: "z-ai/glm-5.3-flash" }];
+
+  test.each(["create", "update"])(
+    "keeps selected models on %s",
+    async (mode) => {
+      const service = new AgentService(
+        null,
+        null,
+        createInMemoryDatabaseAdapter()
+      );
+
+      const created = await service.createProvider({
+        customModels: mode === "create" ? customModels : undefined,
+        type: "command_code",
+      });
+
+      if (mode === "update") {
+        await service.updateProvider(created.provider.id, { customModels });
+      }
+
+      const { providers } = await service.listProviders();
+      const { models } = await service.getModels();
+      const saved = await loadUserConfig();
+
+      expect(saved?.providers[0]?.customModels).toEqual(customModels);
+      expect(providers).toEqual([
+        expect.objectContaining({ id: created.provider.id, modelCount: 1 }),
+      ]);
+      expect(models.map((model) => model.id)).toEqual([customModels[0].id]);
+    }
+  );
 });
 
 describe("AgentService usage pricing context", () => {

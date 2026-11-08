@@ -31,7 +31,10 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
-import { isDiscoveryModelProvider, resolveNetraModelId } from "@nakama/core/discovery-providers";
+import {
+  isDiscoveryModelProvider,
+  resolveNetraModelId,
+} from "@nakama/core/discovery-providers";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   getDefaultModel,

@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import {
   defaultDiscoveryBaseUrl,
+  isDiscoveryModelProvider,
   NETRA_AGENT_MODEL_ID,
   resolveNetraModelId,
 } from "@nakama/core/discovery-providers";
@@ -401,6 +402,7 @@ export function getModelsForProviderInstance(
   }
 
   if (
+    isDiscoveryModelProvider(instance.type) ||
     instance.type === "openai" ||
     instance.type === "chatgpt" ||
     instance.type === "xai_oauth" ||
