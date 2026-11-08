@@ -19,7 +19,10 @@ type ExtraThinkingEffort = "xhigh" | "max";
 // disagree on aliases (DeepSeek reads xhigh as high, Cloudflare as max), so
 // nakama clamps before sending instead of relying on them.
 // A static id table. OpenRouter's `supported_efforts` could replace it if it drifts.
-const EXTRA_EFFORTS_BY_MODEL: [RegExp, ExtraThinkingEffort[]][] = [
+const EXTRA_EFFORTS_BY_MODEL: readonly (readonly [
+  RegExp,
+  readonly ExtraThinkingEffort[],
+])[] = [
   [/^claude-(opus|sonnet)-4[.-]6/, ["max"]],
   [
     /^claude-(opus-4[.-][78]|opus-5|sonnet-5|haiku-5|fable|mythos)/,
@@ -36,7 +39,9 @@ export function isThinkingEffort(value: unknown): value is ThinkingEffort {
 }
 
 /** Levels above "high" the model accepts; low, medium and high are implied. */
-export function extraThinkingEfforts(model: string): ExtraThinkingEffort[] {
+export function extraThinkingEfforts(
+  model: string
+): readonly ExtraThinkingEffort[] {
   const id = model.trim().toLowerCase().split("/").at(-1) ?? "";
 
   return (

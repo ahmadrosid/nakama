@@ -33,7 +33,7 @@ describe("extraThinkingEfforts", () => {
   ];
 
   test.each(cases)("%s", (model, expected) => {
-    expect<string[]>(extraThinkingEfforts(model)).toEqual(expected);
+    expect<readonly string[]>(extraThinkingEfforts(model)).toEqual(expected);
   });
 });
 
