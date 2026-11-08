@@ -23,6 +23,7 @@ import { isXlsxFile } from "@/lib/artifact-spreadsheet";
 import {
   artifactCodeLanguage,
   FILE_PREVIEW_MAX_BYTES,
+  isDelimitedSpreadsheetFile,
   isDocxFile,
   isHtmlArtifactMimeType,
   isImageArtifactMimeType,
@@ -81,6 +82,44 @@ function inlineBlob(file: DisplayDocument): Blob {
   });
 }
 
+/** Which preview an uploaded file gets. */
+function documentPreviewKind(file: DisplayDocument) {
+  const mime = resolveArtifactMimeType(file.mediaType, file.filename);
+  const isWorkbook = isXlsxFile(file.filename, mime);
+
+  const isWord =
+    isDocxFile(file.filename, mime) || isLegacyDocFile(file.filename, mime);
+
+  const isImage = isImageArtifactMimeType(mime);
+  const isVideo = isVideoArtifactMimeType(mime);
+  const isPdf = mime === "application/pdf";
+  const isHtml = isHtmlArtifactMimeType(mime);
+  const isSheet = isDelimitedSpreadsheetFile(file.filename, mime);
+  const isText = isTextArtifactMimeType(mime) || isWord || isSheet;
+
+  const canPreview = [
+    isWorkbook,
+    isImage,
+    isVideo,
+    isPdf,
+    isHtml,
+    isText,
+  ].includes(true);
+
+  return {
+    canPreview,
+    isHtml,
+    isImage,
+    isPdf,
+    isSheet,
+    isText,
+    isVideo,
+    isWord,
+    isWorkbook,
+    mime,
+  };
+}
+
 function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id;
@@ -93,26 +132,18 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
 
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
-  const mime = resolveArtifactMimeType(file.mediaType, file.filename);
-  const isWorkbook = isXlsxFile(file.filename, mime);
-
-  const isWord =
-    isDocxFile(file.filename, mime) || isLegacyDocFile(file.filename, mime);
-
-  const isImage = isImageArtifactMimeType(mime);
-  const isVideo = isVideoArtifactMimeType(mime);
-  const isPdf = mime === "application/pdf";
-  const isHtml = isHtmlArtifactMimeType(mime);
-  const isText = isTextArtifactMimeType(mime) || isWord;
-
-  const canPreview = [
-    isWorkbook,
-    isImage,
-    isVideo,
-    isPdf,
+  const {
+    canPreview,
     isHtml,
+    isImage,
+    isPdf,
+    isSheet,
     isText,
-  ].includes(true);
+    isVideo,
+    isWord,
+    isWorkbook,
+    mime,
+  } = documentPreviewKind(file);
 
   useEffect(() => {
     if (!canPreview) {
@@ -252,6 +283,16 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
     );
   }
 
+  if (isSheet) {
+    return (
+      <ArtifactAttachmentPanelBody
+        {...common}
+        content={loaded?.text ?? null}
+        kind="spreadsheet"
+      />
+    );
+  }
+
   return (
     <ArtifactAttachmentPanelBody
       {...common}
@@ -294,7 +335,9 @@ export function DocumentAttachmentPreview({
         isMarkdownArtifactMimeType(mime) ||
         isDocxFile(file.filename, mime) ||
         isLegacyDocFile(file.filename, mime),
-      isSpreadsheet: isXlsxFile(file.filename, mime),
+      isSpreadsheet:
+        isXlsxFile(file.filename, mime) ||
+        isDelimitedSpreadsheetFile(file.filename, mime),
       isVideo: isVideoArtifactMimeType(mime),
     }),
     content: <DocumentAttachmentPanelContent file={file} key={contentKey} />,

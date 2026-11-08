@@ -319,3 +319,88 @@ test("preview uses available mobile width and clamps desktop widths", () => {
   expect(clampAttachmentPanelWidth(768, 900)).toBe(450);
   expect(clampAttachmentPanelWidth(1600, 1440)).toBe(1080);
 });
+
+test("uploaded CSV opens in the spreadsheet table", async () => {
+  const uuid = spyOn(crypto, "randomUUID").mockImplementation(() => {
+    throw new Error("Not available in this context");
+  });
+
+  const element = document.createElement("div");
+  const root = createRoot(element);
+
+  const file = {
+    filename: "inventory.csv",
+    mediaType: "application/csv",
+    url: `data:application/csv;base64,${btoa("SKU,Warehouse\nQM-0921,Medan\n")}`,
+  };
+
+  function Harness() {
+    const [panel, setPanel] = useState<ChatAttachmentPanelConfig | null>(null);
+
+    const show = useCallback(
+      (next: ChatAttachmentPanelConfig) => setPanel(next),
+      []
+    );
+
+    const hide = useCallback(() => setPanel(null), []);
+
+    // SAFETY: This fixture supplies the only auth field read by the preview, activeOrg.
+    const auth = { activeOrg: { id: "org-preview" } } as AuthContextValue;
+
+    return (
+      <AuthContext.Provider value={auth}>
+        <ChatAttachmentPanelContext.Provider
+          value={{
+            activeId: panel?.id ?? null,
+            hide,
+            isFullscreen: false,
+            isOpen: panel !== null,
+            requestRestore: () => () => undefined,
+            show,
+            update: () => undefined,
+          }}
+        >
+          <DocumentAttachmentPreview document={file} />
+          {panel ? <section>{panel.content}</section> : null}
+        </ChatAttachmentPanelContext.Provider>
+      </AuthContext.Provider>
+    );
+  }
+
+  try {
+    await act(async () =>
+      root.render(
+        <ThemeProvider>
+          <Harness />
+        </ThemeProvider>
+      )
+    );
+    await act(async () =>
+      element
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Preview inventory.csv"]'
+        )!
+        .click()
+    );
+
+    for (
+      let attempt = 0;
+      attempt < 30 && !element.querySelector("table");
+      attempt++
+    ) {
+      await act(async () => {
+        await Bun.sleep(20);
+      });
+    }
+
+    const cells = Array.from(element.querySelectorAll("table td")).map(
+      (cell) => cell.textContent
+    );
+
+    expect(cells).toContain("QM-0921");
+    expect(cells).toContain("Medan");
+  } finally {
+    await act(async () => root.unmount());
+    uuid.mockRestore();
+  }
+});
