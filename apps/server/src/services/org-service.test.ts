@@ -67,7 +67,7 @@ import {
   createNakamaDataExport,
   restoreNakamaDataImport,
 } from "./data-portability";
-import { ManagedSecrets } from "./managed-secrets";
+import { automationWebhookSecretName, ManagedSecrets } from "./managed-secrets";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
 
@@ -579,6 +579,126 @@ describe("OrgService", () => {
 
     expect(sessionA?.revokedAt).toBeTruthy();
     expect(sessionB?.revokedAt).toBeTruthy();
+  });
+
+  describe("webhook secrets of a member who loses access", () => {
+    async function setup() {
+      const { authService, databaseAdapter, orgService } = createOrgService();
+
+      const created = await orgService.createOrganization({
+        admin: {
+          email: "admin@acme.com",
+          name: "Acme Admin",
+          phone: "+628123456789",
+        },
+        name: "Acme",
+        slug: "acme-webhook-secrets",
+      });
+
+      const orgId = created.organization.id;
+
+      const second = await orgService.createOrganization(
+        { name: "Beta", slug: "beta-webhook-secrets" },
+        created.adminMember!.member.userId
+      );
+
+      const addMember = async (email: string) => {
+        const added = await orgService.addMember({
+          email,
+          name: email,
+          orgId,
+          phone: "+628111111111",
+          role: "member",
+        });
+
+        return {
+          password: added.temporaryPassword!,
+          userId: added.member.userId,
+        };
+      };
+
+      const memberA = await addMember("a@acme.com");
+      const memberB = await addMember("b@acme.com");
+
+      const automations = new AutomationService(databaseAdapter, {
+        getUserTimezone: async () => "UTC",
+        secrets: new ManagedSecrets(
+          databaseAdapter,
+          Buffer.alloc(32, 1).toString("base64")
+        ),
+      });
+
+      const makeSecret = async (inOrgId: string, userId: string) => {
+        const automation = await automations.create(
+          inOrgId,
+          {
+            description: "Review",
+            name: "PR review",
+            prompt: "Review the pull request.",
+            trigger: { type: "webhook" },
+          },
+          undefined,
+          { orgRole: "member", userId }
+        );
+
+        await automations.createWebhookSecret(automation.id, inOrgId, userId);
+
+        return automationWebhookSecretName(automation.id);
+      };
+
+      const remaining = async () =>
+        (await databaseAdapter.listManagedSecrets()).map(
+          (secret) => secret.name
+        );
+
+      return {
+        databaseAdapter,
+        makeSecret,
+        memberA,
+        memberB,
+        orgId,
+        orgService,
+        remaining,
+        secondOrgId: second.organization.id,
+      };
+    }
+
+    test("removing a member deletes only their webhook secrets in that org", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId);
+
+      expect(await ctx.remaining()).toEqual([b]);
+      expect(await ctx.remaining()).not.toContain(a);
+    });
+
+    test("disabling a member deletes only their webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.disableMember(ctx.orgId, ctx.memberA.userId);
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("changing a password deletes the user's webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.changePassword({
+        currentPassword: ctx.memberA.password,
+        newPassword: "new-password-123",
+        userId: ctx.memberA.userId,
+      });
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
   });
 
   test("updates own profile email phone and name", async () => {

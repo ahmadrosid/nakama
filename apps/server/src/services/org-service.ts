@@ -70,6 +70,7 @@ import type {
   StoredUserRecord,
 } from "@nakama/db";
 import {
+  DatabaseAutomationStore,
   ensureLocalClientAccess,
   ORG_INVITE_EXPIRY_DAYS,
   ORG_ROLES,
@@ -84,7 +85,10 @@ import {
   loadToolEnv,
   readHandlerConfig,
 } from "./custom-tool-shared";
-import { AUTOMATION_WEBHOOK_SECRET_PREFIX } from "./managed-secrets";
+import {
+  AUTOMATION_WEBHOOK_SECRET_PREFIX,
+  automationWebhookSecretName,
+} from "./managed-secrets";
 import { namespacedMcpToolName } from "./mcp-tool-bridge";
 import { loadMfaPolicy } from "./mfa-config";
 import {
@@ -1133,6 +1137,32 @@ export class OrgService {
     }
   }
 
+  // A webhook secret lets its holder start runs as them, so it ends with
+  // their access. The automation stays a webhook until someone makes a new one.
+  private async deleteUserWebhookSecrets(
+    userId: string,
+    orgId?: string
+  ): Promise<void> {
+    const store = new DatabaseAutomationStore(this.databaseAdapter);
+
+    const automations = orgId
+      ? await store.listForOrg(orgId)
+      : await store.list();
+
+    for (const automation of automations) {
+      if (
+        automation.orgId &&
+        automation.trigger.type === "webhook" &&
+        automation.runAsUserId === userId
+      ) {
+        await this.databaseAdapter.deleteManagedSecret(
+          automation.orgId,
+          automationWebhookSecretName(automation.id)
+        );
+      }
+    }
+  }
+
   async updateOrganization(
     orgId: string,
     request: UpdateOrganizationRequest
@@ -1858,6 +1888,7 @@ export class OrgService {
       userId,
       new Date().toISOString()
     );
+    await this.deleteUserWebhookSecrets(userId, orgId);
   }
 
   async disableMember(orgId: string, userId: string): Promise<void> {
@@ -1945,6 +1976,7 @@ export class OrgService {
     }
 
     await this.databaseAdapter.revokeBrowserSessionsForUser(userId, now);
+    await this.deleteUserWebhookSecrets(userId);
   }
 
   async enableMember(orgId: string, userId: string): Promise<void> {
@@ -2406,6 +2438,7 @@ export class OrgService {
       now
     );
     await this.databaseAdapter.revokeBrowserSessionsForUser(user.id, now);
+    await this.deleteUserWebhookSecrets(user.id);
   }
 
   private async assertCanChangeAdminMembership(
