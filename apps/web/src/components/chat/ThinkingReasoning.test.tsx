@@ -142,3 +142,82 @@ test("one finished tool call names its target in the activity header", async () 
     await act(async () => root.unmount());
   }
 });
+
+test("an opened one-step header shows the tool output without a second tool row", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <AssistantTurnSegmentView
+          segment={{
+            active: false,
+            kind: "work",
+            tools: [
+              {
+                content: "",
+                id: "tool",
+                role: "tool",
+                tool: "bash",
+                toolInput: { command: "date" },
+                toolResult: { exitCode: 0, stdout: "Sun Nov 8 2026" },
+                toolStatus: "done",
+              },
+            ],
+          }}
+        />
+      )
+    );
+
+    const header = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Toggle activity"]'
+    );
+
+    await act(async () => header?.click());
+
+    expect(header?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("Sun Nov 8 2026");
+    expect(container.querySelectorAll("button[aria-expanded]").length).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+test("a one-step document read names the file from the tool result", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <AssistantTurnSegmentView
+          segment={{
+            active: false,
+            kind: "work",
+            tools: [
+              {
+                content: "",
+                id: "tool",
+                role: "tool",
+                tool: "extract_document_text",
+                toolInput: { attachmentId: "att_123" },
+                toolResult: { filename: "inventory.csv", text: "rows" },
+                toolStatus: "done",
+              },
+            ],
+          }}
+        />
+      )
+    );
+
+    const header = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Toggle activity"]'
+    );
+
+    expect(header?.textContent).toContain("inventory.csv");
+    expect(header?.textContent).not.toContain("att_123");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

@@ -1216,18 +1216,12 @@ function ChatMessageRow({
       className="mr-0 ml-auto min-w-0 max-w-full items-end justify-end overflow-visible"
       from="user"
     >
-      <MessageContent
-        className={cn(
-          "ml-auto min-w-0 max-w-full overflow-visible group-[.is-user]:ml-auto",
-          Boolean(
-            message.documents?.length ||
-              message.images?.length ||
-              message.imageAttachments?.length
-          ) && "w-full"
-        )}
-      >
-        <UserMessageContent message={message} />
-      </MessageContent>
+      <UserMessageAttachments message={message} />
+      {message.content || message.questionnaireAnswers?.length ? (
+        <MessageContent className="ml-auto min-w-0 max-w-full overflow-visible group-[.is-user]:ml-auto">
+          <UserMessageContent message={message} />
+        </MessageContent>
+      ) : null}
       {canEdit ? (
         <button
           aria-label="Edit message"
@@ -1443,10 +1437,29 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
     );
   }
 
+  return message.content ? (
+    <p className="whitespace-pre-wrap break-words text-foreground">
+      {message.content}
+    </p>
+  ) : null;
+}
+
+/** Files sit above the bubble on the right, apart from the text. */
+function UserMessageAttachments({ message }: { message: ChatListItem }) {
   const otherDocuments = message.documents ?? [];
 
+  if (
+    !(
+      otherDocuments.length ||
+      message.images?.length ||
+      message.imageAttachments?.length
+    )
+  ) {
+    return null;
+  }
+
   return (
-    <div className="space-y-2">
+    <div className="ml-auto flex w-full max-w-sm flex-col gap-2">
       {message.imageAttachments?.length ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
           {message.imageAttachments.map((image, index) =>
@@ -1500,11 +1513,6 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
             />
           ))}
         </div>
-      ) : null}
-      {message.content ? (
-        <p className="whitespace-pre-wrap break-words text-foreground">
-          {message.content}
-        </p>
       ) : null}
     </div>
   );

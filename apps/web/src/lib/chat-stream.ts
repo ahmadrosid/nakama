@@ -169,6 +169,23 @@ export function formatToolResult(
     return result.content.replace(/\r\n/g, "\n").trim() || null;
   }
 
+  if (
+    tool === "extract_document_text" &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+    typeof result === "object" &&
+    result !== null &&
+    !("error" in result) &&
+    "text" in result &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+    typeof result.text === "string"
+  ) {
+    // The text starts with a one-paragraph note for the model; show the file.
+    const text = result.text.replace(/\r\n/g, "\n");
+    const start = text.indexOf("\n\n");
+
+    return (start === -1 ? text : text.slice(start + 2)).trim() || null;
+  }
+
   if (tool === "bash") {
     return formatBashToolResult(result);
   }
@@ -528,12 +545,29 @@ function basename(value: string): string {
 export function formatToolActionLabel(
   tool: string | undefined,
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
-  input?: Record<string, unknown>
+  input?: Record<string, unknown>,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Tool results are untrusted JSON and are narrowed below.
+  result?: unknown
 ): string {
   const summary = formatToolSummary(tool, input);
 
   if (isSubAgentTool(tool)) {
     return formatSubAgentTitle(input);
+  }
+
+  // The input holds only an attachment id; the result names the file.
+  if (tool === "extract_document_text") {
+    const filename =
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+      typeof result === "object" &&
+      result !== null &&
+      "filename" in result &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
+      typeof result.filename === "string"
+        ? result.filename.trim()
+        : "";
+
+    return filename ? `Read ${basename(filename)}` : "Read document";
   }
 
   if (isListWorkflowsTool(tool)) {

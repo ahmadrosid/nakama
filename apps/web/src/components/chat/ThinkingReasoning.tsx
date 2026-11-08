@@ -23,7 +23,7 @@ export interface ThinkingReasoningProps {
   thinkingDurationMs?: number;
   toolCount?: number;
   /** Replaces "1 step" when the only step is one tool call. */
-  toolLabel?: string;
+  toolLabel?: ReactNode;
 }
 
 function useThinkingElapsed(
@@ -253,18 +253,21 @@ function ThinkingReasoningHeader({
   hasChildren: boolean;
   isThinkingStreaming: boolean;
   stepCount: number;
-  stepLabelOverride?: string;
+  stepLabelOverride?: ReactNode;
   onToggle: () => void;
 }) {
   const stepLabel = `${stepCount} ${stepCount === 1 ? "step" : "steps"}`;
 
-  const doneLabel =
-    stepLabelOverride ?? (stepCount > 0 ? stepLabel : "Activity");
+  const doneLabel = stepLabelOverride ?? (
+    <span className={styles.verb}>
+      {stepCount > 0 ? stepLabel : "Activity"}
+    </span>
+  );
 
   const durationLabel =
     elapsedSeconds === null
       ? ""
-      : ` for ${formatElapsedSeconds(elapsedSeconds)}`;
+      : `${stepLabelOverride ? " · " : " for "}${formatElapsedSeconds(elapsedSeconds)}`;
 
   const liveLabel =
     activityLabel ??
@@ -287,7 +290,7 @@ function ThinkingReasoningHeader({
       <span className={cn(styles.label, !done && styles.shimmer)}>
         {done ? (
           <>
-            <span className={styles.verb}>{doneLabel}</span>
+            {doneLabel}
             {durationLabel}
           </>
         ) : (
