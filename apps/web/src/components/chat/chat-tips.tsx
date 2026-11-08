@@ -21,10 +21,10 @@ export function ChatComposerNotice({
   role?: React.AriaRole;
 }) {
   return (
-    <div className="px-4">
+    <div className="-mb-3 px-4">
       <div
         className={cn(
-          "relative overflow-hidden rounded-t-xl border-border border-x border-t bg-card px-3 py-1.5",
+          "relative overflow-hidden rounded-t-xl border-border border-x border-t bg-card px-3 pt-1.5 pb-4.5",
           className
         )}
         role={role}
