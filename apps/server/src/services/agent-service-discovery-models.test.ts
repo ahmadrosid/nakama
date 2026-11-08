@@ -140,6 +140,21 @@ describe("saving models for discovery providers", () => {
     }
   );
 
+  test.each<ProviderName>(["command_code", "groq"])(
+    "keeps the model picked in the Add form for %s",
+    async (type) => {
+      const { create, listed, modelIds, savedModels } = await setup();
+      const created = await create({ model: picked[0].id, type });
+
+      expect(created.initialModel).toBe(picked[0].id);
+      expect(await listed(created.provider.id)).toMatchObject({
+        modelCount: 1,
+      });
+      expect(await modelIds()).toEqual([picked[0].id]);
+      expect(await savedModels(created.provider.id)).toEqual(picked);
+    }
+  );
+
   test.each<[string, CustomModelEntry[]]>([
     ["an empty list", []],
     ["a blank model id", [{ id: "  " }]],
