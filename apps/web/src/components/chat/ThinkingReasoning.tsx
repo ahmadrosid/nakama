@@ -22,6 +22,8 @@ export interface ThinkingReasoningProps {
   text: string;
   thinkingDurationMs?: number;
   toolCount?: number;
+  /** Replaces "1 step" when the only step is one tool call. */
+  toolLabel?: ReactNode;
 }
 
 function useThinkingElapsed(
@@ -241,6 +243,7 @@ function ThinkingReasoningHeader({
   hasChildren,
   isThinkingStreaming,
   stepCount,
+  stepLabelOverride,
   onToggle,
 }: {
   activityLabel?: string;
@@ -250,15 +253,21 @@ function ThinkingReasoningHeader({
   hasChildren: boolean;
   isThinkingStreaming: boolean;
   stepCount: number;
+  stepLabelOverride?: ReactNode;
   onToggle: () => void;
 }) {
   const stepLabel = `${stepCount} ${stepCount === 1 ? "step" : "steps"}`;
-  const doneLabel = stepCount > 0 ? stepLabel : "Activity";
+
+  const doneLabel = stepLabelOverride ?? (
+    <span className={styles.verb}>
+      {stepCount > 0 ? stepLabel : "Activity"}
+    </span>
+  );
 
   const durationLabel =
     elapsedSeconds === null
       ? ""
-      : ` for ${formatElapsedSeconds(elapsedSeconds)}`;
+      : `${stepLabelOverride ? " · " : " for "}${formatElapsedSeconds(elapsedSeconds)}`;
 
   const liveLabel =
     activityLabel ??
@@ -281,8 +290,10 @@ function ThinkingReasoningHeader({
       <span className={cn(styles.label, !done && styles.shimmer)}>
         {done ? (
           <>
-            <span className={styles.verb}>{doneLabel}</span>
-            {durationLabel}
+            {doneLabel}
+            <span className={cn(stepLabelOverride ? styles.verb : undefined)}>
+              {durationLabel}
+            </span>
           </>
         ) : (
           `${liveLabel}${liveStepLabel}`
@@ -376,6 +387,7 @@ export function ThinkingReasoning({
   className,
   children,
   toolCount = 0,
+  toolLabel,
 }: ThinkingReasoningProps) {
   const displayText = useRafCoalescedValue(text, isThinkingStreaming);
   const trimmed = displayText.trim();
@@ -420,6 +432,9 @@ export function ThinkingReasoning({
         isThinkingStreaming={isThinkingStreaming}
         onToggle={toggle}
         stepCount={stepCount}
+        stepLabelOverride={
+          stepCount === 1 && toolCount === 1 ? toolLabel : undefined
+        }
       />
       <ThinkingReasoningBody
         expanded={expanded}
