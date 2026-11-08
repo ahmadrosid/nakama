@@ -31,7 +31,7 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
-import { resolveNetraModelId } from "@nakama/core/discovery-providers";
+import { isDiscoveryModelProvider, resolveNetraModelId } from "@nakama/core/discovery-providers";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   getDefaultModel,
@@ -310,7 +310,10 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateCloudflareCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
-    } else if (CATALOG_LIST_TYPES.has(instance.type)) {
+    } else if (
+      isDiscoveryModelProvider(instance.type) ||
+      CATALOG_LIST_TYPES.has(instance.type)
+    ) {
       next.customModels = validateCustomModels(request.customModels);
     }
   }
@@ -482,7 +485,7 @@ function buildProviderFieldsFromRequest(
   const customModels = request.customModels?.length
     ? type === "cloudflare"
       ? validateCloudflareCustomModels(request.customModels)
-      : CATALOG_LIST_TYPES.has(type)
+      : isDiscoveryModelProvider(type) || CATALOG_LIST_TYPES.has(type)
         ? validateCustomModels(request.customModels)
         : undefined
     : undefined;
