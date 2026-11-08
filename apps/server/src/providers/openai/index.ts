@@ -650,8 +650,10 @@ function buildDeepSeekThinkingBody(
   }
 
   const effort = normalizeThinkingEffort(thinking.effort, model, "deepseek");
-  // DeepSeek accepts low/high/max; map medium → high for compatibility.
-  const reasoningEffort = effort === "medium" ? "high" : effort;
+
+  // DeepSeek accepts low/high/max; medium and xhigh go to high.
+  const reasoningEffort =
+    effort === "medium" || effort === "xhigh" ? "high" : effort;
 
   return {
     reasoning_effort: reasoningEffort,
