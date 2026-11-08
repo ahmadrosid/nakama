@@ -60,13 +60,11 @@ jobs:
         with:
           bun-version: 1.4.4
 
-      # Both ignores are blocked by an upstream exact range, not accepted
-      # silently: msal by @microsoft/teams.apps and basic-ftp by get-uri v5.
-      # Remove an ignore as soon as the dependent accepts the fixed version.
+      # basic-ftp is blocked by get-uri's ^5 range, not accepted silently.
+      # Remove the ignore as soon as get-uri accepts the fixed version.
       - name: Audit root lockfile
         run: >-
           bun audit --production --audit-level=high
-          --ignore=GHSA-xcx6-jx8p-x3h5
           --ignore=GHSA-c475-qrg2-pj4r
 
       - name: Audit shipped image lockfile

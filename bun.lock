@@ -63,7 +63,7 @@
     "apps/platform/teams": {
       "name": "@nakama/teams",
       "dependencies": {
-        "@microsoft/teams.apps": "2.1.1",
+        "@microsoft/teams.apps": "2.2.0",
         "@nakama/client": "workspace:*",
         "@nakama/core": "workspace:*",
         "zod": "^4.6.5",
@@ -301,9 +301,9 @@
 
     "@astrojs/compiler": ["@astrojs/compiler@4.0.0", "", {}, "sha512-eouss7G8ygdZqHuke033VMcVw5HTZUu+PXd/h06DGDUg/jt5btPYPqh66ENWw/mU78rBrf/oeC4oqoBwMtDMNA=="],
 
-    "@azure/msal-common": ["@azure/msal-common@16.13.0", "", {}, "sha512-rOAy0KUcyBbdwVJ+f3uPpthXatFLLZN+/KWAsTLzk1aB23Xl9DRmmXYwSvBFOZyXj4jUQQ5FKxxRkhAFW1fOow=="],
+    "@azure/msal-common": ["@azure/msal-common@16.16.1", "", {}, "sha512-dSKdL9h/iercb4GumsKFh+wVvLe1ohuDPiviklgnQVHnY2FYNUlbQJ3E1Qd37vkof9CfraK9BQpCW1hoOg0znQ=="],
 
-    "@azure/msal-node": ["@azure/msal-node@5.6.0", "", { "dependencies": { "@azure/msal-common": "16.13.0", "jsonwebtoken": "^9.0.0" } }, "sha512-uFY9NxrWHw8PwZx7gAX6PDn+9vdfS05+levc/kwkx77IkjfaldnQbbcQzzDIZ5Hq5Zdr6/z92oAIoRWKp6MnOA=="],
+    "@azure/msal-node": ["@azure/msal-node@7.2.1", "", { "dependencies": { "@azure/msal-common": "16.16.1", "jsonwebtoken": "^9.0.0" } }, "sha512-6mntsfCNq7H1eAPSZik74jT3C5at4nRqiVk7OC+D5Hy3Pe3s76uwE4+J0xvDvlVPmoX2kasf3mSwUmzeq9rW/A=="],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 
@@ -605,15 +605,17 @@
 
     "@mermaid-js/parser": ["@mermaid-js/parser@1.2.1", "", { "dependencies": { "@chevrotain/types": "~11.1.2" } }, "sha512-n12NohV3mrUyUL2o93IgG/ifeW9FTyeJn3zDxkhwa8MJ9Fxg3HQMlA3RiGmD/3UnJvheztkjjQAjA2T4LmUcpw=="],
 
-    "@microsoft/teams.api": ["@microsoft/teams.api@2.1.1", "", { "dependencies": { "@microsoft/teams.cards": "2.1.1", "@microsoft/teams.common": "2.1.1", "@opentelemetry/api": "^1.9.1", "jwt-decode": "^4.0.0", "qs": "^6.16.0" } }, "sha512-42m4z4fbvb7dq7gJFrMnOuBDDMmLk3GYQGHlIYPLWOBH0KRFtWjEh15Z5XMzkyUFp06uVjsyNnnCgOaea0FKyQ=="],
+    "@microsoft/signalr": ["@microsoft/signalr@10.0.11", "", { "dependencies": { "abort-controller": "^3.0.0", "eventsource": "^2.0.2", "fetch-cookie": "^2.0.3", "node-fetch": "^2.6.7", "ws": "^7.5.10" } }, "sha512-FulOJ2EEtKvLQcswe/U7v8pzyXyk7Jua5xgWJPPwyQU/2Z9ORvKcVjyO75VvLsem+CJ1ORRexJ+7Bz1FCei2aw=="],
 
-    "@microsoft/teams.apps": ["@microsoft/teams.apps@2.1.1", "", { "dependencies": { "@azure/msal-node": "^5.6.0", "@microsoft/teams.api": "2.1.1", "@microsoft/teams.common": "2.1.1", "@microsoft/teams.graph": "2.1.1", "@opentelemetry/api": "^1.9.1", "axios": "^1.18.1", "cors": "^2.8.5", "express": "^5.0.0", "jsonwebtoken": "^9.0.2", "jwks-rsa": "^4.1.0", "reflect-metadata": "^0.2.2" } }, "sha512-/MY2nPH8njX7F5Rw18r09SbBrmQ4BsjSCmNx2+Q4S8X+m/ptzz/hyme8naRlPxgx3/Jrxnef4jUOhqhcLjs06Q=="],
+    "@microsoft/teams.api": ["@microsoft/teams.api@2.2.0", "", { "dependencies": { "@microsoft/teams.cards": "2.2.0", "@microsoft/teams.common": "2.2.0", "@opentelemetry/api": "^1.9.1", "jwt-decode": "^4.0.0", "qs": "^6.16.1" } }, "sha512-fzHAz4IDFdMs6MsBIVlBdRRFFAN2uehAJ3kMs1zkpod0Iy+3WxndrQTrnElyMg3Opt0xA3JaCPnbxc0A9yxV/Q=="],
 
-    "@microsoft/teams.cards": ["@microsoft/teams.cards@2.1.1", "", {}, "sha512-MSI2xk+3l/9h6sOWNCKrUY94b4OwRNB2iyk8j3IASxsTVFEK+E9BzsTR/afWynZ4NCLFXgy3tapDbmDy/hujtw=="],
+    "@microsoft/teams.apps": ["@microsoft/teams.apps@2.2.0", "", { "dependencies": { "@azure/msal-node": "^7.1.1", "@microsoft/signalr": "^10.0.11", "@microsoft/teams.api": "2.2.0", "@microsoft/teams.common": "2.2.0", "@microsoft/teams.graph": "2.2.0", "@opentelemetry/api": "^1.9.1", "axios": "^1.20.0", "cors": "^2.8.5", "express": "^5.3.0", "jsonwebtoken": "^9.0.2", "jwks-rsa": "^4.1.0", "reflect-metadata": "^0.2.2" } }, "sha512-XmIpj/qYyCL/XUe9PeOmwR1nSsUpALD+0N5BajKkazGd0ug28wRkba+96qT4UkhhIbDBOGZ5PkOdjXJ3FAUYYA=="],
 
-    "@microsoft/teams.common": ["@microsoft/teams.common@2.1.1", "", { "dependencies": { "axios": "^1.18.1" } }, "sha512-chbBLXOJj+hHWl0Cls2VQExvq1l+UK2adxChhxkrvypcnDDamDY9frHVTrPUZxWgEZ9bzmCG+HvJJKR1EcnXRw=="],
+    "@microsoft/teams.cards": ["@microsoft/teams.cards@2.2.0", "", {}, "sha512-kYiqHEJFP/3+Hiiikv9n0sQetCxecw4/xtr3dt/BRlZC24SEDrM1spauFQQvqZrEsqIavKdZWdIZUokLnvQsSw=="],
 
-    "@microsoft/teams.graph": ["@microsoft/teams.graph@2.1.1", "", { "dependencies": { "@microsoft/teams.common": "2.1.1", "qs": "^6.16.0" } }, "sha512-oBSvhsUoBx1EPNIK0/UfmipSSYyojVJ5/yvQlO/nQcUV8ZAUQ99KC/QSQY7NLacMplZ+5N4nVO9DuhWvS3/ZpQ=="],
+    "@microsoft/teams.common": ["@microsoft/teams.common@2.2.0", "", { "dependencies": { "axios": "^1.20.0" } }, "sha512-kuprVXivgHAx00YnwnCg/mk6/ZL2RcVjHrn4jopt1LvjVh689boX2VafOLvMJnzP0t5EabCfkgukEhiGIUasWA=="],
+
+    "@microsoft/teams.graph": ["@microsoft/teams.graph@2.2.0", "", { "dependencies": { "@microsoft/teams.common": "2.2.0", "qs": "^6.16.1" } }, "sha512-ktR7V2e9tg5MxtXtOo40N1EvrIGEW6RNln7V5MWDKt+Ba3mJkANV8Yex4sI58p/QSaHExt3KEtk9/TgbEEEafg=="],
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.32.2", "", { "dependencies": { "@hono/node-server": "^1.19.9 || ^2.0.5", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw=="],
 
@@ -1759,6 +1761,8 @@
 
     "fetch-blob": ["fetch-blob@3.2.0", "", { "dependencies": { "node-domexception": "^1.0.0", "web-streams-polyfill": "^3.0.3" } }, "sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ=="],
 
+    "fetch-cookie": ["fetch-cookie@2.2.0", "", { "dependencies": { "set-cookie-parser": "^2.4.8", "tough-cookie": "^4.0.0" } }, "sha512-h9AgfjURuCgA2+2ISl8GbavpUdR+WGAM2McW/ovn4tVccegp8ZqCKWSBR8uRdM8dDNlx5WdKRWxBYUwteLDCNQ=="],
+
     "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "figures": ["figures@6.1.0", "", { "dependencies": { "is-unicode-supported": "^2.0.0" } }, "sha512-d+l3qxjSesT4V7v2fh+QnmFnUWv9lSpjarhShNTgBOfA0ttejbQUAlHLitbjkoRiDulW0OPoQPYIGhIC8ohejg=="],
@@ -2543,6 +2547,8 @@
 
     "proxy-from-env": ["proxy-from-env@1.1.0", "", {}, "sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg=="],
 
+    "psl": ["psl@1.15.0", "", { "dependencies": { "punycode": "^2.3.1" } }, "sha512-JZd3gMVBAVQkSs6HdNZo9Sdo0LNcQeMNP3CozBJb3JYC/QUYZTnKxP+f8oWRX4rHP5EurWxqAHTSwUCjlNKa1w=="],
+
     "pump": ["pump@3.0.4", "", { "dependencies": { "end-of-stream": "^1.1.0", "once": "^1.3.1" } }, "sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA=="],
 
     "punycode": ["punycode@2.3.1", "", {}, "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg=="],
@@ -2560,6 +2566,8 @@
     "qrcode.react": ["qrcode.react@4.2.0", "", { "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA=="],
 
     "qs": ["qs@6.16.1", "", { "dependencies": { "es-define-property": "^1.0.1", "side-channel": "^1.1.1" } }, "sha512-5Px6J7rfHBAGUhNQ3es4YzcOdBBw0SDcVtThJml4RdnKw4tKs2epA0kPZ+K8X+WiHktT93RHVcQ/3ym5aTCgtg=="],
+
+    "querystringify": ["querystringify@2.2.0", "", {}, "sha512-FIqgj2EUvTa7R50u0rGsyTftzjYmv/a3hO345bZNrqabNqjtgiDMgmo4mkUjd+nzU5oF3dClKqFIPUKybUyqoQ=="],
 
     "queue-microtask": ["queue-microtask@1.2.3", "", {}, "sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A=="],
 
@@ -2636,6 +2644,8 @@
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 
     "require-in-the-middle": ["require-in-the-middle@8.0.1", "", { "dependencies": { "debug": "^4.3.5", "module-details-from-path": "^1.0.3" } }, "sha512-QT7FVMXfWOYFbeRBF6nu+I6tr2Tf3u0q8RIEjNob/heKY/nh7drD/k7eeMFmSQgnTtCzLDcCu/XEnpW2wk4xCQ=="],
+
+    "requires-port": ["requires-port@1.0.0", "", {}, "sha512-KigOCHcocU3XODJxsu8i/j8T9tzT4adHiecwORRQ0ZZFcp7ahwXuRU1m+yuO90C5ZUyGeGfocHDI14M3L3yDAQ=="],
 
     "resedit": ["resedit@1.7.2", "", { "dependencies": { "pe-library": "^0.4.1" } }, "sha512-vHjcY2MlAITJhC0eRD/Vv8Vlgmu9Sd3LX9zZvtGzU5ZImdTN3+d6e/4mnTyV8vEbyf1sgNIrWxhWlrys52OkEA=="],
 
@@ -2925,6 +2935,8 @@
 
     "uri-js": ["uri-js@4.4.1", "", { "dependencies": { "punycode": "^2.1.0" } }, "sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg=="],
 
+    "url-parse": ["url-parse@1.5.10", "", { "dependencies": { "querystringify": "^2.1.1", "requires-port": "^1.0.0" } }, "sha512-WypcfiRhfeUP9vvF0j6rw0J3hrWrw6iZv3+22h6iRMJ/8z1Tj6XfLP4DsUix5MhMPnXpiHDoKyoZ/bdCkwBCiQ=="],
+
     "use-callback-ref": ["use-callback-ref@1.3.3", "", { "dependencies": { "tslib": "^2.0.0" }, "peerDependencies": { "@types/react": "*", "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-jQL3lRnocaFtu3V00JToYz/4QkNWswxijDaCVNZRiRTO3HQDLsdu1ZtmIUvV4yPp+rvWm5j0y0TG/S61cuijTg=="],
 
     "use-sidecar": ["use-sidecar@1.1.3", "", { "dependencies": { "detect-node-es": "^1.1.0", "tslib": "^2.0.0" }, "peerDependencies": { "@types/react": "*", "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-Fedw0aZvkhynoPYlA5WXrMCAMm+nSWdZt6lzJQ7Ok8S6Q+VsHmHpRWndVRJ8Be0ZbkfPc5LRYH+5XrzXcEeLRQ=="],
@@ -3061,7 +3073,13 @@
 
     "@malept/flatpak-bundler/fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ=="],
 
+    "@microsoft/signalr/eventsource": ["eventsource@2.0.2", "", {}, "sha512-IzUmBGPR3+oUG9dUeXynyNmf91/3zUSJg1lCktzKw47OXuhco54U3r9B7O4XX+Rb1Itm9OZ2b0RkTs10bICOxA=="],
+
+    "@microsoft/signalr/ws": ["ws@7.5.13", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": "^5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-rsKI6xDBFVf4r/x8XyChGK04QR/XHroxs/jUcoWvtEZM8TPU/X/uIY9B1CsSzYws9ZJb/6bbBu7dPhFW00CAoA=="],
+
     "@microsoft/teams.api/qs": ["qs@6.17.0", "", { "dependencies": { "es-define-property": "^1.0.1", "side-channel": "^1.1.1" } }, "sha512-5LK5BZ2XDHMvcUJaf0CQ5HL3aVgKbpklvByC7qLSxYkfE8COEEbJg5xCHWCTqzqi0Gs4Jn5Mv5v3R38W6edscA=="],
+
+    "@microsoft/teams.apps/express": ["express@5.3.0", "", { "dependencies": { "accepts": "^2.0.0", "body-parser": "^2.3.0", "content-disposition": "^2.0.1", "content-type": "^2.0.0", "cookie": "^0.7.1", "cookie-signature": "^1.2.1", "debug": "^4.4.0", "depd": "^2.0.0", "encodeurl": "^2.0.0", "escape-html": "^1.0.3", "etag": "^1.8.1", "finalhandler": "^2.1.0", "fresh": "^2.0.0", "http-errors": "^2.0.0", "merge-descriptors": "^2.0.0", "mime-types": "^3.0.0", "on-finished": "^2.4.1", "once": "^1.4.0", "parseurl": "^1.3.3", "proxy-addr": "^2.0.8", "qs": "^6.16.0", "range-parser": "^1.2.1", "router": "^2.2.0", "send": "^1.1.0", "serve-static": "^2.2.0", "statuses": "^2.0.1", "type-is": "^2.1.0", "vary": "^1.1.2" } }, "sha512-qCqy1xSoaugxOD4IVHb1ZWdkvCF2W3aE2okKouWj8VwJ+ztskSiXoBnCSJqfKT+cVPJhuJqe9YLbY425+Zh00g=="],
 
     "@microsoft/teams.graph/qs": ["qs@6.17.0", "", { "dependencies": { "es-define-property": "^1.0.1", "side-channel": "^1.1.1" } }, "sha512-5LK5BZ2XDHMvcUJaf0CQ5HL3aVgKbpklvByC7qLSxYkfE8COEEbJg5xCHWCTqzqi0Gs4Jn5Mv5v3R38W6edscA=="],
 
@@ -3174,6 +3192,10 @@
     "eslint/glob-parent": ["glob-parent@6.0.2", "", { "dependencies": { "is-glob": "^4.0.3" } }, "sha512-XxwI8EOhVQgWp6iDL+3b0r86f4d6AX6zSU55HfB4ydCEuXLXc5FcYeOu+nnGftS4TEju/11rt4KJPTMgbfmv4A=="],
 
     "express/cookie": ["cookie@0.7.2", "", {}, "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w=="],
+
+    "fetch-cookie/set-cookie-parser": ["set-cookie-parser@2.7.2", "", {}, "sha512-oeM1lpU/UvhTxw+g3cIfxXHyJRc/uidd3yK1P242gzHds0udQBYzs3y8j4gCCW+ZJ7ad0yctld8RYO+bdurlvw=="],
+
+    "fetch-cookie/tough-cookie": ["tough-cookie@4.1.4", "", { "dependencies": { "psl": "^1.1.33", "punycode": "^2.1.1", "universalify": "^0.2.0", "url-parse": "^1.5.3" } }, "sha512-Loo5UUvLD9ScZ6jh8beX1T6sO1w2/MpCRpEP7V280GKMVUQ0Jzar2U3UJPsrdbziLEMMhu3Ujnq//rhiFuIeag=="],
 
     "filelist/minimatch": ["minimatch@5.1.9", "", { "dependencies": { "brace-expansion": "^2.0.1" } }, "sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw=="],
 
@@ -3327,6 +3349,14 @@
 
     "@electron/universal/minimatch/brace-expansion": ["brace-expansion@2.1.7", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="],
 
+    "@microsoft/teams.apps/express/content-disposition": ["content-disposition@2.0.1", "", {}, "sha512-e+H0ZXHSWYrENhQzw1LPuP4oF5MzVKmDU6d3hxlvaPEYLLg62MxtQNPRx4SYSuYJSBUgnQIG4HIN2tEtNv7Dog=="],
+
+    "@microsoft/teams.apps/express/content-type": ["content-type@2.1.0", "", {}, "sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag=="],
+
+    "@microsoft/teams.apps/express/cookie": ["cookie@0.7.2", "", {}, "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w=="],
+
+    "@microsoft/teams.apps/express/qs": ["qs@6.17.0", "", { "dependencies": { "es-define-property": "^1.0.1", "side-channel": "^1.1.1" } }, "sha512-5LK5BZ2XDHMvcUJaf0CQ5HL3aVgKbpklvByC7qLSxYkfE8COEEbJg5xCHWCTqzqi0Gs4Jn5Mv5v3R38W6edscA=="],
+
     "@npmcli/agent/socks-proxy-agent/socks": ["socks@2.8.9", "", { "dependencies": { "ip-address": "^10.1.1", "smart-buffer": "^4.2.0" } }, "sha512-LJhUYUvItdQ0LkJTmPeaEObWXAqFyfmP85x0tch/ez9cahmhlBBLbIqDFnvBnUJGagb0JbIQrkBs1wJ+yRYpEw=="],
 
     "@npmcli/git/which/isexe": ["isexe@4.0.0", "", {}, "sha512-FFUtZMpoZ8RqHS3XeXEmHWLA4thH+ZxCv2lOiPIn1Xc7CxrqhWzNSDzD+/chS/zbYezmiwWLdQC09JdQKmthOw=="],
@@ -3404,6 +3434,8 @@
     "electron/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
 
     "eslint/ajv/json-schema-traverse": ["json-schema-traverse@0.4.1", "", {}, "sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg=="],
+
+    "fetch-cookie/tough-cookie/universalify": ["universalify@0.2.0", "", {}, "sha512-CJ1QgKmNg3CwvAv/kOFmtnEN05f0D/cn9QntgNOQlQF9dgvVTHj3t+8JPdjqawCHk7V/KA+fbUqzZ9XWhcqPUg=="],
 
     "filelist/minimatch/brace-expansion": ["brace-expansion@2.1.7", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="],
 
