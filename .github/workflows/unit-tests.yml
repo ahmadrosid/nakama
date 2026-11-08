@@ -75,6 +75,15 @@ jobs:
         with:
           version: "8.1"
 
+      # Electron's zip comes from GitHub releases, which sometimes return 504.
+      # The cache skips the download on most runs; the loop retries the rest.
+      - name: Cache Electron download
+        if: env.WEB_ONLY != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/electron
+          key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/electron/package.json') }}
+
       - parallel:
           # bun test does not type-check or bundle. Docker Publish does both, but
           # only after the merge. Keep this list the same as the one in Dockerfile.
@@ -93,7 +102,12 @@ jobs:
           - name: Set up Electron
             run: |
               [[ "$WEB_ONLY" == true ]] && exit 0
-              bun apps/desktop/node_modules/electron/install.js
+              for try in 1 2 3 4; do
+                bun apps/desktop/node_modules/electron/install.js && break
+                [[ $try == 4 ]] && exit 1
+                echo "Electron download failed (try $try), retry in $((try * 20))s"
+                sleep $((try * 20))
+              done
               sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
               sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
 
