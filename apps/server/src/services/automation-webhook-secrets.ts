@@ -73,3 +73,22 @@ export async function webhookSignatureMatches(
   // The pattern fixes the length, so timingSafeEqual cannot throw here.
   return timingSafeEqual(expected, received);
 }
+
+/** Runs after the row change, so it only logs. The next switch to webhook deletes a leftover. */
+export async function deleteWebhookSecretOrLog(
+  secrets: WebhookSecretStore | undefined,
+  automation: StoredAutomation
+): Promise<void> {
+  if (!(secrets && automation.orgId)) {
+    return;
+  }
+
+  try {
+    await secrets.delete(
+      automation.orgId,
+      automationWebhookSecretName(automation.id)
+    );
+  } catch (error) {
+    console.error("Automation webhook secret could not be deleted:", error);
+  }
+}
