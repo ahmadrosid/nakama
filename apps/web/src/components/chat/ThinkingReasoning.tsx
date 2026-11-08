@@ -257,6 +257,7 @@ function ThinkingReasoningHeader({
   onToggle: () => void;
 }) {
   const stepLabel = `${stepCount} ${stepCount === 1 ? "step" : "steps"}`;
+
   const doneLabel =
     stepLabelOverride ?? (stepCount > 0 ? stepLabel : "Activity");
 
