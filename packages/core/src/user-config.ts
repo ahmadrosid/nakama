@@ -39,6 +39,7 @@ import {
   parseProviderName,
   type UserProviderName,
 } from "./provider-resolution";
+import { THINKING_EFFORTS } from "./thinking-effort";
 
 export type { UserProviderName } from "./provider-resolution";
 
@@ -139,6 +140,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   perplexity: "Perplexity Sonar",
   qwen: "Qwen (DashScope)",
   qwen_cn: "Qwen (DashScope CN)",
+  standardcompute: "Standard Compute",
   together: "Together AI",
   vercel_ai_gateway: "Vercel AI Gateway",
   xai: "xAI Grok",
@@ -1096,10 +1098,7 @@ function readThinkingSettings(
 }
 
 function validateThinkingEffort(value: string | undefined): ThinkingEffort {
-  return z
-    .enum(["low", "medium", "high"])
-    .catch(DEFAULT_THINKING_EFFORT)
-    .parse(value);
+  return z.enum(THINKING_EFFORTS).catch(DEFAULT_THINKING_EFFORT).parse(value);
 }
 
 function readTimezone(values: Record<string, string>): string | undefined {

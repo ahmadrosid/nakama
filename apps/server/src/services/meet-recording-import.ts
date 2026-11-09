@@ -162,7 +162,8 @@ async function saveDownload(
 export async function importMeetRecording(
   composio: Pick<ComposioService, "downloadMeetRecording">,
   input: {
-    apiKey: string;
+    model: string;
+    provider: Parameters<typeof transcribeAudio>[0]["provider"];
     orgId: string;
     userId: string;
     messageId: string;
@@ -269,8 +270,8 @@ export async function importMeetRecording(
           filename: part,
           mediaType: "audio/mpeg",
         },
-        model: "whisper-1",
-        provider: { apiKey: input.apiKey, type: "openai" },
+        model: input.model,
+        provider: input.provider,
         signal,
       });
 

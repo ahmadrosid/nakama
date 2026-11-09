@@ -29,9 +29,13 @@ import type {
   CreateProviderRequest,
   ProviderInstanceSummary,
   ProviderModelOption,
+  ProviderName,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
-import { resolveNetraModelId } from "@nakama/core/discovery-providers";
+import {
+  isDiscoveryModelProvider,
+  resolveNetraModelId,
+} from "@nakama/core/discovery-providers";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   getDefaultModel,
@@ -128,6 +132,10 @@ const CATALOG_LIST_TYPES: ReadonlySet<string> = new Set([
   "qwen_cn",
   "perplexity",
 ]);
+
+function keepsUserModelList(type: ProviderName): boolean {
+  return isDiscoveryModelProvider(type) || CATALOG_LIST_TYPES.has(type);
+}
 
 export function buildProviderInstanceFromCreateRequest(
   // apiKey and type are widened here on purpose: request bodies reach this
@@ -310,7 +318,7 @@ export function applyProviderInstanceUpdate(
       next.customModels = validateCloudflareCustomModels(request.customModels);
     } else if (instance.type === "opencode_go") {
       next.customModels = validateOpenCodeGoCustomModels(request.customModels);
-    } else if (CATALOG_LIST_TYPES.has(instance.type)) {
+    } else if (keepsUserModelList(instance.type)) {
       next.customModels = validateCustomModels(request.customModels);
     }
   }
@@ -479,13 +487,18 @@ function buildProviderFieldsFromRequest(
     return { customModels };
   }
 
+  const pickedModel = request.model?.trim();
+
+  // The Add form sends only the picked model for discovery providers.
   const customModels = request.customModels?.length
     ? type === "cloudflare"
       ? validateCloudflareCustomModels(request.customModels)
-      : CATALOG_LIST_TYPES.has(type)
+      : keepsUserModelList(type)
         ? validateCustomModels(request.customModels)
         : undefined
-    : undefined;
+    : pickedModel && isDiscoveryModelProvider(type)
+      ? validateCustomModels([{ default: true, id: pickedModel }])
+      : undefined;
 
   const rawBaseUrl = request.baseUrl?.trim();
 

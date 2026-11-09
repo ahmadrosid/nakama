@@ -5,10 +5,13 @@ import { SetupStepOrganization } from "@/components/setup-wizard/SetupStepOrgani
 import { SetupStepProvider } from "@/components/setup-wizard/SetupStepProvider";
 import { SetupStepUserContext } from "@/components/setup-wizard/SetupStepUserContext";
 import { SetupWizardStepper } from "@/components/setup-wizard/SetupWizardStepper";
-import type {
-  SetupAccountDraft,
-  SetupStepId,
-  SetupWizardProps,
+import {
+  clearStoredAccountDraft,
+  loadStoredAccountDraft,
+  type SetupAccountDraft,
+  type SetupStepId,
+  type SetupWizardProps,
+  saveStoredAccountDraft,
 } from "@/components/setup-wizard/setup-wizard.shared";
 import { useAppContext } from "@/context/use-app-context";
 import { pathForPage } from "@/lib/navigation";
@@ -37,6 +40,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [accountDraft, setAccountDraft] = useState<SetupAccountDraft | null>(
     null
   );
+
+  const [storedDraft] = useState(loadStoredAccountDraft);
 
   useEffect(() => {
     if (!userAlreadyConfigured && currentStep === 2 && !accountDraft) {
@@ -109,8 +114,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       case 1:
         return (
           <SetupStepAccount
-            initialDraft={accountDraft}
+            initialDraft={accountDraft ?? storedDraft}
             onNext={(account) => {
+              saveStoredAccountDraft(account);
               setAccountDraft(account);
               goNext();
             }}
@@ -125,7 +131,10 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <SetupStepOrganization
             account={accountDraft}
             onBack={goBack}
-            onNext={handleStepAdvance}
+            onNext={() => {
+              clearStoredAccountDraft();
+              handleStepAdvance();
+            }}
           />
         );
       case 3:

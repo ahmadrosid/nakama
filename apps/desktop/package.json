@@ -17,7 +17,7 @@
     "test:runtime": "electron tests/smoke.mjs --smoke-test --runtime-test"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "electron": "45.2.1",

@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import {
   defaultDiscoveryBaseUrl,
+  isDiscoveryModelProvider,
   NETRA_AGENT_MODEL_ID,
   resolveNetraModelId,
 } from "@nakama/core/discovery-providers";
@@ -316,7 +317,8 @@ export function getModelsForProviderInstance(
     );
   }
 
-  if (instance.type === "openai_compatible") {
+  // Netra returns above; other discovery providers list only the saved models.
+  if (isDiscoveryModelProvider(instance.type)) {
     const entries = instance.customModels ?? [];
 
     return annotate(

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { UserConfig } from "@nakama/core";
+import { NakamaApiError, type UserConfig } from "@nakama/core";
 import { resolveTranscriptionProviderSelection } from "./audio-transcription";
 
 describe("resolveTranscriptionProviderSelection", () => {
@@ -48,7 +48,7 @@ describe("resolveTranscriptionProviderSelection", () => {
     };
 
     expect(() => resolveTranscriptionProviderSelection(config)).toThrow(
-      "Audio transcription requires an OpenAI or OpenAI-compatible provider with a base URL."
+      NakamaApiError
     );
   });
 
@@ -73,6 +73,26 @@ describe("resolveTranscriptionProviderSelection", () => {
     expect(resolved?.instance.type).toBe("openai_compatible");
   });
 
+  test("resolves openrouter provider with any model id", () => {
+    const config: UserConfig = {
+      defaultProviderId: "p-router",
+      providers: [
+        {
+          apiKey: "sk-or-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: "p-router",
+          label: "OpenRouter",
+          type: "openrouter",
+        },
+      ],
+      transcriptionModel: "p-router::google/gemini-2.5-flash",
+    };
+
+    const resolved = resolveTranscriptionProviderSelection(config);
+    expect(resolved?.model).toBe("google/gemini-2.5-flash");
+    expect(resolved?.instance.type).toBe("openrouter");
+  });
+
   test("rejects openai_compatible provider without a baseUrl", () => {
     const config: UserConfig = {
       defaultProviderId: "p-local",
@@ -89,7 +109,7 @@ describe("resolveTranscriptionProviderSelection", () => {
     };
 
     expect(() => resolveTranscriptionProviderSelection(config)).toThrow(
-      "Audio transcription requires an OpenAI or OpenAI-compatible provider with a base URL."
+      NakamaApiError
     );
   });
 

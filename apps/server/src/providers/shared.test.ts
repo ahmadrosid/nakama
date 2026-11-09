@@ -84,6 +84,10 @@ describe("provider shared helpers", () => {
     expect(events).toEqual(['{"chunk":1}']);
     expect(error).toBeInstanceOf(ProviderStreamInterruptedError);
     expect(error.status).toBe(502);
+    expect(error.cause).toMatchObject({
+      code: "ECONNRESET",
+      message: "The socket connection was closed unexpectedly.",
+    });
   });
 
   test("readSseEvents keeps an abort as an abort", async () => {
@@ -141,9 +145,25 @@ describe("provider shared helpers", () => {
   });
 
   test("normalizeThinkingEffort falls back to medium", () => {
-    expect(normalizeThinkingEffort("low")).toBe("low");
-    expect(normalizeThinkingEffort("high")).toBe("high");
-    expect(normalizeThinkingEffort(undefined)).toBe("medium");
+    expect(normalizeThinkingEffort("low", "gpt-5.4", "openai")).toBe("low");
+    expect(normalizeThinkingEffort("high", "gpt-5.4", "openai")).toBe("high");
+    expect(normalizeThinkingEffort(undefined, "gpt-5.4", "openai")).toBe(
+      "medium"
+    );
+  });
+
+  test("normalizeThinkingEffort lowers xhigh/max to what the host and model accept", () => {
+    expect(normalizeThinkingEffort("max", "gpt-6-luna", "openai")).toBe("max");
+    expect(normalizeThinkingEffort("max", "gpt-5.4", "openai")).toBe("xhigh");
+    expect(
+      normalizeThinkingEffort("xhigh", "deepseek-v4.1-flash", "deepseek")
+    ).toBe("high");
+    expect(
+      normalizeThinkingEffort("max", "gemini-3.6-flash", "openrouter")
+    ).toBe("high");
+    expect(
+      normalizeThinkingEffort("max", "deepseek-v4-flash:cloud", "ollama")
+    ).toBe("high");
   });
 
   const user = (content: string): ChatMessage => ({ content, role: "user" });

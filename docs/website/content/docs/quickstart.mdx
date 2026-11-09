@@ -64,6 +64,55 @@ bun run dev:server
 
 On first run, the browser setup wizard guides you through creating an admin account and organization, then configuring a model provider. Local settings are saved in `~/.nakama/config.ini`.
 
+## Install with an AI agent
+
+If you use a coding agent such as Claude Code, Codex, Cursor, or OpenCode, paste one of these prompts into it. Each prompt points the agent at the commands on this site, so it installs the same way you would by hand. Provider API keys are not part of it: you add them in the setup wizard.
+
+### Docker on your machine
+
+```text
+Install Nakama on this machine with Docker.
+
+Follow "Option 3: Docker" in https://ahmadrosid.github.io/nakama/quickstart.md and run only the commands written there.
+
+1. First check that `docker` and `openssl` are installed and that the Docker daemon is running. If one is missing, stop and tell me what to install. Do not install it yourself.
+2. If a container named `nakama` already exists or port 4310 is in use, stop and ask me.
+3. `nakama-secrets.env` holds NAKAMA_SECRETS_KEY. Run the documented `umask 077` and `printf` lines in one shell command, so the file is created readable only by me. Never print, cat, or echo it. Check it with `wc -c nakama-secrets.env` only. Tell me its full path and to back it up, because secrets saved in Settings cannot be read without it.
+4. Wait until `curl -fsS http://localhost:4310/health` succeeds.
+5. Tell me to open http://localhost:4310 and finish the setup wizard (https://ahmadrosid.github.io/nakama/first-time-setup). Do not fill in the wizard for me.
+```
+
+### Docker Compose on a server
+
+Run your agent on the server itself, for example in an SSH session.
+
+```text
+Install Nakama on this server with Docker Compose.
+
+Follow "On a server" in https://ahmadrosid.github.io/nakama/docker.md and run only the commands written there.
+
+1. First check that `docker`, `docker compose`, `curl`, and `openssl` are available and that the Docker daemon is running. If one is missing, stop and tell me what to install. Do not install it yourself.
+2. Work in a new directory named `nakama`. If it already holds `docker-compose.yaml`, `.env`, or `nakama-secrets.env`, stop and ask me.
+3. Set NAKAMA_VERSION to the latest release from https://github.com/ahmadrosid/nakama/releases/latest, without the leading "v".
+4. `nakama-secrets.env` holds NAKAMA_SECRETS_KEY. Run the documented `umask 077` and `printf` lines in one shell command, so the file is created readable only by me. Never print, cat, or echo it. Check it with `wc -c nakama-secrets.env` only. Tell me its full path and to back it up somewhere other than this server, because secrets saved in Settings cannot be read without it.
+5. Wait until `curl -fsS http://localhost:4310/health` succeeds.
+6. Warn me that Compose publishes port 4310 on every interface, and that Docker's published ports are not blocked by ufw. Whoever finishes the setup wizard first becomes the admin. Tell me to finish it right away through an SSH tunnel (`ssh -L 4310:localhost:4310 <this server>`, then http://localhost:4310 on my machine), using the setup wizard guide (https://ahmadrosid.github.io/nakama/first-time-setup), then follow https://ahmadrosid.github.io/nakama/deployment-hardening before sharing the server.
+```
+
+### From source with Bun
+
+```text
+Install Nakama from source on this machine with Bun.
+
+Follow "Option 4: Local development" in https://ahmadrosid.github.io/nakama/quickstart.md and run only the commands written there.
+
+1. First check that `git` and `bun` are installed. If one is missing, stop and tell me to install Bun from https://bun.sh. Do not install it yourself.
+2. If a `nakama` directory already exists here, or ports 3003 or 4310 are in use, stop and ask me.
+3. Do not create NAKAMA_SECRETS_KEY. A source checkout creates its own in ~/.config/nakama/dev-secrets.env on first start. Never print that file. Tell me to keep it, because secrets saved in Settings cannot be read without it.
+4. Start `bun run dev:web` in the background and wait until `curl -fsS http://127.0.0.1:4310/health` succeeds.
+5. Tell me to open http://localhost:3003 and finish the setup wizard (https://ahmadrosid.github.io/nakama/first-time-setup). Do not fill in the wizard for me.
+```
+
 ## First-time setup
 
 After Nakama is running:

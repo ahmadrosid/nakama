@@ -10,7 +10,7 @@ import {
   artifactPanelBodyClassName,
   artifactPanelDefaultWidth,
 } from "@/components/chat/artifact-attachment-panel-body.shared";
-import { FilePreviewCard } from "@/components/chat/artifact-attachment-preview";
+import { CompactFileCard } from "@/components/chat/artifact-attachment-preview";
 import { WorkbookGrid } from "@/components/chat/artifact-workbook-preview";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -23,6 +23,7 @@ import { isXlsxFile } from "@/lib/artifact-spreadsheet";
 import {
   artifactCodeLanguage,
   FILE_PREVIEW_MAX_BYTES,
+  isDelimitedSpreadsheetFile,
   isDocxFile,
   isHtmlArtifactMimeType,
   isImageArtifactMimeType,
@@ -81,6 +82,44 @@ function inlineBlob(file: DisplayDocument): Blob {
   });
 }
 
+/** Which preview an uploaded file gets. */
+function documentPreviewKind(file: DisplayDocument) {
+  const mime = resolveArtifactMimeType(file.mediaType, file.filename);
+  const isWorkbook = isXlsxFile(file.filename, mime);
+
+  const isWord =
+    isDocxFile(file.filename, mime) || isLegacyDocFile(file.filename, mime);
+
+  const isImage = isImageArtifactMimeType(mime);
+  const isVideo = isVideoArtifactMimeType(mime);
+  const isPdf = mime === "application/pdf";
+  const isHtml = isHtmlArtifactMimeType(mime);
+  const isSheet = isDelimitedSpreadsheetFile(file.filename, mime);
+  const isText = isTextArtifactMimeType(mime) || isWord || isSheet;
+
+  const canPreview = [
+    isWorkbook,
+    isImage,
+    isVideo,
+    isPdf,
+    isHtml,
+    isText,
+  ].includes(true);
+
+  return {
+    canPreview,
+    isHtml,
+    isImage,
+    isPdf,
+    isSheet,
+    isText,
+    isVideo,
+    isWord,
+    isWorkbook,
+    mime,
+  };
+}
+
 function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id;
@@ -93,26 +132,19 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
 
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
-  const mime = resolveArtifactMimeType(file.mediaType, file.filename);
-  const isWorkbook = isXlsxFile(file.filename, mime);
 
-  const isWord =
-    isDocxFile(file.filename, mime) || isLegacyDocFile(file.filename, mime);
-
-  const isImage = isImageArtifactMimeType(mime);
-  const isVideo = isVideoArtifactMimeType(mime);
-  const isPdf = mime === "application/pdf";
-  const isHtml = isHtmlArtifactMimeType(mime);
-  const isText = isTextArtifactMimeType(mime) || isWord;
-
-  const canPreview = [
-    isWorkbook,
-    isImage,
-    isVideo,
-    isPdf,
+  const {
+    canPreview,
     isHtml,
+    isImage,
+    isPdf,
+    isSheet,
     isText,
-  ].includes(true);
+    isVideo,
+    isWord,
+    isWorkbook,
+    mime,
+  } = documentPreviewKind(file);
 
   useEffect(() => {
     if (!canPreview) {
@@ -252,6 +284,16 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
     );
   }
 
+  if (isSheet) {
+    return (
+      <ArtifactAttachmentPanelBody
+        {...common}
+        content={loaded?.text ?? null}
+        kind="spreadsheet"
+      />
+    );
+  }
+
   return (
     <ArtifactAttachmentPanelBody
       {...common}
@@ -260,6 +302,30 @@ function DocumentAttachmentPanelContent({ file }: { file: DisplayDocument }) {
       kind="text"
       language={artifactCodeLanguage(file.filename)}
     />
+  );
+}
+
+/**
+ * Reads and sets fullscreen on the panel itself. The list unmounts cards that
+ * leave the screen (fullscreen hides the whole list), so card state would go.
+ */
+function PanelFullscreenToggle({ panelId }: { panelId: string }) {
+  const panel = useOptionalChatAttachmentPanel();
+  const fullscreen = panel?.isFullscreen ?? false;
+
+  return (
+    <Button
+      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      onClick={() => panel?.update(panelId, { fullscreen: !fullscreen })}
+      size="icon-sm"
+      variant="ghost"
+    >
+      {fullscreen ? (
+        <ArrowShrink02Icon className="size-4" />
+      ) : (
+        <ArrowExpand01Icon className="size-4" />
+      )}
+    </Button>
   );
 }
 
@@ -274,11 +340,9 @@ export function DocumentAttachmentPreview({
   const panelId = useId();
   const panel = useOptionalChatAttachmentPanel();
   const { activeOrg } = useAuth();
-  const [fullscreen, setFullscreen] = useState(false);
   const open = panel?.activeId === panelId;
   const show = panel?.show;
   const update = panel?.update;
-  const hide = panel?.hide;
   const mime = resolveArtifactMimeType(file.mediaType, file.filename);
 
   const contentKey = useMemo(
@@ -294,11 +358,12 @@ export function DocumentAttachmentPreview({
         isMarkdownArtifactMimeType(mime) ||
         isDocxFile(file.filename, mime) ||
         isLegacyDocFile(file.filename, mime),
-      isSpreadsheet: isXlsxFile(file.filename, mime),
+      isSpreadsheet:
+        isXlsxFile(file.filename, mime) ||
+        isDelimitedSpreadsheetFile(file.filename, mime),
       isVideo: isVideoArtifactMimeType(mime),
     }),
     content: <DocumentAttachmentPanelContent file={file} key={contentKey} />,
-    fullscreen,
     headerActions: (
       <>
         <Button
@@ -309,18 +374,7 @@ export function DocumentAttachmentPreview({
         >
           <Download04Icon className="size-4" />
         </Button>
-        <Button
-          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          onClick={() => setFullscreen((value) => !value)}
-          size="icon-sm"
-          variant="ghost"
-        >
-          {fullscreen ? (
-            <ArrowShrink02Icon className="size-4" />
-          ) : (
-            <ArrowExpand01Icon className="size-4" />
-          )}
-        </Button>
+        <PanelFullscreenToggle panelId={panelId} />
       </>
     ),
     title: file.filename,
@@ -332,11 +386,10 @@ export function DocumentAttachmentPreview({
     }
     // The panel functions are stable; file identity controls content remounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, update, panelId, fullscreen, contentKey]);
-  useEffect(() => () => hide?.(panelId), [hide, panelId]);
+  }, [open, update, panelId, contentKey]);
 
   return (
-    <FilePreviewCard
+    <CompactFileCard
       artifact={{
         filename: file.filename,
         mimeType: mime,
@@ -347,9 +400,7 @@ export function DocumentAttachmentPreview({
       className={className}
       isImage={isImageArtifactMimeType(mime)}
       isVideo={isVideoArtifactMimeType(mime)}
-      onDownload={() => downloadFile(file)}
       onOpen={() => {
-        setFullscreen(false);
         show?.({
           ...config(),
           defaultWidth: artifactPanelDefaultWidth(file.filename, mime),

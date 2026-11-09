@@ -41,6 +41,7 @@ export function createXaiProvider(options: XaiProviderOptions): ProviderClient {
       input,
       label: "Grok",
       model,
+      provider: "xai_oauth",
       stream: Boolean(handlers),
       supportsThinking:
         model.startsWith("grok-4.6") ||

@@ -1701,7 +1701,7 @@ export interface UpdateTimezoneRequest {
   timezone: string;
 }
 
-export type ThinkingEffort = "low" | "medium" | "high";
+export type ThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface ThinkingSettings {
   effort: ThinkingEffort;
@@ -3146,6 +3146,7 @@ export type ProviderName =
   | "xai"
   | "groq"
   | "cheaper_inference"
+  | "standardcompute"
   | "together"
   | "xiaomi"
   | "meta"

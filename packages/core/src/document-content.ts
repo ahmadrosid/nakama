@@ -114,6 +114,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   perplexity: new Set<string>(),
   qwen: new Set<string>(),
   qwen_cn: new Set<string>(),
+  standardcompute: new Set<string>(),
   together: new Set<string>(),
   vercel_ai_gateway: new Set<string>(),
   xai: new Set<string>(),

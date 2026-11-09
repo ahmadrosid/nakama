@@ -65,6 +65,7 @@ import {
 import { createProviderForInstance } from "./providers/create";
 import { runFirstBootSeed } from "./seed";
 import { AgentService } from "./services/agent-service";
+import { resolveTranscriptionProviderSelection } from "./services/audio-transcription";
 import { AuthService } from "./services/auth-service";
 import { AutomationDeliveryService } from "./services/automation-delivery-service";
 import { AutomationRunner } from "./services/automation-runner";
@@ -74,7 +75,6 @@ import { ComposioService } from "./services/composio-service";
 import { ComputerAuthService } from "./services/computer-auth";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
-
 import {
   cleanupDataPortabilityTempDirs,
   createNakamaDataExportFile,
@@ -265,7 +265,12 @@ const googleMeetService = new GoogleMeetService(
   getUserConfigDir(),
   (request, signal) => agent.transcribeAudio(request, signal),
   () => openaiProviderKey(agent.getUserConfig()),
-  composioService
+  composioService,
+  async () => {
+    await agent.ensureTranscriptionSettingsLoaded();
+
+    return resolveTranscriptionProviderSelection(agent.getUserConfig());
+  }
 );
 
 agent.setServerTools({

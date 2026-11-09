@@ -175,7 +175,11 @@ function buildGeminiThinkingConfig(
     return;
   }
 
-  const effort = normalizeThinkingEffort(providerOptions?.thinking?.effort);
+  const effort = normalizeThinkingEffort(
+    providerOptions?.thinking?.effort,
+    model,
+    "gemini"
+  );
 
   if (model.includes("gemini-3") || model.includes("3-")) {
     return {
@@ -190,16 +194,18 @@ function buildGeminiThinkingConfig(
   };
 }
 
+// Anything above medium is high, so a level that slips past the clamp never
+// gets less effort than high.
 function mapEffortToThinkingLevel(effort: ThinkingEffort): ThinkingLevel {
   if (effort === "low") {
     return ThinkingLevel.LOW;
   }
 
-  if (effort === "high") {
-    return ThinkingLevel.HIGH;
+  if (effort === "medium") {
+    return ThinkingLevel.MEDIUM;
   }
 
-  return ThinkingLevel.MEDIUM;
+  return ThinkingLevel.HIGH;
 }
 
 function mapEffortToThinkingBudget(effort: ThinkingEffort): number {
@@ -207,11 +213,11 @@ function mapEffortToThinkingBudget(effort: ThinkingEffort): number {
     return 1024;
   }
 
-  if (effort === "high") {
-    return 8192;
+  if (effort === "medium") {
+    return 4096;
   }
 
-  return 4096;
+  return 8192;
 }
 
 export function buildGeminiChatConfig(

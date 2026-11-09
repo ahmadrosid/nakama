@@ -116,7 +116,7 @@ export function SkillPostTurnReviewBanner({
   }
 
   return (
-    <ChatComposerNotice className="py-1.5">
+    <ChatComposerNotice>
       <div
         className="flex flex-col divide-y divide-border"
         data-testid="skill-post-turn-review-banner"

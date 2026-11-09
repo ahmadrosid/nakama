@@ -36,6 +36,7 @@ import {
   Search01Icon,
   SearchList01Icon,
   TaskEdit01Icon,
+  Tick02Icon,
 } from "hugeicons-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -595,13 +596,86 @@ function OtherWorkGroup({
         tools.length === 0 && !active ? thinking.thinkingDurationMs : undefined
       }
       toolCount={tools.length}
+      toolLabel={singleToolLabel(tools)}
     >
       <ToolStepList
         modelLabel={modelLabel}
         profileId={profileId}
+        quiet={!(active || thinking.thinking?.trim())}
         tools={tools}
       />
     </ThinkingReasoning>
+  );
+}
+
+/** One finished tool call reads as its action, e.g. "Read report.xls". */
+function singleToolLabel(tools: ChatListItem[]): ReactNode {
+  const [tool] = tools;
+
+  return tools.length === 1 && tool ? (
+    <SingleToolLabel message={tool} />
+  ) : undefined;
+}
+
+function SingleToolLabel({ message }: { message: ChatListItem }) {
+  const label = formatToolActionLabel(
+    message.tool,
+    message.toolInput,
+    message.toolResult
+  );
+
+  const split = label.indexOf(" ");
+  const failed = toolItemFailed(message);
+
+  return (
+    <>
+      {failed ? null : (
+        <Tick02Icon
+          aria-hidden
+          className="mr-1.5 inline size-3.5 align-[-2px] text-emerald-600 dark:text-emerald-400"
+        />
+      )}
+      <span
+        className={
+          failed ? "text-red-600 dark:text-red-400" : thinkingStyles.verb
+        }
+      >
+        {split > 0 ? label.slice(0, split) : label}
+      </span>
+      {split > 0 ? label.slice(split) : null}
+    </>
+  );
+}
+
+/** A plain tool row can fold into the header plus one quiet output line. */
+function isQuietTool(message: ChatListItem): boolean {
+  return !(
+    message.tool?.startsWith("plugin_") ||
+    isRunWorkflowTool(message.tool) ||
+    isDedicatedTool(message) ||
+    toolItemImages(message).images.length > 0
+  );
+}
+
+function QuietToolOutput({ message }: { message: ChatListItem }) {
+  const output =
+    message.toolStatus === "done"
+      ? formatToolResult(message.tool, toolItemImages(message).rest)
+      : null;
+
+  if (!output) {
+    return null;
+  }
+
+  return (
+    <pre
+      className={cn(
+        "ml-5 max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-muted-foreground text-xs leading-relaxed",
+        toolItemFailed(message, output) && "text-red-600 dark:text-red-400"
+      )}
+    >
+      {output}
+    </pre>
   );
 }
 
@@ -647,6 +721,8 @@ function ToolOnlyWorkGroup({
   const done = !isWorkActive;
   const expanded = open;
   const toolLabel = `${tools.length} ${tools.length === 1 ? "step" : "steps"}`;
+  const [only] = tools;
+  const quietOnly = done && tools.length === 1 && only && isQuietTool(only);
   const runningTool = tools.findLast((tool) => tool.toolStatus === "running");
 
   return (
@@ -664,10 +740,14 @@ function ToolOnlyWorkGroup({
       >
         {done ? (
           <span className={thinkingStyles.label}>
-            <span className={thinkingStyles.verb}>{toolLabel}</span>
-            {elapsedSeconds === null
-              ? null
-              : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
+            {singleToolLabel(tools) ?? (
+              <span className={thinkingStyles.verb}>{toolLabel}</span>
+            )}
+            {elapsedSeconds === null ? null : (
+              <span className={cn(tools.length === 1 && thinkingStyles.verb)}>
+                {` · ${formatElapsedSeconds(elapsedSeconds)}`}
+              </span>
+            )}
           </span>
         ) : (
           <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>
@@ -707,13 +787,14 @@ function ToolOnlyWorkGroup({
           <div
             className={cn(
               thinkingStyles.timeline,
-              thinkingStyles.timelineWithTools
+              !quietOnly && thinkingStyles.timelineWithTools
             )}
           >
             <div className={thinkingStyles.tools}>
               <ToolStepList
                 modelLabel={modelLabel}
                 profileId={profileId}
+                quiet={done}
                 tools={tools}
               />
             </div>
@@ -728,11 +809,20 @@ function ToolStepList({
   tools,
   modelLabel,
   profileId,
+  quiet = false,
 }: {
   tools: ChatListItem[];
   modelLabel?: string | null;
   profileId?: string | null;
+  /** The header already names the one tool, so show only its output. */
+  quiet?: boolean;
 }) {
+  const [only] = tools;
+
+  if (quiet && tools.length === 1 && only && isQuietTool(only)) {
+    return <QuietToolOutput message={only} />;
+  }
+
   const steps = groupFileSteps(tools);
 
   return steps.map((step, index) => {
@@ -1389,7 +1479,10 @@ function toolTimelineLabel(message: ChatListItem, nested: boolean): string {
     ? readString(message.toolInput?.path)?.split("/").at(-1)
     : undefined;
 
-  return fileName || formatToolActionLabel(message.tool, message.toolInput);
+  return (
+    fileName ||
+    formatToolActionLabel(message.tool, message.toolInput, message.toolResult)
+  );
 }
 
 function ToolTimelineItem({

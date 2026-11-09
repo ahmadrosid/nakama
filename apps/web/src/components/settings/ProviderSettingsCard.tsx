@@ -194,13 +194,13 @@ export function ProviderSettingsCard({
             <div className="flex items-start gap-3 border-border border-b px-4 py-3">
               <Alert02Icon
                 aria-hidden="true"
-                className="mt-0.5 size-5 shrink-0 text-amber-200"
+                className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-200"
               />
               <div className="min-w-0 space-y-0.5">
-                <p className="font-medium text-amber-100 text-sm">
+                <p className="font-medium text-amber-900 text-sm dark:text-amber-100">
                   No provider connected
                 </p>
-                <p className="text-amber-200/90 text-xs">
+                <p className="text-amber-800 text-xs dark:text-amber-200/90">
                   Chat is offline until you add a provider below.
                 </p>
               </div>

@@ -44,6 +44,8 @@ import { type ReactNode, useMemo, useState } from "react";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useUserTimezone } from "@/hooks/use-timezones";
 import {
   formatFutureRelativeTime,
@@ -991,7 +993,7 @@ function RunDetailPopup({
   const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
 
   return (
-    <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none">
+    <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out has-[[data-slot=attachment-detail-panel]]:max-w-full data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none md:has-[[data-slot=attachment-detail-panel]:not([data-fullscreen])]:w-fit">
       <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
         {selectedRun ? <RunStatusIcon status={selectedRun.status} /> : null}
         <DialogTitle className="min-w-0 flex-1 truncate text-sm">
@@ -1051,23 +1053,49 @@ function RunDetailPopup({
         </p>
       ) : null}
       {selectedRun ? (
-        <ChatMessageList
-          actionsDisabled
-          className="min-h-0 flex-1"
-          emptyMessage={
-            selectedRun.status === "running"
-              ? "Waiting for output…"
-              : "No output returned."
-          }
-          key={selectedRun.id}
-          messages={automationRunMessages(selectedRun)}
-          profileId={profileId}
-          readOnly
-          streamActive={selectedRun.status === "running"}
-          turnStartedAt={selectedRun.startedAt}
-        />
+        <ChatAttachmentPanelProvider key={selectedRun.id}>
+          <RunConversation profileId={profileId} run={selectedRun} />
+        </ChatAttachmentPanelProvider>
       ) : null}
     </DialogPrimitive.Popup>
+  );
+}
+
+/**
+ * An open file panel sits beside a 24rem conversation, the room the panel
+ * column leaves for it, and the drawer grows to fit both.
+ */
+function RunConversation({
+  run,
+  profileId,
+}: {
+  run: AutomationRunRecord;
+  profileId: string;
+}) {
+  const { isFullscreen, isOpen } = useChatAttachmentPanel();
+
+  return (
+    <ChatMessageList
+      actionsDisabled
+      className={cn(
+        "min-h-0",
+        isFullscreen
+          ? "pointer-events-none w-0 flex-none overflow-hidden opacity-0"
+          : isOpen
+            ? "w-96 flex-none"
+            : "flex-1",
+        isOpen &&
+          "max-md:pointer-events-none max-md:w-0 max-md:flex-none max-md:overflow-hidden max-md:opacity-0"
+      )}
+      emptyMessage={
+        run.status === "running" ? "Waiting for output…" : "No output returned."
+      }
+      messages={automationRunMessages(run)}
+      profileId={profileId}
+      readOnly
+      streamActive={run.status === "running"}
+      turnStartedAt={run.startedAt}
+    />
   );
 }
 

@@ -55,8 +55,10 @@ const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
   "text/markdown",
 ]);
 
-const CANONICAL_BASE64_PATTERN =
-  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+// With a length that is a multiple of 4, this accepts the same strings as
+// `^(?:x{4})*(?:x{2}==|x{3}=)?$`. That repeated group is slow on Bun and
+// rejects valid base64 past about 8M characters (#1597).
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
 
 const DOCUMENT_EXTENSION_MEDIA_TYPES = {
   ".csv": "text/csv",
@@ -237,7 +239,7 @@ export function normalizeAttachmentBase64(
   const dataUrl = /^data:[^,]*;base64,([^,]+)$/is.exec(raw);
   const base64 = dataUrl?.[1] ?? raw;
 
-  if (!CANONICAL_BASE64_PATTERN.test(base64)) {
+  if (!(base64.length % 4 === 0 && BASE64_PATTERN.test(base64))) {
     throw new NakamaApiError(`${label} data must be valid base64.`, 400);
   }
 

@@ -107,3 +107,73 @@ test("transcription uses the configured provider endpoint, model, file, and canc
     request.mockRestore();
   }
 });
+
+test("openrouter sends audio to chat completions and returns the reply", async () => {
+  const request = spyOn(globalThis, "fetch").mockImplementation(
+    asTestFetch(async (url, init) => {
+      expect(String(url)).toBe("https://openrouter.ai/api/v1/chat/completions");
+      const body = JSON.parse(String(init?.body));
+      expect(body.model).toBe("google/gemini-2.5-flash");
+      expect(body.messages[0].content[1]).toEqual({
+        input_audio: { data: "YXVkaW8=", format: "mp3" },
+        type: "input_audio",
+      });
+
+      return Response.json({
+        choices: [{ message: { content: " Hello team \n" } }],
+      });
+    })
+  );
+
+  try {
+    expect(
+      await transcribeAudio({
+        audio: {
+          bytes: new TextEncoder().encode("audio"),
+          filename: "part-0.mp3",
+          mediaType: "audio/mpeg",
+        },
+        model: "google/gemini-2.5-flash",
+        provider: { apiKey: "sk-or-key", type: "openrouter" as const },
+      })
+    ).toBe("Hello team");
+  } finally {
+    request.mockRestore();
+  }
+});
+
+test("openrouter rejects audio with an unknown format", async () => {
+  await expect(
+    transcribeAudio({
+      audio: {
+        bytes: new TextEncoder().encode("audio"),
+        filename: "meeting.bin",
+        mediaType: "application/octet-stream",
+      },
+      model: "google/gemini-2.5-flash",
+      provider: { apiKey: "sk-or-key", type: "openrouter" as const },
+    })
+  ).rejects.toMatchObject({ status: 400 });
+});
+
+test("openrouter surfaces a failed request as 502", async () => {
+  const request = spyOn(globalThis, "fetch").mockImplementation(
+    asTestFetch(async () => new Response("nope", { status: 401 }))
+  );
+
+  try {
+    await expect(
+      transcribeAudio({
+        audio: {
+          bytes: new TextEncoder().encode("audio"),
+          filename: "meeting.wav",
+          mediaType: "audio/wav",
+        },
+        model: "google/gemini-2.5-flash",
+        provider: { apiKey: "sk-or-key", type: "openrouter" as const },
+      })
+    ).rejects.toMatchObject({ status: 502 });
+  } finally {
+    request.mockRestore();
+  }
+});

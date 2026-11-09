@@ -15,12 +15,15 @@ import {
   type ProfileSummary,
   type SendMessageInput,
   type SoulStatusResponse,
+  type ThinkingEffort,
   type UserContextStatusResponse,
 } from "@nakama/core";
 import { isAbortError } from "@nakama/core/channel-active-stream";
+import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
+  effortForActiveModel,
   formatSlashCommands,
   resolveModelSwitchTarget,
   resolveSlashCommand,
@@ -832,6 +835,15 @@ async function runStickyChat(
     return "unhandled";
   }
 
+  // `/thinking max` on a model that stops at high says so instead of "max".
+  function describeEffort(effort: ThinkingEffort): string {
+    const sent = effortForActiveModel(effort, currentProfile, modelsCache);
+
+    return sent === effort
+      ? `${effort} effort`
+      : `${effort} effort, ${sent} on this model`;
+  }
+
   async function handleThinkingCommand(line: string): Promise<"handled"> {
     const arg = line.slice("/thinking".length).trim().toLowerCase();
 
@@ -839,7 +851,7 @@ async function runStickyChat(
       try {
         const settings = await options.client.getThinkingSettings();
         writeOutput(
-          `Thinking: ${settings.enabled ? "on" : "off"} (${settings.effort} effort)`
+          `Thinking: ${settings.enabled ? "on" : "off"} (${describeEffort(settings.effort)})`
         );
       } catch (error) {
         writeError(error);
@@ -863,11 +875,11 @@ async function runStickyChat(
         enabled = true;
       } else if (arg === "off") {
         enabled = false;
-      } else if (arg === "low" || arg === "medium" || arg === "high") {
+      } else if (isThinkingEffort(arg)) {
         enabled = true;
         effort = arg;
       } else {
-        writeOutput("Usage: /thinking [on|off|low|medium|high]");
+        writeOutput("Usage: /thinking [on|off|low|medium|high|xhigh|max]");
 
         return "handled";
       }
@@ -884,7 +896,7 @@ async function runStickyChat(
       context.onSessionChange(session);
       lastUserMessage = null;
       writeOutput(
-        `Thinking ${saved.enabled ? "enabled" : "disabled"} (${saved.effort} effort). Chat history reset.`
+        `Thinking ${saved.enabled ? "enabled" : "disabled"} (${describeEffort(saved.effort)}). Chat history reset.`
       );
     } catch (error) {
       writeError(error);

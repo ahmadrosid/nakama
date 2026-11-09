@@ -28,16 +28,18 @@ export function resolveTranscriptionProviderSelection(
 
   // Self-hosted backends speaking the OpenAI-compatible transcriptions API
   // surface as `openai_compatible` with a baseUrl (e.g. local Whisper),
-  // alongside first-party `openai`. Other types are not supported.
+  // alongside first-party `openai` and OpenRouter (audio through chat).
+  // Other types are not supported.
   if (
     !(
       configured.instance.type === "openai" ||
+      configured.instance.type === "openrouter" ||
       (configured.instance.type === "openai_compatible" &&
         configured.instance.baseUrl?.trim())
     )
   ) {
     throw new NakamaApiError(
-      "Audio transcription requires an OpenAI or OpenAI-compatible provider with a base URL. Update it in Settings → AI Providers (/settings/providers#transcription).",
+      "Audio transcription requires an OpenAI, OpenRouter or OpenAI-compatible provider with a base URL. Update it in Settings → AI Providers (/settings/providers#transcription).",
       400
     );
   }

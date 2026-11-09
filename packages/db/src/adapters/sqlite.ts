@@ -15,6 +15,7 @@ import {
   PRIVATE_FILE_MODE,
 } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
+import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
 import { migrateDatabase } from "../migrate";
@@ -7368,9 +7369,7 @@ function parseAgentQuestionnaire(
 }
 
 function parseThinkingEffort(value: string | null | undefined) {
-  return value === "low" || value === "medium" || value === "high"
-    ? value
-    : null;
+  return isThinkingEffort(value) ? value : null;
 }
 
 function toSessionRecord(row: SessionRow): StoredSessionRecord {

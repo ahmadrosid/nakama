@@ -7,12 +7,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { VirtuosoMockContext } from "react-virtuoso";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import {
   AuthContext,
   type AuthContextValue,
 } from "@/context/auth-context-shared";
+import { ThemeProvider } from "@/context/theme-context";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { AutomationEditorForm, RunHistoryList } from "./automations-components";
@@ -264,6 +266,88 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
     } else {
       Reflect.deleteProperty(Element.prototype, "getAnimations");
     }
+  }
+});
+
+test("opens a run whose transcript saved an artifact", async () => {
+  const artifactPath =
+    "/home/test/.nakama/orgs/org_1/profiles/profile/artifacts/report.md";
+
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: "Saved the report.",
+    progress: [
+      {
+        content: "",
+        role: "assistant",
+        toolCalls: [
+          {
+            arguments: { content: "# Report", path: "artifacts/report.md" },
+            id: "call-1",
+            name: "write_file",
+          },
+        ],
+      },
+      {
+        content: JSON.stringify({ bytesWritten: 8, path: artifactPath }),
+        name: "write_file",
+        role: "tool",
+        toolCallId: "call-1",
+      },
+      { content: "Saved the report.", role: "assistant" },
+    ],
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ThemeProvider>
+            <AuthContext.Provider
+              value={
+                /* SAFETY: The artifact chip reads only the authentication flags. */
+                { isAuthenticated: true, isLoading: false } as AuthContextValue
+              }
+            >
+              <VirtuosoMockContext.Provider
+                value={{ itemHeight: 100, viewportHeight: 2000 }}
+              >
+                <RunHistoryList
+                  busy={false}
+                  onRerun={() => {}}
+                  profileId="profile"
+                  running={false}
+                  runs={[run]}
+                />
+              </VirtuosoMockContext.Provider>
+            </AuthContext.Provider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      );
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+        .click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    const conversation = document.querySelector('[role="dialog"] [role="log"]');
+    expect(conversation).not.toBeNull();
+    expect(conversation!.textContent).toContain("report.md");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
   }
 });
 

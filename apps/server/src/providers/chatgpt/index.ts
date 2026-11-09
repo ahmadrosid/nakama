@@ -63,6 +63,7 @@ export function createChatgptProvider(
       input,
       label: "ChatGPT",
       model,
+      provider: "chatgpt",
       // Codex rejects non-streaming /responses calls.
       stream: true,
       supportsThinking: true,

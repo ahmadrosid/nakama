@@ -5,7 +5,15 @@ import type {
   ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
-import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
+import {
+  MODEL_CONNECTION_CLOSED_MESSAGE,
+  NakamaApiError,
+  ProviderStreamInterruptedError,
+} from "@nakama/core";
+import {
+  clampThinkingEffort,
+  isThinkingEffort,
+} from "@nakama/core/thinking-effort";
 import { z } from "zod";
 
 export type ProviderJsonValue =
@@ -287,8 +295,9 @@ async function readStreamChunk(
       throw error;
     }
 
-    throw new ProviderStreamInterruptedError(
-      "The model connection closed before the reply finished. Try again."
+    throw Object.assign(
+      new ProviderStreamInterruptedError(MODEL_CONNECTION_CLOSED_MESSAGE),
+      { cause: error }
     );
   }
 }
@@ -443,14 +452,15 @@ export function readRecord<Value>(value: Value): ProviderJsonRecord {
   return value as ProviderJsonRecord;
 }
 
+/** Defaults a missing effort to medium and lowers it to what the host and model accept. */
 export function normalizeThinkingEffort(
-  effort: ThinkingEffort | undefined
+  effort: ThinkingEffort | undefined,
+  model: string,
+  provider: string
 ): ThinkingEffort {
-  if (effort === "low" || effort === "medium" || effort === "high") {
-    return effort;
-  }
-
-  return "medium";
+  return isThinkingEffort(effort)
+    ? clampThinkingEffort(effort, model, provider)
+    : "medium";
 }
 
 export function formatHttpErrorBody(

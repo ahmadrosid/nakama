@@ -60,6 +60,8 @@ macOS downloads are available in [desktop releases](https://github.com/ahmadrosi
 
 ## Quick start
 
+Installing with Claude Code, Codex, Cursor, or OpenCode? Paste a prompt from [Install with an AI agent](https://ahmadrosid.github.io/nakama/quickstart#install-with-an-ai-agent).
+
 ### Managed hosting
 
 Use [Nakama Cloud](https://getnakama.cloud/) to try Nakama with the least work.
