@@ -39,7 +39,6 @@ import {
 } from "hugeicons-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
-import { openRouterModelsQueryOptions } from "@/components/OpenRouterModelsBrowseList";
 import { SettingsPicker } from "@/components/settings/settings-model-select";
 import { useAuth } from "@/context/use-auth";
 import {
@@ -52,7 +51,10 @@ import {
   encodeModelSelection,
   TRANSCRIPTION_MODEL_OPTIONS,
 } from "@/lib/models";
-import type { OpenRouterModelRow } from "@/lib/openrouter-models";
+import {
+  type OpenRouterModelRow,
+  openRouterModelsQueryOptions,
+} from "@/lib/openrouter-models";
 
 type MeetCall = <Action extends MeetAction>(
   action: Action,

@@ -1,3 +1,7 @@
+import { queryOptions } from "@tanstack/react-query";
+import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
+
 interface OpenRouterApiPricing {
   completion?: string;
   image?: string;
@@ -147,3 +151,19 @@ function truncateDescription(text: string, maxLength = 120): string {
 
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }
+
+async function fetchOpenRouterModels(): Promise<OpenRouterModelRow[]> {
+  // SAFETY: The enclosing parser checks the value before this conversion.
+  const data = (await client.getExternalModelCatalog(
+    "openrouter"
+  )) as OpenRouterModelsApiResponse;
+
+  return normalizeOpenRouterModels(data);
+}
+
+/** The OpenRouter catalog, cached as long as the server caches it. */
+export const openRouterModelsQueryOptions = queryOptions({
+  queryFn: fetchOpenRouterModels,
+  queryKey: queryKeys.openRouterModels,
+  staleTime: 1000 * 60 * 30,
+});
