@@ -403,7 +403,7 @@ export function McpServerDialog({
             />
           </DialogContent>
         ) : (
-          <DialogContent className="top-4 -translate-y-0 gap-0 overflow-hidden p-0 sm:top-[8dvh] sm:max-h-[84dvh] sm:min-h-[26rem] sm:max-w-2xl">
+          <DialogContent className="top-4 flex -translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:top-[8dvh] sm:max-h-[84dvh] sm:min-h-[26rem] sm:max-w-2xl">
             <DialogDescription className="sr-only">
               Pick an app to connect to this agent.
             </DialogDescription>
