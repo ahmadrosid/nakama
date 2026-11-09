@@ -214,7 +214,7 @@ test("uploaded Markdown opens read-only with download, fullscreen and close", as
   }
 });
 
-test("switches sheets, shows selected cached values/formulas, and changes zoom without editing", async () => {
+test("switches sheets, shows selected cached values/formulas, without editing", async () => {
   const element = document.createElement("div");
   const root = createRoot(element);
 
@@ -248,12 +248,6 @@ test("switches sheets, shows selected cached values/formulas, and changes zoom w
       ).click()
     );
     expect(element.querySelector("output")?.textContent).toBe("=SUM(B2:B6)");
-    const select = element.querySelector("select")!;
-    await act(async () => {
-      select.value = "150";
-      select.dispatchEvent(new window.Event("change", { bubbles: true }));
-    });
-    expect(element.querySelector("table")?.style.fontSize).toBe("19.5px");
     expect(
       element.querySelector("input,textarea,[contenteditable=true]")
     ).toBeNull();

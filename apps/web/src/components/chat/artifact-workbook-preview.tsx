@@ -77,7 +77,6 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
   const panelId = useId();
   const [sheetIndex, setSheetIndex] = useState(0);
   const [selected, setSelected] = useState({ column: 0, row: 0 });
-  const [zoom, setZoom] = useState(100);
   const grid = useRef<HTMLDivElement>(null);
   const sheet = workbook.sheets[sheetIndex];
   const rowCount = Math.max(24, sheet.rows.length);
@@ -100,26 +99,6 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
       aria-label="Workbook preview"
       className="flex min-h-0 min-w-0 flex-1 flex-col"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-border border-b bg-muted/30 px-3 py-2">
-        <span className="min-w-0 truncate text-muted-foreground text-xs">
-          Read-only · Saved formula values
-        </span>
-        <label className="flex items-center gap-2 text-xs">
-          Zoom
-          <select
-            aria-label="Spreadsheet zoom"
-            className="min-h-9 rounded-md border border-border bg-background px-2"
-            onChange={(event) => setZoom(Number(event.target.value))}
-            value={zoom}
-          >
-            {[75, 100, 125, 150, 200].map((value) => (
-              <option key={value} value={value}>
-                {value}%
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
       <div className="flex min-h-11 items-center gap-3 border-border border-b px-3 font-mono text-xs">
         <span className="w-12 shrink-0 text-muted-foreground">{address}</span>
         <span aria-hidden className="text-muted-foreground italic">
@@ -174,7 +153,7 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
               )
               ?.focus();
           }}
-          style={{ fontSize: (13 * zoom) / 100 }}
+          style={{ fontSize: 13 }}
         >
           <thead className="sticky top-0 z-20">
             <tr>
@@ -202,7 +181,6 @@ export function WorkbookGrid({ workbook }: { workbook: WorkbookPreview }) {
                 row={row}
                 selectedColumn={selected.row === row ? selected.column : -1}
                 values={sheet.rows[row]}
-                zoom={zoom}
               />
             ))}
           </tbody>
@@ -279,14 +257,12 @@ const WorkbookRow = memo(function WorkbookRow({
   values,
   columnCount,
   selectedColumn,
-  zoom,
   onSelect,
 }: {
   row: number;
   values: WorkbookPreview["sheets"][number]["rows"][number] | undefined;
   columnCount: number;
   selectedColumn: number;
-  zoom: number;
   onSelect: (column: number, row: number) => void;
 }) {
   return (
@@ -317,7 +293,7 @@ const WorkbookRow = memo(function WorkbookRow({
                 backgroundColor: value?.background,
                 color: value?.color,
                 fontWeight: value?.bold ? 600 : undefined,
-                height: (34 * zoom) / 100,
+                height: 34,
               }}
               tabIndex={active ? 0 : -1}
               title={value?.value}
