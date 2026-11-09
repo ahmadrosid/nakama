@@ -1326,6 +1326,9 @@ function TranscriptionSetup({
       const created = await createProvider.mutateAsync({
         apiKey: apiKey.trim() || undefined,
         baseUrl: custom ? baseUrl.trim() : undefined,
+        // Self-hosted providers have no default name or model list.
+        customModels: custom ? [{ id: model.trim() }] : undefined,
+        label: custom ? "Self-hosted transcription" : undefined,
         type: provider.type,
       });
 
@@ -1353,6 +1356,7 @@ function TranscriptionSetup({
             onClick={() => {
               setProvider(option);
               setModel(option.model);
+              setApiKey("");
               setError("");
             }}
             role="tab"

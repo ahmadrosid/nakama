@@ -360,3 +360,57 @@ test("a rejected key stays on the form and adds no provider", async () => {
   expect(create).not.toHaveBeenCalled();
   expect(container.querySelector('input[type="password"]')).not.toBeNull();
 });
+
+test("a self-hosted provider is saved with a name and its base URL", async () => {
+  const check = spyOn(client, "checkProviderKey").mockResolvedValue({
+    status: "unchecked",
+  });
+
+  // SAFETY: the page reads only the provider id from this response.
+  const provider = {
+    id: "p-local",
+    type: "openai_compatible",
+  } as Awaited<ReturnType<typeof client.createProvider>>["provider"];
+
+  const create = spyOn(client, "createProvider").mockResolvedValue({
+    defaultProviderId: "p-other",
+    initialModel: "",
+    provider,
+  });
+
+  const select = spyOn(client, "setTranscriptionSettings").mockResolvedValue({
+    model: "p-local::whisper-large-v3",
+  });
+
+  cleanups.push(async () => {
+    for (const spy of [check, create, select]) {
+      spy.mockRestore();
+    }
+  });
+
+  const { container } = await mountPage(undefined, () => ({
+    configured: false,
+  }));
+
+  await act(async () => button(container, "Self-hosted")?.click());
+  await type(
+    container.querySelector<HTMLInputElement>('input[type="url"]'),
+    "http://127.0.0.1:8000/v1"
+  );
+  await type(
+    container.querySelector<HTMLInputElement>('input[placeholder="whisper-1"]'),
+    "whisper-large-v3"
+  );
+  await act(async () => {
+    button(container, "Save and test")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(create.mock.calls[0]?.[0]).toMatchObject({
+    baseUrl: "http://127.0.0.1:8000/v1",
+    customModels: [{ id: "whisper-large-v3" }],
+    type: "openai_compatible",
+  });
+  expect(create.mock.calls[0]?.[0].label?.trim()).toBeTruthy();
+  expect(select).toHaveBeenCalledWith("p-local::whisper-large-v3");
+});
