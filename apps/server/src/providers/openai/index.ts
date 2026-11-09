@@ -185,6 +185,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Cheaper Inference";
   }
 
+  if (providerName === "standardcompute") {
+    return "Standard Compute";
+  }
+
   if (providerName === "vercel_ai_gateway") {
     return "Vercel AI Gateway";
   }

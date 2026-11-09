@@ -3088,6 +3088,7 @@ export type ProviderName =
   | "xai"
   | "groq"
   | "cheaper_inference"
+  | "standardcompute"
   | "together"
   | "xiaomi"
   | "meta"
