@@ -33,7 +33,7 @@ export function createAskUserQuestionTools(
   return [
     {
       description:
-        'Ask short multiple-choice questions when info is missing. Every question needs one choice ending in "(Recommended)".',
+        'Ask short multiple-choice questions only when blocked. Every question needs one choice ending in "(Recommended)".',
       name: "ask_user_question",
       parameters: {
         additionalProperties: false,
