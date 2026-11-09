@@ -211,6 +211,7 @@ function FilePreviewTile({
   const style = PREVIEW_TILE[kind];
 
   let sketch: ReactNode = <Icon className="size-4" />;
+
   if (kind === "web") {
     sketch = (
       <>
