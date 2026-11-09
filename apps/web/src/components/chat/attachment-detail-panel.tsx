@@ -129,6 +129,7 @@ export function AttachmentDetailPanel({
         "max-md:left-0 max-md:w-full! max-md:min-w-0 max-md:max-w-none max-md:flex-1",
         className
       )}
+      data-fullscreen={fullscreen || undefined}
       data-slot="attachment-detail-panel"
       style={fullscreen ? undefined : { width }}
     >
