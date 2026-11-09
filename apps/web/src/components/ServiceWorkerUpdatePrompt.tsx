@@ -35,20 +35,18 @@ export function ServiceWorkerUpdatePrompt() {
   return (
     <div
       aria-label="App update"
-      className="pointer-events-auto fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-lg sm:inset-x-auto sm:right-4 sm:w-80"
+      className="pointer-events-auto fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50 flex items-center gap-2 rounded-xl border border-border bg-card py-1.5 pr-1.5 pl-3 shadow-lg sm:inset-x-auto sm:right-4"
       role="status"
     >
-      <div className="flex gap-3">
-        <RefreshIcon
-          aria-hidden="true"
-          className="mt-0.5 size-5 shrink-0 text-primary"
-          strokeWidth={1.75}
-        />
-        <p className="min-w-0 font-medium text-foreground text-sm">
-          {version ? `Nakama ${version} is ready.` : "A new version is ready."}
-        </p>
-      </div>
-      <div className="flex justify-end gap-2">
+      <RefreshIcon
+        aria-hidden="true"
+        className="size-4 shrink-0 text-primary"
+        strokeWidth={1.75}
+      />
+      <p className="min-w-0 flex-1 truncate text-foreground text-sm">
+        {version ? `Nakama ${version} is ready.` : "A new version is ready."}
+      </p>
+      <div className="flex shrink-0 gap-1">
         <Button onClick={postpone} size="sm" type="button" variant="ghost">
           Later
         </Button>
