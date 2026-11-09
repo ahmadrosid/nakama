@@ -44,6 +44,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useUserTimezone } from "@/hooks/use-timezones";
 import {
   formatFutureRelativeTime,
@@ -1051,21 +1052,22 @@ function RunDetailPopup({
         </p>
       ) : null}
       {selectedRun ? (
-        <ChatMessageList
-          actionsDisabled
-          className="min-h-0 flex-1"
-          emptyMessage={
-            selectedRun.status === "running"
-              ? "Waiting for output…"
-              : "No output returned."
-          }
-          key={selectedRun.id}
-          messages={automationRunMessages(selectedRun)}
-          profileId={profileId}
-          readOnly
-          streamActive={selectedRun.status === "running"}
-          turnStartedAt={selectedRun.startedAt}
-        />
+        <ChatAttachmentPanelProvider key={selectedRun.id}>
+          <ChatMessageList
+            actionsDisabled
+            className="min-h-0 flex-1"
+            emptyMessage={
+              selectedRun.status === "running"
+                ? "Waiting for output…"
+                : "No output returned."
+            }
+            messages={automationRunMessages(selectedRun)}
+            profileId={profileId}
+            readOnly
+            streamActive={selectedRun.status === "running"}
+            turnStartedAt={selectedRun.startedAt}
+          />
+        </ChatAttachmentPanelProvider>
       ) : null}
     </DialogPrimitive.Popup>
   );
