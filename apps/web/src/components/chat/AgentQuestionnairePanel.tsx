@@ -167,7 +167,7 @@ export function AgentQuestionnairePanel({
     setAnswers((current) => ({
       ...current,
       [activeQuestion.id]: {
-        ...activeState,
+        customAnswer: isCustomChoice(choice) ? activeState.customAnswer : "",
         selectedChoiceId: choice.id,
         selectedChoiceLabel: choice.label,
       },

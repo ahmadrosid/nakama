@@ -122,7 +122,7 @@ export function AgentQuestionnaireQuestion({
                 key={choice.id}
                 onClick={() =>
                   onStateChange({
-                    ...state,
+                    customAnswer: "",
                     selectedChoiceId: choice.id,
                     selectedChoiceLabel: choice.label,
                   })
@@ -165,8 +165,9 @@ export function AgentQuestionnaireQuestion({
           label="Other answer"
           onChange={(customAnswer) =>
             onStateChange({
-              ...state,
               customAnswer,
+              selectedChoiceId: null,
+              selectedChoiceLabel: null,
             })
           }
           placeholder={question.placeholder || "Write another answer…"}
