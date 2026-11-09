@@ -34,7 +34,7 @@ test("the recommended choice carries a Recommended badge", async () => {
     ...container.querySelectorAll("button[data-question-option='true']"),
   ].map((option) => option.textContent);
 
-  expect(options).toEqual(["1.D1Recommended", "2.KV"]);
+  expect(options).toEqual(["1D1Recommended", "2KV"]);
 
   act(() => root.unmount());
 });
