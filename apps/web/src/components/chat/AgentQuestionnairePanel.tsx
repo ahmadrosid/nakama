@@ -167,7 +167,7 @@ export function AgentQuestionnairePanel({
     setAnswers((current) => ({
       ...current,
       [activeQuestion.id]: {
-        ...activeState,
+        customAnswer: isCustomChoice(choice) ? activeState.customAnswer : "",
         selectedChoiceId: choice.id,
         selectedChoiceLabel: choice.label,
       },
@@ -245,7 +245,7 @@ export function AgentQuestionnairePanel({
     <div className="w-full max-w-xl">
       <section
         aria-label="Agent questions"
-        className="rounded-xl border border-border bg-background"
+        className="rounded-2xl border border-border bg-background"
       >
         <AgentQuestionnaireNav
           answered={resolvedAnswers.map(
@@ -253,7 +253,7 @@ export function AgentQuestionnairePanel({
           )}
           currentQuestionIndex={currentQuestionIndex}
         />
-        <div className="space-y-3 px-3 pt-1 pb-3" onKeyDown={handleKeyDown}>
+        <div className="space-y-4 px-4 pb-4" onKeyDown={handleKeyDown}>
           <div key={activeQuestion.id} ref={activeQuestionRef}>
             <AgentQuestionnaireQuestion
               disabled={disabled}
@@ -267,7 +267,7 @@ export function AgentQuestionnairePanel({
               state={activeState}
             />
           </div>
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between">
             <button
               className="text-muted-foreground text-sm transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
               disabled={disabled}
