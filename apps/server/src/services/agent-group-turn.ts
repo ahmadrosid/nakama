@@ -14,6 +14,8 @@ import type {
   GroupRoster,
 } from "@nakama/core/agent-groups";
 import {
+  MAX_IMAGE_BYTES,
+  normalizeAttachmentBase64,
   validateDocumentAttachments,
   validateImageAttachments,
 } from "@nakama/core/message-content";
@@ -296,8 +298,16 @@ export async function readGroupDocuments(
   validateDocumentAttachments(attachments.filter((a) => !isImage(a)));
 
   return await Promise.all(
-    attachments.map(async (document) => {
-      const filename = document.filename.trim() || "image";
+    attachments.map(async (attachment) => {
+      const filename = attachment.filename.trim() || "image";
+
+      // Validation accepts a data URL; decode only its base64 part.
+      const document = {
+        ...attachment,
+        data: isImage(attachment)
+          ? normalizeAttachmentBase64(attachment.data, MAX_IMAGE_BYTES, "image")
+          : normalizeAttachmentBase64(attachment.data),
+      };
 
       if (isImage(document)) {
         return { filename, image: Buffer.from(document.data, "base64") };

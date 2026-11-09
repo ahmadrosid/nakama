@@ -117,6 +117,30 @@ describe("group attachments", () => {
     ).toEqual([path]);
   });
 
+  test("a data URL attachment is read as its bytes", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const text = Buffer.from("Q3 revenue was 42").toString("base64");
+
+    const [image, document] = await readGroupDocuments([
+      {
+        data: `data:image/png;base64,${png.toString("base64")}`,
+        filename: "image.png",
+        mediaType: "image/png",
+      },
+      {
+        data: `data:text/plain;base64,${text}`,
+        filename: "notes.txt",
+        mediaType: "text/plain",
+      },
+    ]);
+
+    expect(image).toEqual({ filename: "image.png", image: png });
+    expect(document).toMatchObject({ filename: "notes.txt" });
+    expect(document && "text" in document && document.text).toContain(
+      "Q3 revenue was 42"
+    );
+  });
+
   test("an image posted to a missing session is not saved", async () => {
     const { service } = setup(() => "ok");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
