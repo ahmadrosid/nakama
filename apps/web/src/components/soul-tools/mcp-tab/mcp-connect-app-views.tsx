@@ -13,7 +13,7 @@ import {
   Add01Icon,
   ArrowLeft01Icon,
   CheckmarkCircle02Icon,
-  CodeIcon,
+  Key01Icon,
   Search01Icon,
   Tick02Icon,
 } from "hugeicons-react";
@@ -411,13 +411,11 @@ export function McpCustomConnection({
   children,
   kind,
   onBack,
-  onImport,
   onKindChange,
 }: {
   children: ReactNode;
   kind: McpServerKind;
   onBack: () => void;
-  onImport: () => void;
   onKindChange: (kind: McpServerKind) => void;
 }) {
   return (
@@ -425,30 +423,30 @@ export function McpCustomConnection({
       <BackButton onClick={onBack} />
       <DialogTitle className="text-xl">Add a custom connection</DialogTitle>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div
-          aria-label="How does it sign in?"
-          className="segmented-control min-w-0 flex-1"
-          role="tablist"
-        >
-          {SIGN_IN_CHOICES.map((choice) => (
-            <button
-              aria-selected={kind === choice.id}
-              className="segmented-control-item"
-              data-active={kind === choice.id || undefined}
-              key={choice.id}
-              onClick={() => onKindChange(choice.id)}
-              role="tab"
-              type="button"
-            >
-              {choice.label}
-            </button>
-          ))}
-        </div>
-        <Button onClick={onImport} size="sm" type="button" variant="ghost">
-          <CodeIcon aria-hidden />
-          Import JSON
-        </Button>
+      <div
+        aria-label="How does it sign in?"
+        className="segmented-control grid grid-cols-3 border-0 bg-muted sm:w-full"
+        role="tablist"
+      >
+        {SIGN_IN_CHOICES.map((choice) => (
+          <button
+            aria-selected={kind === choice.id}
+            className="segmented-control-item min-h-10 px-2 sm:flex-1"
+            data-active={kind === choice.id || undefined}
+            key={choice.id}
+            onClick={() => onKindChange(choice.id)}
+            role="tab"
+            type="button"
+          >
+            {choice.id === "http" ? (
+              <Key01Icon
+                aria-hidden
+                className={cn("size-4", kind === "http" && "text-primary")}
+              />
+            ) : null}
+            {choice.label}
+          </button>
+        ))}
       </div>
 
       {children}

@@ -182,6 +182,7 @@ test("a new connection starts on API key and sends its headers", async () => {
     await act(async () => render(false));
     await act(async () => render(true));
     expect(state!.kind).toBe("http");
+    expect(state!.headers).toEqual([{ key: "Authorization", value: "" }]);
 
     await act(async () => {
       state.setName("Keyed");

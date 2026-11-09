@@ -121,7 +121,7 @@ function applyMcpFormReset({
     setters.setName("");
     setters.setKind("http");
     setters.setUrl("");
-    setters.setHeaders([emptyHeaderRow()]);
+    setters.setHeaders([{ key: "Authorization", value: "" }]);
     setters.setCommand("");
     setters.setArgs([]);
     setters.setEnv([emptyHeaderRow()]);
