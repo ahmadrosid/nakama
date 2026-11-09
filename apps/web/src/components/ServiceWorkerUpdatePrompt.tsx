@@ -44,11 +44,16 @@ export function ServiceWorkerUpdatePrompt() {
         <Button onClick={postpone} size="sm" type="button" variant="ghost">
           Later
         </Button>
-        <Button onClick={applyUpdate} size="sm" type="button">
+        <Button
+          className="gap-1.5"
+          onClick={applyUpdate}
+          size="sm"
+          type="button"
+        >
           {/* RefreshCwIcon from @hugeicons/core-free-icons 4.3 (MIT); the locked 3.x lacks it. */}
           <svg
             aria-hidden="true"
-            className="size-4"
+            data-icon="inline-start"
             fill="none"
             stroke="currentColor"
             strokeLinecap="round"
