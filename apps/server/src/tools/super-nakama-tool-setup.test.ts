@@ -332,7 +332,7 @@ describe("super nakama create_tool setup", () => {
           content: "export async function run(input) { return input; }",
           path: path.join(toolsDir, "echo.js"),
         },
-        { orgId: ORG_ID, profileId: "super_nakama" }
+        { orgId: ORG_ID, orgRole: "admin", profileId: "super_nakama" }
       );
 
       const capturedRequests: CreateToolRequest[] = [];

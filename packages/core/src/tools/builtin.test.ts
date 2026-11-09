@@ -324,7 +324,35 @@ describe("file builtin tools", () => {
     }
   });
 
-  test("write_file allows the org's own custom tool modules outside profile workspace", async () => {
+  test("write_file refuses the org's custom tool modules for a member", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const toolsDir = path.join(
+      configDir,
+      "orgs",
+      PROFILE_CONTEXT.orgId,
+      "tools"
+    );
+
+    await mkdir(toolsDir, { recursive: true });
+
+    const targetPath = path.join(toolsDir, "echo.js");
+
+    await expect(
+      runWriteFile(
+        {
+          content: "export async function run() { return null; }",
+          path: targetPath,
+        },
+        { ...PROFILE_CONTEXT, orgRole: "member" },
+        { workspaceRoot: tempDir }
+      )
+    ).rejects.toThrow(PathGuardError);
+  });
+
+  test("write_file allows the org's custom tool modules for an org admin", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -345,7 +373,7 @@ describe("file builtin tools", () => {
         content: "export async function run() { return null; }",
         path: targetPath,
       },
-      PROFILE_CONTEXT,
+      { ...PROFILE_CONTEXT, orgRole: "admin" },
       { workspaceRoot: tempDir }
     );
 
@@ -1434,7 +1462,7 @@ describe("file builtin tools", () => {
     expect(result.content).toBe("relative");
   });
 
-  test("read_file allows custom tool modules outside profile workspace", async () => {
+  test("read_file refuses custom tool modules for a member", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -1451,9 +1479,39 @@ describe("file builtin tools", () => {
     const targetPath = path.join(toolsDir, "echo.js");
     await writeFile(targetPath, "export async function run() {}", "utf8");
 
-    const result = await runReadFile({ path: targetPath }, PROFILE_CONTEXT, {
-      workspaceRoot: tempDir,
-    });
+    await expect(
+      runReadFile(
+        { path: targetPath },
+        { ...PROFILE_CONTEXT, orgRole: "member" },
+        {
+          workspaceRoot: tempDir,
+        }
+      )
+    ).rejects.toBeInstanceOf(PathGuardError);
+  });
+
+  test("read_file allows custom tool modules for an org admin", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const toolsDir = path.join(
+      configDir,
+      "orgs",
+      PROFILE_CONTEXT.orgId,
+      "tools"
+    );
+
+    await mkdir(toolsDir, { recursive: true });
+
+    const targetPath = path.join(toolsDir, "echo.js");
+    await writeFile(targetPath, "export async function run() {}", "utf8");
+
+    const result = await runReadFile(
+      { path: targetPath },
+      { ...PROFILE_CONTEXT, orgRole: "admin" },
+      { workspaceRoot: tempDir }
+    );
 
     expect(result.path).toBe(await realpath(targetPath));
     expect(result.content).toContain("export async function run");
