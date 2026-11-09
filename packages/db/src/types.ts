@@ -835,6 +835,13 @@ export interface StoredAuditEvent {
   resourceType: string;
 }
 
+export interface StoredAutomationWebhookSecret {
+  automationId: string;
+  createdAt: string;
+  createdByUserId: string;
+  encryptedValue: string;
+}
+
 export interface StoredManagedSecret {
   encryptedValue: string | null;
   name: string;
@@ -1009,6 +1016,12 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
+  deleteAutomationWebhookSecret(automationId: string): Promise<void>;
+  /** Deletes the secrets this user made; with `orgId`, only on that org's automations. */
+  deleteAutomationWebhookSecretsForUser(
+    userId: string,
+    orgId?: string
+  ): Promise<void>;
   deleteComposioToolkit(id: string): Promise<boolean>;
   deleteComposioUserConnection(id: string): Promise<boolean>;
   deleteManagedSecret(scope: string, name: string): Promise<void>;
@@ -1097,6 +1110,9 @@ export interface DatabaseAdapter {
     orgId: string,
     automationId: string
   ): Promise<string | null>;
+  getAutomationWebhookSecret(
+    automationId: string
+  ): Promise<StoredAutomationWebhookSecret | null>;
   getBrowserSessionBySessionTokenHash(
     sessionTokenHash: string
   ): Promise<StoredBrowserSessionRecord | null>;
@@ -1335,6 +1351,7 @@ export interface DatabaseAdapter {
 
   listAutomations(): Promise<StoredAutomationRecord[]>;
   listAutomationsForOrg(orgId: string): Promise<StoredAutomationRecord[]>;
+  listAutomationWebhookSecrets(): Promise<StoredAutomationWebhookSecret[]>;
   /** Live sessions for one user, newest first. Revoked and expired rows are left out. */
   listBrowserSessionsForUser(
     userId: string,
@@ -1511,6 +1528,10 @@ export interface DatabaseAdapter {
   publishOrgSharedResource(
     record: StoredOrgSharedResourceRecord
   ): Promise<StoredOrgSharedResourceRecord>;
+  /** Replaces the automation's secret, so the old one stops at once. */
+  putAutomationWebhookSecret(
+    secret: StoredAutomationWebhookSecret
+  ): Promise<void>;
   putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
   /** Frees a claimed automation webhook delivery ID so a redelivery can run. */
   releaseAutomationWebhookDelivery(
@@ -1530,6 +1551,11 @@ export interface DatabaseAdapter {
   replaceManagedSecrets(
     secrets: Array<
       Pick<StoredManagedSecret, "scope" | "name" | "encryptedValue">
+    >,
+    webhookSecrets: Array<
+      Pick<StoredAutomationWebhookSecret, "automationId" | "encryptedValue"> & {
+        previousEncryptedValue: string;
+      }
     >
   ): Promise<void>;
   replaceMessagesForSession(

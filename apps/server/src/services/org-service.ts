@@ -70,7 +70,6 @@ import type {
   StoredUserRecord,
 } from "@nakama/db";
 import {
-  DatabaseAutomationStore,
   ensureLocalClientAccess,
   ORG_INVITE_EXPIRY_DAYS,
   ORG_ROLES,
@@ -85,10 +84,6 @@ import {
   loadToolEnv,
   readHandlerConfig,
 } from "./custom-tool-shared";
-import {
-  AUTOMATION_WEBHOOK_SECRET_PREFIX,
-  automationWebhookSecretName,
-} from "./managed-secrets";
 import { namespacedMcpToolName } from "./mcp-tool-bridge";
 import { loadMfaPolicy } from "./mfa-config";
 import {
@@ -1114,7 +1109,6 @@ export class OrgService {
     // Keep the database row available for a safe retry if disk cleanup fails.
     await rm(getOrgConfigDir(orgId), { force: true, recursive: true });
     await deleteOrgToolCredentials(orgId, this.databaseAdapter);
-    await this.deleteOrgWebhookSecrets(orgId);
     await rm(join(getUserConfigDir(), "retired-app-users", orgId), {
       force: true,
       recursive: true,
@@ -1123,43 +1117,6 @@ export class OrgService {
 
     if (!deleted) {
       throw new NakamaApiError("Not found", 404);
-    }
-  }
-
-  private async deleteOrgWebhookSecrets(orgId: string): Promise<void> {
-    for (const secret of await this.databaseAdapter.listManagedSecrets()) {
-      if (
-        secret.scope === orgId &&
-        secret.name.startsWith(AUTOMATION_WEBHOOK_SECRET_PREFIX)
-      ) {
-        await this.databaseAdapter.deleteManagedSecret(orgId, secret.name);
-      }
-    }
-  }
-
-  // A webhook secret lets its holder start runs as them, so it ends with
-  // their access. The automation stays a webhook until someone makes a new one.
-  private async deleteUserWebhookSecrets(
-    userId: string,
-    orgId?: string
-  ): Promise<void> {
-    const store = new DatabaseAutomationStore(this.databaseAdapter);
-
-    const automations = orgId
-      ? await store.listForOrg(orgId)
-      : await store.list();
-
-    for (const automation of automations) {
-      if (
-        automation.orgId &&
-        automation.trigger.type === "webhook" &&
-        automation.runAsUserId === userId
-      ) {
-        await this.databaseAdapter.deleteManagedSecret(
-          automation.orgId,
-          automationWebhookSecretName(automation.id)
-        );
-      }
     }
   }
 
@@ -1871,6 +1828,13 @@ export class OrgService {
     await this.requireActiveOrganization(orgId);
     await this.assertCanChangeAdminMembership(orgId, userId);
 
+    // A webhook secret lets its maker start runs, so it ends with their access.
+    // Revoke first: a failed revoke keeps the member row, so a retry still works.
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(
+      userId,
+      orgId
+    );
+
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
 
     if (!deleted) {
@@ -1888,7 +1852,6 @@ export class OrgService {
       userId,
       new Date().toISOString()
     );
-    await this.deleteUserWebhookSecrets(userId, orgId);
   }
 
   async disableMember(orgId: string, userId: string): Promise<void> {
@@ -1966,6 +1929,8 @@ export class OrgService {
     // so a concurrent disable, remove or demote cannot leave no usable admin.
     const now = new Date().toISOString();
 
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(userId);
+
     const disabled = await this.databaseAdapter.disableUserUnlessLastAdmin(
       userId,
       now
@@ -1976,7 +1941,6 @@ export class OrgService {
     }
 
     await this.databaseAdapter.revokeBrowserSessionsForUser(userId, now);
-    await this.deleteUserWebhookSecrets(userId);
   }
 
   async enableMember(orgId: string, userId: string): Promise<void> {
@@ -2072,6 +2036,14 @@ export class OrgService {
     }
 
     if (member.role !== role) {
+      // Only admins may hold secrets for email-capable profiles, so demotion revokes all of this user's secrets in the org.
+      if (role !== "admin") {
+        await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(
+          userId,
+          orgId
+        );
+      }
+
       const updated = await this.databaseAdapter.updateOrgMemberRole(
         orgId,
         userId,
@@ -2432,13 +2404,13 @@ export class OrgService {
     }
 
     const now = new Date().toISOString();
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(user.id);
     await this.databaseAdapter.updateUserPassword(
       user.id,
       await this.authService.hashPassword(newPassword),
       now
     );
     await this.databaseAdapter.revokeBrowserSessionsForUser(user.id, now);
-    await this.deleteUserWebhookSecrets(user.id);
   }
 
   private async assertCanChangeAdminMembership(

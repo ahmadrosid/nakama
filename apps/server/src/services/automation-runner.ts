@@ -50,10 +50,10 @@ export class AutomationRunner {
 
   /** Starts a webhook run and returns once it is recorded, without waiting for the agent. */
   async startFromWebhook(
-    automationId: string,
+    automation: StoredAutomation,
     webhook: WebhookDelivery
   ): Promise<{ runId: string } | RunSkipped> {
-    const begun = await this.begin(automationId, webhook);
+    const begun = await this.begin(automation.id, webhook, automation);
 
     if ("skipped" in begun) {
       return begun;
@@ -69,7 +69,8 @@ export class AutomationRunner {
   /** Takes the run lock and records the run; the caller must `finish` a begun run. */
   private async begin(
     automationId: string,
-    webhook?: WebhookDelivery
+    webhook?: WebhookDelivery,
+    loaded?: StoredAutomation
   ): Promise<BegunRun | RunSkipped> {
     if (this.running.has(automationId)) {
       return { error: "Automation is already running.", skipped: true };
@@ -79,7 +80,8 @@ export class AutomationRunner {
     let begun = false;
 
     try {
-      const automation = await this.automationService.get(automationId);
+      const automation =
+        loaded ?? (await this.automationService.get(automationId));
 
       if (!automation) {
         throw new Error("Automation not found.");
@@ -213,7 +215,10 @@ export class AutomationRunner {
         ? automation.prompt
         : withWebhookPayload(automation.prompt, input);
 
-    const messages: ChatMessage[] = [{ content: prompt, role: "user" }];
+    // Saved progress is shown to members; the payload stays in `input` only.
+    const messages: ChatMessage[] = [
+      { content: automation.prompt, role: "user" },
+    ];
 
     const publishProgress = () => {
       this.automationService.setRunProgress(runId, {

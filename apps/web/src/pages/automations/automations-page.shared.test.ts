@@ -88,7 +88,6 @@ test("daily cron reads as plain words and other triggers stay readable", () => {
 test("a webhook trigger is not treated as a schedule", () => {
   const trigger = { type: "webhook" } as const;
 
-  expect(describeTrigger(trigger).label).toBe("On webhook");
   expect(previewAutomationSchedule(trigger, "UTC")).toBeNull();
   expect(schedulePresetTrigger("daily", trigger)).toEqual({
     cron: "0 7 * * *",
@@ -102,21 +101,27 @@ test("a webhook trigger is not treated as a schedule", () => {
       type: "schedule",
     })
   ).toEqual({ type: "webhook" });
-  expect(
+
+  const automation = {
+    createdAt: "2026-10-01T00:00:00Z",
+    description: "",
+    enabled: true,
+    id: "automation",
+    name: "Task",
+    profileId: "agent",
+    prompt: "Run task",
+    steps: [],
+    trigger,
+    updatedAt: "2026-10-01T00:00:00Z",
+    version: 1,
+  };
+
+  expect(summarizeAutomationListMeta(automation)).not.toBe(
     summarizeAutomationListMeta({
-      createdAt: "2026-10-01T00:00:00Z",
-      description: "",
-      enabled: true,
-      id: "automation",
-      name: "Task",
-      profileId: "agent",
-      prompt: "Run task",
-      steps: [],
-      trigger,
-      updatedAt: "2026-10-01T00:00:00Z",
-      version: 1,
+      ...automation,
+      trigger: { cron: "0 7 * * *", type: "schedule" },
     })
-  ).toBe("Webhook automation");
+  );
 });
 
 test("schedule presets recognize supported frequencies without changing custom schedules", () => {

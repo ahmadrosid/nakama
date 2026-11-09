@@ -1913,6 +1913,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("User not found", 404);
     }
 
+    // Breach containment: webhook secrets the user made end with their sessions.
+    await databaseAdapter.deleteAutomationWebhookSecretsForUser(userId);
+
     const revoked = await databaseAdapter.revokeBrowserSessionsForUser(
       userId,
       new Date().toISOString()

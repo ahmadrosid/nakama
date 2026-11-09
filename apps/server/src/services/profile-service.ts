@@ -108,7 +108,6 @@ import {
   parseToolEnvDeclarations,
   readToolEnvDeclarations,
 } from "./custom-tool-shared";
-import { automationWebhookSecretName } from "./managed-secrets";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -724,6 +723,12 @@ export class ProfileService {
     const moved: [string, string][] = [];
     const automationIds = await this.listProfileAutomationIds(orgId, profileId);
 
+    // Moved automations are disabled; the owner makes a new secret in the new org.
+    // Delete first so a failure leaves no valid secret on a moved automation.
+    for (const id of automationIds) {
+      await this.db.deleteAutomationWebhookSecret(id);
+    }
+
     try {
       for (const [source, targetPath] of paths) {
         if (lstatSync(targetPath, { throwIfNoEntry: false })) {
@@ -751,9 +756,6 @@ export class ProfileService {
       throw error;
     }
 
-    // Moved automations are disabled; the owner makes a new secret in the new org.
-    await this.deleteWebhookSecrets(orgId, automationIds);
-
     return this.getProfile(destination, profileId);
   }
 
@@ -764,15 +766,6 @@ export class ProfileService {
     return (await this.db.listAutomationsForOrg(orgId))
       .filter((automation) => automation.profileId === profileId)
       .map((automation) => automation.id);
-  }
-
-  private async deleteWebhookSecrets(
-    orgId: string,
-    automationIds: string[]
-  ): Promise<void> {
-    for (const id of automationIds) {
-      await this.db.deleteManagedSecret(orgId, automationWebhookSecretName(id));
-    }
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
@@ -809,8 +802,7 @@ export class ProfileService {
 
     await this.beforeChannelOwnerDelete?.(orgId, profileId);
 
-    const automationIds = await this.listProfileAutomationIds(orgId, profileId);
-
+    // Webhook secrets go with the profile's automations (FK cascade).
     const deleted = await deleteProfileWithHistoryArchives(
       this.db,
       orgId,
@@ -821,8 +813,6 @@ export class ProfileService {
     if (!deleted) {
       throw new Error("Profile not found.");
     }
-
-    await this.deleteWebhookSecrets(orgId, automationIds);
   }
 
   async listTools(orgId: string): Promise<ListToolsResponse> {

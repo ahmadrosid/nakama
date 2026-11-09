@@ -1,5 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { CreateAutomationWebhookSecretResponse } from "@nakama/core";
+import { DatabaseAutomationStore } from "@nakama/db";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -21,7 +22,12 @@ export function registerAutomationWebhookRoutes(
     errorSchema: z.ZodTypeAny;
   }
 ): void {
-  const { agent, automationService } = options;
+  const { agent, automationService, databaseAdapter } = options;
+
+  const automationStore = databaseAdapter
+    ? new DatabaseAutomationStore(databaseAdapter)
+    : undefined;
+
   const { automationIdParam, errorSchema } = schemas;
 
   app.openAPIRegistry.registerPath(
@@ -102,7 +108,7 @@ export function registerAutomationWebhookRoutes(
   app.post("/v1/automations/:automationId/webhook-secret", async (c) => {
     const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const automationId = decodeURIComponent(c.req.param("automationId"));
+    const automationId = c.req.param("automationId");
     const automation = await automationService.get(automationId, orgId);
 
     if (!automation) {
@@ -127,7 +133,7 @@ export function registerAutomationWebhookRoutes(
   // signature check answers the same 401, so ids and triggers do not leak.
   app.post("/v1/automations/:automationId/webhook", async (c) => {
     const unauthorized = () => errorResponse("Invalid webhook signature.", 401);
-    const automationId = decodeURIComponent(c.req.param("automationId"));
+    const automationId = c.req.param("automationId");
 
     // Size checks come first so 413 does not reveal which ids are webhooks.
     if (Number(c.req.header("content-length") ?? 0) > WEBHOOK_MAX_BODY_BYTES) {
@@ -140,13 +146,14 @@ export function registerAutomationWebhookRoutes(
       return errorResponse("Request body is too large.", 413);
     }
 
-    const automation = await automationService.get(automationId);
+    // The plain store read: unsigned callers must not trigger run-history reads.
+    const automation = await automationStore?.get(automationId);
 
     if (!automation?.orgId || automation.trigger.type !== "webhook") {
       return unauthorized();
     }
 
-    const organization = await options.databaseAdapter?.getOrganizationById(
+    const organization = await databaseAdapter?.getOrganizationById(
       automation.orgId
     );
 
@@ -172,6 +179,11 @@ export function registerAutomationWebhookRoutes(
       return unauthorized();
     }
 
+    // Before the ping, so a wrong GitHub content type fails during setup.
+    if (!c.req.header("content-type")?.includes("application/json")) {
+      return errorResponse("Send the webhook as application/json.", 415);
+    }
+
     if (c.req.header("x-github-event") === "ping") {
       return json({ ok: true });
     }
@@ -182,10 +194,6 @@ export function registerAutomationWebhookRoutes(
       return errorResponse("X-GitHub-Delivery header is required.", 400);
     }
 
-    if (!c.req.header("content-type")?.includes("application/json")) {
-      return errorResponse("Send the webhook as application/json.", 415);
-    }
-
     const payload = new TextDecoder().decode(body);
 
     try {
@@ -194,7 +202,7 @@ export function registerAutomationWebhookRoutes(
       return errorResponse("Request body must be JSON.", 400);
     }
 
-    const result = await agent.startAutomationFromWebhook(automationId, {
+    const result = await agent.startAutomationFromWebhook(automation, {
       deliveryId,
       payload,
     });

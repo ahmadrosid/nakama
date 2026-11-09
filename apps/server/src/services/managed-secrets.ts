@@ -21,7 +21,11 @@ import {
   writeParsedConfigIni,
 } from "@nakama/core";
 import { parseProviderName } from "@nakama/core/provider-resolution";
-import type { DatabaseAdapter, StoredManagedSecret } from "@nakama/db";
+import type {
+  DatabaseAdapter,
+  StoredAutomationWebhookSecret,
+  StoredManagedSecret,
+} from "@nakama/db";
 import { z } from "zod";
 
 export type ManagedSecretSource = "environment" | "settings" | "missing";
@@ -31,11 +35,18 @@ export const KERNEL_BROWSER_SECRET = "kernel-browser";
 
 export const KERNEL_API_KEY_ENV = "KERNEL_API_KEY";
 
-export const AUTOMATION_WEBHOOK_SECRET_PREFIX = "automation-webhook:";
+// Webhook secrets live in their own table; this scope binds each to its automation.
+const WEBHOOK_SECRET_SCOPE = "automation-webhook";
 
-export function automationWebhookSecretName(automationId: string): string {
-  return `${AUTOMATION_WEBHOOK_SECRET_PREFIX}${automationId}`;
-}
+type EncryptedSecret = Pick<
+  StoredManagedSecret,
+  "scope" | "name" | "encryptedValue"
+>;
+
+type EncryptedWebhookSecret = Pick<
+  StoredAutomationWebhookSecret,
+  "automationId" | "encryptedValue"
+>;
 
 export function providerSecretEnvNames(
   providerId: string,
@@ -90,6 +101,22 @@ export class ManagedSecrets {
         this.decrypt(row);
       }
     }
+
+    for (const row of await this.db.listAutomationWebhookSecrets()) {
+      this.decryptWebhookSecret(row);
+    }
+  }
+
+  encryptWebhookSecret(automationId: string, value: string): string {
+    return this.encrypt(WEBHOOK_SECRET_SCOPE, automationId, value);
+  }
+
+  decryptWebhookSecret(row: EncryptedWebhookSecret): string {
+    return this.decrypt({
+      encryptedValue: row.encryptedValue,
+      name: row.automationId,
+      scope: WEBHOOK_SECRET_SCOPE,
+    });
   }
 
   async resolve(
@@ -245,12 +272,7 @@ export class ManagedSecrets {
     const hash = createHash("sha256");
     const rows = await this.db.listManagedSecrets();
 
-    // Chat sessions never read webhook secrets, so rotating one must not reset them.
-    const sessionRows = rows.filter(
-      (row) => !row.name.startsWith(AUTOMATION_WEBHOOK_SECRET_PREFIX)
-    );
-
-    for (const row of sessionRows.sort((a, b) =>
+    for (const row of rows.sort((a, b) =>
       `${a.scope}:${a.name}`.localeCompare(`${b.scope}:${b.name}`)
     )) {
       hash.update(
@@ -293,7 +315,26 @@ export class ManagedSecrets {
       replacements.push({ encryptedValue, name: row.name, scope: row.scope });
     }
 
-    await this.db.replaceManagedSecrets(replacements);
+    const webhookReplacements: Array<
+      EncryptedWebhookSecret & { previousEncryptedValue: string }
+    > = [];
+
+    for (const row of await this.db.listAutomationWebhookSecrets()) {
+      const plain = this.decryptWebhookSecret(row);
+      const encryptedValue = next.encryptWebhookSecret(row.automationId, plain);
+
+      if (next.decryptWebhookSecret({ ...row, encryptedValue }) !== plain) {
+        throw new Error("Secret key rotation verification failed.");
+      }
+
+      webhookReplacements.push({
+        automationId: row.automationId,
+        encryptedValue,
+        previousEncryptedValue: row.encryptedValue,
+      });
+    }
+
+    await this.db.replaceManagedSecrets(replacements, webhookReplacements);
   }
 
   async migrateLegacyFiles(rootDir = getUserConfigDir()): Promise<void> {
@@ -480,7 +521,7 @@ export class ManagedSecrets {
     ].join(":");
   }
 
-  private decrypt(row: StoredManagedSecret): string {
+  private decrypt(row: EncryptedSecret): string {
     if (!this.key) {
       throw new Error("NAKAMA_SECRETS_KEY is required for saved secrets.");
     }

@@ -137,6 +137,145 @@ describe("automation webhook deliveries", () => {
   });
 });
 
+describe("automation webhook secrets", () => {
+  const secret = (automationId: string, createdByUserId: string) => ({
+    automationId,
+    createdAt: new Date(T0).toISOString(),
+    createdByUserId,
+    encryptedValue: `enc-${automationId}-${createdByUserId}`,
+  });
+
+  test("upserts one row per automation and cascades on delete", async () => {
+    await withDatabase(async ({ db, raw, seedAutomation }) => {
+      raw.exec(
+        "INSERT INTO users (id,email,password_hash,created_at,updated_at) VALUES ('u1','a@x','h','now','now'), ('u2','b@x','h','now','now')"
+      );
+      await seedAutomation();
+
+      await db.putAutomationWebhookSecret(secret("auto_a", "u1"));
+      await db.putAutomationWebhookSecret(secret("auto_a", "u2"));
+
+      expect(await db.getAutomationWebhookSecret("auto_a")).toEqual(
+        secret("auto_a", "u2")
+      );
+      expect(await db.listAutomationWebhookSecrets()).toHaveLength(1);
+
+      await db.deleteAutomationWebhookSecret("auto_a");
+      expect(await db.getAutomationWebhookSecret("auto_a")).toBeNull();
+
+      await db.putAutomationWebhookSecret(secret("auto_a", "u1"));
+      expect(await db.deleteAutomation("auto_a")).toBe(true);
+      expect(await db.listAutomationWebhookSecrets()).toEqual([]);
+
+      await seedAutomation();
+      await db.putAutomationWebhookSecret(secret("auto_a", "u1"));
+      expect(await db.deleteProfile("p")).toBe(true);
+      expect(await db.listAutomationWebhookSecrets()).toEqual([]);
+    });
+  });
+
+  test("deletes a user's secrets in one org or in all orgs", async () => {
+    await withDatabase(async ({ db, raw, seedAutomation }) => {
+      raw.exec(
+        "INSERT INTO users (id,email,password_hash,created_at,updated_at) VALUES ('u1','a@x','h','now','now'), ('u2','b@x','h','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('o2','Other','o2','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('p2','Other','o2','now','now')"
+      );
+      await seedAutomation();
+      raw.exec(
+        "INSERT INTO automations (id,name,version,definition,profile_id,org_id,created_at,updated_at) SELECT 'auto_b',name,version,definition,'p2','o2',created_at,updated_at FROM automations WHERE id = 'auto_a'"
+      );
+      raw.exec(
+        "INSERT INTO automations (id,name,version,definition,profile_id,org_id,created_at,updated_at) SELECT 'auto_c',name,version,definition,profile_id,org_id,created_at,updated_at FROM automations WHERE id = 'auto_a'"
+      );
+
+      await db.putAutomationWebhookSecret(secret("auto_a", "u1"));
+      await db.putAutomationWebhookSecret(secret("auto_b", "u1"));
+      await db.putAutomationWebhookSecret(secret("auto_c", "u2"));
+
+      const ids = async () =>
+        (await db.listAutomationWebhookSecrets())
+          .map((row) => row.automationId)
+          .sort();
+
+      await db.deleteAutomationWebhookSecretsForUser("u1", "o");
+      expect(await ids()).toEqual(["auto_b", "auto_c"]);
+
+      await db.deleteAutomationWebhookSecretsForUser("u1");
+      expect(await ids()).toEqual(["auto_c"]);
+    });
+  });
+
+  test("key rotation replaces webhook secrets in the same transaction", async () => {
+    await withDatabase(async ({ db, raw, seedAutomation }) => {
+      raw.exec(
+        "INSERT INTO users (id,email,password_hash,created_at,updated_at) VALUES ('u1','a@x','h','now','now')"
+      );
+      await seedAutomation();
+      await db.putManagedSecret({
+        encryptedValue: "old",
+        name: "provider:one",
+        scope: "global",
+        source: "settings",
+      });
+      await db.putAutomationWebhookSecret(secret("auto_a", "u1"));
+
+      await expect(
+        db.replaceManagedSecrets(
+          [{ encryptedValue: "new", name: "provider:one", scope: "global" }],
+          [
+            {
+              automationId: "missing",
+              encryptedValue: "new",
+              previousEncryptedValue: "x",
+            },
+          ]
+        )
+      ).rejects.toThrow();
+      expect(
+        (await db.getManagedSecret("global", "provider:one"))?.encryptedValue
+      ).toBe("old");
+
+      await expect(
+        db.replaceManagedSecrets(
+          [{ encryptedValue: "new", name: "provider:one", scope: "global" }],
+          [
+            {
+              automationId: "auto_a",
+              encryptedValue: "new",
+              previousEncryptedValue: "rotated-meanwhile",
+            },
+          ]
+        )
+      ).rejects.toThrow();
+      expect(
+        (await db.getManagedSecret("global", "provider:one"))?.encryptedValue
+      ).toBe("old");
+      expect(
+        (await db.getAutomationWebhookSecret("auto_a"))?.encryptedValue
+      ).toBe(secret("auto_a", "u1").encryptedValue);
+
+      await db.replaceManagedSecrets(
+        [{ encryptedValue: "new", name: "provider:one", scope: "global" }],
+        [
+          {
+            automationId: "auto_a",
+            encryptedValue: "new",
+            previousEncryptedValue: secret("auto_a", "u1").encryptedValue,
+          },
+        ]
+      );
+      expect(
+        (await db.getAutomationWebhookSecret("auto_a"))?.encryptedValue
+      ).toBe("new");
+    });
+  });
+});
+
 describe("automation webhook upgrade", () => {
   test("an old database gains the deliveries table and run columns", () => {
     const db = new Database(":memory:");
@@ -144,6 +283,7 @@ describe("automation webhook upgrade", () => {
     try {
       migrateDatabase(db);
       db.exec("DROP TABLE automation_webhook_deliveries");
+      db.exec("DROP TABLE automation_webhook_secrets");
       db.exec("ALTER TABLE automation_runs DROP COLUMN source");
       db.exec("ALTER TABLE automation_runs DROP COLUMN input");
 
@@ -160,6 +300,13 @@ describe("automation webhook upgrade", () => {
         db
           .query(
             "SELECT name FROM sqlite_master WHERE name = 'automation_webhook_deliveries'"
+          )
+          .get()
+      ).not.toBeNull();
+      expect(
+        db
+          .query(
+            "SELECT name FROM sqlite_master WHERE name = 'automation_webhook_secrets'"
           )
           .get()
       ).not.toBeNull();

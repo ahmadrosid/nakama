@@ -82,6 +82,8 @@ export interface StoredAutomation extends AutomationDefinition {
   /** The last person who saved it; runs use their Composio sign-ins. */
   runAsUserId?: string | null;
   updatedAt: string;
+  /** Computed, not saved: set when the install has a public URL. */
+  webhookUrl?: string;
 }
 
 export type AutomationRunStatus = "running" | "completed" | "failed";

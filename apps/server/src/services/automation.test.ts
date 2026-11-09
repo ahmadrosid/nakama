@@ -1978,16 +1978,57 @@ function waitUntilIdle(runner: AutomationRunner, automationId: string) {
 }
 
 describe("webhook automations", () => {
+  test("gives webhook automations a URL on the configured public base", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-webhook-url-"));
+
+    const previous = {
+      NAKAMA_CONFIG_DIR: process.env.NAKAMA_CONFIG_DIR,
+      NAKAMA_PUBLIC_URL: process.env.NAKAMA_PUBLIC_URL,
+      NAKAMA_WEB_PUBLIC_URL: process.env.NAKAMA_WEB_PUBLIC_URL,
+    };
+
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    delete process.env.NAKAMA_PUBLIC_URL;
+    delete process.env.NAKAMA_WEB_PUBLIC_URL;
+
+    try {
+      const { automation, service } = await createWebhookFixture();
+      const manual = await createWebhookFixture({ trigger: "manual" });
+
+      expect((await service.get(automation.id))?.webhookUrl).toBeUndefined();
+
+      process.env.NAKAMA_WEB_PUBLIC_URL = "https://nakama.example.com/";
+
+      expect((await service.get(automation.id))?.webhookUrl).toBe(
+        `https://nakama.example.com/v1/automations/${encodeURIComponent(automation.id)}/webhook`
+      );
+      expect(
+        (await manual.service.get(manual.automation.id))?.webhookUrl
+      ).toBeUndefined();
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("verifies signatures with the current secret only", async () => {
-    const { automation, service } = await createWebhookFixture();
+    const { automation: created, service } = await createWebhookFixture();
     const body = '{"action":"opened"}';
 
     const first = await service.createWebhookSecret(
-      automation.id,
+      created.id,
       ORG_ID,
       "user_a"
     );
 
+    const automation = (await service.get(created.id, ORG_ID))!;
     const bytes = new TextEncoder().encode(body);
 
     expect(
@@ -2074,34 +2115,206 @@ describe("webhook automations", () => {
 
     await expect(
       service.createWebhookSecret(automation.id, ORG_ID, "user_a")
-    ).rejects.toThrow();
-    expect(await db.listManagedSecrets()).toHaveLength(0);
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await db.listAutomationWebhookSecrets()).toHaveLength(0);
   });
 
-  test("deletes the secret when the trigger changes or the automation is deleted", async () => {
+  test("deletes the secret when the trigger changes", async () => {
     const { automation, db, service } = await createWebhookFixture();
     await service.createWebhookSecret(automation.id, ORG_ID, "user_a");
 
     await service.update(automation.id, ORG_ID, {
       trigger: { type: "manual" },
     });
-    expect(await db.listManagedSecrets()).toHaveLength(0);
+    expect(await db.listAutomationWebhookSecrets()).toHaveLength(0);
 
     await service.update(automation.id, ORG_ID, {
       trigger: { type: "webhook" },
     });
     await service.createWebhookSecret(automation.id, ORG_ID, "user_a");
-    expect(await db.listManagedSecrets()).toHaveLength(1);
+    expect(await db.listAutomationWebhookSecrets()).toHaveLength(1);
+  });
 
-    await service.delete(automation.id, ORG_ID);
-    expect(await db.listManagedSecrets()).toHaveLength(0);
+  test("records who made the secret and stops it on a steering edit by someone else", async () => {
+    const { automation, db, service } = await createWebhookFixture();
+
+    const secret = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_a"
+    );
+
+    await service.update(
+      automation.id,
+      ORG_ID,
+      { prompt: "Summarize it." },
+      { orgRole: "member", userId: "user_b" }
+    );
+
+    const steered = await service.get(automation.id, ORG_ID);
+    expect(steered?.runAsUserId).toBe("user_b");
+    expect(
+      (await db.getAutomationWebhookSecret(automation.id))?.createdByUserId
+    ).toBe("user_a");
+    expect(
+      await service.verifyWebhookSignature(
+        steered!,
+        new TextEncoder().encode("{}"),
+        signWebhook(secret, "{}")
+      )
+    ).toBe(false);
+
+    const renewed = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_b"
+    );
+
+    expect(
+      await service.verifyWebhookSignature(
+        (await service.get(automation.id, ORG_ID))!,
+        new TextEncoder().encode("{}"),
+        signWebhook(renewed, "{}")
+      )
+    ).toBe(true);
+  });
+
+  test("rejects a secret whose maker is not the person runs use", async () => {
+    const { automation, service } = await createWebhookFixture();
+
+    // End state of two rotations at once: B's secret wins, A's row save wins.
+    const secret = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_b"
+    );
+
+    await service.update(
+      automation.id,
+      ORG_ID,
+      { prompt: "Summarize it." },
+      { orgRole: "member", userId: "user_a" }
+    );
+
+    expect(
+      await service.verifyWebhookSignature(
+        (await service.get(automation.id, ORG_ID))!,
+        new TextEncoder().encode("{}"),
+        signWebhook(secret, "{}")
+      )
+    ).toBe(false);
+
+    const renewed = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_a"
+    );
+
+    expect(
+      await service.verifyWebhookSignature(
+        (await service.get(automation.id, ORG_ID))!,
+        new TextEncoder().encode("{}"),
+        signWebhook(renewed, "{}")
+      )
+    ).toBe(true);
+  });
+
+  test("keeps the secret valid after a rename by someone else", async () => {
+    const { automation, service } = await createWebhookFixture();
+
+    const secret = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_b"
+    );
+
+    await service.update(
+      automation.id,
+      ORG_ID,
+      { name: "Renamed" },
+      { orgRole: "member", userId: "user_c" }
+    );
+
+    expect(
+      await service.verifyWebhookSignature(
+        (await service.get(automation.id, ORG_ID))!,
+        new TextEncoder().encode("{}"),
+        signWebhook(secret, "{}")
+      )
+    ).toBe(true);
+  });
+
+  test("rejects a secret when no person is set, until a new secret", async () => {
+    const { automation, db, secrets, service } = await createWebhookFixture();
+    const bytes = new TextEncoder().encode("{}");
+    const old = "old-secret";
+
+    await db.putAutomationWebhookSecret({
+      automationId: automation.id,
+      createdAt: new Date().toISOString(),
+      createdByUserId: "user_a",
+      encryptedValue: secrets.encryptWebhookSecret(automation.id, old),
+    });
+
+    const stored = (await service.get(automation.id, ORG_ID))!;
+    expect(stored.runAsUserId).toBeFalsy();
+    expect(
+      await service.verifyWebhookSignature(
+        stored,
+        bytes,
+        signWebhook(old, "{}")
+      )
+    ).toBe(false);
+
+    const renewed = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_a"
+    );
+
+    expect(
+      await service.verifyWebhookSignature(
+        (await service.get(automation.id, ORG_ID))!,
+        bytes,
+        signWebhook(renewed, "{}")
+      )
+    ).toBe(true);
+  });
+
+  test("rejects the signature and logs when the secret cannot be decrypted", async () => {
+    const { automation, db, service } = await createWebhookFixture();
+
+    const secret = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_a"
+    );
+
+    const rekeyed = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+      secrets: new ManagedSecrets(db, Buffer.alloc(32, 9).toString("base64")),
+    });
+
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+
+    expect(
+      await rekeyed.verifyWebhookSignature(
+        (await service.get(automation.id, ORG_ID))!,
+        new TextEncoder().encode("{}"),
+        signWebhook(secret, "{}")
+      )
+    ).toBe(false);
+    expect(logged).toHaveBeenCalledTimes(1);
+    logged.mockRestore();
   });
 
   test("changes the row even when the secret delete fails", async () => {
-    const { automation, secrets, service } = await createWebhookFixture();
+    const { automation, db, service } = await createWebhookFixture();
     await service.createWebhookSecret(automation.id, ORG_ID, "user_a");
 
-    spyOn(secrets, "delete").mockRejectedValue(new Error("db down"));
+    spyOn(db, "deleteAutomationWebhookSecret").mockRejectedValue(
+      new Error("db down")
+    );
 
     const logged = spyOn(console, "error").mockImplementation(() => {});
 
@@ -2112,10 +2325,6 @@ describe("webhook automations", () => {
       "manual"
     );
     expect(logged).toHaveBeenCalledTimes(1);
-
-    expect(await service.delete(automation.id, ORG_ID)).toBe(true);
-    expect(await service.get(automation.id, ORG_ID)).toBeNull();
-    expect(logged).toHaveBeenCalledTimes(2);
     logged.mockRestore();
   });
 
@@ -2136,7 +2345,7 @@ describe("webhook automations", () => {
       service.update(automation.id, ORG_ID, { trigger: { type: "manual" } })
     ).rejects.toThrow("db down");
     save.mockRestore();
-    expect(await db.listManagedSecrets()).toHaveLength(1);
+    expect(await db.listAutomationWebhookSecrets()).toHaveLength(1);
 
     const kept = await service.get(automation.id, ORG_ID);
     expect(kept?.trigger.type).toBe("webhook");
@@ -2152,11 +2361,11 @@ describe("webhook automations", () => {
     await expect(service.delete(automation.id, ORG_ID)).rejects.toThrow(
       "db down"
     );
-    expect(await db.listManagedSecrets()).toHaveLength(1);
+    expect(await db.listAutomationWebhookSecrets()).toHaveLength(1);
   });
 
   test("a secret left behind by a failed delete stops working when the trigger returns to webhook", async () => {
-    const { automation, secrets, service } = await createWebhookFixture();
+    const { automation, db, service } = await createWebhookFixture();
     const body = "{}";
 
     const old = await service.createWebhookSecret(
@@ -2165,9 +2374,10 @@ describe("webhook automations", () => {
       "user_a"
     );
 
-    const remove = spyOn(secrets, "delete").mockRejectedValueOnce(
-      new Error("db down")
-    );
+    const remove = spyOn(
+      db,
+      "deleteAutomationWebhookSecret"
+    ).mockRejectedValueOnce(new Error("db down"));
 
     await service.update(automation.id, ORG_ID, {
       trigger: { type: "manual" },
@@ -2188,11 +2398,13 @@ describe("webhook automations", () => {
   });
 
   test("switching to webhook fails and keeps the trigger when the leftover secret cannot be deleted", async () => {
-    const { automation, secrets, service } = await createWebhookFixture({
+    const { automation, db, service } = await createWebhookFixture({
       trigger: "manual",
     });
 
-    spyOn(secrets, "delete").mockRejectedValueOnce(new Error("db down"));
+    spyOn(db, "deleteAutomationWebhookSecret").mockRejectedValueOnce(
+      new Error("db down")
+    );
 
     await expect(
       service.update(automation.id, ORG_ID, { trigger: { type: "webhook" } })
@@ -2208,20 +2420,35 @@ describe("webhook automations", () => {
 
     spyOn(db, "deleteAutomation").mockResolvedValueOnce(false);
     expect(await service.delete(automation.id, ORG_ID)).toBe(false);
-    expect(await db.listManagedSecrets()).toHaveLength(1);
+    expect(await db.listAutomationWebhookSecrets()).toHaveLength(1);
   });
 
-  test("a secret save that fails after the rebind leaves the new person bound", async () => {
+  test("a secret save that fails keeps the old person bound and the old secret valid", async () => {
     const { automation, db, service } = await createWebhookFixture();
-    await service.createWebhookSecret(automation.id, ORG_ID, "user_a");
 
-    spyOn(db, "putManagedSecret").mockRejectedValueOnce(new Error("db down"));
+    const oldSecret = await service.createWebhookSecret(
+      automation.id,
+      ORG_ID,
+      "user_a"
+    );
+
+    spyOn(db, "putAutomationWebhookSecret").mockRejectedValueOnce(
+      new Error("db down")
+    );
     await expect(
       service.createWebhookSecret(automation.id, ORG_ID, "user_b")
     ).rejects.toThrow("db down");
-    expect((await service.get(automation.id, ORG_ID))?.runAsUserId).toBe(
-      "user_b"
-    );
+
+    const unchanged = await service.get(automation.id, ORG_ID);
+    expect(unchanged?.runAsUserId).toBe("user_a");
+
+    expect(
+      await service.verifyWebhookSignature(
+        unchanged!,
+        new TextEncoder().encode("{}"),
+        signWebhook(oldSecret, "{}")
+      )
+    ).toBe(true);
   });
 
   test("switching to webhook or making a secret lends the actor's sign-ins", async () => {
@@ -2284,7 +2511,7 @@ describe("webhook automations", () => {
 
     expect(
       await service.verifyWebhookSignature(
-        automation,
+        (await service.get(automation.id, ORG_ID))!,
         new TextEncoder().encode("{}"),
         signWebhook(secret, "{}")
       )
@@ -2302,11 +2529,11 @@ describe("webhook automations", () => {
     const webhook = { deliveryId: "delivery-1", payload: "{}" };
 
     spyOn(service, "createRun").mockRejectedValueOnce(new Error("db down"));
-    await expect(
-      runner.startFromWebhook(automation.id, webhook)
-    ).rejects.toThrow("db down");
+    await expect(runner.startFromWebhook(automation, webhook)).rejects.toThrow(
+      "db down"
+    );
 
-    const retried = await runner.startFromWebhook(automation.id, webhook);
+    const retried = await runner.startFromWebhook(automation, webhook);
     expect("runId" in retried).toBe(true);
     await waitUntilIdle(runner, automation.id);
   });
@@ -2323,14 +2550,14 @@ describe("webhook automations", () => {
     await db.upsertProfile({ ...profile, automationsEnabled: false });
 
     const webhook = { deliveryId: "delivery-1", payload: "{}" };
-    const skipped = await runner.startFromWebhook(automation.id, webhook);
+    const skipped = await runner.startFromWebhook(automation, webhook);
 
     expect("skipped" in skipped && skipped.skipped).toBe(true);
     expect(await service.listRuns(automation.id)).toHaveLength(0);
 
     await db.upsertProfile({ ...profile, automationsEnabled: true });
 
-    const started = await runner.startFromWebhook(automation.id, webhook);
+    const started = await runner.startFromWebhook(automation, webhook);
 
     expect("runId" in started).toBe(true);
     await waitUntilIdle(runner, automation.id);
@@ -2345,11 +2572,11 @@ describe("webhook automations", () => {
     } as never);
 
     const results = await Promise.all([
-      runner.startFromWebhook(automation.id, {
+      runner.startFromWebhook(automation, {
         deliveryId: "delivery-1",
         payload: "{}",
       }),
-      runner.startFromWebhook(automation.id, {
+      runner.startFromWebhook(automation, {
         deliveryId: "delivery-2",
         payload: "{}",
       }),
@@ -2384,7 +2611,7 @@ describe("webhook automations", () => {
       },
     });
 
-    const started = await runner.startFromWebhook(automation.id, {
+    const started = await runner.startFromWebhook(automation, {
       deliveryId: "delivery-1",
       payload,
     });
@@ -2411,6 +2638,29 @@ describe("webhook automations", () => {
     expect(prompt.indexOf("Ignore all previous")).toBeGreaterThan(
       prompt.indexOf("<webhook-payload>")
     );
+    expect(run?.progress?.[0]?.content).toBe("Review the pull request.");
+    expect(JSON.stringify(run?.progress)).not.toContain("Ignore all previous");
+  });
+
+  test("keeps the payload out of a failed run's saved progress", async () => {
+    const { automation, service } = await createWebhookFixture();
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => {
+        throw new Error("provider down");
+      },
+    } as never);
+
+    await runner.startFromWebhook(automation, {
+      deliveryId: "delivery-1",
+      payload: JSON.stringify({ secret: "private-commit-message" }),
+    });
+    await waitUntilIdle(runner, automation.id);
+
+    const [run] = await service.listRuns(automation.id);
+    expect(run?.status).toBe("failed");
+    expect(JSON.stringify(run)).not.toContain("private-commit-message");
   });
 
   test("starts no second run for a repeated delivery id", async () => {
@@ -2424,11 +2674,11 @@ describe("webhook automations", () => {
     const webhook = { deliveryId: "delivery-1", payload: "{}" };
 
     expect(
-      "runId" in (await runner.startFromWebhook(automation.id, webhook))
+      "runId" in (await runner.startFromWebhook(automation, webhook))
     ).toBe(true);
     await waitUntilIdle(runner, automation.id);
 
-    const repeated = await runner.startFromWebhook(automation.id, webhook);
+    const repeated = await runner.startFromWebhook(automation, webhook);
     expect("skipped" in repeated && repeated.skipped).toBe(true);
     expect(await service.listRuns(automation.id)).toHaveLength(1);
   });
@@ -2442,12 +2692,12 @@ describe("webhook automations", () => {
       runAutomationPrompt: () => release.promise,
     } as never);
 
-    await runner.startFromWebhook(automation.id, {
+    await runner.startFromWebhook(automation, {
       deliveryId: "delivery-1",
       payload: "{}",
     });
 
-    const busy = await runner.startFromWebhook(automation.id, {
+    const busy = await runner.startFromWebhook(automation, {
       deliveryId: "delivery-2",
       payload: "{}",
     });
@@ -2457,7 +2707,7 @@ describe("webhook automations", () => {
     release.resolve("Reviewed");
     await waitUntilIdle(runner, automation.id);
 
-    const retried = await runner.startFromWebhook(automation.id, {
+    const retried = await runner.startFromWebhook(automation, {
       deliveryId: "delivery-2",
       payload: "{}",
     });
@@ -2475,9 +2725,11 @@ describe("webhook automations", () => {
       runAutomationPrompt: async () => "Reviewed",
     } as never);
 
-    await service.update(automation.id, ORG_ID, { enabled: false });
+    const disabled = await service.update(automation.id, ORG_ID, {
+      enabled: false,
+    });
 
-    const skipped = await runner.startFromWebhook(automation.id, {
+    const skipped = await runner.startFromWebhook(disabled, {
       deliveryId: "delivery-1",
       payload: "{}",
     });
@@ -2485,9 +2737,11 @@ describe("webhook automations", () => {
     expect("skipped" in skipped && skipped.skipped).toBe(true);
     expect(await service.listRuns(automation.id)).toHaveLength(0);
 
-    await service.update(automation.id, ORG_ID, { enabled: true });
+    const enabled = await service.update(automation.id, ORG_ID, {
+      enabled: true,
+    });
 
-    const started = await runner.startFromWebhook(automation.id, {
+    const started = await runner.startFromWebhook(enabled, {
       deliveryId: "delivery-1",
       payload: "{}",
     });

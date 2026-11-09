@@ -260,6 +260,19 @@ CREATE TABLE IF NOT EXISTS automation_webhook_deliveries (
 CREATE INDEX IF NOT EXISTS automation_webhook_deliveries_created_at
   ON automation_webhook_deliveries (created_at);
 
+-- One HMAC secret per webhook automation; it ends with its maker's access.
+CREATE TABLE IF NOT EXISTS automation_webhook_secrets (
+  automation_id TEXT PRIMARY KEY NOT NULL,
+  encrypted_value TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS automation_webhook_secrets_created_by_user_id
+  ON automation_webhook_secrets (created_by_user_id);
+
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,

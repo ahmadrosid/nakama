@@ -32,6 +32,7 @@ import type {
   StoredAutomationRecord,
   StoredAutomationRunRecord,
   StoredAutomationRunStepRecord,
+  StoredAutomationWebhookSecret,
   StoredBrowserSessionRecord,
   StoredComposioToolkitRecord,
   StoredComposioUserConnectionRecord,
@@ -743,6 +744,53 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "DELETE FROM managed_secrets WHERE scope = ? AND name = ?"
   );
 
+  const webhookSecretColumns =
+    "automation_id AS automationId, encrypted_value AS encryptedValue, created_by_user_id AS createdByUserId, created_at AS createdAt";
+
+  const getAutomationWebhookSecretStmt = db.prepare<
+    StoredAutomationWebhookSecret,
+    SQLQueryBindings[]
+  >(
+    `SELECT ${webhookSecretColumns} FROM automation_webhook_secrets WHERE automation_id = ?`
+  );
+
+  const listAutomationWebhookSecretsStmt = db.prepare<
+    StoredAutomationWebhookSecret,
+    SQLQueryBindings[]
+  >(`SELECT ${webhookSecretColumns} FROM automation_webhook_secrets`);
+
+  const putAutomationWebhookSecretStmt = db.prepare(`
+    INSERT INTO automation_webhook_secrets (
+      automation_id,
+      encrypted_value,
+      created_by_user_id,
+      created_at
+    )
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(automation_id) DO UPDATE SET
+      encrypted_value = excluded.encrypted_value,
+      created_by_user_id = excluded.created_by_user_id,
+      created_at = excluded.created_at
+  `);
+
+  const deleteAutomationWebhookSecretStmt = db.prepare(
+    "DELETE FROM automation_webhook_secrets WHERE automation_id = ?"
+  );
+
+  const deleteUserAutomationWebhookSecretsStmt = db.prepare(
+    "DELETE FROM automation_webhook_secrets WHERE created_by_user_id = ?"
+  );
+
+  const deleteUserOrgAutomationWebhookSecretsStmt = db.prepare(`
+    DELETE FROM automation_webhook_secrets
+    WHERE created_by_user_id = ?
+      AND automation_id IN (SELECT id FROM automations WHERE org_id = ?)
+  `);
+
+  const replaceAutomationWebhookSecretStmt = db.prepare(
+    "UPDATE automation_webhook_secrets SET encrypted_value = ? WHERE automation_id = ? AND encrypted_value = ?"
+  );
+
   const replaceManagedSecretStmt = db.prepare(
     "UPDATE managed_secrets SET encrypted_value = ?, version = version + 1 WHERE scope = ? AND name = ?"
   );
@@ -751,6 +799,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     (
       secrets: Array<
         Pick<StoredManagedSecret, "scope" | "name" | "encryptedValue">
+      >,
+      webhookSecrets: Array<
+        Pick<
+          StoredAutomationWebhookSecret,
+          "automationId" | "encryptedValue"
+        > & { previousEncryptedValue: string }
       >
     ) => {
       for (const secret of secrets) {
@@ -762,6 +816,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           ).changes !== 1
         ) {
           throw new Error("Managed secret changed during key rotation.");
+        }
+      }
+
+      for (const secret of webhookSecrets) {
+        if (
+          replaceAutomationWebhookSecretStmt.run(
+            secret.encryptedValue,
+            secret.automationId,
+            secret.previousEncryptedValue
+          ).changes !== 1
+        ) {
+          throw new Error("Webhook secret changed during key rotation.");
         }
       }
     }
@@ -2857,6 +2923,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       deleteErasedUserBrowserSessionsStmt.run(input.id);
       deleteErasedUserPasswordResetsStmt.run(input.id);
       deleteErasedUserComposioConnectionsStmt.run(input.id);
+      deleteUserAutomationWebhookSecretsStmt.run(input.id);
 
       return anonymizeErasedUserStmt.run(
         input.email,
@@ -3024,6 +3091,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       consumePasswordResetTokensForUserStmt.run(consumedAt, token.user_id);
       updateUserPasswordStmt.run(passwordHash, consumedAt, token.user_id);
       revokeBrowserSessionsForUserStmt.run(consumedAt, token.user_id);
+      deleteUserAutomationWebhookSecretsStmt.run(token.user_id);
 
       return token.user_id;
     }
@@ -4993,6 +5061,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return result.changes > 0;
     },
+    async deleteAutomationWebhookSecret(automationId) {
+      deleteAutomationWebhookSecretStmt.run(automationId);
+    },
+    async deleteAutomationWebhookSecretsForUser(userId, orgId) {
+      if (orgId) {
+        deleteUserOrgAutomationWebhookSecretsStmt.run(userId, orgId);
+      } else {
+        deleteUserAutomationWebhookSecretsStmt.run(userId);
+      }
+    },
 
     async deleteComposioToolkit(id) {
       const result = deleteComposioToolkitStmt.run(id);
@@ -5208,6 +5286,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
 
       return row?.read_through_at ?? null;
+    },
+
+    async getAutomationWebhookSecret(automationId) {
+      return getAutomationWebhookSecretStmt.get(automationId) ?? null;
     },
 
     async getBrowserSessionBySessionTokenHash(sessionTokenHash) {
@@ -5823,6 +5905,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toAutomationRecord(row));
     },
+    async listAutomationWebhookSecrets() {
+      return listAutomationWebhookSecretsStmt.all();
+    },
 
     async listBrowserSessionsForUser(userId, now) {
       const rows = listBrowserSessionsForUserStmt.all(userId, now);
@@ -5891,6 +5976,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toLlmUsageModelStatsRecord(row));
     },
+
     async listManagedSecrets() {
       // SAFETY: managed_secrets columns and its source constraint match this row type.
       const rows = listManagedSecretsStmt.all() as Array<{
@@ -6235,6 +6321,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async publishOrgSharedResource(record) {
       return publishOrgSharedResourceTransaction(record);
     },
+    async putAutomationWebhookSecret(secret) {
+      putAutomationWebhookSecretStmt.run(
+        secret.automationId,
+        secret.encryptedValue,
+        secret.createdByUserId,
+        secret.createdAt
+      );
+    },
     async putManagedSecret(secret) {
       putManagedSecretStmt.run(
         secret.scope,
@@ -6285,8 +6379,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return result.changes > 0;
     },
-    async replaceManagedSecrets(secrets) {
-      replaceManagedSecretsTransaction(secrets);
+    async replaceManagedSecrets(secrets, webhookSecrets) {
+      replaceManagedSecretsTransaction(secrets, webhookSecrets);
     },
 
     async replaceMessagesForSession(sessionId, messages) {

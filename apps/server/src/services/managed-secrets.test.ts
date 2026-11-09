@@ -48,6 +48,31 @@ describe("ManagedSecrets", () => {
     await expect(secrets.resolve("org-b", "tool:one")).rejects.toThrow();
   });
 
+  test("binds a webhook secret to its automation and checks it with the key", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const secrets = new ManagedSecrets(db, randomBytes(32).toString("base64"));
+    const encryptedValue = secrets.encryptWebhookSecret("auto_a", "hook");
+
+    expect(encryptedValue).not.toContain("hook");
+    expect(
+      secrets.decryptWebhookSecret({ automationId: "auto_a", encryptedValue })
+    ).toBe("hook");
+    expect(() =>
+      secrets.decryptWebhookSecret({ automationId: "auto_b", encryptedValue })
+    ).toThrow();
+
+    await db.putAutomationWebhookSecret({
+      automationId: "auto_a",
+      createdAt: new Date().toISOString(),
+      createdByUserId: "user_a",
+      encryptedValue,
+    });
+    await secrets.checkIntegrity();
+
+    const wrong = new ManagedSecrets(db, randomBytes(32).toString("base64"));
+    await expect(wrong.checkIntegrity()).rejects.toThrow();
+  });
+
   test("rotates every saved value before the old key stops working", async () => {
     const db = createInMemoryDatabaseAdapter();
     const oldKey = randomBytes(32).toString("base64");
@@ -55,8 +80,16 @@ describe("ManagedSecrets", () => {
     const oldSecrets = new ManagedSecrets(db, oldKey);
     await oldSecrets.save("global", "email", "first");
     await oldSecrets.save("org-a", "tool:one", "second");
+    await db.putAutomationWebhookSecret({
+      automationId: "auto_a",
+      createdAt: new Date().toISOString(),
+      createdByUserId: "user_a",
+      encryptedValue: oldSecrets.encryptWebhookSecret("auto_a", "third"),
+    });
     await oldSecrets.rotateKey(newKey);
     const newSecrets = new ManagedSecrets(db, newKey);
+    const webhookSecret = await db.getAutomationWebhookSecret("auto_a");
+    expect(newSecrets.decryptWebhookSecret(webhookSecret!)).toBe("third");
     expect((await newSecrets.resolve("global", "email")).value).toBe("first");
     expect((await newSecrets.resolve("org-a", "tool:one")).value).toBe(
       "second"
@@ -304,20 +337,5 @@ describe("ManagedSecrets", () => {
 
       await rm(root, { force: true, recursive: true });
     }
-  });
-
-  test("fingerprint ignores webhook secrets but sees other secrets", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const secrets = new ManagedSecrets(db, randomBytes(32).toString("base64"));
-
-    await secrets.save("global", "provider:one", "sk-one");
-    const before = await secrets.fingerprint();
-
-    await secrets.save("org_1", "automation-webhook:auto_1", "secret-a");
-    await secrets.save("org_1", "automation-webhook:auto_1", "secret-b");
-    expect(await secrets.fingerprint()).toBe(before);
-
-    await secrets.save("global", "provider:one", "sk-two");
-    expect(await secrets.fingerprint()).not.toBe(before);
   });
 });

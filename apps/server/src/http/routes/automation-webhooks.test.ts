@@ -56,9 +56,8 @@ function createWebhookFixture(
         providerConfigured: true,
         runAutomation: (id: string) => active.run(id),
         startAutomationFromWebhook: (
-          id: string,
-          webhook: Parameters<AutomationRunner["startFromWebhook"]>[1]
-        ) => active.startFromWebhook(id, webhook),
+          ...args: Parameters<AutomationRunner["startFromWebhook"]>
+        ) => active.startFromWebhook(...args),
       };
     },
     secrets: (db) =>
@@ -221,6 +220,7 @@ describe("automation webhook", () => {
     );
 
     const deliveryId = "delivery-1";
+    const runReads = spyOn(fixture.databaseAdapter, "listAutomationRuns");
 
     for (const options of [
       { signature: null },
@@ -233,6 +233,10 @@ describe("automation webhook", () => {
           .status
       ).toBe(401);
     }
+
+    // Unsigned callers must not trigger the run-history reads of `get`.
+    expect(runReads).not.toHaveBeenCalled();
+    runReads.mockRestore();
 
     expect(
       await fixture.automationService.listRuns(automation.id)
@@ -269,6 +273,7 @@ describe("automation webhook", () => {
     });
 
     expect((await postWebhook(fixture, "automation_missing")).status).toBe(401);
+    expect((await postWebhook(fixture, "%25")).status).toBe(401);
     expect((await postWebhook(fixture, manual.id)).status).toBe(401);
     expect((await postWebhook(fixture, noSecret.id)).status).toBe(401);
     expect(
@@ -369,6 +374,29 @@ describe("automation webhook", () => {
         })
       ).status
     ).toBe(401);
+    // GitHub defaults to form encoding; a ping must fail setup the same way
+    // real events would.
+    const form = "payload=%7B%7D";
+    expect(
+      (
+        await postWebhook(fixture, automation.id, {
+          body: form,
+          contentType: "application/x-www-form-urlencoded",
+          event: "ping",
+          secret,
+        })
+      ).status
+    ).toBe(415);
+    expect(
+      (
+        await postWebhook(fixture, automation.id, {
+          body: form,
+          contentType: "application/x-www-form-urlencoded",
+          event: "ping",
+          secret: "wrong",
+        })
+      ).status
+    ).toBe(401);
     expect(
       await fixture.automationService.listRuns(automation.id)
     ).toHaveLength(0);
@@ -450,6 +478,32 @@ describe("automation webhook", () => {
     expect(await real.json()).toEqual(await unknown.json());
   });
 
+  test("a secret whose maker no longer runs the automation gets 401", async () => {
+    const fixture = createWebhookFixture();
+    const automation = await seedWebhookAutomation(fixture, ORG_A);
+
+    const secret = await fixture.automationService.createWebhookSecret(
+      automation.id,
+      ORG_A,
+      "user_a"
+    );
+
+    await fixture.automationService.update(
+      automation.id,
+      ORG_A,
+      { prompt: "Summarize it." },
+      { orgRole: "member", userId: "user_b" }
+    );
+
+    const response = await postWebhook(fixture, automation.id, { secret });
+
+    expect(response.status).toBe(401);
+    expect(
+      await fixture.automationService.listRuns(automation.id, ORG_A)
+    ).toEqual([]);
+    expect(fixture.prompts).toEqual([]);
+  });
+
   test("a member creates a secret shown once for a webhook automation", async () => {
     const fixture = createWebhookFixture();
     const { orgId, session } = await loginMember(fixture);
@@ -511,6 +565,64 @@ describe("automation webhook", () => {
 
     const foreign = await seedWebhookAutomation(fixture, ORG_B);
     expect((await call(foreign.id)).status).toBe(404);
+    // `%25` decodes to `%`, which must not be decoded a second time.
+    expect((await call("%25")).status).toBe(404);
+  });
+
+  test("an id with a slash resolves on the public and the member route", async () => {
+    const fixture = createWebhookFixture();
+    const { orgId, session } = await loginMember(fixture);
+
+    const created = await fixture.automationService.create(
+      orgId,
+      {
+        description: "",
+        name: "PR review",
+        prompt: "Review the pull request.",
+        trigger: { type: "webhook" },
+      },
+      PROFILE_ID
+    );
+
+    const id = "automation/with slash";
+    const stored = await fixture.databaseAdapter.getAutomation(created.id);
+    await fixture.databaseAdapter.upsertAutomation({ ...stored!, id });
+    const encodedId = encodeURIComponent(id);
+
+    const secretResponse = await fixture.app.fetch(
+      new Request(
+        `http://localhost:4310/v1/automations/${encodedId}/webhook-secret`,
+        {
+          headers: {
+            "X-CSRF-Token": session.csrfToken,
+            ...session.headers(),
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(secretResponse.status).toBe(200);
+    // SAFETY: The 200 response body is `{ secret }` per the route contract.
+    const { secret } = (await secretResponse.json()) as { secret: string };
+
+    const body = '{"action":"opened"}';
+
+    const response = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${encodedId}/webhook`, {
+        body,
+        headers: {
+          "Content-Type": "application/json",
+          "X-GitHub-Delivery": crypto.randomUUID(),
+          "X-GitHub-Event": "pull_request",
+          "X-Hub-Signature-256": signWebhook(secret, body),
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(202);
+    await waitUntilIdle(fixture, id);
   });
 
   test("creating a secret without NAKAMA_SECRETS_KEY gets 400", async () => {

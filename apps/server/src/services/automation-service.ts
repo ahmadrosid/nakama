@@ -1,7 +1,7 @@
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   AutomationDeliveryStatus,
   AutomationRunRecord,
-  AutomationToolLimit,
   AutomationTrigger,
   AutomationUnreadSummary,
   CreateAutomationRequest,
@@ -12,42 +12,38 @@ import {
   computeAutomationNextRunAt,
   createId,
   DEFAULT_TIMEZONE,
-  isAutomationRunUnread,
   isWorkerSchedulable,
   NakamaApiError,
   normalizeAutomationDelivery,
   resolveScheduleTimezone,
+  resolveWebPublicUrl,
   summarizeAutomationUnreadCounts,
   validateAutomationDelivery,
   validateAutomationInput,
 } from "@nakama/core";
-import { canAccessSuperNakamaProfile } from "@nakama/core/profiles";
-import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import { type DatabaseAdapter, DatabaseAutomationStore } from "@nakama/db";
-import { z } from "zod";
 import {
-  deleteWebhookSecretOrLog,
-  saveNewWebhookSecret,
-  type WebhookSecretStore,
-  webhookSignatureMatches,
-} from "./automation-webhook-secrets";
-import { automationWebhookSecretName } from "./managed-secrets";
+  assertCanAutomateMailbox,
+  type ProfileAccess,
+  resolveProfileId,
+} from "./automation-profile-access";
+import {
+  automationBelongsToOrg,
+  normalizeToolLimit,
+  toRunRecord,
+} from "./automation-records";
+import type { ManagedSecrets } from "./managed-secrets";
 
-const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
-
-/**
- * Caller role context used to gate access to admin-only profiles (e.g. Super
- * Nakama). `userId` is the person saving, whose Composio sign-ins runs use.
- */
-export type ProfileAccess = Parameters<
-  typeof canAccessSuperNakamaProfile
->[0] & { userId?: string | null };
+const WEBHOOK_SIGNATURE_PATTERN = /^sha256=([0-9a-f]{64})$/;
 
 export interface AutomationServiceOptions {
   canSendEmail?: (profileId: string, orgId: string) => Promise<boolean>;
   getUserTimezone: () => Promise<string>;
   onChange?: () => void | Promise<void>;
-  secrets?: WebhookSecretStore;
+  secrets?: Pick<
+    ManagedSecrets,
+    "decryptWebhookSecret" | "encryptWebhookSecret"
+  >;
 }
 
 export class AutomationService {
@@ -144,7 +140,8 @@ export class AutomationService {
       trigger,
     });
 
-    const profileId = await this.resolveProfileId(
+    const profileId = await resolveProfileId(
+      this.db,
       orgId,
       profileIdOverride ?? input.profileId,
       access
@@ -244,7 +241,12 @@ export class AutomationService {
         throw new Error("Profile id is required.");
       }
 
-      profileId = await this.resolveProfileId(orgId, input.profileId, access);
+      profileId = await resolveProfileId(
+        this.db,
+        orgId,
+        input.profileId,
+        access
+      );
     }
 
     // Only the runner updates without `access`, to switch a runAt job off.
@@ -312,14 +314,19 @@ export class AutomationService {
 
     // Before the save: a failed delete keeps the row, so no old secret revives.
     if (existing.trigger.type !== "webhook" && trigger.type === "webhook") {
-      await this.secrets?.delete(orgId, automationWebhookSecretName(id));
+      await this.db.deleteAutomationWebhookSecret(id);
     }
 
     await this.store.save(updated);
 
     // After the save: a failed save keeps the secret.
+    // Runs after the row change, so it only logs. The next switch to webhook deletes a leftover.
     if (existing.trigger.type === "webhook" && trigger.type !== "webhook") {
-      await deleteWebhookSecretOrLog(this.secrets, updated);
+      try {
+        await this.db.deleteAutomationWebhookSecret(id);
+      } catch (error) {
+        console.error("Automation webhook secret could not be deleted:", error);
+      }
     }
 
     await this.notifyChange();
@@ -350,6 +357,35 @@ export class AutomationService {
       );
     }
 
+    const secret = randomBytes(32).toString("base64url");
+    let encryptedValue: string;
+
+    try {
+      encryptedValue = this.secrets.encryptWebhookSecret(id, secret);
+    } catch (error) {
+      // ManagedSecrets throws this exact copy when the key is unset.
+      if (
+        error instanceof Error &&
+        error.message.includes("NAKAMA_SECRETS_KEY")
+      ) {
+        throw new NakamaApiError(
+          `${error.message} Create a key with \`openssl rand -base64 32\`.`,
+          400
+        );
+      }
+
+      throw error;
+    }
+
+    // The maker holds the secret, so revoking their access deletes it.
+    await this.db.putAutomationWebhookSecret({
+      automationId: id,
+      createdAt: new Date().toISOString(),
+      createdByUserId: userId,
+      encryptedValue,
+    });
+
+    // Last, so a failed encrypt or put leaves the old maker bound to the old secret.
     if (automation.runAsUserId !== userId) {
       await this.store.save({
         ...automation,
@@ -359,18 +395,43 @@ export class AutomationService {
       });
     }
 
-    return saveNewWebhookSecret(this.secrets, orgId, id);
+    return secret;
   }
 
   /** Checks a GitHub-style `X-Hub-Signature-256` header against the raw body. */
-  verifyWebhookSignature(
+  async verifyWebhookSignature(
     automation: StoredAutomation,
     body: Uint8Array,
     header: string | undefined
   ): Promise<boolean> {
-    return this.secrets
-      ? webhookSignatureMatches(this.secrets, automation, body, header)
-      : Promise.resolve(false);
+    const match = WEBHOOK_SIGNATURE_PATTERN.exec(header ?? "");
+
+    if (!(match?.[1] && this.secrets)) {
+      return false;
+    }
+
+    const row = await this.db.getAutomationWebhookSecret(automation.id);
+
+    // Runs use runAsUserId's sign-ins, so only that person's secret may start one.
+    if (!row || row.createdByUserId !== automation.runAsUserId) {
+      return false;
+    }
+
+    let secret: string;
+
+    try {
+      secret = this.secrets.decryptWebhookSecret(row);
+    } catch (error) {
+      console.error("Automation webhook secret could not be read:", error);
+
+      return false;
+    }
+
+    const expected = createHmac("sha256", secret).update(body).digest();
+    const received = Buffer.from(match[1], "hex");
+
+    // The pattern fixes the length, so timingSafeEqual cannot throw here.
+    return timingSafeEqual(expected, received);
   }
 
   claimWebhookDelivery(
@@ -400,8 +461,8 @@ export class AutomationService {
 
     const deleted = await this.store.delete(id);
 
+    // The secret row goes with the automation (FK cascade).
     if (deleted) {
-      await deleteWebhookSecretOrLog(this.secrets, existing);
       await this.notifyChange();
     }
 
@@ -595,56 +656,11 @@ export class AutomationService {
     return computeAutomationNextRunAt(trigger, userTimezone);
   }
 
-  /** Automation turns may use the email tool, so only an admin may write, run or read one on a profile that has it. */
-  async assertCanAutomateMailbox(
+  assertCanAutomateMailbox(
     profileId: string,
     access?: ProfileAccess
   ): Promise<void> {
-    if (access?.isPlatformAdmin || access?.orgRole === "admin") {
-      return;
-    }
-
-    const tools = await this.db.listToolsForProfile(profileId);
-
-    if (tools.some((tool) => tool.id === BUILTIN_TOOL_IDS.email)) {
-      throw new NakamaApiError(
-        "Only org admins can automate an agent that has the email tool.",
-        403
-      );
-    }
-  }
-
-  private async resolveProfileId(
-    orgId: string,
-    profileId?: string,
-    access?: ProfileAccess
-  ): Promise<string> {
-    const trimmed = profileId?.trim();
-
-    if (trimmed) {
-      const profile = await this.db.getProfileForOrg(trimmed, orgId);
-
-      if (profile) {
-        if (profile.isSuper && !canAccessSuperNakamaProfile(access ?? {})) {
-          throw new NakamaApiError(
-            "Super Nakama is only available to org admins.",
-            403
-          );
-        }
-
-        return profile.id;
-      }
-
-      throw new Error("Profile not found.");
-    }
-
-    const defaultProfile = await this.db.getDefaultProfileForOrg(orgId);
-
-    if (!defaultProfile) {
-      throw new Error("No default profile exists for this organization.");
-    }
-
-    return defaultProfile.id;
+    return assertCanAutomateMailbox(this.db, profileId, access);
   }
 
   private async enrichAutomation(
@@ -653,6 +669,9 @@ export class AutomationService {
     const userTimezone = await this.getUserTimezone();
     const runs = await this.db.listAutomationRuns(automation.id, 1);
 
+    const publicUrl =
+      automation.trigger.type === "webhook" ? resolveWebPublicUrl() : undefined;
+
     return {
       ...automation,
       lastRunAt: runs[0]?.startedAt ?? null,
@@ -660,6 +679,9 @@ export class AutomationService {
       nextRunAt: isWorkerSchedulable(automation)
         ? this.computeNextRunAt(automation.trigger, userTimezone)
         : null,
+      ...(publicUrl && {
+        webhookUrl: `${publicUrl}/v1/automations/${encodeURIComponent(automation.id)}/webhook`,
+      }),
     };
   }
 
@@ -672,65 +694,4 @@ export class AutomationService {
   private async notifyChange(): Promise<void> {
     await this.onChange?.();
   }
-}
-
-function automationBelongsToOrg(
-  automation: StoredAutomation,
-  orgId: string
-): boolean {
-  return automation.orgId === orgId;
-}
-
-function toRunRecord(
-  run: {
-    id: string;
-    automationId: string;
-    status: AutomationRunRecord["status"];
-    startedAt: string;
-    completedAt: string | null;
-    output: string | null;
-    progress?: AutomationRunRecord["progress"];
-    error: string | null;
-    deliveryStatus?: string | null;
-    deliveryError?: string | null;
-    source?: "webhook" | null;
-  },
-  readThroughAt?: string | null
-): AutomationRunRecord {
-  const record: AutomationRunRecord = {
-    automationId: run.automationId,
-    completedAt: run.completedAt,
-    deliveryError: run.deliveryError ?? null,
-    deliveryStatus: DeliveryStatusSchema.parse(run.deliveryStatus) ?? null,
-    error: run.error,
-    id: run.id,
-    output: run.output,
-    progress: run.progress,
-    startedAt: run.startedAt,
-    status: run.status,
-  };
-
-  if (run.source === "webhook") {
-    record.source = "webhook";
-  }
-
-  if (readThroughAt !== undefined) {
-    record.read = !isAutomationRunUnread(record, readThroughAt);
-  }
-
-  return record;
-}
-
-function normalizeToolLimit(limit: AutomationToolLimit): AutomationToolLimit {
-  const clean = (ids: string[]) => [
-    ...new Set(ids.flatMap((id) => id.trim() || [])),
-  ];
-
-  return {
-    composioToolkits: clean(
-      limit.composioToolkits.map((slug) => slug.toLowerCase())
-    ),
-    mcpServerIds: clean(limit.mcpServerIds),
-    toolIds: clean(limit.toolIds),
-  };
 }

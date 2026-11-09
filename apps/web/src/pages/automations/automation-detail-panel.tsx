@@ -227,15 +227,23 @@ function CopyValue({ value }: { value: string }) {
   );
 }
 
-function WebhookCard({ automationId }: { automationId: string }) {
+function WebhookCard({
+  automationId,
+  webhookUrl,
+}: {
+  automationId: string;
+  webhookUrl?: string;
+}) {
   const createSecret = useCreateAutomationWebhookSecretMutation();
   const [secret, setSecret] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const url = buildNotificationWebhookUrl(
-    window.location.origin,
-    `/v1/automations/${encodeURIComponent(automationId)}/webhook`
-  );
+  const url =
+    webhookUrl ??
+    buildNotificationWebhookUrl(
+      window.location.origin,
+      `/v1/automations/${encodeURIComponent(automationId)}/webhook`
+    );
 
   async function handleCreate(): Promise<void> {
     try {
@@ -323,7 +331,10 @@ export function AutomationDetailPanel(state: DetailState) {
       />
 
       {selected.trigger.type === "webhook" ? (
-        <WebhookCard automationId={selected.id} />
+        <WebhookCard
+          automationId={selected.id}
+          webhookUrl={selected.webhookUrl}
+        />
       ) : null}
 
       <section className="space-y-4">

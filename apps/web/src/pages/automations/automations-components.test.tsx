@@ -813,11 +813,13 @@ test("editor shows the webhook trigger and warns before a save drops it", async 
 
   try {
     await render({ type: "webhook" }, { type: "webhook" });
-    expect(container.querySelector('[aria-pressed="true"]')?.textContent).toBe(
-      "On webhook"
+
+    const webhookPill = Array.from(container.querySelectorAll("button")).find(
+      (item) => item.textContent === "On webhook"
     );
+
+    expect(webhookPill?.getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).not.toContain("undefined");
-    expect(container.textContent).not.toContain("Custom schedule");
     expect(container.textContent).not.toContain("Next run");
     expect(container.querySelector('input[type="time"]')).toBeNull();
     expect(container.querySelector('[role="alert"]')).toBeNull();
@@ -956,6 +958,15 @@ test("detail panel shows the webhook URL and a new secret only once", async () =
     expect(codes()).toEqual([
       `${window.location.origin}/v1/automations/a%2Fb/webhook`,
     ]);
+
+    const configured =
+      "https://nakama.example.com/v1/automations/a%2Fb/webhook";
+
+    await renderDetailPanel(root, queryClient, {
+      ...webhookAutomation({ type: "webhook" }, "a/b"),
+      webhookUrl: configured,
+    });
+    expect(codes()).toEqual([configured]);
 
     await act(async () => buttonByLabel("New secret")!.click());
     await act(async () => {

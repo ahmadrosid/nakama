@@ -20,7 +20,6 @@ import {
   ensureBuiltinToolDefinitions,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
-import { ManagedSecrets } from "./managed-secrets";
 import { ProfileService } from "./profile-service";
 import { sessionHistoryArchivePath } from "./session-persistence";
 import { sessionTurnRegistry } from "./session-turn-registry";
@@ -32,17 +31,12 @@ const tinyPngBase64 =
 
 const ORG_ID = "org_test";
 
-async function seedWebhookSecrets(
+async function seedWebhookSecret(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,
   orgId: string,
   profileId: string
 ) {
   const now = new Date().toISOString();
-
-  const secrets = new ManagedSecrets(
-    db,
-    Buffer.alloc(32, 7).toString("base64")
-  );
 
   await db.upsertAutomation({
     createdAt: now,
@@ -55,16 +49,12 @@ async function seedWebhookSecrets(
     updatedAt: now,
     version: 1,
   });
-  await secrets.save(orgId, "automation-webhook:auto_webhook", "s3cret");
-  await secrets.save(orgId, "provider:keep", "sk-keep");
-
-  return db;
-}
-
-async function webhookSecretNames(
-  db: ReturnType<typeof createInMemoryDatabaseAdapter>
-) {
-  return (await db.listManagedSecrets()).map((secret) => secret.name);
+  await db.putAutomationWebhookSecret({
+    automationId: "auto_webhook",
+    createdAt: now,
+    createdByUserId: "user_maker",
+    encryptedValue: "enc",
+  });
 }
 
 const PYTHON_ECHO_TOOL = `import json
@@ -1339,11 +1329,8 @@ describe("profile service deleteProfile", () => {
     await mkdir(artifactDir, { recursive: true });
     await writeFile(path.join(artifactDir, "report.md"), "private data");
 
-    await seedWebhookSecrets(db, ORG_ID, removed.profile.id);
-
     await service.deleteProfile(ORG_ID, removed.profile.id);
 
-    expect(await webhookSecretNames(db)).toEqual(["provider:keep"]);
     expect(await db.getProfile(removed.profile.id)).toBeNull();
     await expect(access(removedDir)).rejects.toThrow();
     expect(
@@ -1864,7 +1851,7 @@ describe("profile organization transfer", () => {
     );
 
     await writeFile(path.join(sourceDir, "MEMORY.md"), "Remember me");
-    await seedWebhookSecrets(db, "source", profile.id);
+    await seedWebhookSecret(db, "source", profile.id);
     await db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
@@ -1878,7 +1865,7 @@ describe("profile organization transfer", () => {
     await service.moveProfile("source", profile.id, {
       organizationId: "destination",
     });
-    expect(await webhookSecretNames(db)).toEqual(["provider:keep"]);
+    expect(await db.listAutomationWebhookSecrets()).toEqual([]);
     expect(await db.getProfileForOrg(profile.id, "source")).toBeNull();
     expect((await db.getProfileForOrg(profile.id, "destination"))?.name).toBe(
       "Moving bot"
@@ -1890,6 +1877,37 @@ describe("profile organization transfer", () => {
     expect(await Bun.file(path.join(sourceDir, "MEMORY.md")).exists()).toBe(
       false
     );
+  });
+
+  test("a failed secret delete stops the move and keeps the profile in the source org", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+
+    for (const id of ["source", "destination"]) {
+      await db.upsertOrganization({
+        createdAt: now,
+        id,
+        name: id,
+        slug: id,
+        updatedAt: now,
+      });
+    }
+
+    const { profile } = await service.createProfile("source", {
+      name: "Moving bot",
+    });
+
+    await seedWebhookSecret(db, "source", profile.id);
+    db.deleteAutomationWebhookSecret = () =>
+      Promise.reject(new Error("delete failed"));
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toThrow();
+    expect(await db.getProfileForOrg(profile.id, "source")).not.toBeNull();
+    expect(await db.getProfileForOrg(profile.id, "destination")).toBeNull();
   });
 
   test("profile transfer preserves related data and rolls back database and files on failure", async () => {
