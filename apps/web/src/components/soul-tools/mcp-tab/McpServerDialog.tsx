@@ -54,6 +54,7 @@ function mcpServerDialogDescription({
 function McpServerDialogCreateForm({
   busy,
   className,
+  onImport,
   onOpenChange,
   showKindPicker = true,
   state,
@@ -62,6 +63,7 @@ function McpServerDialogCreateForm({
 }: {
   busy: boolean;
   className?: string;
+  onImport?: () => void;
   onOpenChange: (open: boolean) => void;
   showKindPicker?: boolean;
   state: McpServerDialogState;
@@ -123,15 +125,27 @@ function McpServerDialogCreateForm({
       />
 
       <DialogFooter className="gap-3 border-t-0 bg-transparent p-3 sm:justify-end">
-        <Button
-          className="sm:mr-auto"
-          disabled={state.formDisabled || !state.canSubmit}
-          onClick={() => void state.handleTestConnection()}
-          type="button"
-          variant="outline"
-        >
-          {state.testing ? <Spinner className="size-4" /> : "Test connection"}
-        </Button>
+        <div className="flex items-center gap-3 sm:mr-auto">
+          <Button
+            disabled={state.formDisabled || !state.canSubmit}
+            onClick={() => void state.handleTestConnection()}
+            type="button"
+            variant="outline"
+          >
+            {state.testing ? <Spinner className="size-4" /> : "Test connection"}
+          </Button>
+          {onImport ? (
+            <Button
+              className="px-0 underline"
+              disabled={state.formDisabled}
+              onClick={onImport}
+              type="button"
+              variant="link"
+            >
+              Import JSON
+            </Button>
+          ) : null}
+        </div>
         <Button
           disabled={state.formDisabled}
           onClick={() => onOpenChange(false)}
@@ -315,11 +329,11 @@ function McpCreateBody({
       <McpCustomConnection
         kind={state.kind}
         onBack={() => setView("apps")}
-        onImport={state.openImportDialog}
         onKindChange={state.selectKind}
       >
         <McpServerDialogCreateForm
           busy={busy}
+          onImport={state.openImportDialog}
           onOpenChange={onOpenChange}
           showKindPicker={false}
           state={state}
@@ -335,7 +349,7 @@ function McpCreateBody({
       onAssign={onAssign}
       onConnect={(item) => void connectApp(item)}
       onCustom={() => {
-        state.selectKind("signin");
+        state.selectKind("http");
         state.setName("");
         state.setUrl("");
         setView("custom");
