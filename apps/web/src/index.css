@@ -1492,6 +1492,72 @@
 .meet-page [data-tone="danger"] {
   --meet-tone: #dc2626;
 }
+.meet-provider {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in oklab, #d97706 35%, var(--border));
+  border-radius: 14px;
+}
+.meet-provider-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+.meet-provider-tabs button {
+  min-height: 40px;
+  padding: 0 12px;
+  margin-bottom: -1px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+.meet-provider-tabs button[aria-selected="true"] {
+  color: var(--foreground);
+  border-bottom-color: var(--foreground);
+}
+.meet-provider-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.meet-provider-error {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 14px;
+  color: var(--destructive);
+}
+.meet-provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.meet-provider-actions a {
+  margin-right: auto;
+  font-size: 14px;
+  color: var(--muted-foreground);
+  text-decoration: underline;
+}
+.meet-provider-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.meet-provider-model {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+}
 .meet-setup {
   display: flex;
   flex-wrap: wrap;

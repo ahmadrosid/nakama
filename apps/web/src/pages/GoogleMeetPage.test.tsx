@@ -4,7 +4,9 @@ import type {
   MeetActionInput,
   MeetActionResults,
   Meeting,
+  MeetOverview,
 } from "@nakama/core/google-meet";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -59,7 +61,10 @@ const auth = {
   user: { email: "admin@example.com", id: "admin", isPlatformAdmin: false },
 } as AuthContextValue;
 
-async function mountPage(recordings?: MeetActionResults["recordings"]) {
+async function mountPage(
+  recordings?: MeetActionResults["recordings"],
+  overview: () => Partial<MeetOverview> = () => ({})
+) {
   // SAFETY: each branch returns the result shape of the action it handles.
   const invoke = spyOn(client, "invokeGoogleMeet").mockImplementation(((
     action: MeetAction,
@@ -71,7 +76,11 @@ async function mountPage(recordings?: MeetActionResults["recordings"]) {
         captureProtocol: 1,
         configured: true,
         enabled: true,
+        liveReady: true,
         meetings,
+        transcription: null,
+        transcriptionError: null,
+        ...overview(),
       });
     }
 
@@ -105,11 +114,13 @@ async function mountPage(recordings?: MeetActionResults["recordings"]) {
 
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={["/google-meet"]}>
-        <AuthContext.Provider value={auth}>
-          <GoogleMeetPage />
-        </AuthContext.Provider>
-      </MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={["/google-meet"]}>
+          <AuthContext.Provider value={auth}>
+            <GoogleMeetPage />
+          </AuthContext.Provider>
+        </MemoryRouter>
+      </QueryClientProvider>
     );
     await Bun.sleep(20);
   });
@@ -238,4 +249,114 @@ test("recording picker imports the selected recording", async () => {
     "org-a",
     expect.anything()
   );
+});
+
+function button(container: HTMLElement, label: string) {
+  return [...container.querySelectorAll("button")].find(
+    (element) => element.textContent?.trim() === label
+  );
+}
+
+test("an admin connects OpenRouter from the page and sees it connected", async () => {
+  let connected = false;
+
+  const check = spyOn(client, "checkProviderKey").mockResolvedValue({
+    status: "ok",
+  });
+
+  // SAFETY: the page reads only the provider id from these responses.
+  const provider = {
+    id: "p-router",
+    label: "OpenRouter",
+    type: "openrouter",
+  } as Awaited<ReturnType<typeof client.createProvider>>["provider"];
+
+  const create = spyOn(client, "createProvider").mockResolvedValue({
+    defaultProviderId: "p-router",
+    initialModel: "",
+    provider,
+  });
+
+  // SAFETY: the page reads only the provider id from this response.
+  const secret = spyOn(client, "setProviderSecret").mockResolvedValue({
+    provider,
+  } as Awaited<ReturnType<typeof client.setProviderSecret>>);
+
+  const select = spyOn(client, "setTranscriptionSettings").mockImplementation(
+    async (model) => {
+      connected = true;
+
+      return { model };
+    }
+  );
+
+  cleanups.push(async () => {
+    for (const spy of [check, create, secret, select]) {
+      spy.mockRestore();
+    }
+  });
+
+  const { container } = await mountPage(undefined, () =>
+    connected
+      ? {
+          liveReady: false,
+          transcription: {
+            model: "google/gemini-2.5-flash",
+            type: "openrouter",
+          },
+        }
+      : { configured: false, liveReady: false }
+  );
+
+  await act(async () => button(container, "OpenRouter")?.click());
+  await type(
+    container.querySelector<HTMLInputElement>('input[type="password"]'),
+    "sk-or-v1-key"
+  );
+  await act(async () => {
+    button(container, "Save and test")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(check).toHaveBeenCalledWith({
+    apiKey: "sk-or-v1-key",
+    baseUrl: undefined,
+    type: "openrouter",
+  });
+  expect(create.mock.calls[0]?.[0]).toMatchObject({ type: "openrouter" });
+  expect(secret).toHaveBeenCalledWith("p-router", "sk-or-v1-key");
+  expect(select).toHaveBeenCalledWith("p-router::google/gemini-2.5-flash");
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+  expect(container.textContent).toContain("google/gemini-2.5-flash");
+  expect(button(container, "Change")).toBeDefined();
+});
+
+test("a rejected key stays on the form and adds no provider", async () => {
+  const check = spyOn(client, "checkProviderKey").mockResolvedValue({
+    status: "rejected",
+  });
+
+  const create = spyOn(client, "createProvider");
+
+  cleanups.push(async () => {
+    check.mockRestore();
+    create.mockRestore();
+  });
+
+  const { container } = await mountPage(undefined, () => ({
+    configured: false,
+  }));
+
+  await type(
+    container.querySelector<HTMLInputElement>('input[type="password"]'),
+    "sk-bad"
+  );
+  await act(async () => {
+    button(container, "Save and test")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  expect(create).not.toHaveBeenCalled();
+  expect(container.querySelector('input[type="password"]')).not.toBeNull();
 });

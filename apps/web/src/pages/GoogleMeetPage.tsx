@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Input,
   Switch,
 } from "@nakama/ui";
 import { buttonVariants } from "@nakama/ui/button-variants";
@@ -38,8 +39,13 @@ import {
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
+import {
+  useCreateProviderMutation,
+  useSaveTranscriptionSettings,
+} from "@/hooks/use-app-queries";
 import { isAllowedComposioRedirectUrl } from "@/hooks/use-composio";
 import { client, formatError } from "@/lib/client";
+import { encodeModelSelection } from "@/lib/models";
 
 type MeetCall = <Action extends MeetAction>(
   action: Action,
@@ -176,12 +182,10 @@ function useTranscriptSegments(
 
 function Settings({
   close,
-  configured,
   enabled: initialEnabled,
   call,
 }: {
   close(): void;
-  configured: boolean;
   enabled: boolean;
   call: MeetCall;
 }) {
@@ -231,13 +235,6 @@ function Settings({
               onCheckedChange={setEnabled}
             />
           </label>
-          {!configured && (
-            <p className="meet-status">
-              Add an OpenAI provider in{" "}
-              <a href="/settings/providers">AI Providers</a> to transcribe
-              meetings.
-            </p>
-          )}
           {error && <p role="alert">{error}</p>}
           <DialogFooter>
             <Button
@@ -595,7 +592,7 @@ function ConnectionStatus({
   let tone = "muted";
 
   if (!overview.configured) {
-    message = "Needs an OpenAI provider";
+    message = "Needs a provider";
     tone = "warning";
   } else if (!overview.enabled) {
     message = "Disabled";
@@ -1251,12 +1248,309 @@ function MeetingDeleteDialog({
   );
 }
 
+const TRANSCRIPTION_PROVIDERS = [
+  { label: "OpenAI", model: "whisper-1", type: "openai" },
+  { label: "OpenRouter", model: "google/gemini-2.5-flash", type: "openrouter" },
+  { label: "Self-hosted", model: "", type: "openai_compatible" },
+] as const;
+
+type TranscriptionProvider = (typeof TRANSCRIPTION_PROVIDERS)[number];
+
+const KEY_URLS: Partial<Record<TranscriptionProvider["type"], string>> = {
+  openai: "https://platform.openai.com/api-keys",
+  openrouter: "https://openrouter.ai/keys",
+};
+
+function providerLabel(type: string) {
+  return (
+    TRANSCRIPTION_PROVIDERS.find((provider) => provider.type === type)?.label ??
+    type
+  );
+}
+
+// Connects a provider for uploads and imports: checks the key, adds the
+// provider and makes it the workspace transcription model.
+function TranscriptionSetup({
+  onCancel,
+  onSaved,
+}: {
+  onCancel?: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [provider, setProvider] = React.useState<TranscriptionProvider>(
+    TRANSCRIPTION_PROVIDERS[0]
+  );
+
+  const [apiKey, setApiKey] = React.useState("");
+  const [baseUrl, setBaseUrl] = React.useState("");
+  const [model, setModel] = React.useState<string>(provider.model);
+  const [testing, setTesting] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const createProvider = useCreateProviderMutation();
+  const saveTranscription = useSaveTranscriptionSettings();
+  const custom = provider.type === "openai_compatible";
+  const keyUrl = KEY_URLS[provider.type];
+
+  const saving = React.useRef(false);
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+
+    if (saving.current) {
+      return;
+    }
+
+    saving.current = true;
+    setTesting(true);
+    setError("");
+
+    try {
+      const { status } = await client.checkProviderKey({
+        apiKey: apiKey.trim(),
+        baseUrl: custom ? baseUrl.trim() : undefined,
+        type: provider.type,
+      });
+
+      if (status === "rejected" || status === "needs-key") {
+        setError(`${provider.label} did not accept this key.`);
+
+        return;
+      }
+
+      if (status === "unreachable") {
+        setError(`Could not reach ${custom ? "this URL" : provider.label}.`);
+
+        return;
+      }
+
+      const created = await createProvider.mutateAsync({
+        apiKey: apiKey.trim() || undefined,
+        baseUrl: custom ? baseUrl.trim() : undefined,
+        type: provider.type,
+      });
+
+      await saveTranscription.mutateAsync(
+        encodeModelSelection(created.provider.id, model.trim())
+      );
+      await onSaved();
+    } catch (reason) {
+      setError(formatError(reason));
+    } finally {
+      saving.current = false;
+      setTesting(false);
+    }
+  }
+
+  return (
+    <section aria-label="Transcription provider" className="meet-provider">
+      <h2>Connect a transcription provider</h2>
+      <div aria-label="Provider" className="meet-provider-tabs" role="tablist">
+        {TRANSCRIPTION_PROVIDERS.map((option) => (
+          <button
+            aria-selected={option.type === provider.type}
+            disabled={testing}
+            key={option.type}
+            onClick={() => {
+              setProvider(option);
+              setModel(option.model);
+              setError("");
+            }}
+            role="tab"
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <form className="meet-form" onSubmit={save}>
+        {custom && (
+          <label>
+            Base URL
+            <Input
+              disabled={testing}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              placeholder="http://localhost:8000/v1"
+              required
+              type="url"
+              value={baseUrl}
+            />
+          </label>
+        )}
+        <div className="meet-provider-fields">
+          {provider.type !== "openai" && (
+            <label>
+              Model
+              <Input
+                disabled={testing}
+                onChange={(event) => setModel(event.target.value)}
+                placeholder="whisper-1"
+                required
+                value={model}
+              />
+            </label>
+          )}
+          <label>
+            {custom ? "API key (optional)" : "API key"}
+            <Input
+              aria-invalid={error ? true : undefined}
+              autoComplete="off"
+              disabled={testing}
+              onChange={(event) => {
+                setApiKey(event.target.value);
+                setError("");
+              }}
+              placeholder={provider.type === "openrouter" ? "sk-or-…" : "sk-…"}
+              required={!custom}
+              type="password"
+              value={apiKey}
+            />
+          </label>
+        </div>
+        {error && (
+          <p className="meet-provider-error" role="alert">
+            <AlertCircleIcon aria-hidden="true" size={16} />
+            {error}
+          </p>
+        )}
+        <div className="meet-provider-actions">
+          {keyUrl && (
+            <a href={keyUrl} rel="noreferrer" target="_blank">
+              Get a key
+            </a>
+          )}
+          {onCancel && (
+            <Button
+              disabled={testing}
+              onClick={onCancel}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+          )}
+          <Button aria-busy={testing} disabled={testing} type="submit">
+            {testing ? "Testing…" : "Save and test"}
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function TranscriptionConnected({
+  onChange,
+  overview,
+}: {
+  onChange?: () => void;
+  overview: Overview;
+}) {
+  // Installs set up before the provider picker transcribe with OpenAI Whisper.
+  const transcription = overview.transcription ?? {
+    model: "whisper-1",
+    type: "openai",
+  };
+
+  return (
+    <section aria-label="Transcription provider" className="meet-provider-row">
+      <div className="meet-setup-copy">
+        <strong>{providerLabel(transcription.type)}</strong>
+        <span className="meet-provider-model">{transcription.model}</span>
+      </div>
+      {onChange && (
+        <Button onClick={onChange} variant="outline">
+          Change
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function LiveCaptureSetup({ liveReady }: { liveReady: boolean }) {
+  return (
+    <section aria-label="Live capture setup" className="meet-setup">
+      <span aria-hidden="true" className="meet-setup-icon">
+        <Mic01Icon size={18} />
+      </span>
+      <div className="meet-setup-copy">
+        <strong>Record live calls</strong>
+        <span>
+          {liveReady
+            ? "Install the Chrome extension, then choose Connect this Nakama tab."
+            : "Live calls need an OpenAI key."}
+        </span>
+      </div>
+      <a
+        className={buttonVariants({ variant: "outline" })}
+        download
+        href="/google-meet-extension.zip"
+      >
+        <Download01Icon aria-hidden="true" size={16} />
+        Download extension
+      </a>
+    </section>
+  );
+}
+
+// Admins connect or change the provider; members only see what is set.
+function TranscriptionPanel({
+  onSaved,
+  overview,
+}: {
+  onSaved: () => Promise<void>;
+  overview: Overview;
+}) {
+  const [changing, setChanging] = React.useState(false);
+
+  if (overview.transcriptionError && !changing) {
+    return (
+      <div className="meet-provider-row">
+        <p className="meet-provider-error" role="alert">
+          <AlertCircleIcon aria-hidden="true" size={16} />
+          {overview.transcriptionError}
+        </p>
+        {overview.canConfigure && (
+          <Button onClick={() => setChanging(true)} variant="outline">
+            Change
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  if (overview.canConfigure && (changing || !overview.configured)) {
+    return (
+      <TranscriptionSetup
+        onCancel={overview.configured ? () => setChanging(false) : undefined}
+        onSaved={async () => {
+          await onSaved();
+          setChanging(false);
+        }}
+      />
+    );
+  }
+
+  if (!overview.configured) {
+    return (
+      <p className="meet-status">
+        Ask an admin to connect a transcription provider.
+      </p>
+    );
+  }
+
+  return (
+    <TranscriptionConnected
+      onChange={overview.canConfigure ? () => setChanging(true) : undefined}
+      overview={overview}
+    />
+  );
+}
+
 function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [error, setError] = React.useState("");
   const [extensionConnected, setExtensionConnected] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [settings, setSettings] = React.useState<boolean | null>(null);
+  const [settings, setSettings] = React.useState(false);
   const [deleting, setDeleting] = React.useState<Meeting | null>(null);
   const [selected, setSelected] = React.useState<Meeting | null>(null);
   const [uploading, setUploading] = React.useState(false);
@@ -1445,26 +1739,14 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
           )}
         </div>
       </header>
+      {overview && (
+        <TranscriptionPanel
+          onSaved={async () => setOverview(await call("meetings"))}
+          overview={overview}
+        />
+      )}
       {overview && !extensionConnected && (
-        <section aria-label="Live capture setup" className="meet-setup">
-          <span aria-hidden="true" className="meet-setup-icon">
-            <Mic01Icon size={18} />
-          </span>
-          <div className="meet-setup-copy">
-            <strong>Record live calls</strong>
-            <span>
-              Install the Chrome extension, then choose Connect this Nakama tab.
-            </span>
-          </div>
-          <a
-            className={buttonVariants({ variant: "outline" })}
-            download
-            href="/google-meet-extension.zip"
-          >
-            <Download01Icon aria-hidden="true" size={16} />
-            Download extension
-          </a>
-        </section>
+        <LiveCaptureSetup liveReady={overview.liveReady} />
       )}
       {error && <p role="alert">{error}</p>}
       {live.map((meeting) => (
@@ -1487,11 +1769,10 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       {recordingPicker && (
         <RecordingPicker call={call} close={() => setRecordingPicker(false)} />
       )}
-      {(settings ?? (overview?.canConfigure && !overview.configured)) && (
+      {settings && (
         <Settings
           call={call}
           close={() => setSettings(false)}
-          configured={overview?.configured === true}
           enabled={overview?.enabled !== false}
         />
       )}

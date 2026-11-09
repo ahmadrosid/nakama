@@ -360,8 +360,9 @@ test("built-in recording imports use the current member and cancel without savin
     "importMeetRecording"
   ).mockImplementation(async (_composio, input, signal) => {
     expect(input).toMatchObject({
-      apiKey: "test",
+      model: "whisper-1",
       orgId: "a",
+      provider: { apiKey: "test", type: "openai" },
       userId: "alice",
     });
     importing();

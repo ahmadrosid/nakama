@@ -20,6 +20,7 @@ import type { ComposioService } from "../composio-service";
 import { pluginActorFromContext } from "../tool-resolver";
 import {
   type MeetActionInput,
+  type MeetTranscriber,
   meetEnabled,
   meetingActionSchemas,
   run,
@@ -81,7 +82,8 @@ export class GoogleMeetService {
     private readonly composio?: Pick<
       ComposioService,
       "listMeetRecordings" | "downloadMeetRecording"
-    >
+    >,
+    private readonly transcriber?: () => Promise<MeetTranscriber | null>
   ) {
     if (!isAbsolute(configDir)) {
       throw new Error("Google Meet configDir must be absolute");
@@ -337,6 +339,7 @@ export class GoogleMeetService {
             cancelled,
           ]);
         },
+        transcriber: this.transcriber,
       });
 
       if (action === "upload" || action === "import-recording") {

@@ -69,9 +69,15 @@ export interface MeetImportProgress {
 export interface MeetOverview {
   canConfigure: boolean;
   captureProtocol: number;
+  /** Uploads and imports can be transcribed. */
   configured: boolean;
   enabled: boolean;
+  /** Live calls need an OpenAI key for speaker labels. */
+  liveReady: boolean;
   meetings: Meeting[];
+  /** The workspace transcription model, when one is set. */
+  transcription: { model: string; type: string } | null;
+  transcriptionError: string | null;
 }
 
 export interface MeetActionResults {
