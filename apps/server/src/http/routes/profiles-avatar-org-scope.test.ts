@@ -185,17 +185,10 @@ async function createPrivateProfileScenario() {
     slug: PRIVATE_ORG,
     updatedAt: now,
   });
-  await databaseAdapter.createUser({
-    createdAt: now,
+  await seedOrgMember(databaseAdapter, {
     email: "owner@example.com",
-    id: "user_owner",
-    passwordHash: await new AuthService().hashPassword(PASSWORD),
-    updatedAt: now,
-  });
-  await databaseAdapter.upsertOrgMember({
-    createdAt: now,
     orgId: PRIVATE_ORG,
-    role: "admin",
+    password: PASSWORD,
     userId: "user_owner",
   });
   await databaseAdapter.upsertProfile({
@@ -247,7 +240,7 @@ describe("GET /v1/profiles/:profileId/avatar enforces the profile read guard", (
     expect(response.status).toBe(403);
   });
 
-  test("returns 200 to the private profile owner", async () => {
+  test("returns 200 to the private profile owner as an org member", async () => {
     const { app } = await createPrivateProfileScenario();
 
     const owner = await loginUserSession(
