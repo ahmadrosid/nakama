@@ -151,7 +151,7 @@ export function SettingsModelSelect({
 }
 
 /** One picker with search, as in the chat picker. */
-function SettingsPicker({
+export function SettingsPicker({
   ariaLabel,
   disabled,
   emptyLabel,

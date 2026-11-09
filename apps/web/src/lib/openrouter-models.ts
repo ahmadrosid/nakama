@@ -27,6 +27,8 @@ export interface OpenRouterModelsApiResponse {
 }
 
 export interface OpenRouterModelRow {
+  /** Takes audio input, so it can transcribe. */
+  audio: boolean;
   contextLength: number;
   deprecated: boolean;
   description: string;
@@ -101,6 +103,7 @@ function normalizeOpenRouterModel(
   const perMillion = openRouterPricingPerMillion(entry.pricing);
 
   return {
+    audio: inputModalities.includes("audio"),
     contextLength: entry.context_length ?? 0,
     deprecated: isOpenRouterModelDeprecated(entry.expiration_date),
     description: truncateDescription(entry.description ?? ""),

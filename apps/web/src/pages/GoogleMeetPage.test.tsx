@@ -290,8 +290,34 @@ test("an admin connects OpenRouter from the page and sees it connected", async (
     }
   );
 
+  // Only models that take audio can transcribe.
+  const catalog = spyOn(client, "getExternalModelCatalog").mockResolvedValue({
+    data: [
+      {
+        architecture: { input_modalities: ["text"] },
+        id: "acme/text-only",
+        name: "Text only",
+      },
+      {
+        architecture: { input_modalities: ["text", "audio"] },
+        id: "openrouter/auto",
+        name: "Auto Router",
+      },
+      {
+        architecture: { input_modalities: ["text", "audio"] },
+        id: "google/gemini-3.5-flash:batch",
+        name: "Gemini batch",
+      },
+      {
+        architecture: { input_modalities: ["text", "audio"] },
+        id: "openai/gpt-4o-audio-preview",
+        name: "GPT-4o Audio",
+      },
+    ],
+  });
+
   cleanups.push(async () => {
-    for (const spy of [check, create, secret, select]) {
+    for (const spy of [catalog, check, create, secret, select]) {
       spy.mockRestore();
     }
   });
@@ -301,14 +327,17 @@ test("an admin connects OpenRouter from the page and sees it connected", async (
       ? {
           liveReady: false,
           transcription: {
-            model: "google/gemini-2.5-flash",
+            model: "openai/gpt-4o-audio-preview",
             type: "openrouter",
           },
         }
       : { configured: false, liveReady: false }
   );
 
-  await act(async () => button(container, "OpenRouter")?.click());
+  await act(async () => {
+    button(container, "OpenRouter")?.click();
+    await Bun.sleep(20);
+  });
   await type(
     container.querySelector<HTMLInputElement>('input[type="password"]'),
     "sk-or-v1-key"
@@ -325,9 +354,9 @@ test("an admin connects OpenRouter from the page and sees it connected", async (
   });
   expect(create.mock.calls[0]?.[0]).toMatchObject({ type: "openrouter" });
   expect(secret).toHaveBeenCalledWith("p-router", "sk-or-v1-key");
-  expect(select).toHaveBeenCalledWith("p-router::google/gemini-2.5-flash");
+  expect(select).toHaveBeenCalledWith("p-router::openai/gpt-4o-audio-preview");
   expect(container.querySelector('input[type="password"]')).toBeNull();
-  expect(container.textContent).toContain("google/gemini-2.5-flash");
+  expect(container.textContent).toContain("openai/gpt-4o-audio-preview");
   expect(button(container, "Change")).toBeDefined();
 });
 

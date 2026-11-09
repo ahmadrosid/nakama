@@ -22,6 +22,7 @@ import {
   Switch,
 } from "@nakama/ui";
 import { buttonVariants } from "@nakama/ui/button-variants";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
   ArrowRight01Icon,
@@ -38,6 +39,8 @@ import {
 } from "hugeicons-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
+import { openRouterModelsQueryOptions } from "@/components/OpenRouterModelsBrowseList";
+import { SettingsPicker } from "@/components/settings/settings-model-select";
 import { useAuth } from "@/context/use-auth";
 import {
   useCreateProviderMutation,
@@ -45,7 +48,11 @@ import {
 } from "@/hooks/use-app-queries";
 import { isAllowedComposioRedirectUrl } from "@/hooks/use-composio";
 import { client, formatError } from "@/lib/client";
-import { encodeModelSelection } from "@/lib/models";
+import {
+  encodeModelSelection,
+  TRANSCRIPTION_MODEL_OPTIONS,
+} from "@/lib/models";
+import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 
 type MeetCall = <Action extends MeetAction>(
   action: Action,
@@ -1261,11 +1268,91 @@ const KEY_URLS: Partial<Record<TranscriptionProvider["type"], string>> = {
   openrouter: "https://openrouter.ai/keys",
 };
 
+type ModelOption = { id: string; name: string };
+
+// Router entries may send audio to a text-only model, and batch copies
+// answer later, so neither can transcribe on request.
+function isOpenRouterTranscriber(row: OpenRouterModelRow) {
+  return (
+    row.audio &&
+    !row.deprecated &&
+    !row.id.startsWith("openrouter/") &&
+    !row.id.endsWith(":batch")
+  );
+}
+
+function ModelSelect({
+  disabled,
+  models,
+  onChange,
+  placeholder,
+  value,
+}: {
+  disabled: boolean;
+  models: readonly ModelOption[];
+  onChange: (model: string) => void;
+  placeholder: string;
+  value: string;
+}) {
+  const selected = models.find((model) => model.id === value);
+
+  return (
+    <div className="meet-provider-field">
+      <span>Model</span>
+      <SettingsPicker
+        ariaLabel="Model"
+        disabled={disabled || models.length === 0}
+        emptyLabel="No model found."
+        onValueChange={onChange}
+        options={models.map((model) => ({
+          label: model.name,
+          value: model.id,
+        }))}
+        searchPlaceholder="Search models…"
+        triggerLabel={selected?.name ?? placeholder}
+        value={value}
+      />
+    </div>
+  );
+}
+
 function providerLabel(type: string) {
   return (
     TRANSCRIPTION_PROVIDERS.find((provider) => provider.type === type)?.label ??
     type
   );
+}
+
+// OpenAI lists the allowed transcription models; OpenRouter loads the audio
+// models from its catalog. Self-hosted model names are typed, not listed.
+function useTranscriptionModels(
+  type: TranscriptionProvider["type"],
+  model: string
+) {
+  const openRouter = type === "openrouter";
+
+  const catalog = useQuery({
+    ...openRouterModelsQueryOptions,
+    enabled: openRouter,
+  });
+
+  const models: readonly ModelOption[] = openRouter
+    ? (catalog.data ?? []).filter(isOpenRouterTranscriber)
+    : TRANSCRIPTION_MODEL_OPTIONS;
+
+  // Keep the default when the list has it, else the first model.
+  const selectedModel =
+    type === "openai_compatible" || models.some(({ id }) => id === model)
+      ? model
+      : (models[0]?.id ?? "");
+
+  return {
+    catalogError:
+      openRouter && catalog.error ? formatError(catalog.error) : null,
+    loading: openRouter && catalog.isLoading,
+    models,
+    selectedModel,
+  };
 }
 
 // Connects a provider for uploads and imports: checks the key, adds the
@@ -1290,6 +1377,9 @@ function TranscriptionSetup({
   const saveTranscription = useSaveTranscriptionSettings();
   const custom = provider.type === "openai_compatible";
   const keyUrl = KEY_URLS[provider.type];
+
+  const { catalogError, loading, models, selectedModel } =
+    useTranscriptionModels(provider.type, model);
 
   const saving = React.useRef(false);
 
@@ -1327,13 +1417,13 @@ function TranscriptionSetup({
         apiKey: apiKey.trim() || undefined,
         baseUrl: custom ? baseUrl.trim() : undefined,
         // Self-hosted providers have no default name or model list.
-        customModels: custom ? [{ id: model.trim() }] : undefined,
+        customModels: custom ? [{ id: selectedModel.trim() }] : undefined,
         label: custom ? "Self-hosted transcription" : undefined,
         type: provider.type,
       });
 
       await saveTranscription.mutateAsync(
-        encodeModelSelection(created.provider.id, model.trim())
+        encodeModelSelection(created.provider.id, selectedModel.trim())
       );
       await onSaved();
     } catch (reason) {
@@ -1381,7 +1471,7 @@ function TranscriptionSetup({
           </label>
         )}
         <div className="meet-provider-fields">
-          {provider.type !== "openai" && (
+          {custom ? (
             <label>
               Model
               <Input
@@ -1392,6 +1482,14 @@ function TranscriptionSetup({
                 value={model}
               />
             </label>
+          ) : (
+            <ModelSelect
+              disabled={testing}
+              models={models}
+              onChange={setModel}
+              placeholder={loading ? "Loading models…" : "No models"}
+              value={selectedModel}
+            />
           )}
           <label>
             {custom ? "API key (optional)" : "API key"}
@@ -1410,6 +1508,12 @@ function TranscriptionSetup({
             />
           </label>
         </div>
+        {catalogError && (
+          <p className="meet-provider-error" role="alert">
+            <AlertCircleIcon aria-hidden="true" size={16} />
+            {catalogError}
+          </p>
+        )}
         {error && (
           <p className="meet-provider-error" role="alert">
             <AlertCircleIcon aria-hidden="true" size={16} />
@@ -1432,7 +1536,11 @@ function TranscriptionSetup({
               Cancel
             </Button>
           )}
-          <Button aria-busy={testing} disabled={testing} type="submit">
+          <Button
+            aria-busy={testing}
+            disabled={testing || !selectedModel.trim()}
+            type="submit"
+          >
             {testing ? "Testing…" : "Save and test"}
           </Button>
         </div>

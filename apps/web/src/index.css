@@ -1525,6 +1525,13 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
+.meet-provider-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
 .meet-provider-error {
   display: flex;
   gap: 8px;
