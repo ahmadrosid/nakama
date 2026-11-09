@@ -927,6 +927,28 @@ describe("published parent knowledge reads", () => {
     expect(anonymous.status).toBe(401);
   });
 
+  test("a plain member cannot read a root org publication", async () => {
+    const { db, profileService, read } = await setupPublishedKnowledge();
+    const now = new Date().toISOString();
+
+    const { document } =
+      await profileService.uploadOrganizationKnowledgeBaseDocument(
+        "org_other",
+        textDocument("Root bytes")
+      );
+
+    await db.publishOrgSharedResource({
+      createdAt: now,
+      id: "publication_root",
+      orgId: "org_other",
+      resourceId: document.id,
+      resourceKind: "knowledge",
+      updatedAt: now,
+    });
+
+    expect((await read("org_other", "publication_root")).status).toBe(404);
+  });
+
   test("parent admins read published documents in parent context with live publication checks", async () => {
     const { db, document, privateDocument, publication, read } =
       await setupPublishedKnowledge();
