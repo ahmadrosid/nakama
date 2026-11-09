@@ -402,8 +402,9 @@ export function McpAppPicker({
 }
 
 const SIGN_IN_CHOICES = [
-  { id: "signin", label: "Sign in with my account" },
-  { id: "http", label: "Use an API key" },
+  { id: "http", label: "API key" },
+  { id: "signin", label: "Sign in" },
+  { id: "stdio", label: "Command" },
 ] as const satisfies readonly { id: McpServerKind; label: string }[];
 
 export function McpCustomConnection({
@@ -424,55 +425,31 @@ export function McpCustomConnection({
       <BackButton onClick={onBack} />
       <DialogTitle className="text-xl">Add a custom connection</DialogTitle>
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 font-medium text-sm">
-          How does it sign in?
-        </legend>
-        <div className="grid gap-2 sm:grid-cols-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div
+          aria-label="How does it sign in?"
+          className="segmented-control min-w-0 flex-1"
+          role="tablist"
+        >
           {SIGN_IN_CHOICES.map((choice) => (
-            <label
-              className={cn(
-                "flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm",
-                kind === choice.id
-                  ? "border-primary bg-primary/5 font-medium"
-                  : "border-border"
-              )}
+            <button
+              aria-selected={kind === choice.id}
+              className="segmented-control-item"
+              data-active={kind === choice.id || undefined}
               key={choice.id}
+              onClick={() => onKindChange(choice.id)}
+              role="tab"
+              type="button"
             >
-              <input
-                checked={kind === choice.id}
-                className="size-4 accent-primary"
-                name="mcp-sign-in"
-                onChange={() => onKindChange(choice.id)}
-                type="radio"
-              />
               {choice.label}
-            </label>
+            </button>
           ))}
         </div>
-      </fieldset>
-
-      <details
-        className="text-muted-foreground text-sm"
-        open={kind === "stdio"}
-      >
-        <summary className="cursor-pointer py-1">For developers</summary>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Button
-            aria-pressed={kind === "stdio"}
-            onClick={() => onKindChange("stdio")}
-            size="sm"
-            type="button"
-            variant={kind === "stdio" ? "secondary" : "outline"}
-          >
-            Run a command
-          </Button>
-          <Button onClick={onImport} size="sm" type="button" variant="outline">
-            <CodeIcon aria-hidden />
-            Import JSON
-          </Button>
-        </div>
-      </details>
+        <Button onClick={onImport} size="sm" type="button" variant="ghost">
+          <CodeIcon aria-hidden />
+          Import JSON
+        </Button>
+      </div>
 
       {children}
     </div>
