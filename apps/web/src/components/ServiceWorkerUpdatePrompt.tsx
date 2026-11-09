@@ -1,5 +1,4 @@
 import { Button } from "@nakama/ui/button";
-import { RefreshIcon } from "hugeicons-react";
 import { useState } from "react";
 import { useServiceWorkerUpdate } from "@/hooks/use-service-worker-update";
 
@@ -35,14 +34,9 @@ export function ServiceWorkerUpdatePrompt() {
   return (
     <div
       aria-label="App update"
-      className="pointer-events-auto fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50 flex items-center gap-2 rounded-xl border border-border bg-card py-1.5 pr-1.5 pl-3 shadow-lg sm:inset-x-auto sm:right-4"
+      className="pointer-events-auto fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50 flex items-center gap-2 rounded-xl border border-border bg-card py-1.5 pr-1.5 pl-4 shadow-lg sm:inset-x-auto sm:right-4"
       role="status"
     >
-      <RefreshIcon
-        aria-hidden="true"
-        className="size-4 shrink-0 text-primary"
-        strokeWidth={1.75}
-      />
       <p className="min-w-0 flex-1 truncate text-foreground text-sm">
         {version ? `Nakama ${version} is ready.` : "A new version is ready."}
       </p>
