@@ -189,7 +189,8 @@ export function SettingsPicker({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-max min-w-72 max-w-[min(24rem,92vw)] p-0"
+        // A fixed width, so filtering the list does not resize it.
+        className="w-(--anchor-width) min-w-72 max-w-[min(24rem,92vw)] p-0"
         sideOffset={4}
       >
         <Command className="rounded-lg bg-transparent p-0">
