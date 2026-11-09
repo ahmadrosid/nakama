@@ -66,7 +66,6 @@ test("file card opens its preview and offers a separate download action", async 
         />
       )
     );
-    expect(element.textContent).toContain("Excel");
     await act(async () =>
       element
         .querySelector<HTMLButtonElement>('[aria-label="Preview report.xlsx"]')!
@@ -75,8 +74,14 @@ test("file card opens its preview and offers a separate download action", async 
     expect(previews).toBe(1);
     await act(async () =>
       element
+        .querySelector<HTMLButtonElement>('[aria-label="Open report.xlsx"]')!
+        .click()
+    );
+    expect(previews).toBe(2);
+    await act(async () =>
+      element
         .querySelector<HTMLButtonElement>(
-          '[aria-label="Open in: report.xlsx"]'
+          '[aria-label="More actions for report.xlsx"]'
         )!
         .click()
     );
@@ -88,7 +93,7 @@ test("file card opens its preview and offers a separate download action", async 
     expect(download).toBeDefined();
     await act(async () => download.click());
     expect(downloads).toBe(1);
-    expect(previews).toBe(1);
+    expect(previews).toBe(2);
   } finally {
     await act(async () => root.unmount());
     element.remove();
