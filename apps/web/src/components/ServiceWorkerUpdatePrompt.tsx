@@ -1,4 +1,5 @@
 import { Button } from "@nakama/ui/button";
+import { ArrowReloadHorizontalIcon } from "hugeicons-react";
 import { useState } from "react";
 import { useServiceWorkerUpdate } from "@/hooks/use-service-worker-update";
 
@@ -45,6 +46,11 @@ export function ServiceWorkerUpdatePrompt() {
           Later
         </Button>
         <Button onClick={applyUpdate} size="sm" type="button">
+          <ArrowReloadHorizontalIcon
+            aria-hidden="true"
+            className="size-4"
+            strokeWidth={1.75}
+          />
           Reload
         </Button>
       </div>
