@@ -46,10 +46,11 @@ test("recorded video becomes a Whisper transcript and temporary media is removed
     };
 
     const input = {
-      apiKey: "test-key",
       fileId: "drive_file_123",
       messageId: "msg_1",
+      model: "whisper-1",
       orgId: "org",
+      provider: { apiKey: "test-key", type: "openai" as const },
       userId: "member",
     };
 
