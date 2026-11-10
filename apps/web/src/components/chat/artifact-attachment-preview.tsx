@@ -169,42 +169,35 @@ function fileCardKind(
 /** Colors of the small preview tile, by kind of file. */
 const PREVIEW_TILE = {
   doc: {
-    badge: "bg-neutral-600",
     line: "bg-border",
     lineStrong: "bg-muted-foreground/40",
     page: "border-border",
     tile: "border-border bg-muted px-3 pt-1",
   },
   media: {
-    badge: "bg-neutral-600",
     tile: "items-center justify-center border-border bg-muted text-muted-foreground",
   },
   pdf: {
-    badge: "bg-orange-700",
     line: "bg-orange-200 dark:bg-orange-800",
     lineStrong: "bg-orange-300 dark:bg-orange-700",
     page: "border-orange-200 dark:border-orange-800",
     tile: "border-orange-100 bg-orange-50 px-3 pt-1 dark:border-orange-900 dark:bg-orange-950",
   },
   sheet: {
-    badge: "bg-emerald-700",
     tile: "grid grid-cols-4 grid-rows-3 border-emerald-200 bg-background dark:border-emerald-900",
   },
   web: {
-    badge: "bg-sky-700",
     tile: "items-end gap-0.5 border-sky-100 bg-sky-50 p-1 dark:border-sky-900 dark:bg-sky-950",
   },
 } as const;
 
 type PreviewTileKind = keyof typeof PREVIEW_TILE;
 
-/** A small sketch of the file's content, with its type badge. */
+/** A small sketch of the file's content. */
 function FilePreviewTile({
-  badge,
   Icon,
   kind,
 }: {
-  badge: string;
   Icon: ReturnType<typeof fileCardKind>["Icon"];
   kind: PreviewTileKind;
 }) {
@@ -252,19 +245,11 @@ function FilePreviewTile({
     <span
       aria-hidden
       className={cn(
-        "relative flex h-9 w-14 shrink-0 overflow-hidden rounded-md border",
+        "flex h-9 w-14 shrink-0 overflow-hidden rounded-md border",
         style.tile
       )}
     >
       {sketch}
-      <span
-        className={cn(
-          "absolute bottom-0.5 left-0.5 rounded-[2px] px-[3px] font-bold text-[8px] text-white leading-tight tracking-wide",
-          style.badge
-        )}
-      >
-        {badge}
-      </span>
     </span>
   );
 }
@@ -301,7 +286,7 @@ export function FilePreviewCard({
 
   const kind = kinds.find(([match]) => match)?.[1] ?? "doc";
 
-  const badge =
+  const type =
     extension && extension !== filename.toLowerCase()
       ? extension.toUpperCase().slice(0, 4)
       : label.toUpperCase();
@@ -319,7 +304,7 @@ export function FilePreviewCard({
         onClick={onOpen}
         type="button"
       >
-        <FilePreviewTile badge={badge} Icon={Icon} kind={kind} />
+        <FilePreviewTile Icon={Icon} kind={kind} />
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span
             className="min-w-0 truncate font-medium text-foreground text-sm"
@@ -328,7 +313,9 @@ export function FilePreviewCard({
             {filename}
           </span>
           <span className="shrink-0 text-muted-foreground text-xs">
-            {artifact.sizeBytes > 0 ? formatBytes(artifact.sizeBytes) : label}
+            {artifact.sizeBytes > 0
+              ? `${type} · ${formatBytes(artifact.sizeBytes)}`
+              : type}
           </span>
         </span>
       </button>
