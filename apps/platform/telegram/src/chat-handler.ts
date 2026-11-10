@@ -21,7 +21,10 @@ import {
   formatOrgSwitchConfirmation,
   prepareChannelOrgContext,
 } from "@nakama/core/channel-org";
-import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
+import type {
+  ChannelOpenQuestions,
+  ChannelSessionStore,
+} from "@nakama/core/channel-session-store";
 import { createTypingLoop } from "@nakama/core/channel-typing-loop";
 import type {
   AgentQuestionItem,
@@ -417,10 +420,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const chatId = String(ctx.chat?.id);
     const isGroup = isTelegramGroupChat(ctx);
     const conversationKey = resolveConversationKey(ctx, chatId, isGroup);
-    const tap = recordQuestionTap(conversationKey, data);
+    const tap = recordQuestionTap(sessionStore, conversationKey, data);
 
     if (!tap) {
-      await ctx.answerCallbackQuery({ text: QUESTION_CLOSED_REPLY });
+      await ctx.answerCallbackQuery({
+        show_alert: true,
+        text: QUESTION_CLOSED_REPLY,
+      });
       await ctx
         .editMessageReplyMarkup()
         .catch((error) =>
@@ -433,6 +439,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
+    await sessionStore.save();
     await ctx.answerCallbackQuery();
     await ctx
       .editMessageText(`${tap.questionText}\n\n✅ ${tap.answer}`)
@@ -675,7 +682,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     // The latest open question from the stream; an array so the callback write
     // keeps its type.
     const shownQuestions: AgentQuestionnaire[] = [];
-    openQuestionnaires.delete(conversationKey);
+
+    // A new turn closes buttons from the last one.
+    if (sessionStore.getOpenQuestions(conversationKey)) {
+      sessionStore.setOpenQuestions(conversationKey, undefined);
+      await sessionStore.save();
+    }
+
     const signal = registerActiveStream(conversationKey);
 
     try {
@@ -768,7 +781,12 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (questionnaire) {
-      await sendQuestionButtons(ctx, conversationKey, questionnaire);
+      await sendQuestionButtons(
+        ctx,
+        sessionStore,
+        conversationKey,
+        questionnaire
+      );
     }
 
     if (profileId) {
@@ -1235,10 +1253,9 @@ async function withChatLock(
   return chatLock.withLock(chatId, fn);
 }
 
-/** @internal Test helper — clears the in-process chat locks and open questions. */
+/** @internal Test helper — clears the in-process chat lock map. */
 export function resetChatLocksForTests(): void {
   chatLock.resetForTests();
-  openQuestionnaires.clear();
 }
 
 const DRAFT_FRAME_MS = 1000;
@@ -1380,47 +1397,29 @@ export function formatReplyDraft(text: string): {
     : { html: "", visible: "" };
 }
 
-const QUESTION_CLOSED_REPLY = "This question is closed.";
+const QUESTION_CLOSED_REPLY =
+  "This question is closed. Type your answer instead.";
 
 const QUESTION_TAP_PATTERN = /^aq:([0-9a-f]{8}):(\d{1,2}):(\d{1,2})$/;
 
-const MAX_OPEN_QUESTIONNAIRES = 500;
+const OPEN_QUESTIONS_TTL_MS = 24 * 60 * 60 * 1000;
 
-const OPEN_QUESTIONNAIRE_TTL_MS = 24 * 60 * 60 * 1000;
-
-interface OpenQuestionnaire {
-  answers: Map<number, string>;
-  createdAt: number;
-  questionnaire: AgentQuestionnaire;
-  token: string;
-}
-
-/** Questions waiting for button taps, by conversation. Lost on restart. */
-const openQuestionnaires = new Map<string, OpenQuestionnaire>();
-
+/** Saves the open questions with the chat session, so taps work after a restart. */
 async function sendQuestionButtons(
   ctx: Context,
+  sessionStore: ChannelSessionStore,
   conversationKey: string,
   questionnaire: AgentQuestionnaire
 ): Promise<void> {
   const token = randomUUID().slice(0, 8);
 
-  openQuestionnaires.set(conversationKey, {
-    answers: new Map(),
-    createdAt: Date.now(),
+  sessionStore.setOpenQuestions(conversationKey, {
+    answers: {},
+    createdAt: new Date().toISOString(),
     questionnaire,
     token,
   });
-
-  while (openQuestionnaires.size > MAX_OPEN_QUESTIONNAIRES) {
-    const oldest = openQuestionnaires.keys().next().value;
-
-    if (oldest === undefined) {
-      break;
-    }
-
-    openQuestionnaires.delete(oldest);
-  }
+  await sessionStore.save();
 
   for (const [questionIndex, question] of questionnaire.questions.entries()) {
     const keyboard = new InlineKeyboard();
@@ -1461,20 +1460,24 @@ function formatQuestionText(
   return lines.join("\n");
 }
 
-/** Saves one button tap. Returns null when the question is no longer open. */
+/**
+ * Records one button tap in the session store; the caller saves. Returns
+ * null when the question is no longer open.
+ */
 function recordQuestionTap(
+  sessionStore: ChannelSessionStore,
   conversationKey: string,
   data: string
 ): { answer: string; answersMessage?: string; questionText: string } | null {
   const match = QUESTION_TAP_PATTERN.exec(data);
-  const open = openQuestionnaires.get(conversationKey);
+  const open = sessionStore.getOpenQuestions(conversationKey);
 
   if (!(match && open && open.token === match[1])) {
     return null;
   }
 
-  if (Date.now() - open.createdAt > OPEN_QUESTIONNAIRE_TTL_MS) {
-    openQuestionnaires.delete(conversationKey);
+  if (Date.now() - Date.parse(open.createdAt) > OPEN_QUESTIONS_TTL_MS) {
+    sessionStore.setOpenQuestions(conversationKey, undefined);
 
     return null;
   }
@@ -1484,11 +1487,17 @@ function recordQuestionTap(
   const question = questions[questionIndex];
   const choice = question?.choices[Number(match[3])];
 
-  if (!(question && choice) || open.answers.has(questionIndex)) {
+  if (
+    !(question && choice) ||
+    open.answers[String(questionIndex)] !== undefined
+  ) {
     return null;
   }
 
-  open.answers.set(questionIndex, choice.label);
+  const answers: ChannelOpenQuestions["answers"] = {
+    ...open.answers,
+    [String(questionIndex)]: choice.label,
+  };
 
   const questionText = formatQuestionText(
     open.questionnaire,
@@ -1496,17 +1505,19 @@ function recordQuestionTap(
     questionIndex
   );
 
-  if (open.answers.size < questions.length) {
+  if (Object.keys(answers).length < questions.length) {
+    sessionStore.setOpenQuestions(conversationKey, { ...open, answers });
+
     return { answer: choice.label, questionText };
   }
 
-  openQuestionnaires.delete(conversationKey);
+  sessionStore.setOpenQuestions(conversationKey, undefined);
 
   return {
     answer: choice.label,
     answersMessage: formatAgentQuestionnaireAnswersMessage(
       questions.map((entry, index) => ({
-        answer: open.answers.get(index) ?? "",
+        answer: answers[String(index)] ?? "",
         prompt: entry.prompt,
         questionId: entry.id,
       }))

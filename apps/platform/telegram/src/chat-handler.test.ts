@@ -1231,7 +1231,70 @@ describe("createChatHandler security", () => {
       await handler(repeatTap.ctx);
 
       expect(calls.sendStream).toBe(2);
-      expect(repeatTap.callbackAnswers).toEqual(["This question is closed."]);
+      expect(repeatTap.callbackAnswers).toEqual([
+        "This question is closed. Type your answer instead.",
+      ]);
+    });
+  });
+
+  test("question buttons still work after the worker restarts", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const clientOptions = {
+        steps: [
+          {
+            questionnaire: BUDGET_QUESTIONNAIRE,
+            type: "questionnaire" as const,
+          },
+          { reply: "", type: "resolve" as const },
+        ],
+        streaming: true,
+      };
+
+      const before = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        clientOptions
+      );
+
+      const asked = createMessageContext({ text: "budget", userId: 4242 });
+
+      await before.handler(asked.ctx);
+
+      const firstTap = createMessageContext({
+        callbackData: buttonData(asked.replyOptions[0], 1),
+        userId: 4242,
+      });
+
+      await before.handler(firstTap.ctx);
+
+      resetChatLocksForTests();
+
+      const after = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        clientOptions
+      );
+
+      await after.sessionStore.load();
+
+      const secondTap = createMessageContext({
+        callbackData: buttonData(asked.replyOptions[1], 0),
+        userId: 4242,
+      });
+
+      await after.handler(secondTap.ctx);
+
+      expect(secondTap.edits.at(0)?.text).toContain("✅ Makan di luar");
+      expect(after.calls.sendStream).toBe(1);
+      expect(after.getLastStreamInput()).toMatchObject({
+        message:
+          "Answers\n\nQ: Target tabungan?\nA: 10%\n\nQ: Fokus kurangi apa?\nA: Makan di luar",
+      });
     });
   });
 
