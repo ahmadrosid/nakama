@@ -31,6 +31,7 @@ export const TEST_BOT_INFO: TelegramBotInfo = { id: 999, username: "mybot" };
 export interface MockMessageContext {
   callbackAnswers: Array<string | undefined>;
   ctx: Context;
+  drafts: Array<{ draftId: number; text: string }>;
   editOptions: Array<Parameters<Context["api"]["editMessageText"]>[3]>;
   edits: Array<{ chatId: number; messageId: number; text: string }>;
   replies: string[];
@@ -50,8 +51,10 @@ export function createMessageContext(options: {
   messageThreadId?: number;
   /** Makes this an inline button tap with this callback data. */
   callbackData?: string;
+  failDraft?: boolean;
 }): MockMessageContext {
   const callbackAnswers: Array<string | undefined> = [];
+  const drafts: Array<{ draftId: number; text: string }> = [];
   const replies: string[] = [];
   const replyOptions: Array<Parameters<Context["reply"]>[1]> = [];
   const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
@@ -127,6 +130,15 @@ export function createMessageContext(options: {
       return { message_id: nextMessageId++ };
     },
     replyWithChatAction: async () => {},
+    replyWithDraft: async (text: string, other: { draft_id: number }) => {
+      if (options.failDraft) {
+        throw new Error("Draft failed");
+      }
+
+      drafts.push({ draftId: other.draft_id, text });
+
+      return true;
+    },
   };
 
   // SAFETY: This test context implements only fields exercised by the channel tests.
@@ -135,6 +147,7 @@ export function createMessageContext(options: {
   return {
     callbackAnswers,
     ctx: typedContext,
+    drafts,
     editOptions,
     edits,
     replies,

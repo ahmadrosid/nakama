@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import { deliverTurnArtifactShares } from "@nakama/core";
 import {
@@ -58,7 +58,11 @@ import {
 import type { TelegramAuthStore } from "./auth-store";
 import { maybeSendRequestedTelegramArtifactAttachment } from "./channel-artifact-flow";
 import type { TelegramBridgeConfig } from "./config";
-import { HELP_TEXT, prepareTelegramReply } from "./format";
+import {
+  HELP_TEXT,
+  prepareTelegramFallbackReply,
+  prepareTelegramReply,
+} from "./format";
 import {
   explainGroupMessageHandling,
   isTelegramGroupChat,
@@ -665,6 +669,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     );
 
     const todoStatus = new TelegramTodoStatusMessage(telegram);
+    const draft = createReplyDraft(ctx);
     let reply = "";
     // The latest open question from the stream; an array so the callback write
     // keeps its type.
@@ -674,12 +679,14 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     try {
       typingLoop.start();
+      draft?.start();
 
       reply = await session.sendStream(
         input,
         {
           onChunk: (delta) => {
             reply += delta;
+            draft?.update(reply);
           },
           onQuestionnaireUpdated: (next) => {
             typingLoop.ping();
@@ -706,6 +713,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         { signal }
       );
 
+      await draft?.stop();
       await todoStatus.complete();
 
       if (signal.aborted) {
@@ -718,6 +726,8 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         return;
       }
     } catch (error) {
+      await draft?.stop();
+
       if (isAbortError(error)) {
         await todoStatus.stop();
 
@@ -737,6 +747,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     } finally {
       clearActiveStream(conversationKey, signal);
       typingLoop.stop();
+      await draft?.stop();
     }
 
     const questionnaire = shownQuestions.at(0);
@@ -1219,6 +1230,93 @@ async function withChatLock(
 export function resetChatLocksForTests(): void {
   chatLock.resetForTests();
   openQuestionnaires.clear();
+}
+
+const DRAFT_FRAME_MS = 1000;
+
+const DRAFT_KEEPALIVE_MS = 20_000;
+
+const MAX_DRAFT_CHARS = 4000;
+
+interface ReplyDraft {
+  start(): void;
+  /** Waits for a frame in flight, so no draft lands after the final message. */
+  stop(): Promise<void>;
+  update(text: string): void;
+}
+
+/**
+ * Live preview of the reply in a private chat (Bot API sendMessageDraft).
+ * Empty text shows "Thinking…". A draft expires after about 30 s, so it is
+ * sent again while the agent works. The final message replaces it.
+ */
+function createReplyDraft(ctx: Context): ReplyDraft | null {
+  if (ctx.chat?.type !== "private") {
+    return null;
+  }
+
+  const draftId = randomInt(1, 2 ** 31);
+  let text = "";
+  let sentText: string | null = null;
+  let lastSentAt = 0;
+  let enabled = true;
+  let inFlight: Promise<void> | null = null;
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  const flush = (force: boolean) => {
+    if (!enabled || inFlight || (!force && text === sentText)) {
+      return;
+    }
+
+    const next = text;
+
+    inFlight = ctx
+      .replyWithDraft(formatDraftText(next), { draft_id: draftId })
+      .then(() => {
+        sentText = next;
+        lastSentAt = Date.now();
+      })
+      .catch((error) => {
+        enabled = false;
+        console.warn(
+          "Telegram: reply draft failed; sending the final message only",
+          error
+        );
+      })
+      .finally(() => {
+        inFlight = null;
+      });
+  };
+
+  return {
+    start() {
+      flush(true);
+      timer = setInterval(() => {
+        flush(Date.now() - lastSentAt >= DRAFT_KEEPALIVE_MS);
+      }, DRAFT_FRAME_MS);
+    },
+    async stop() {
+      enabled = false;
+
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+
+      await inFlight;
+    },
+    update(next) {
+      text = next;
+    },
+  };
+}
+
+function formatDraftText(text: string): string {
+  const plain = text.trim() ? prepareTelegramFallbackReply(text) : "";
+
+  return plain.length > MAX_DRAFT_CHARS
+    ? `…${plain.slice(-MAX_DRAFT_CHARS)}`
+    : plain;
 }
 
 const QUESTION_CLOSED_REPLY = "This question is closed.";

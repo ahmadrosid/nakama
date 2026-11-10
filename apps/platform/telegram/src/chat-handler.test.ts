@@ -1268,6 +1268,100 @@ describe("createChatHandler security", () => {
     });
   });
 
+  test("streams the reply as a draft in a private chat, then sends the final message", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { getStreamControl, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        {
+          autoComplete: false,
+          steps: [{ delta: "Halo **dunia**", type: "chunk" }],
+          streaming: true,
+        }
+      );
+
+      const { ctx, drafts, replies } = createMessageContext({
+        text: "hello agent",
+        userId: 4242,
+      });
+
+      const handled = handler(ctx);
+
+      await waitForCondition(
+        () => drafts.some((draft) => draft.text === "Halo dunia"),
+        "Expected the streamed text in a draft"
+      );
+
+      getStreamControl()?.complete("Halo **dunia**");
+      await handled;
+
+      expect(drafts[0]?.text).toBe("");
+      expect(new Set(drafts.map((draft) => draft.draftId)).size).toBe(1);
+      expect(drafts[0]?.draftId).toBeGreaterThan(0);
+      expect(replies).toEqual(["Halo <b>dunia</b>"]);
+    });
+  });
+
+  test("does not send drafts in group chats", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { calls, handler } = await createTestHandler(homeDir, undefined, {
+        steps: [{ reply: "Group reply", type: "resolve" }],
+        streaming: true,
+      });
+
+      const { ctx, drafts } = createMessageContext({
+        chatId: -100_123,
+        chatType: "supergroup",
+        entities: [{ length: 6, offset: 0, type: "mention" }],
+        text: "@mybot hello",
+        userId: 4242,
+      });
+
+      await handler(ctx);
+
+      expect(calls.sendStream).toBe(1);
+      expect(drafts).toEqual([]);
+    });
+  });
+
+  test("still sends the final reply when drafts fail", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        {
+          steps: [{ reply: "Agent reply", type: "resolve" }],
+          streaming: true,
+        }
+      );
+
+      const { ctx, replies } = createMessageContext({
+        failDraft: true,
+        text: "hello agent",
+        userId: 4242,
+      });
+
+      await handler(ctx);
+
+      expect(replies).toEqual(["Agent reply"]);
+    });
+  });
+
   test("does not create a status message when no todo updates arrive", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
