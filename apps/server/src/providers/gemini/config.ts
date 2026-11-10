@@ -11,6 +11,7 @@ import type {
 } from "@nakama/core";
 import { z } from "zod";
 import {
+  dropEmptyEnumMembers,
   normalizeThinkingEffort,
   type ProviderJsonRecord,
   type ProviderJsonValue,
@@ -132,7 +133,7 @@ function sanitizeSchemaValue<Value>(value: Value): ProviderJsonValue {
 export function sanitizeGeminiToolParameters(
   parameters: LlmToolDefinition["parameters"]
 ): LlmToolDefinition["parameters"] {
-  const sanitized = sanitizeSchemaValue(parameters);
+  const sanitized = dropEmptyEnumMembers(sanitizeSchemaValue(parameters));
 
   // SAFETY: The input is the core-owned JSON Schema contract, sanitized recursively above.
   return sanitized as LlmToolDefinition["parameters"];

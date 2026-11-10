@@ -452,6 +452,57 @@ export function readRecord<Value>(value: Value): ProviderJsonRecord {
   return value as ProviderJsonRecord;
 }
 
+/**
+ * Gemini rejects a function-declaration enum with an empty or non-scalar member,
+ * and MCP servers publish such schemas. Drop those members before a provider
+ * sees the schema: an absent member still allows the request, while the empty
+ * one fails the whole turn.
+ */
+export function dropEmptyEnumMembers<Schema extends object>(
+  schema: Schema
+): Schema {
+  // SAFETY: The walker rebuilds the same JSON Schema shape it was given.
+  return sanitizeEnumMembers(readRecord(schema)) as Schema;
+}
+
+function sanitizeEnumMembers(value: ProviderJsonValue): ProviderJsonValue {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeEnumMembers);
+  }
+
+  if (!(value instanceof Object)) {
+    return value;
+  }
+
+  const sanitized: ProviderJsonRecord = {};
+
+  for (const [key, entry] of Object.entries(readRecord(value))) {
+    if (key === "enum" && Array.isArray(entry)) {
+      const members = entry.filter(isUsableEnumMember);
+
+      if (members.length > 0) {
+        sanitized.enum = members;
+      }
+
+      continue;
+    }
+
+    sanitized[key] = sanitizeEnumMembers(entry);
+  }
+
+  return sanitized;
+}
+
+const usableEnumMemberSchema = z.union([
+  z.string().min(1),
+  providerNumberSchema,
+  z.boolean(),
+]);
+
+function isUsableEnumMember(value: ProviderJsonValue): boolean {
+  return usableEnumMemberSchema.safeParse(value).success;
+}
+
 /** Defaults a missing effort to medium and lowers it to what the host and model accept. */
 export function normalizeThinkingEffort(
   effort: ThinkingEffort | undefined,

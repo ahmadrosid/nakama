@@ -138,3 +138,33 @@ describe("buildGeminiChatConfig tool sanitization", () => {
     });
   });
 });
+
+describe("sanitizeGeminiToolParameters enum members", () => {
+  test("drops empty enum members that Gemini rejects", () => {
+    expect(
+      sanitizeGeminiToolParameters({
+        properties: {
+          graduationStrategy: { enum: ["", "auto"], type: "string" },
+        },
+        type: "object",
+      })
+    ).toEqual({
+      properties: {
+        graduationStrategy: { enum: ["auto"], type: "string" },
+      },
+      type: "object",
+    });
+  });
+
+  test("drops an enum that only holds an empty string", () => {
+    expect(
+      sanitizeGeminiToolParameters({
+        properties: { mode: { enum: [""], type: "string" } },
+        type: "object",
+      })
+    ).toEqual({
+      properties: { mode: { type: "string" } },
+      type: "object",
+    });
+  });
+});
