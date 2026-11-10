@@ -21,7 +21,11 @@ import {
   UNSUPPORTED_MEDIA_REPLY,
 } from "./attachments";
 import { TelegramAuthStore } from "./auth-store";
-import { createChatHandler, resetChatLocksForTests } from "./chat-handler";
+import {
+  createChatHandler,
+  formatDraftHtml,
+  resetChatLocksForTests,
+} from "./chat-handler";
 import {
   createMessageContext,
   createMockClient,
@@ -1280,7 +1284,7 @@ describe("createChatHandler security", () => {
         { config: TEST_CONFIG },
         {
           autoComplete: false,
-          steps: [{ delta: "Halo **dunia**", type: "chunk" }],
+          steps: [{ delta: "Halo **dunia**\nlagi", type: "chunk" }],
           streaming: true,
         }
       );
@@ -1293,18 +1297,37 @@ describe("createChatHandler security", () => {
       const handled = handler(ctx);
 
       await waitForCondition(
-        () => drafts.some((draft) => draft.text === "Halo dunia"),
+        () => drafts.some((draft) => draft.text === "Halo <b>dunia</b>"),
         "Expected the streamed text in a draft"
       );
 
-      getStreamControl()?.complete("Halo **dunia**");
+      getStreamControl()?.complete("Halo **dunia**\nlagi");
       await handled;
 
       expect(drafts[0]?.text).toBe("");
       expect(new Set(drafts.map((draft) => draft.draftId)).size).toBe(1);
       expect(drafts[0]?.draftId).toBeGreaterThan(0);
-      expect(replies).toEqual(["Halo <b>dunia</b>"]);
+      expect(replies).toEqual(["Halo <b>dunia</b>\nlagi"]);
     });
+  });
+
+  test("draft text only grows, so Telegram never replays it from the top", () => {
+    const reply =
+      "## Langkah 1\n\nGaji **Rp10.000.000** per bulan.\n\n- Makan: *Rp3 juta*\n- Transport: `Rp1 juta`\n\n| Pos | Jumlah |\n|---|---|\n| Makan | 3 |\n\n```\ntotal = 5\n```\n\nSelesai.\n";
+
+    let shown = "";
+
+    for (let end = 1; end <= reply.length; end++) {
+      const visible = formatDraftHtml(reply.slice(0, end)).replace(
+        /<[^>]+>/g,
+        ""
+      );
+
+      expect(visible.startsWith(shown)).toBe(true);
+      shown = visible;
+    }
+
+    expect(shown).toContain("Selesai.");
   });
 
   test("does not send drafts in group chats", async () => {

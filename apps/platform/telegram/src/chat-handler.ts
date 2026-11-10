@@ -42,7 +42,10 @@ import {
   hasActiveHandshakeCode,
   looksLikePairingCode,
 } from "@nakama/core/telegram-config";
-import { splitTelegramRichChunks } from "@nakama/core/telegram-rich-text";
+import {
+  renderTelegramRichText,
+  splitTelegramRichChunks,
+} from "@nakama/core/telegram-rich-text";
 import { type Context, InlineKeyboard } from "grammy";
 import {
   buildTelegramDocumentInput,
@@ -58,11 +61,7 @@ import {
 import type { TelegramAuthStore } from "./auth-store";
 import { maybeSendRequestedTelegramArtifactAttachment } from "./channel-artifact-flow";
 import type { TelegramBridgeConfig } from "./config";
-import {
-  HELP_TEXT,
-  prepareTelegramFallbackReply,
-  prepareTelegramReply,
-} from "./format";
+import { HELP_TEXT, prepareTelegramReply } from "./format";
 import {
   explainGroupMessageHandling,
   isTelegramGroupChat,
@@ -670,6 +669,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     const todoStatus = new TelegramTodoStatusMessage(telegram);
     const draft = createReplyDraft(ctx);
+    let todoStatusShown = false;
     let reply = "";
     // The latest open question from the stream; an array so the callback write
     // keeps its type.
@@ -701,6 +701,14 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           },
           onTodosUpdated: (todos) => {
             typingLoop.ping();
+
+            // The first todo update sends the status message, which clears
+            // the draft; a new draft id shows it again without replaying it.
+            if (!todoStatusShown && todos.length > 0) {
+              todoStatusShown = true;
+              draft?.restart();
+            }
+
             void todoStatus.update(todos);
           },
           onToolEnd: () => {
@@ -1238,7 +1246,11 @@ const DRAFT_KEEPALIVE_MS = 20_000;
 
 const MAX_DRAFT_CHARS = 4000;
 
+const HTML_TAG = /<[^>]+>/g;
+
 interface ReplyDraft {
+  /** Call after the bot sends a message: Telegram clears the draft then. */
+  restart(): void;
   start(): void;
   /** Waits for a frame in flight, so no draft lands after the final message. */
   stop(): Promise<void>;
@@ -1255,25 +1267,21 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
     return null;
   }
 
-  const draftId = randomInt(1, 2 ** 31);
+  let draftId = randomInt(1, 2 ** 31);
   let text = "";
-  let sentText: string | null = null;
+  let sentHtml: string | null = null;
+  let sentVisible = "";
   let lastSentAt = 0;
   let enabled = true;
   let inFlight: Promise<void> | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  const flush = (force: boolean) => {
-    if (!enabled || inFlight || (!force && text === sentText)) {
-      return;
-    }
-
-    const next = text;
-
+  const send = (html: string) => {
     inFlight = ctx
-      .replyWithDraft(formatDraftText(next), { draft_id: draftId })
+      .replyWithDraft(html, { draft_id: draftId, parse_mode: "HTML" })
       .then(() => {
-        sentText = next;
+        sentHtml = html;
+        sentVisible = html.replace(HTML_TAG, "");
         lastSentAt = Date.now();
       })
       .catch((error) => {
@@ -1288,12 +1296,36 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
       });
   };
 
+  const flush = () => {
+    if (!enabled || inFlight) {
+      return;
+    }
+
+    const html = formatDraftHtml(text);
+    const visible = html.replace(HTML_TAG, "");
+
+    // Telegram animates a draft from the top when shown text changes, so a
+    // frame may only add text after what is already shown.
+    const grows =
+      html !== sentHtml &&
+      visible.startsWith(sentVisible) &&
+      visible.length <= MAX_DRAFT_CHARS;
+
+    if (grows) {
+      send(html);
+    } else if (Date.now() - lastSentAt >= DRAFT_KEEPALIVE_MS) {
+      send(sentHtml ?? "");
+    }
+  };
+
   return {
+    restart() {
+      draftId = randomInt(1, 2 ** 31);
+      lastSentAt = 0;
+    },
     start() {
-      flush(true);
-      timer = setInterval(() => {
-        flush(Date.now() - lastSentAt >= DRAFT_KEEPALIVE_MS);
-      }, DRAFT_FRAME_MS);
+      flush();
+      timer = setInterval(flush, DRAFT_FRAME_MS);
     },
     async stop() {
       enabled = false;
@@ -1311,12 +1343,32 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
   };
 }
 
-function formatDraftText(text: string): string {
-  const plain = text.trim() ? prepareTelegramFallbackReply(text) : "";
+/**
+ * The reply as rich HTML, cut to the part that will not change: complete
+ * lines, no open code block, no table still being written.
+ */
+export function formatDraftHtml(text: string): string {
+  const lines = text.slice(0, Math.max(0, text.lastIndexOf("\n"))).split("\n");
 
-  return plain.length > MAX_DRAFT_CHARS
-    ? `…${plain.slice(-MAX_DRAFT_CHARS)}`
-    : plain;
+  const fenceCount = lines.filter((line) =>
+    line.trimStart().startsWith("```")
+  ).length;
+
+  if (fenceCount % 2 === 1) {
+    const openFence = lines.findLastIndex((line) =>
+      line.trimStart().startsWith("```")
+    );
+
+    lines.length = openFence;
+  }
+
+  while (lines.at(-1)?.trimStart().startsWith("|")) {
+    lines.pop();
+  }
+
+  const stable = lines.join("\n").trim();
+
+  return stable ? renderTelegramRichText(stable) : "";
 }
 
 const QUESTION_CLOSED_REPLY = "This question is closed.";
