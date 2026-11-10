@@ -19,6 +19,7 @@ const DEFAULT_PROVIDER_LABEL = "Anthropic";
 export interface AnthropicProviderOptions {
   apiKey: string;
   baseUrl?: string;
+  defaultHeaders?: Record<string, string>;
   /** Injected in tests to mock HTTP without touching global fetch. */
   fetch?: typeof fetch;
   model?: string;
@@ -29,10 +30,12 @@ export interface AnthropicProviderOptions {
 function createAnthropicClient(
   apiKey: string,
   baseUrl?: string,
-  fetchImpl?: typeof fetch
+  fetchImpl?: typeof fetch,
+  defaultHeaders?: Record<string, string>
 ): Anthropic {
   const options: ConstructorParameters<typeof Anthropic>[0] = {
     apiKey,
+    defaultHeaders,
     fetch: fetchImpl ?? fetchWithoutIdleTimeout,
   };
 
@@ -79,7 +82,8 @@ export function createAnthropicProvider(
   const client = createAnthropicClient(
     options.apiKey,
     options.baseUrl,
-    options.fetch
+    options.fetch,
+    options.defaultHeaders
   );
 
   const name: ProviderName = options.providerName ?? "anthropic";

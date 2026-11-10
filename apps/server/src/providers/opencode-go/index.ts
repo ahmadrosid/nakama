@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   GenerateChatInput,
   GenerateTextInput,
@@ -23,7 +24,26 @@ const MESSAGES_MODELS = new Set([
 
 export interface OpenCodeGoProviderOptions {
   apiKey: string;
+  baseUrl?: string;
+  extraHeaders?: Record<string, string>;
   model?: string;
+  sessionId?: string;
+}
+
+export function formatOpenCodeSessionId(sessionId?: string): string {
+  if (!sessionId?.trim()) {
+    return `ses_${randomUUID().replace(/-/g, "")}`;
+  }
+
+  const trimmed = sessionId.trim();
+
+  if (trimmed.startsWith("ses_")) {
+    return trimmed;
+  }
+
+  const sanitized = trimmed.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+  return `ses_${sanitized}`;
 }
 
 export function createOpenCodeGoProvider(
@@ -32,10 +52,23 @@ export function createOpenCodeGoProvider(
   const model = options.model ?? "opencode-go/kimi-k2.7-code";
   const useMessages = MESSAGES_MODELS.has(model);
 
+  const explicitSession =
+    options.sessionId ??
+    options.extraHeaders?.["x-opencode-session"] ??
+    options.extraHeaders?.["X-OpenCode-Session"];
+
+  const sessionId = formatOpenCodeSessionId(explicitSession);
+
+  const extraHeaders = {
+    ...options.extraHeaders,
+    "x-opencode-session": sessionId,
+  };
+
   if (useMessages) {
     const anthropic = createAnthropicProvider({
       apiKey: options.apiKey,
-      baseUrl: OPENCODE_GO_MESSAGES_BASE_URL,
+      baseUrl: options.baseUrl ?? OPENCODE_GO_MESSAGES_BASE_URL,
+      defaultHeaders: extraHeaders,
       model,
       providerLabel: "OpenCode Go",
       providerName: "opencode_go",
@@ -56,7 +89,8 @@ export function createOpenCodeGoProvider(
 
   return createOpenAIProvider({
     apiKey: options.apiKey,
-    baseUrl: OPENCODE_GO_CHAT_BASE_URL,
+    baseUrl: options.baseUrl ?? OPENCODE_GO_CHAT_BASE_URL,
+    extraHeaders,
     model,
     providerName: "opencode_go",
   });

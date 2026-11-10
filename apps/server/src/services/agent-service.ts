@@ -6623,7 +6623,8 @@ export class AgentService {
       {
         ...workspaceThinking,
         effort: record.thinkingEffort ?? workspaceThinking.effort,
-      }
+      },
+      sessionId
     );
 
     // Part of the "no tools" contract: session-history and channel-artifact
@@ -6757,6 +6758,7 @@ export class AgentService {
               this.persistXaiOAuth(instanceId, oauth),
             resolveInstance: (instanceId) =>
               findProviderInstance(this.userConfig, instanceId),
+            sessionId,
           }
         );
 
@@ -7162,7 +7164,8 @@ export class AgentService {
     userId?: string | null,
     acpSessionKey?: string,
     acpTools?: { context: ToolContext; tools: ToolDefinition[] },
-    thinking: ThinkingSettings = this.resolveWorkspaceThinkingDefaults()
+    thinking: ThinkingSettings = this.resolveWorkspaceThinkingDefaults(),
+    sessionId?: string
   ): AgentDependencies {
     if (profile.acpAgent && profile.orgId) {
       const sessionKey = acpSessionKey ?? `${profile.id}:${randomUUID()}`;
@@ -7218,6 +7221,7 @@ export class AgentService {
           this.persistXaiOAuth(instanceId, oauth),
         resolveInstance: (instanceId) =>
           findProviderInstance(this.userConfig, instanceId),
+        sessionId: sessionId ?? acpSessionKey,
       }
     );
 

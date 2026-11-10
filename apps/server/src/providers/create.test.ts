@@ -496,4 +496,50 @@ describe("createProviderForInstance routing", () => {
       mock.stop(true);
     }
   });
+
+  test("routes opencode_go instances with session ID header", async () => {
+    let seenSession = "";
+
+    const mock = Bun.serve({
+      fetch(req) {
+        seenSession = req.headers.get("x-opencode-session") ?? "";
+
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "OK" } }],
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        );
+      },
+      port: 0,
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "test-key",
+        baseUrl: `http://127.0.0.1:${mock.port}`,
+        createdAt: new Date().toISOString(),
+        id: "inst_opencode_go",
+        label: "OpenCode Go",
+        type: "opencode_go",
+      };
+
+      const client = createProviderForInstance(
+        instance,
+        "opencode-go/kimi-k2.7-code",
+        process.env,
+        { sessionId: "org_1:session_456" }
+      );
+
+      await client!.generateChat({
+        messages: [{ content: "Hello", role: "user" }],
+        system: "Be concise.",
+      });
+
+      expect(client?.name).toBe("opencode_go");
+      expect(seenSession).toBe("ses_org_1_session_456");
+    } finally {
+      mock.stop(true);
+    }
+  });
 });
