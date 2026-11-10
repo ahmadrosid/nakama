@@ -26,8 +26,13 @@ import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import type { AgentActivity } from "@/components/moodstone";
+import {
+  canUseRegressionCases,
+  SaveRegressionCaseDialog,
+} from "@/components/regression-cases";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
 import {
@@ -447,6 +452,13 @@ function ChatConversation({
     session?.id ?? "new"
   );
 
+  const { activeOrg } = useAuth();
+  const [caseExpected, setCaseExpected] = useState<string | null>(null);
+
+  // Cognito chats are never stored, so there is no run to save.
+  const canSaveCase =
+    canUseRegressionCases(activeOrg?.role) && session != null && !cognito;
+
   // Cognito chats are not kept, so neither is their open panel.
   const rememberId = session && !cognito ? session.id : undefined;
   const modelLabel = renderModelLabel(currentModelSelection);
@@ -530,6 +542,7 @@ function ChatConversation({
                 onRetryMessage={(message) =>
                   void handleTryAgainMessage(message)
                 }
+                onSaveAsCase={canSaveCase ? setCaseExpected : undefined}
                 onSubmitQuestionnaire={(answers) => {
                   void sendMessage(
                     formatAgentQuestionnaireAnswersMessage(answers),
@@ -557,6 +570,19 @@ function ChatConversation({
               <div className="mx-auto w-full max-w-3xl">{composer}</div>
             </div>
           </div>
+          {session && profileId ? (
+            <SaveRegressionCaseDialog
+              expectedResult={caseExpected ?? ""}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setCaseExpected(null);
+                }
+              }}
+              open={caseExpected !== null}
+              profileId={profileId}
+              source={{ sourceId: session.id, sourceType: "session" }}
+            />
+          ) : null}
         </ChatPageColumn>
       </ChatAttachmentPanelProvider>
     </ChatStatusProvider>

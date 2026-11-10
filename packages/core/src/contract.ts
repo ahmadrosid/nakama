@@ -139,6 +139,15 @@ export interface RegressionCase {
   source: RegressionCaseSource;
 }
 
+export type CreateRegressionCaseRequest =
+  | { expectedResult: string; sourceId: string; sourceType: "session" }
+  | {
+      automationId: string;
+      expectedResult: string;
+      sourceId: string;
+      sourceType: "automation_run";
+    };
+
 export interface RegressionCaseResponse {
   case: RegressionCase;
 }

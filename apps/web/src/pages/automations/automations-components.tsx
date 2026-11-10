@@ -40,11 +40,17 @@ import {
   Delete02Icon,
   Loading03Icon,
   Search01Icon,
+  TestTube01Icon,
 } from "hugeicons-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useContext, useMemo, useState } from "react";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import {
+  canUseRegressionCases,
+  SaveRegressionCaseDialog,
+} from "@/components/regression-cases";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { AuthContext } from "@/context/auth-context-shared";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useUserTimezone } from "@/hooks/use-timezones";
@@ -1016,6 +1022,15 @@ function RunDetailPopup({
   onRerun: () => void;
 }) {
   const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
+  const [savingCase, setSavingCase] = useState(false);
+
+  // Read without useAuth: the drawer also renders where no auth provider is mounted.
+  const orgRole = useContext(AuthContext)?.activeOrg?.role;
+
+  const canSaveCase =
+    canUseRegressionCases(orgRole) &&
+    selectedRun?.status === "completed" &&
+    Boolean(selectedRun.output?.trim());
 
   return (
     <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out has-[[data-slot=attachment-detail-panel]]:max-w-full data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none md:has-[[data-slot=attachment-detail-panel]:not([data-fullscreen])]:w-fit">
@@ -1050,6 +1065,18 @@ function RunDetailPopup({
             )}
           </Button>
         ) : null}
+        {canSaveCase ? (
+          <Button
+            aria-label="Save as test case"
+            onClick={() => setSavingCase(true)}
+            size="icon-sm"
+            title="Save as test case"
+            type="button"
+            variant="ghost"
+          >
+            <TestTube01Icon aria-hidden className="size-4" />
+          </Button>
+        ) : null}
         {selectedRun?.status === "failed" ? (
           <Button
             disabled={busy || running}
@@ -1081,6 +1108,19 @@ function RunDetailPopup({
         <ChatAttachmentPanelProvider key={selectedRun.id}>
           <RunConversation profileId={profileId} run={selectedRun} />
         </ChatAttachmentPanelProvider>
+      ) : null}
+      {canSaveCase && selectedRun ? (
+        <SaveRegressionCaseDialog
+          expectedResult={selectedRun.output ?? ""}
+          onOpenChange={setSavingCase}
+          open={savingCase}
+          profileId={profileId}
+          source={{
+            automationId: selectedRun.automationId,
+            sourceId: selectedRun.id,
+            sourceType: "automation_run",
+          }}
+        />
       ) : null}
     </DialogPrimitive.Popup>
   );

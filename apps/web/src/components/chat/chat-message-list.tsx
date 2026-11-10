@@ -23,6 +23,7 @@ import {
   GitBranchIcon,
   MoreHorizontalIcon,
   RefreshIcon,
+  TestTube01Icon,
 } from "hugeicons-react";
 import {
   forwardRef,
@@ -178,6 +179,8 @@ interface ChatMessageListProps {
   onContinueToolSetup?: (setupId: string) => Promise<void>;
   onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  /** Offered on the last reply only: a case's input is the session's last user message. */
+  onSaveAsCase?: (expectedResult: string) => void;
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   onSwitchModel?: () => void;
   profileId?: string | null;
@@ -329,6 +332,7 @@ function ChatMessageListSession({
   onBranchMessage,
   onEditMessage,
   onRetryMessage,
+  onSaveAsCase,
   onSwitchModel,
   onSubmitQuestionnaire,
   questionnaire,
@@ -423,6 +427,9 @@ function ChatMessageListSession({
               canPreviewCitations ? openCitationPreview : undefined
             }
             onRetryMessage={onRetryMessage}
+            onSaveAsCase={
+              turnIndex === turns.length - 1 ? onSaveAsCase : undefined
+            }
             onSubmitQuestionnaire={onSubmitQuestionnaire}
             onSwitchModel={onSwitchModel}
             profileId={profileId}
@@ -460,6 +467,7 @@ function ChatMessageListSession({
       onBranchMessage,
       onEditMessage,
       onRetryMessage,
+      onSaveAsCase,
       onSwitchModel,
       onSubmitQuestionnaire,
       openCitationPreview,
@@ -550,6 +558,7 @@ function AssistantTurn({
   onBranchMessage,
   onOpenFileCitation,
   onRetryMessage,
+  onSaveAsCase,
   onSwitchModel,
   onSubmitQuestionnaire,
   questionnaire,
@@ -573,6 +582,7 @@ function AssistantTurn({
   onBranchMessage?: (message: ChatListItem) => void;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  onSaveAsCase?: (expectedResult: string) => void;
   onSwitchModel?: () => void;
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   questionnaire?: AgentQuestionnaire | null;
@@ -670,6 +680,7 @@ function AssistantTurn({
           message={anchorMessage}
           onBranchMessage={onBranchMessage}
           onRetryMessage={onRetryMessage}
+          onSaveAsCase={onSaveAsCase}
           usage={turnUsage}
         />
       ) : null}
@@ -1294,6 +1305,7 @@ function AssistantMessageActions({
   actionsDisabled = false,
   onBranchMessage,
   onRetryMessage,
+  onSaveAsCase,
   usage,
 }: {
   message: ChatListItem;
@@ -1302,6 +1314,7 @@ function AssistantMessageActions({
   actionsDisabled?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
+  onSaveAsCase?: (expectedResult: string) => void;
   usage?: ChatUsage;
 }) {
   const [copied, setCopied] = useState(false);
@@ -1376,7 +1389,7 @@ function AssistantMessageActions({
           <RefreshIcon aria-hidden className="size-4" />
         </button>
       ) : null}
-      {onBranchMessage && branchCreatedAt ? (
+      {(onBranchMessage && branchCreatedAt) || onSaveAsCase ? (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -1393,17 +1406,31 @@ function AssistantMessageActions({
             <MoreHorizontalIcon aria-hidden className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56 min-w-56 p-1.5">
-            <div className="px-2 py-1 text-muted-foreground text-xs">
-              {formatSessionTimestamp(branchCreatedAt)}
-            </div>
-            <DropdownMenuItem
-              className="gap-2"
-              disabled={busy}
-              onClick={() => onBranchMessage(message)}
-            >
-              <GitBranchIcon aria-hidden className="size-4" />
-              <span>Branch in new chat</span>
-            </DropdownMenuItem>
+            {onBranchMessage && branchCreatedAt ? (
+              <>
+                <div className="px-2 py-1 text-muted-foreground text-xs">
+                  {formatSessionTimestamp(branchCreatedAt)}
+                </div>
+                <DropdownMenuItem
+                  className="gap-2"
+                  disabled={busy}
+                  onClick={() => onBranchMessage(message)}
+                >
+                  <GitBranchIcon aria-hidden className="size-4" />
+                  <span>Branch in new chat</span>
+                </DropdownMenuItem>
+              </>
+            ) : null}
+            {onSaveAsCase ? (
+              <DropdownMenuItem
+                className="gap-2"
+                disabled={busy || actionsDisabled}
+                onClick={() => onSaveAsCase(copyContent)}
+              >
+                <TestTube01Icon aria-hidden className="size-4" />
+                <span>Save as test case</span>
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
