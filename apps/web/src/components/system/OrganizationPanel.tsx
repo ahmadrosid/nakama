@@ -49,6 +49,7 @@ import {
   useOrgPublicationMutation,
 } from "@/hooks/use-org-members";
 import { client, formatError } from "@/lib/client";
+import { createClientId } from "@/lib/client-id";
 import { decodeModelSelection, encodeModelSelection } from "@/lib/models";
 import {
   canAccessSystemPage,
@@ -907,7 +908,7 @@ function AddTeamDialog({
       request.current.slug !== input.slug ||
       request.current.adminUserId !== input.adminUserId
     ) {
-      request.current = { ...input, requestId: crypto.randomUUID() };
+      request.current = { ...input, requestId: createClientId() };
     }
 
     running.current = true;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
+import { createClientId } from "@/lib/client-id";
 
 /** Fired after this device's subscription changes, so every switch re-reads it. */
 const WEB_PUSH_CHANGED = "nakama:web-push-changed";
@@ -392,7 +393,7 @@ export function usePushPresence(): void {
       return;
     }
 
-    const clientId = crypto.randomUUID();
+    const clientId = createClientId();
     let lastVisible: boolean | null = null;
 
     const report = (visible: boolean) => {
