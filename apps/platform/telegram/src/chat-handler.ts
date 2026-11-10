@@ -1258,8 +1258,9 @@ interface ReplyDraft {
 
 /**
  * Live preview of the reply in a private chat (Bot API sendMessageDraft).
- * Empty text shows "Thinking…". A draft expires after about 30 s, so it is
- * sent again while the agent works. The final message replaces it.
+ * It starts with the first line of text; Telegram shows an empty draft as a
+ * blank bubble, and typing covers the wait. A draft expires after about 30 s,
+ * so it is sent again while the agent works. The final message replaces it.
  */
 function createReplyDraft(ctx: Context): ReplyDraft | null {
   if (ctx.chat?.type !== "private") {
@@ -1305,14 +1306,15 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
     // Telegram animates a draft from the top when shown text changes, so a
     // frame may only add text after what is already shown.
     const grows =
+      visible.length > 0 &&
       html !== sentHtml &&
       visible.startsWith(sentVisible) &&
       visible.length <= MAX_DRAFT_CHARS;
 
     if (grows) {
       send(html, visible);
-    } else if (Date.now() - lastSentAt >= DRAFT_KEEPALIVE_MS) {
-      send(sentHtml ?? "", sentVisible);
+    } else if (sentHtml && Date.now() - lastSentAt >= DRAFT_KEEPALIVE_MS) {
+      send(sentHtml, sentVisible);
     }
   };
 

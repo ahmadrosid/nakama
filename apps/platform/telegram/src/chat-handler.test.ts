@@ -1272,7 +1272,7 @@ describe("createChatHandler security", () => {
     });
   });
 
-  test("streams the reply as a draft in a private chat, then sends the final message", async () => {
+  test("streams the reply as a draft in a private chat with no empty draft, then sends the final message", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         allowedUserIds: [4242],
@@ -1304,7 +1304,8 @@ describe("createChatHandler security", () => {
       getStreamControl()?.complete("Halo **dunia**\nlagi");
       await handled;
 
-      expect(drafts[0]?.text).toBe("");
+      expect(drafts[0]?.text).toBe("Halo <b>dunia</b>");
+      expect(drafts.every((draft) => draft.text.length > 0)).toBe(true);
       expect(new Set(drafts.map((draft) => draft.draftId)).size).toBe(1);
       expect(drafts[0]?.draftId).toBeGreaterThan(0);
       expect(replies).toEqual(["Halo <b>dunia</b>\nlagi"]);
