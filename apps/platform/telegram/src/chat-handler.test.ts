@@ -1166,6 +1166,59 @@ describe("createChatHandler security", () => {
     });
   });
 
+  test("sends the agent question to the chat so the user can answer there", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          steps: [
+            {
+              questionnaire: {
+                id: "q1",
+                questions: [
+                  {
+                    allowCustomAnswer: true,
+                    choices: [
+                      { id: "recap", label: "Recap Pengeluaran Bulanan" },
+                      { id: "fund", label: "Rencana Dana Darurat" },
+                    ],
+                    id: "resend",
+                    prompt: "Mana yang mau dikirim ulang?",
+                  },
+                ],
+                title: "Kirim ulang",
+              },
+              type: "questionnaire",
+            },
+            { reply: "", type: "resolve" },
+          ],
+          streaming: true,
+        }
+      );
+
+      const { ctx, replies } = createMessageContext({
+        text: "coba kirim ulang ini",
+        userId: 4242,
+      });
+
+      await handleMessage(ctx);
+
+      const sent = replies.join("\n");
+      expect(sent).toContain("Mana yang mau dikirim ulang?");
+      expect(sent).toContain("Recap Pengeluaran Bulanan");
+      expect(sent).toContain("Rencana Dana Darurat");
+      expect(sent).not.toContain("(empty reply)");
+    });
+  });
+
   test("does not create a status message when no todo updates arrive", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

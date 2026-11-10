@@ -1,5 +1,9 @@
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import { deliverTurnArtifactShares } from "@nakama/core";
+import {
+  formatAgentQuestionnaireMessage,
+  hasActiveAgentQuestionnaire,
+} from "@nakama/core/agent-questionnaire";
 import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
@@ -576,6 +580,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     const todoStatus = new TelegramTodoStatusMessage(telegram);
     let reply = "";
+    let question = "";
     const signal = registerActiveStream(conversationKey);
 
     try {
@@ -586,6 +591,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         {
           onChunk: (delta) => {
             reply += delta;
+          },
+          onQuestionnaireUpdated: (next) => {
+            typingLoop.ping();
+            question =
+              next && hasActiveAgentQuestionnaire(next)
+                ? formatAgentQuestionnaireMessage(next)
+                : "";
           },
           onThinking: () => {
             typingLoop.ping();
@@ -639,8 +651,12 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     if (reply.trim()) {
       await replyAsChat(telegram, reply);
-    } else {
+    } else if (!question) {
       await telegram.send("(empty reply)");
+    }
+
+    if (question) {
+      await replyAsChat(telegram, question);
     }
 
     if (profileId) {

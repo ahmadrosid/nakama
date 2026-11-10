@@ -18,6 +18,7 @@ import {
   withTempHome as withSharedTempHome,
 } from "@nakama/core/channel-test-helpers";
 import type {
+  AgentQuestionnaire,
   AgentTodo,
   ChatMessage,
   UserOrgSummary,
@@ -132,6 +133,7 @@ interface MockStreamControl {
 
 type StreamStep =
   | { type: "todos"; todos: AgentTodo[] }
+  | { type: "questionnaire"; questionnaire: AgentQuestionnaire | null }
   | { type: "chunk"; delta: string }
   | { type: "thinking"; delta?: string }
   | { type: "tool_start" }
@@ -250,6 +252,9 @@ export function createMockClient(
           switch (step.type) {
             case "todos":
               streamHandlers.onTodosUpdated?.(step.todos);
+              break;
+            case "questionnaire":
+              streamHandlers.onQuestionnaireUpdated?.(step.questionnaire);
               break;
             case "chunk":
               streamHandlers.onChunk(step.delta);
