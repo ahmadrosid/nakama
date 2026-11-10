@@ -23,7 +23,7 @@ import {
 import { TelegramAuthStore } from "./auth-store";
 import {
   createChatHandler,
-  formatDraftHtml,
+  formatReplyDraft,
   resetChatLocksForTests,
 } from "./chat-handler";
 import {
@@ -1318,10 +1318,7 @@ describe("createChatHandler security", () => {
     let shown = "";
 
     for (let end = 1; end <= reply.length; end++) {
-      const visible = formatDraftHtml(reply.slice(0, end)).replace(
-        /<[^>]+>/g,
-        ""
-      );
+      const { visible } = formatReplyDraft(reply.slice(0, end));
 
       expect(visible.startsWith(shown)).toBe(true);
       shown = visible;

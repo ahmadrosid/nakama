@@ -43,6 +43,7 @@ import {
   looksLikePairingCode,
 } from "@nakama/core/telegram-config";
 import {
+  renderTelegramPlainText,
   renderTelegramRichText,
   splitTelegramRichChunks,
 } from "@nakama/core/telegram-rich-text";
@@ -1246,8 +1247,6 @@ const DRAFT_KEEPALIVE_MS = 20_000;
 
 const MAX_DRAFT_CHARS = 4000;
 
-const HTML_TAG = /<[^>]+>/g;
-
 interface ReplyDraft {
   /** Call after the bot sends a message: Telegram clears the draft then. */
   restart(): void;
@@ -1276,12 +1275,12 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
   let inFlight: Promise<void> | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  const send = (html: string) => {
+  const send = (html: string, visible: string) => {
     inFlight = ctx
       .replyWithDraft(html, { draft_id: draftId, parse_mode: "HTML" })
       .then(() => {
         sentHtml = html;
-        sentVisible = html.replace(HTML_TAG, "");
+        sentVisible = visible;
         lastSentAt = Date.now();
       })
       .catch((error) => {
@@ -1301,8 +1300,7 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
       return;
     }
 
-    const html = formatDraftHtml(text);
-    const visible = html.replace(HTML_TAG, "");
+    const { html, visible } = formatReplyDraft(text);
 
     // Telegram animates a draft from the top when shown text changes, so a
     // frame may only add text after what is already shown.
@@ -1312,9 +1310,9 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
       visible.length <= MAX_DRAFT_CHARS;
 
     if (grows) {
-      send(html);
+      send(html, visible);
     } else if (Date.now() - lastSentAt >= DRAFT_KEEPALIVE_MS) {
-      send(sentHtml ?? "");
+      send(sentHtml ?? "", sentVisible);
     }
   };
 
@@ -1344,10 +1342,14 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
 }
 
 /**
- * The reply as rich HTML, cut to the part that will not change: complete
- * lines, no open code block, no table still being written.
+ * The reply cut to the part that will not change (complete lines, no open
+ * code block, no table still being written), as the rich HTML to send and
+ * the plain text the user sees.
  */
-export function formatDraftHtml(text: string): string {
+export function formatReplyDraft(text: string): {
+  html: string;
+  visible: string;
+} {
   const lines = text.slice(0, Math.max(0, text.lastIndexOf("\n"))).split("\n");
 
   const fenceCount = lines.filter((line) =>
@@ -1368,7 +1370,12 @@ export function formatDraftHtml(text: string): string {
 
   const stable = lines.join("\n").trim();
 
-  return stable ? renderTelegramRichText(stable) : "";
+  return stable
+    ? {
+        html: renderTelegramRichText(stable),
+        visible: renderTelegramPlainText(stable),
+      }
+    : { html: "", visible: "" };
 }
 
 const QUESTION_CLOSED_REPLY = "This question is closed.";
