@@ -1456,10 +1456,6 @@ function formatQuestionText(
       : question.prompt.trim()
   );
 
-  if (question.allowCustomAnswer) {
-    lines.push("", "Or type your own answer.");
-  }
-
   return lines.join("\n");
 }
 
