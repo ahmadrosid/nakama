@@ -50,7 +50,7 @@ export function isTelegramTopicMessage(ctx: Context): boolean {
 
 function getTelegramTopicId(ctx: Context): number | undefined {
   // ctx.msg also covers the message under a tapped inline button.
-  const value = ctx.message?.message_thread_id ?? ctx.msg?.message_thread_id;
+  const value = ctx.msg?.message_thread_id;
 
   return value !== undefined && Number.isFinite(value) ? value : undefined;
 }

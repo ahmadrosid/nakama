@@ -1231,9 +1231,8 @@ describe("createChatHandler security", () => {
       await handler(repeatTap.ctx);
 
       expect(calls.sendStream).toBe(2);
-      expect(repeatTap.callbackAnswers).toEqual([
-        "This question is closed. Type your answer instead.",
-      ]);
+      expect(repeatTap.callbackAnswers).toHaveLength(1);
+      expect(repeatTap.edits).toEqual([]);
     });
   });
 
@@ -1295,6 +1294,234 @@ describe("createChatHandler security", () => {
         message:
           "Answers\n\nQ: Target tabungan?\nA: 10%\n\nQ: Fokus kurangi apa?\nA: Makan di luar",
       });
+    });
+  });
+
+  test("a second tap on an answered question does not close the questions", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { calls, getLastStreamInput, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        QUESTION_TURN
+      );
+
+      const asked = createMessageContext({ text: "budget", userId: 4242 });
+
+      await handler(asked.ctx);
+
+      const tap = (questionIndex: number, choiceIndex: number) =>
+        createMessageContext({
+          callbackData: buttonData(
+            asked.replyOptions[questionIndex],
+            choiceIndex
+          ),
+          userId: 4242,
+        });
+
+      await handler(tap(0, 1).ctx);
+
+      const doubleTap = tap(0, 0);
+
+      await handler(doubleTap.ctx);
+
+      expect(doubleTap.edits).toEqual([]);
+      expect(doubleTap.buttonRemovals).toEqual([]);
+
+      await handler(tap(1, 0).ctx);
+
+      expect(calls.sendStream).toBe(2);
+      expect(getLastStreamInput()).toMatchObject({
+        message:
+          "Answers\n\nQ: Target tabungan?\nA: 10%\n\nQ: Fokus kurangi apa?\nA: Makan di luar",
+      });
+    });
+  });
+
+  test("a typed answer joins the tapped answers", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { calls, getLastStreamInput, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        QUESTION_TURN
+      );
+
+      const asked = createMessageContext({ text: "budget", userId: 4242 });
+
+      await handler(asked.ctx);
+      await handler(
+        createMessageContext({
+          callbackData: buttonData(asked.replyOptions[0], 1),
+          userId: 4242,
+        }).ctx
+      );
+      await handler(createMessageContext({ text: "Kopi", userId: 4242 }).ctx);
+
+      expect(calls.sendStream).toBe(2);
+      expect(getLastStreamInput()).toMatchObject({
+        message:
+          "Answers\n\nQ: Target tabungan?\nA: 10%\n\nQ: Fokus kurangi apa?\nA: Kopi",
+      });
+    });
+  });
+
+  test("a busy bot keeps the answers so the last tap can be repeated", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      let busy = false;
+      let running: Promise<void> = Promise.resolve();
+
+      const { calls, handler } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+          dispatchTurn: (_key, work) => {
+            if (busy) {
+              return false;
+            }
+
+            running = work();
+
+            return true;
+          },
+        },
+        QUESTION_TURN
+      );
+
+      const asked = createMessageContext({ text: "budget", userId: 4242 });
+
+      await handler(asked.ctx);
+      await running;
+
+      const tap = (questionIndex: number, choiceIndex: number) =>
+        createMessageContext({
+          callbackData: buttonData(
+            asked.replyOptions[questionIndex],
+            choiceIndex
+          ),
+          userId: 4242,
+        });
+
+      await handler(tap(0, 1).ctx);
+
+      busy = true;
+
+      const refused = tap(1, 0);
+
+      await handler(refused.ctx);
+
+      expect(calls.sendStream).toBe(1);
+
+      busy = false;
+
+      const retry = tap(1, 0);
+
+      await handler(retry.ctx);
+      await running;
+
+      expect(retry.edits.at(0)?.text).toContain("✅ Makan di luar");
+      expect(calls.sendStream).toBe(2);
+    });
+  });
+
+  test("the last tap still reaches the agent when Telegram refuses the tap answer", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { calls, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        QUESTION_TURN
+      );
+
+      const asked = createMessageContext({ text: "budget", userId: 4242 });
+
+      await handler(asked.ctx);
+
+      for (const [questionIndex, choiceIndex] of [
+        [0, 1],
+        [1, 0],
+      ] as const) {
+        await handler(
+          createMessageContext({
+            callbackData: buttonData(
+              asked.replyOptions[questionIndex],
+              choiceIndex
+            ),
+            failAnswerTap: true,
+            userId: 4242,
+          }).ctx
+        );
+      }
+
+      expect(calls.sendStream).toBe(2);
+    });
+  });
+
+  test("questions in a group reply thread stay in that thread", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { calls, handler } = await createTestHandler(
+        homeDir,
+        undefined,
+        QUESTION_TURN
+      );
+
+      const inThread = {
+        chatId: -100_123,
+        chatType: "supergroup" as const,
+        messageThreadId: 77,
+        userId: 4242,
+      };
+
+      const asked = createMessageContext({
+        ...inThread,
+        entities: [{ length: 6, offset: 0, type: "mention" }],
+        text: "@mybot budget",
+      });
+
+      await handler(asked.ctx);
+
+      expect(asked.replyOptions[0]).toMatchObject({
+        reply_parameters: { message_id: 100 },
+      });
+
+      for (const [questionIndex, choiceIndex] of [
+        [0, 1],
+        [1, 0],
+      ] as const) {
+        await handler(
+          createMessageContext({
+            ...inThread,
+            callbackData: buttonData(
+              asked.replyOptions[questionIndex],
+              choiceIndex
+            ),
+          }).ctx
+        );
+      }
+
+      expect(calls.sendStream).toBe(2);
     });
   });
 
@@ -1389,6 +1616,94 @@ describe("createChatHandler security", () => {
     }
 
     expect(shown).toContain("Selesai.");
+  });
+
+  test("a one-paragraph reply streams its finished words", () => {
+    expect(formatReplyDraft("Halo dunia ini sed").visible).toBe(
+      "Halo dunia ini"
+    );
+    expect(formatReplyDraft("Total gaji **Rp10").visible).toBe("Total gaji");
+    expect(formatReplyDraft("- Makan di lu").visible).toBe("");
+  });
+
+  test("after a tool call the draft shows only the new text, under a new id", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { getStreamControl, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        {
+          autoComplete: false,
+          steps: [
+            { delta: "Cek dulu ya\n", type: "chunk" },
+            { ms: 1300, type: "pause" },
+            { type: "tool_start" },
+            { delta: "Hasil budget\nlagi", type: "chunk" },
+          ],
+          streaming: true,
+        }
+      );
+
+      const { ctx, drafts } = createMessageContext({
+        text: "budget",
+        userId: 4242,
+      });
+
+      const handled = handler(ctx);
+
+      await waitForCondition(
+        () => drafts.some((draft) => draft.text === "Hasil budget"),
+        "Expected the text after the tool call in a draft",
+        { timeoutMs: 4000 }
+      );
+
+      getStreamControl()?.complete("Hasil budget\nlagi");
+      await handled;
+
+      const narration = drafts.find((draft) => draft.text === "Cek dulu ya");
+      const result = drafts.find((draft) => draft.text === "Hasil budget");
+
+      expect(narration?.draftId).not.toBe(result?.draftId);
+      expect(
+        drafts.some((draft) => draft.text.includes("Cek dulu ya\nHasil"))
+      ).toBe(false);
+    });
+  });
+
+  test("a draft request that hangs does not hold back the final reply", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        {
+          steps: [
+            { delta: "Halo dunia\n", type: "chunk" },
+            { ms: 1200, type: "pause" },
+            { reply: "Halo dunia", type: "resolve" },
+          ],
+          streaming: true,
+        }
+      );
+
+      const { ctx, replies } = createMessageContext({
+        hangDraft: true,
+        text: "hello agent",
+        userId: 4242,
+      });
+
+      await handler(ctx);
+
+      expect(replies).toEqual(["Halo dunia"]);
+    });
   });
 
   test("does not send drafts in group chats", async () => {
@@ -2843,6 +3158,14 @@ const BUDGET_QUESTIONNAIRE = {
   ],
   title: "Budget",
 } satisfies AgentQuestionnaire;
+
+const QUESTION_TURN = {
+  steps: [
+    { questionnaire: BUDGET_QUESTIONNAIRE, type: "questionnaire" as const },
+    { reply: "", type: "resolve" as const },
+  ],
+  streaming: true,
+};
 
 function inlineButtons(
   replyOptions: Parameters<Context["reply"]>[1]

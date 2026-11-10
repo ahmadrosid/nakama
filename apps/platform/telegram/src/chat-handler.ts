@@ -367,6 +367,44 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         ? stripBotMention(text, botInfo?.username)
         : text;
 
+      // Text sent while questions are open answers the next open question.
+      const typed = recordTypedAnswer(
+        sessionStore,
+        conversationKey,
+        messageText
+      );
+
+      if (typed) {
+        await sessionStore.save();
+
+        if (typed.messageId !== undefined) {
+          await ctx.api
+            .editMessageText(
+              ctx.chat!.id,
+              typed.messageId,
+              `${typed.questionText}\n\n✅ ${typed.answer}`
+            )
+            .catch((error) =>
+              console.warn(
+                "Telegram: could not mark the question answered",
+                error
+              )
+            );
+        }
+
+        if (typed.answersMessage) {
+          await handleChatMessage(
+            ctx,
+            withGroupContext({ message: typed.answersMessage }, isGroup),
+            conversationKey,
+            telegram,
+            typed.answersMessage
+          );
+        }
+
+        return;
+      }
+
       await handleChatMessage(
         ctx,
         withGroupContext({ message: messageText }, isGroup),
@@ -385,22 +423,26 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     userId: number,
     telegram: TelegramRichMessenger,
     turn: () => Promise<void>
-  ): Promise<void> {
+  ): Promise<boolean> {
     const runTurn = () => withChatLock(conversationKey, turn);
 
     if (!dispatchTurn) {
       await runTurn();
 
-      return;
+      return true;
     }
 
-    if (!dispatchTurn(conversationKey, runTurn, ctx)) {
-      await authStore.reload();
-
-      if (authStore.isAuthorized(userId)) {
-        await telegram.send("This bot is busy. Try again shortly.");
-      }
+    if (dispatchTurn(conversationKey, runTurn, ctx)) {
+      return true;
     }
+
+    await authStore.reload();
+
+    if (authStore.isAuthorized(userId)) {
+      await telegram.send("This bot is busy. Try again shortly.");
+    }
+
+    return false;
   }
 
   async function handleQuestionTap(
@@ -422,11 +464,8 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const conversationKey = resolveConversationKey(ctx, chatId, isGroup);
     const tap = recordQuestionTap(sessionStore, conversationKey, data);
 
-    if (!tap) {
-      await ctx.answerCallbackQuery({
-        show_alert: true,
-        text: QUESTION_CLOSED_REPLY,
-      });
+    if (tap.kind === "closed") {
+      await answerTap(ctx, { show_alert: true, text: QUESTION_CLOSED_REPLY });
       await ctx
         .editMessageReplyMarkup()
         .catch((error) =>
@@ -439,13 +478,16 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
+    if (tap.kind === "duplicate") {
+      // A double tap, or a tap that raced the edit: the first one counted.
+      await answerTap(ctx, { text: `✅ ${tap.answer}` });
+
+      return;
+    }
+
     await sessionStore.save();
-    await ctx.answerCallbackQuery();
-    await ctx
-      .editMessageText(`${tap.questionText}\n\n✅ ${tap.answer}`)
-      .catch((error) =>
-        console.warn("Telegram: could not mark the question answered", error)
-      );
+    await answerTap(ctx);
+    await editQuestionMessage(ctx, `${tap.questionText}\n\n✅ ${tap.answer}`);
 
     const message = tap.answersMessage;
 
@@ -453,21 +495,41 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    await startTurn(ctx, conversationKey, userId, telegram, async () => {
-      const channelOrgKey = resolveChannelOrgKey(chatId, userId, isGroup);
+    // Until the agent turn takes the answers, they stay open; a refused turn
+    // puts the last question back so the user can tap again.
+    const reopen = async () => {
+      tap.undo();
+      await sessionStore.save();
+      await editQuestionMessage(ctx, tap.questionText, tap.keyboard);
+    };
 
-      if (!(await ensureOrgReady(telegram, channelOrgKey, undefined))) {
-        return;
+    const accepted = await startTurn(
+      ctx,
+      conversationKey,
+      userId,
+      telegram,
+      async () => {
+        const channelOrgKey = resolveChannelOrgKey(chatId, userId, isGroup);
+
+        if (!(await ensureOrgReady(telegram, channelOrgKey, undefined))) {
+          await reopen();
+
+          return;
+        }
+
+        await handleChatMessage(
+          ctx,
+          withGroupContext({ message }, isGroup),
+          conversationKey,
+          telegram,
+          message
+        );
       }
+    );
 
-      await handleChatMessage(
-        ctx,
-        withGroupContext({ message }, isGroup),
-        conversationKey,
-        telegram,
-        message
-      );
-    });
+    if (!accepted) {
+      await reopen();
+    }
   }
 
   async function requestAccess(ctx: Context, userId: number): Promise<void> {
@@ -679,6 +741,8 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const draft = createReplyDraft(ctx);
     let todoStatusShown = false;
     let reply = "";
+    // The final reply holds only the text after the last tool call.
+    let segmentStart = 0;
     // The latest open question from the stream; an array so the callback write
     // keeps its type.
     const shownQuestions: AgentQuestionnaire[] = [];
@@ -700,7 +764,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         {
           onChunk: (delta) => {
             reply += delta;
-            draft?.update(reply);
+            draft?.update(reply.slice(segmentStart));
           },
           onQuestionnaireUpdated: (next) => {
             typingLoop.ping();
@@ -717,19 +781,27 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
             typingLoop.ping();
 
             // The first todo update sends the status message, which clears
-            // the draft; a new draft id shows it again without replaying it.
-            if (!todoStatusShown && todos.length > 0) {
+            // the draft; once it is sent, a new draft id shows the draft
+            // again without replaying it.
+            const firstStatus = !todoStatusShown && todos.length > 0;
+
+            if (firstStatus) {
               todoStatusShown = true;
-              draft?.restart();
             }
 
-            void todoStatus.update(todos);
+            void todoStatus.update(todos).then(() => {
+              if (firstStatus) {
+                draft?.restart();
+              }
+            });
           },
           onToolEnd: () => {
             typingLoop.ping();
           },
           onToolStart: () => {
             typingLoop.ping();
+            segmentStart = reply.length;
+            draft?.newSegment();
           },
         },
         { signal }
@@ -769,7 +841,6 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     } finally {
       clearActiveStream(conversationKey, signal);
       typingLoop.stop();
-      await draft?.stop();
     }
 
     const questionnaire = shownQuestions.at(0);
@@ -1262,20 +1333,25 @@ const DRAFT_FRAME_MS = 1000;
 
 const DRAFT_KEEPALIVE_MS = 20_000;
 
+/** How long the final reply waits for a draft request still in flight. */
+const DRAFT_STOP_WAIT_MS = 1000;
+
 const MAX_DRAFT_CHARS = 4000;
 
 interface ReplyDraft {
+  /** The reply restarts after a tool call; the final message holds only the new text. */
+  newSegment(): void;
   /** Call after the bot sends a message: Telegram clears the draft then. */
   restart(): void;
   start(): void;
-  /** Waits for a frame in flight, so no draft lands after the final message. */
+  /** Waits briefly for a frame in flight, so no draft lands after the final message. */
   stop(): Promise<void>;
   update(text: string): void;
 }
 
 /**
  * Live preview of the reply in a private chat (Bot API sendMessageDraft).
- * It starts with the first line of text; Telegram shows an empty draft as a
+ * It starts with the first stable words; Telegram shows an empty draft as a
  * blank bubble, and typing covers the wait. A draft expires after about 30 s,
  * so it is sent again while the agent works. The final message replaces it.
  */
@@ -1284,10 +1360,17 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
     return null;
   }
 
+  const abort = new AbortController();
+  // SAFETY: grammy types its signal with the abort-controller shim; Bun's
+  // AbortSignal is the object that shim describes at runtime.
+  const signal = abort.signal as Parameters<Context["replyWithDraft"]>[2];
   let draftId = randomInt(1, 2 ** 31);
   let text = "";
+  let formattedFor: string | null = null;
+  let formatted = { html: "", visible: "" };
   let sentHtml: string | null = null;
   let sentVisible = "";
+  let segmentPending = false;
   let lastSentAt = 0;
   let enabled = true;
   let inFlight: Promise<void> | null = null;
@@ -1295,7 +1378,7 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
 
   const send = (html: string, visible: string) => {
     inFlight = ctx
-      .replyWithDraft(html, { draft_id: draftId, parse_mode: "HTML" })
+      .replyWithDraft(html, { draft_id: draftId, parse_mode: "HTML" }, signal)
       .then(() => {
         sentHtml = html;
         sentVisible = visible;
@@ -1303,10 +1386,13 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
       })
       .catch((error) => {
         enabled = false;
-        console.warn(
-          "Telegram: reply draft failed; sending the final message only",
-          error
-        );
+
+        if (!abort.signal.aborted) {
+          console.warn(
+            "Telegram: reply draft failed; sending the final message only",
+            error
+          );
+        }
       })
       .finally(() => {
         inFlight = null;
@@ -1318,17 +1404,29 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
       return;
     }
 
-    const { html, visible } = formatReplyDraft(text);
+    if (text !== formattedFor) {
+      formatted = formatReplyDraft(text);
+      formattedFor = text;
+    }
+
+    const { html, visible } = formatted;
+    const shown = segmentPending ? "" : sentVisible;
 
     // Telegram animates a draft from the top when shown text changes, so a
     // frame may only add text after what is already shown.
     const grows =
       visible.length > 0 &&
       html !== sentHtml &&
-      visible.startsWith(sentVisible) &&
+      visible.startsWith(shown) &&
       visible.length <= MAX_DRAFT_CHARS;
 
     if (grows) {
+      if (segmentPending) {
+        // A new id replaces the old text at once instead of replaying it.
+        draftId = randomInt(1, 2 ** 31);
+        segmentPending = false;
+      }
+
       send(html, visible);
     } else if (sentHtml && Date.now() - lastSentAt >= DRAFT_KEEPALIVE_MS) {
       send(sentHtml, sentVisible);
@@ -1336,6 +1434,10 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
   };
 
   return {
+    newSegment() {
+      segmentPending = true;
+      text = "";
+    },
     restart() {
       draftId = randomInt(1, 2 ** 31);
       lastSentAt = 0;
@@ -1352,7 +1454,19 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
         timer = null;
       }
 
-      await inFlight;
+      if (inFlight) {
+        let waitTimer: ReturnType<typeof setTimeout> | undefined;
+
+        await Promise.race([
+          inFlight,
+          new Promise((resolve) => {
+            waitTimer = setTimeout(resolve, DRAFT_STOP_WAIT_MS);
+          }),
+        ]);
+        clearTimeout(waitTimer);
+      }
+
+      abort.abort();
     },
     update(next) {
       text = next;
@@ -1360,16 +1474,25 @@ function createReplyDraft(ctx: Context): ReplyDraft | null {
   };
 }
 
+/** Line starts whose meaning depends on the rest of the line. */
+const BLOCK_LINE_START = /^\s*(?:[#>|`~*+-]|\d+[.)])/;
+
+/** Inline markup that changes earlier text once it closes. */
+const INLINE_MARKUP = /[*_`[~<\\|]/;
+
 /**
- * The reply cut to the part that will not change (complete lines, no open
- * code block, no table still being written), as the rich HTML to send and
- * the plain text the user sees.
+ * The reply cut to the part that will not change (complete lines, plus the
+ * finished words of the current line before any markup; no open code block,
+ * no table still being written), as the rich HTML to send and the plain text
+ * the user sees.
  */
 export function formatReplyDraft(text: string): {
   html: string;
   visible: string;
 } {
-  const lines = text.slice(0, Math.max(0, text.lastIndexOf("\n"))).split("\n");
+  const end = text.lastIndexOf("\n");
+  const lines = end === -1 ? [] : text.slice(0, end).split("\n");
+  let partial = text.slice(end + 1);
 
   const fenceCount = lines.filter((line) =>
     line.trimStart().startsWith("```")
@@ -1381,11 +1504,15 @@ export function formatReplyDraft(text: string): {
     );
 
     lines.length = openFence;
+    partial = "";
   }
 
   while (lines.at(-1)?.trimStart().startsWith("|")) {
     lines.pop();
+    partial = "";
   }
+
+  lines.push(stableWords(partial));
 
   const stable = lines.join("\n").trim();
 
@@ -1395,6 +1522,19 @@ export function formatReplyDraft(text: string): {
         visible: renderTelegramPlainText(stable),
       }
     : { html: "", visible: "" };
+}
+
+/** The finished words of a line still being written, before any markup. */
+function stableWords(line: string): string {
+  if (BLOCK_LINE_START.test(line)) {
+    return "";
+  }
+
+  const markup = line.search(INLINE_MARKUP);
+  const plain = markup === -1 ? line : line.slice(0, markup);
+  const lastSpace = plain.lastIndexOf(" ");
+
+  return lastSpace === -1 ? "" : plain.slice(0, lastSpace);
 }
 
 const QUESTION_CLOSED_REPLY =
@@ -1421,23 +1561,61 @@ async function sendQuestionButtons(
   });
   await sessionStore.save();
 
+  // In a reply thread of a plain supergroup only a reply keeps the thread id;
+  // without it a tap would resolve to another conversation key.
+  const msg = ctx.msg;
+
+  const threadReply =
+    isTelegramGroupChat(ctx) &&
+    msg?.message_thread_id !== undefined &&
+    !msg.is_topic_message
+      ? {
+          reply_parameters: {
+            allow_sending_without_reply: true,
+            message_id: msg.message_id,
+          },
+        }
+      : {};
+
+  const messageIds: number[] = [];
+
   for (const [questionIndex, question] of questionnaire.questions.entries()) {
-    const keyboard = new InlineKeyboard();
-
-    for (const [choiceIndex, choice] of question.choices.entries()) {
-      keyboard
-        .text(
-          choice.recommended ? `${choice.label} (recommended)` : choice.label,
-          `aq:${token}:${questionIndex}:${choiceIndex}`
-        )
-        .row();
-    }
-
-    await ctx.reply(
+    const message = await ctx.reply(
       formatQuestionText(questionnaire, question, questionIndex),
-      { reply_markup: keyboard }
+      {
+        ...threadReply,
+        reply_markup: buildQuestionKeyboard(token, questionIndex, question),
+      }
     );
+
+    messageIds.push(message.message_id);
   }
+
+  const open = sessionStore.getOpenQuestions(conversationKey);
+
+  if (open?.token === token) {
+    sessionStore.setOpenQuestions(conversationKey, { ...open, messageIds });
+    await sessionStore.save();
+  }
+}
+
+function buildQuestionKeyboard(
+  token: string,
+  questionIndex: number,
+  question: AgentQuestionItem
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+
+  for (const [choiceIndex, choice] of question.choices.entries()) {
+    keyboard
+      .text(
+        choice.recommended ? `${choice.label} (recommended)` : choice.label,
+        `aq:${token}:${questionIndex}:${choiceIndex}`
+      )
+      .row();
+  }
+
+  return keyboard;
 }
 
 function formatQuestionText(
@@ -1460,68 +1638,182 @@ function formatQuestionText(
   return lines.join("\n");
 }
 
-/**
- * Records one button tap in the session store; the caller saves. Returns
- * null when the question is no longer open.
- */
-function recordQuestionTap(
+/** Answers a button tap; a failed answer (too old) must not stop the work. */
+async function answerTap(
+  ctx: Context,
+  options?: { show_alert?: boolean; text?: string }
+): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery(options);
+  } catch (error) {
+    console.warn("Telegram: could not answer the button tap", error);
+  }
+}
+
+async function editQuestionMessage(
+  ctx: Context,
+  text: string,
+  keyboard?: InlineKeyboard
+): Promise<void> {
+  await ctx
+    .editMessageText(text, keyboard ? { reply_markup: keyboard } : undefined)
+    .catch((error) =>
+      console.warn("Telegram: could not update the question message", error)
+    );
+}
+
+interface RecordedAnswer {
+  answer: string;
+  /** Set when every question has an answer: the message for the agent. */
+  answersMessage?: string;
+  questionText: string;
+  /** Takes this answer back, while the same questions are still open. */
+  undo: () => void;
+}
+
+type QuestionTap =
+  | { kind: "closed" }
+  | { kind: "duplicate"; answer: string }
+  | ({ keyboard: InlineKeyboard; kind: "answered" } & RecordedAnswer);
+
+/** Open questions for the chat, or undefined; drops them once expired. */
+function readOpenQuestions(
   sessionStore: ChannelSessionStore,
-  conversationKey: string,
-  data: string
-): { answer: string; answersMessage?: string; questionText: string } | null {
-  const match = QUESTION_TAP_PATTERN.exec(data);
+  conversationKey: string
+): ChannelOpenQuestions | undefined {
   const open = sessionStore.getOpenQuestions(conversationKey);
 
-  if (!(match && open && open.token === match[1])) {
-    return null;
-  }
-
-  if (Date.now() - Date.parse(open.createdAt) > OPEN_QUESTIONS_TTL_MS) {
+  if (open && Date.now() - Date.parse(open.createdAt) > OPEN_QUESTIONS_TTL_MS) {
     sessionStore.setOpenQuestions(conversationKey, undefined);
 
-    return null;
+    return;
   }
 
-  const questionIndex = Number(match[2]);
+  return open;
+}
+
+/**
+ * Records one answer in the session store; the caller saves. The questions
+ * stay open until the agent turn starts, which closes them.
+ */
+function applyAnswer(
+  sessionStore: ChannelSessionStore,
+  conversationKey: string,
+  open: ChannelOpenQuestions,
+  questionIndex: number,
+  answer: string
+): RecordedAnswer {
   const { questions } = open.questionnaire;
-  const question = questions[questionIndex];
-  const choice = question?.choices[Number(match[3])];
-
-  if (
-    !(question && choice) ||
-    open.answers[String(questionIndex)] !== undefined
-  ) {
-    return null;
-  }
 
   const answers: ChannelOpenQuestions["answers"] = {
     ...open.answers,
-    [String(questionIndex)]: choice.label,
+    [String(questionIndex)]: answer,
   };
 
-  const questionText = formatQuestionText(
-    open.questionnaire,
-    question,
-    questionIndex
+  sessionStore.setOpenQuestions(conversationKey, { ...open, answers });
+
+  const complete = questions.every(
+    (_, index) => answers[String(index)] !== undefined
   );
 
-  if (Object.keys(answers).length < questions.length) {
-    sessionStore.setOpenQuestions(conversationKey, { ...open, answers });
+  const recorded: RecordedAnswer = {
+    answer,
+    questionText: formatQuestionText(
+      open.questionnaire,
+      questions[questionIndex]!,
+      questionIndex
+    ),
+    undo: () => {
+      if (
+        sessionStore.getOpenQuestions(conversationKey)?.token === open.token
+      ) {
+        sessionStore.setOpenQuestions(conversationKey, open);
+      }
+    },
+  };
 
-    return { answer: choice.label, questionText };
-  }
-
-  sessionStore.setOpenQuestions(conversationKey, undefined);
-
-  return {
-    answer: choice.label,
-    answersMessage: formatAgentQuestionnaireAnswersMessage(
+  if (complete) {
+    recorded.answersMessage = formatAgentQuestionnaireAnswersMessage(
       questions.map((entry, index) => ({
         answer: answers[String(index)] ?? "",
         prompt: entry.prompt,
         questionId: entry.id,
       }))
+    );
+  }
+
+  return recorded;
+}
+
+function recordQuestionTap(
+  sessionStore: ChannelSessionStore,
+  conversationKey: string,
+  data: string
+): QuestionTap {
+  const match = QUESTION_TAP_PATTERN.exec(data);
+  const open = readOpenQuestions(sessionStore, conversationKey);
+
+  if (!(match && open && open.token === match[1])) {
+    return { kind: "closed" };
+  }
+
+  const questionIndex = Number(match[2]);
+  const question = open.questionnaire.questions[questionIndex];
+  const choice = question?.choices[Number(match[3])];
+
+  if (!(question && choice)) {
+    return { kind: "closed" };
+  }
+
+  const earlier = open.answers[String(questionIndex)];
+
+  if (earlier !== undefined) {
+    return { answer: earlier, kind: "duplicate" };
+  }
+
+  return {
+    ...applyAnswer(
+      sessionStore,
+      conversationKey,
+      open,
+      questionIndex,
+      choice.label
     ),
-    questionText,
+    keyboard: buildQuestionKeyboard(open.token, questionIndex, question),
+    kind: "answered",
   };
+}
+
+/** Text typed while questions are open answers the first open question. */
+function recordTypedAnswer(
+  sessionStore: ChannelSessionStore,
+  conversationKey: string,
+  text: string
+): (RecordedAnswer & { messageId?: number }) | null {
+  const open = readOpenQuestions(sessionStore, conversationKey);
+  const answer = text.trim();
+
+  if (!(open && answer)) {
+    return null;
+  }
+
+  const questionIndex = open.questionnaire.questions.findIndex(
+    (_, index) => open.answers[String(index)] === undefined
+  );
+
+  if (questionIndex === -1) {
+    return null;
+  }
+
+  const recorded = applyAnswer(
+    sessionStore,
+    conversationKey,
+    open,
+    questionIndex,
+    answer
+  );
+
+  const messageId = open.messageIds?.[questionIndex];
+
+  return messageId === undefined ? recorded : { ...recorded, messageId };
 }

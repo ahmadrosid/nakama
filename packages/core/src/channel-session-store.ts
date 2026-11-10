@@ -10,6 +10,8 @@ export interface ChannelOpenQuestions {
   /** Choice label by question index. */
   answers: Record<string, string>;
   createdAt: string;
+  /** Telegram message id of each question, by question index. */
+  messageIds?: number[];
   questionnaire: AgentQuestionnaire;
   /** Short id in the button data, so a tap on older buttons is refused. */
   token: string;
@@ -31,6 +33,7 @@ type ChatSessionMap = Record<string, ChatSessionRecord>;
 const OpenQuestionsSchema = z.object({
   answers: z.record(z.string(), z.string()),
   createdAt: z.string(),
+  messageIds: z.array(z.number()).optional(),
   questionnaire: z.object({
     id: z.string(),
     questions: z.array(

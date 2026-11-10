@@ -29,6 +29,8 @@ import type { TelegramBotInfo } from "./group-message";
 export const TEST_BOT_INFO: TelegramBotInfo = { id: 999, username: "mybot" };
 
 export interface MockMessageContext {
+  /** One entry per call that removed a message's buttons. */
+  buttonRemovals: number[];
   callbackAnswers: Array<string | undefined>;
   ctx: Context;
   drafts: Array<{ draftId: number; text: string }>;
@@ -52,9 +54,14 @@ export function createMessageContext(options: {
   /** Makes this an inline button tap with this callback data. */
   callbackData?: string;
   failDraft?: boolean;
+  /** The draft request never settles unless its signal aborts. */
+  hangDraft?: boolean;
+  /** answerCallbackQuery throws, like Telegram's "query is too old". */
+  failAnswerTap?: boolean;
 }): MockMessageContext {
   const callbackAnswers: Array<string | undefined> = [];
   const drafts: Array<{ draftId: number; text: string }> = [];
+  const buttonRemovals: number[] = [];
   const replies: string[] = [];
   const replyOptions: Array<Parameters<Context["reply"]>[1]> = [];
   const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
@@ -74,6 +81,7 @@ export function createMessageContext(options: {
 
   const message = {
     entities: options.entities,
+    message_id: 100,
     message_thread_id: options.messageThreadId,
     reply_to_message: replyFrom ? { from: replyFrom } : undefined,
     text: options.text,
@@ -81,6 +89,10 @@ export function createMessageContext(options: {
 
   const ctx = {
     answerCallbackQuery: async (answer?: { text?: string }) => {
+      if (options.failAnswerTap) {
+        throw new Error("query is too old");
+      }
+
       callbackAnswers.push(answer?.text);
     },
     api: {
@@ -105,7 +117,9 @@ export function createMessageContext(options: {
     chat: options.chatType
       ? { id: options.chatId ?? -100, type: options.chatType }
       : { id: options.chatId ?? options.userId ?? 1, type: "private" as const },
-    editMessageReplyMarkup: async () => {},
+    editMessageReplyMarkup: async () => {
+      buttonRemovals.push(buttonRemovals.length + 1);
+    },
     editMessageText: async (text: string) => {
       edits.push({
         chatId: options.chatId ?? options.userId ?? 1,
@@ -130,9 +144,21 @@ export function createMessageContext(options: {
       return { message_id: nextMessageId++ };
     },
     replyWithChatAction: async () => {},
-    replyWithDraft: async (text: string, other: { draft_id: number }) => {
+    replyWithDraft: async (
+      text: string,
+      other: { draft_id: number },
+      signal?: AbortSignal
+    ) => {
       if (options.failDraft) {
         throw new Error("Draft failed");
+      }
+
+      if (options.hangDraft) {
+        await new Promise((_, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
       }
 
       drafts.push({ draftId: other.draft_id, text });
@@ -145,6 +171,7 @@ export function createMessageContext(options: {
   const typedContext = ctx as Context;
 
   return {
+    buttonRemovals,
     callbackAnswers,
     ctx: typedContext,
     drafts,
@@ -178,6 +205,8 @@ type StreamStep =
   | { type: "thinking"; delta?: string }
   | { type: "tool_start" }
   | { type: "tool_end" }
+  /** Waits before the next step, like a model that is still working. */
+  | { type: "pause"; ms: number }
   | { type: "error"; message: string }
   | { type: "resolve"; reply?: string };
 
@@ -283,7 +312,7 @@ export function createMockClient(
         { once: true }
       );
 
-      queueMicrotask(() => {
+      queueMicrotask(async () => {
         for (const step of options.steps ?? []) {
           if (settled) {
             break;
@@ -315,6 +344,9 @@ export function createMockClient(
                 tool: "todo_write",
                 toolCallId: "tool_call_1",
               });
+              break;
+            case "pause":
+              await new Promise((resolve) => setTimeout(resolve, step.ms));
               break;
             case "error":
               streamControl?.fail(new Error(step.message));
