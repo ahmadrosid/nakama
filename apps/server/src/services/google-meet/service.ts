@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import {
@@ -36,6 +37,79 @@ type Capture = {
   timer: ReturnType<typeof setTimeout>;
 };
 
+type Pairing = {
+  /** Set once a member approves the code; the raw key waits here for one poll. */
+  approved?: { key: string; keyId: string; orgId: string; userId: string };
+  code: string;
+  expiresAt: number;
+  label: string;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+const PAIRING_TTL_MS = 5 * 60_000;
+
+const MAX_PAIRINGS = 100;
+
+// No 0/O, 1/I/L or U, so a code read aloud or retyped stays unambiguous.
+const PAIRING_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+const EXTENSION_KEY_PATTERN = /^nmk_([A-Za-z0-9_-]{1,200})\.[A-Za-z0-9_-]{43}$/;
+
+function hashExtensionKey(key: string) {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+function pairingCode() {
+  let code = "";
+
+  while (code.length < 6) {
+    for (const byte of randomBytes(12)) {
+      // Drop bytes past the last full alphabet cycle so every letter is equally likely.
+      if (code.length < 6 && byte < 240) {
+        code += PAIRING_ALPHABET[byte % PAIRING_ALPHABET.length];
+      }
+    }
+  }
+
+  return `${code.slice(0, 3)}-${code.slice(3)}`;
+}
+
+function normalizePairingCode(code: string) {
+  const compact = code.toUpperCase().replace(/[\s-]/g, "");
+
+  return compact.length === 6
+    ? `${compact.slice(0, 3)}-${compact.slice(3)}`
+    : null;
+}
+
+function browserLabel(userAgent: string | null) {
+  const agent = userAgent ?? "";
+
+  const browser = /Edg\//.test(agent)
+    ? "Edge"
+    : /OPR\//.test(agent)
+      ? "Opera"
+      : /Chrome\//.test(agent)
+        ? "Chrome"
+        : /Firefox\//.test(agent)
+          ? "Firefox"
+          : "Browser";
+
+  const system = /CrOS/.test(agent)
+    ? "ChromeOS"
+    : /Windows/.test(agent)
+      ? "Windows"
+      : /Macintosh|Mac OS X/.test(agent)
+        ? "macOS"
+        : /Android/.test(agent)
+          ? "Android"
+          : /Linux/.test(agent)
+            ? "Linux"
+            : null;
+
+  return system ? `${browser} on ${system}` : browser;
+}
+
 type SocketData = Capture & {
   abort?: AbortController;
   store?: MeetingStore;
@@ -67,6 +141,9 @@ export class GoogleMeetService {
   private readonly importProgress = new Map<string, MeetImportProgress>();
   private readonly tasks = new Map<Promise<unknown>, string>();
   private readonly blockedOrganizations = new Set<string>();
+  // Pending extension pairings by pairId, and the code that points at each.
+  private readonly pairings = new Map<string, Pairing>();
+  private readonly pairingCodes = new Map<string, string>();
   private abort = new AbortController();
   private paused = false;
   private listener?: Server<SocketData>;
@@ -306,6 +383,20 @@ export class GoogleMeetService {
         throw new NakamaApiError("Organization unavailable", 404);
       }
 
+      if (
+        action === "approve-extension" ||
+        action === "revoke-extension" ||
+        action === "extension-keys"
+      ) {
+        // SAFETY: extensionAction returns the result type of these three actions.
+        return this.extensionAction(
+          orgId,
+          action,
+          input,
+          actor.id
+        ) as MeetActionResults[Action];
+      }
+
       const result = await run(input, {
         actionKey: action,
         actor,
@@ -371,6 +462,252 @@ export class GoogleMeetService {
         this.activeActions.delete(orgId);
       }
     });
+  }
+
+  private extensionAction(
+    orgId: string,
+    action: "approve-extension" | "revoke-extension" | "extension-keys",
+    input: MeetActionInput,
+    userId: string
+  ) {
+    const directory = this.directory(orgId);
+    const store = new MeetingStore(directory, orgId);
+
+    try {
+      if (action === "extension-keys") {
+        return { keys: store.listExtensionKeys(userId) };
+      }
+
+      if (action === "revoke-extension") {
+        return {
+          revoked: store.revokeExtensionKeys(userId, String(input.keyId)),
+        };
+      }
+
+      if (!meetEnabled(directory)) {
+        throw new Error("Google Meet is disabled");
+      }
+
+      const code = normalizePairingCode(String(input.code ?? ""));
+      const pairId = code ? this.pairingCodes.get(code) : undefined;
+      const pairing = pairId ? this.pairings.get(pairId) : undefined;
+
+      if (!pairing || pairing.approved || pairing.expiresAt <= Date.now()) {
+        throw new Error("This code is wrong or has expired");
+      }
+
+      const key = `nmk_${Buffer.from(orgId).toString("base64url")}.${randomBytes(32).toString("base64url")}`;
+
+      const created = store.createExtensionKey(
+        userId,
+        hashExtensionKey(key),
+        pairing.label
+      );
+
+      // The code works once.
+      this.pairingCodes.delete(pairing.code);
+      pairing.approved = { key, keyId: created.id, orgId, userId };
+
+      return created;
+    } finally {
+      store.close();
+    }
+  }
+
+  /** Starts pairing a browser. The code is shown to the member, who approves it. */
+  startPairing(userAgent: string | null) {
+    if (this.paused || this.abort.signal.aborted) {
+      throw new NakamaApiError("Google Meet is temporarily unavailable", 503);
+    }
+
+    if (this.pairings.size >= MAX_PAIRINGS) {
+      throw new NakamaApiError("Too many pending pairings", 429);
+    }
+
+    let code = pairingCode();
+
+    while (this.pairingCodes.has(code)) {
+      code = pairingCode();
+    }
+
+    const pairId = randomBytes(24).toString("base64url");
+
+    const timer = setTimeout(
+      () => this.dropPairing(pairId, true),
+      PAIRING_TTL_MS
+    );
+
+    timer.unref();
+    this.pairings.set(pairId, {
+      code,
+      expiresAt: Date.now() + PAIRING_TTL_MS,
+      label: browserLabel(userAgent),
+      timer,
+    });
+    this.pairingCodes.set(code, pairId);
+
+    return { code, expiresIn: PAIRING_TTL_MS / 1000, pairId };
+  }
+
+  /** Returns the raw key once after approval, then forgets it. */
+  collectPairing(
+    pairId: string
+  ): { status: "pending" } | { key: string; status: "approved" } {
+    const pairing = this.pairings.get(pairId);
+
+    if (!pairing || pairing.expiresAt <= Date.now()) {
+      throw new NakamaApiError("Pairing not found", 404);
+    }
+
+    if (!pairing.approved) {
+      return { status: "pending" };
+    }
+
+    const { key } = pairing.approved;
+    this.dropPairing(pairId, false);
+
+    return { key, status: "approved" };
+  }
+
+  private dropPairing(pairId: string, revokeUncollected: boolean) {
+    const pairing = this.pairings.get(pairId);
+
+    if (!pairing) {
+      return;
+    }
+
+    clearTimeout(pairing.timer);
+    this.pairings.delete(pairId);
+    this.pairingCodes.delete(pairing.code);
+
+    // An approved key the browser never collected must not stay usable.
+    if (revokeUncollected && pairing.approved) {
+      const { keyId, orgId, userId } = pairing.approved;
+      const store = new MeetingStore(this.directory(orgId), orgId);
+
+      try {
+        store.revokeExtensionKeys(userId, keyId);
+      } catch (error) {
+        console.warn("Could not revoke uncollected Google Meet key", error);
+      } finally {
+        store.close();
+      }
+    }
+  }
+
+  /**
+   * Resolves a Meet extension key to its member and organization. Returns
+   * null for an unknown, revoked or expired key, a disabled user, a user who
+   * left the organization, or an organization with Meet turned off.
+   */
+  async authenticateExtensionKey(key: string) {
+    const match = EXTENSION_KEY_PATTERN.exec(key);
+
+    if (!match?.[1]) {
+      return null;
+    }
+
+    if (this.paused || this.abort.signal.aborted) {
+      throw new NakamaApiError("Google Meet is temporarily unavailable", 503);
+    }
+
+    const orgId = Buffer.from(match[1], "base64url").toString("utf8");
+
+    if (
+      Buffer.from(orgId).toString("base64url") !== match[1] ||
+      this.blockedOrganizations.has(orgId)
+    ) {
+      return null;
+    }
+
+    let directory: string;
+
+    try {
+      directory = this.directory(orgId);
+    } catch {
+      // An org id that is not a safe path segment cannot belong to a key.
+      return null;
+    }
+
+    const organization = await this.db.getOrganizationById(orgId);
+
+    if (!organization || organization.archivedAt || organization.setupPending) {
+      return null;
+    }
+
+    // Never create a store for a key: only an org that already has Meet data.
+    if (
+      !(
+        existsSync(join(directory, "meetings.sqlite")) && meetEnabled(directory)
+      )
+    ) {
+      return null;
+    }
+
+    const store = new MeetingStore(directory, orgId);
+
+    try {
+      const found = store.findExtensionKey(hashExtensionKey(key));
+
+      if (!found) {
+        return null;
+      }
+
+      const [user, member] = await Promise.all([
+        this.db.getUserById(found.userId),
+        this.db.getOrgMember(orgId, found.userId),
+      ]);
+
+      if (
+        !user ||
+        user.disabledAt ||
+        !member ||
+        (member.role !== "admin" && member.role !== "member")
+      ) {
+        return null;
+      }
+
+      // Status polls are frequent; one write a minute is enough to renew.
+      if ((found.lastUsedAt ?? 0) < Date.now() - 60_000) {
+        store.renewExtensionKey(found.id);
+      }
+
+      return { orgId, userId: found.userId };
+    } finally {
+      store.close();
+    }
+  }
+
+  /** Revokes a user's extension keys in one organization, or in all of them. */
+  async revokeExtensionKeys(userId: string, orgId?: string) {
+    for (const [pairId, pairing] of this.pairings) {
+      if (
+        pairing.approved?.userId === userId &&
+        (!orgId || pairing.approved.orgId === orgId)
+      ) {
+        this.dropPairing(pairId, false);
+      }
+    }
+
+    const orgIds = orgId
+      ? [orgId]
+      : (await this.db.listOrganizations()).map(({ id }) => id);
+
+    for (const id of orgIds) {
+      const directory = this.directory(id);
+
+      if (!existsSync(join(directory, "meetings.sqlite"))) {
+        continue;
+      }
+
+      const store = new MeetingStore(directory, id);
+
+      try {
+        store.revokeExtensionKeys(userId);
+      } finally {
+        store.close();
+      }
+    }
   }
 
   private title(orgId: string, meetingId: string) {
@@ -697,6 +1034,10 @@ export class GoogleMeetService {
     }
 
     this.sessions.clear();
+
+    for (const pairId of [...this.pairings.keys()]) {
+      this.dropPairing(pairId, true);
+    }
 
     for (const ws of this.sockets) {
       ws.close();
