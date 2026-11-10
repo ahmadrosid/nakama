@@ -29,6 +29,7 @@ import type { TelegramBotInfo } from "./group-message";
 export const TEST_BOT_INFO: TelegramBotInfo = { id: 999, username: "mybot" };
 
 export interface MockMessageContext {
+  callbackAnswers: Array<string | undefined>;
   ctx: Context;
   editOptions: Array<Parameters<Context["api"]["editMessageText"]>[3]>;
   edits: Array<{ chatId: number; messageId: number; text: string }>;
@@ -47,7 +48,10 @@ export function createMessageContext(options: {
   failRichReply?: boolean;
   failRichEdit?: boolean;
   messageThreadId?: number;
+  /** Makes this an inline button tap with this callback data. */
+  callbackData?: string;
 }): MockMessageContext {
+  const callbackAnswers: Array<string | undefined> = [];
   const replies: string[] = [];
   const replyOptions: Array<Parameters<Context["reply"]>[1]> = [];
   const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
@@ -73,6 +77,9 @@ export function createMessageContext(options: {
   };
 
   const ctx = {
+    answerCallbackQuery: async (answer?: { text?: string }) => {
+      callbackAnswers.push(answer?.text);
+    },
     api: {
       editMessageText: async (
         chatId: number,
@@ -88,11 +95,24 @@ export function createMessageContext(options: {
         editOptions.push(editOptionsArg);
       },
     },
+    callbackQuery:
+      options.callbackData === undefined
+        ? undefined
+        : { data: options.callbackData, message },
     chat: options.chatType
       ? { id: options.chatId ?? -100, type: options.chatType }
       : { id: options.chatId ?? options.userId ?? 1, type: "private" as const },
+    editMessageReplyMarkup: async () => {},
+    editMessageText: async (text: string) => {
+      edits.push({
+        chatId: options.chatId ?? options.userId ?? 1,
+        messageId: 0,
+        text,
+      });
+    },
     from: options.userId === undefined ? undefined : { id: options.userId },
-    message,
+    message: options.callbackData === undefined ? message : undefined,
+    msg: message,
     reply: async (
       text: string,
       replyOptionsArg?: Parameters<Context["reply"]>[1]
@@ -112,7 +132,14 @@ export function createMessageContext(options: {
   // SAFETY: This test context implements only fields exercised by the channel tests.
   const typedContext = ctx as Context;
 
-  return { ctx: typedContext, editOptions, edits, replies, replyOptions };
+  return {
+    callbackAnswers,
+    ctx: typedContext,
+    editOptions,
+    edits,
+    replies,
+    replyOptions,
+  };
 }
 
 function isHtmlParseMode(

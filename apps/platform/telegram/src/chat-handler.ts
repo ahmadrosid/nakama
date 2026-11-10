@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import { deliverTurnArtifactShares } from "@nakama/core";
 import {
-  formatAgentQuestionnaireMessage,
+  formatAgentQuestionnaireAnswersMessage,
   hasActiveAgentQuestionnaire,
 } from "@nakama/core/agent-questionnaire";
 import { formatClientError } from "@nakama/core/api-error";
@@ -22,7 +23,11 @@ import {
 } from "@nakama/core/channel-org";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { createTypingLoop } from "@nakama/core/channel-typing-loop";
-import type { SendMessageInput } from "@nakama/core/contract";
+import type {
+  AgentQuestionItem,
+  AgentQuestionnaire,
+  SendMessageInput,
+} from "@nakama/core/contract";
 import {
   filterProfilesForChatAccess,
   formatProfileSelectionPrompt,
@@ -38,7 +43,7 @@ import {
   looksLikePairingCode,
 } from "@nakama/core/telegram-config";
 import { splitTelegramRichChunks } from "@nakama/core/telegram-rich-text";
-import type { Context } from "grammy";
+import { type Context, InlineKeyboard } from "grammy";
 import {
   buildTelegramDocumentInput,
   DOWNLOAD_FAILED_REPLY,
@@ -160,6 +165,14 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     const userId = ctx.from?.id;
 
     if (userId === undefined) {
+      return;
+    }
+
+    const tapData = ctx.callbackQuery?.data;
+
+    if (tapData !== undefined) {
+      await handleQuestionTap(ctx, tapData, userId, telegram);
+
       return;
     }
 
@@ -356,6 +369,16 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       );
     };
 
+    await startTurn(ctx, conversationKey, userId, telegram, turn);
+  };
+
+  async function startTurn(
+    ctx: Context,
+    conversationKey: string,
+    userId: number,
+    telegram: TelegramRichMessenger,
+    turn: () => Promise<void>
+  ): Promise<void> {
     const runTurn = () => withChatLock(conversationKey, turn);
 
     if (!dispatchTurn) {
@@ -371,7 +394,70 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         await telegram.send("This bot is busy. Try again shortly.");
       }
     }
-  };
+  }
+
+  async function handleQuestionTap(
+    ctx: Context,
+    data: string,
+    userId: number,
+    telegram: TelegramRichMessenger
+  ): Promise<void> {
+    await authStore.reload();
+
+    if (!authStore.isAuthorized(userId)) {
+      await ctx.answerCallbackQuery();
+
+      return;
+    }
+
+    const chatId = String(ctx.chat?.id);
+    const isGroup = isTelegramGroupChat(ctx);
+    const conversationKey = resolveConversationKey(ctx, chatId, isGroup);
+    const tap = recordQuestionTap(conversationKey, data);
+
+    if (!tap) {
+      await ctx.answerCallbackQuery({ text: QUESTION_CLOSED_REPLY });
+      await ctx
+        .editMessageReplyMarkup()
+        .catch((error) =>
+          console.warn(
+            "Telegram: could not remove closed question buttons",
+            error
+          )
+        );
+
+      return;
+    }
+
+    await ctx.answerCallbackQuery();
+    await ctx
+      .editMessageText(`${tap.questionText}\n\n✅ ${tap.answer}`)
+      .catch((error) =>
+        console.warn("Telegram: could not mark the question answered", error)
+      );
+
+    const message = tap.answersMessage;
+
+    if (!message) {
+      return;
+    }
+
+    await startTurn(ctx, conversationKey, userId, telegram, async () => {
+      const channelOrgKey = resolveChannelOrgKey(chatId, userId, isGroup);
+
+      if (!(await ensureOrgReady(telegram, channelOrgKey, undefined))) {
+        return;
+      }
+
+      await handleChatMessage(
+        ctx,
+        withGroupContext({ message }, isGroup),
+        conversationKey,
+        telegram,
+        message
+      );
+    });
+  }
 
   async function requestAccess(ctx: Context, userId: number): Promise<void> {
     try {
@@ -580,7 +666,10 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     const todoStatus = new TelegramTodoStatusMessage(telegram);
     let reply = "";
-    let question = "";
+    // The latest open question from the stream; an array so the callback write
+    // keeps its type.
+    const shownQuestions: AgentQuestionnaire[] = [];
+    openQuestionnaires.delete(conversationKey);
     const signal = registerActiveStream(conversationKey);
 
     try {
@@ -594,10 +683,11 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           },
           onQuestionnaireUpdated: (next) => {
             typingLoop.ping();
-            question =
-              next && hasActiveAgentQuestionnaire(next)
-                ? formatAgentQuestionnaireMessage(next)
-                : "";
+            shownQuestions.length = 0;
+
+            if (next && hasActiveAgentQuestionnaire(next)) {
+              shownQuestions.push(next);
+            }
           },
           onThinking: () => {
             typingLoop.ping();
@@ -649,14 +739,16 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       typingLoop.stop();
     }
 
+    const questionnaire = shownQuestions.at(0);
+
     if (reply.trim()) {
       await replyAsChat(telegram, reply);
-    } else if (!question) {
+    } else if (!questionnaire) {
       await telegram.send("(empty reply)");
     }
 
-    if (question) {
-      await replyAsChat(telegram, question);
+    if (questionnaire) {
+      await sendQuestionButtons(ctx, conversationKey, questionnaire);
     }
 
     if (profileId) {
@@ -1123,7 +1215,147 @@ async function withChatLock(
   return chatLock.withLock(chatId, fn);
 }
 
-/** @internal Test helper — clears the in-process chat lock map. */
+/** @internal Test helper — clears the in-process chat locks and open questions. */
 export function resetChatLocksForTests(): void {
   chatLock.resetForTests();
+  openQuestionnaires.clear();
+}
+
+const QUESTION_CLOSED_REPLY = "This question is closed.";
+
+const QUESTION_TAP_PATTERN = /^aq:([0-9a-f]{8}):(\d{1,2}):(\d{1,2})$/;
+
+const MAX_OPEN_QUESTIONNAIRES = 500;
+
+const OPEN_QUESTIONNAIRE_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface OpenQuestionnaire {
+  answers: Map<number, string>;
+  createdAt: number;
+  questionnaire: AgentQuestionnaire;
+  token: string;
+}
+
+/** Questions waiting for button taps, by conversation. Lost on restart. */
+const openQuestionnaires = new Map<string, OpenQuestionnaire>();
+
+async function sendQuestionButtons(
+  ctx: Context,
+  conversationKey: string,
+  questionnaire: AgentQuestionnaire
+): Promise<void> {
+  const token = randomUUID().slice(0, 8);
+
+  openQuestionnaires.set(conversationKey, {
+    answers: new Map(),
+    createdAt: Date.now(),
+    questionnaire,
+    token,
+  });
+
+  while (openQuestionnaires.size > MAX_OPEN_QUESTIONNAIRES) {
+    const oldest = openQuestionnaires.keys().next().value;
+
+    if (oldest === undefined) {
+      break;
+    }
+
+    openQuestionnaires.delete(oldest);
+  }
+
+  for (const [questionIndex, question] of questionnaire.questions.entries()) {
+    const keyboard = new InlineKeyboard();
+
+    for (const [choiceIndex, choice] of question.choices.entries()) {
+      keyboard
+        .text(
+          choice.recommended ? `${choice.label} (recommended)` : choice.label,
+          `aq:${token}:${questionIndex}:${choiceIndex}`
+        )
+        .row();
+    }
+
+    await ctx.reply(
+      formatQuestionText(questionnaire, question, questionIndex),
+      { reply_markup: keyboard }
+    );
+  }
+}
+
+function formatQuestionText(
+  questionnaire: AgentQuestionnaire,
+  question: AgentQuestionItem,
+  questionIndex: number
+): string {
+  const lines: string[] = [];
+
+  if (questionIndex === 0) {
+    lines.push(questionnaire.title.trim(), "");
+  }
+
+  lines.push(
+    questionnaire.questions.length > 1
+      ? `${questionIndex + 1}. ${question.prompt.trim()}`
+      : question.prompt.trim()
+  );
+
+  if (question.allowCustomAnswer) {
+    lines.push("", "Or type your own answer.");
+  }
+
+  return lines.join("\n");
+}
+
+/** Saves one button tap. Returns null when the question is no longer open. */
+function recordQuestionTap(
+  conversationKey: string,
+  data: string
+): { answer: string; answersMessage?: string; questionText: string } | null {
+  const match = QUESTION_TAP_PATTERN.exec(data);
+  const open = openQuestionnaires.get(conversationKey);
+
+  if (!(match && open && open.token === match[1])) {
+    return null;
+  }
+
+  if (Date.now() - open.createdAt > OPEN_QUESTIONNAIRE_TTL_MS) {
+    openQuestionnaires.delete(conversationKey);
+
+    return null;
+  }
+
+  const questionIndex = Number(match[2]);
+  const { questions } = open.questionnaire;
+  const question = questions[questionIndex];
+  const choice = question?.choices[Number(match[3])];
+
+  if (!(question && choice) || open.answers.has(questionIndex)) {
+    return null;
+  }
+
+  open.answers.set(questionIndex, choice.label);
+
+  const questionText = formatQuestionText(
+    open.questionnaire,
+    question,
+    questionIndex
+  );
+
+  if (open.answers.size < questions.length) {
+    return { answer: choice.label, questionText };
+  }
+
+  openQuestionnaires.delete(conversationKey);
+
+  return {
+    answer: choice.label,
+    answersMessage: formatAgentQuestionnaireAnswersMessage(
+      questions.map((entry, index) => ({
+        answer: open.answers.get(index) ?? "",
+        prompt: entry.prompt,
+        questionId: entry.id,
+      }))
+    ),
+    questionText,
+  };
 }

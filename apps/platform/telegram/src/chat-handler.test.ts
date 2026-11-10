@@ -13,8 +13,9 @@ import {
   resetActiveStreamsForTests,
 } from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
-import type { ChatMessage } from "@nakama/core/contract";
+import type { AgentQuestionnaire, ChatMessage } from "@nakama/core/contract";
 import { listTelegramAccessRequests } from "@nakama/core/telegram-config";
+import type { Context } from "grammy";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
   UNSUPPORTED_MEDIA_REPLY,
@@ -1166,56 +1167,104 @@ describe("createChatHandler security", () => {
     });
   });
 
-  test("sends the agent question to the chat so the user can answer there", async () => {
+  test("shows agent questions as buttons and sends the tapped answers to the agent", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         allowedUserIds: [4242],
         botToken: "1234567890:TEST",
       });
 
-      const { handler: handleMessage } = await createTestHandler(
+      const { calls, getLastStreamInput, handler } = await createTestHandler(
         homeDir,
-        {
-          config: TEST_CONFIG,
-        },
+        { config: TEST_CONFIG },
         {
           steps: [
-            {
-              questionnaire: {
-                id: "q1",
-                questions: [
-                  {
-                    allowCustomAnswer: true,
-                    choices: [
-                      { id: "recap", label: "Recap Pengeluaran Bulanan" },
-                      { id: "fund", label: "Rencana Dana Darurat" },
-                    ],
-                    id: "resend",
-                    prompt: "Mana yang mau dikirim ulang?",
-                  },
-                ],
-                title: "Kirim ulang",
-              },
-              type: "questionnaire",
-            },
+            { questionnaire: BUDGET_QUESTIONNAIRE, type: "questionnaire" },
             { reply: "", type: "resolve" },
           ],
           streaming: true,
         }
       );
 
-      const { ctx, replies } = createMessageContext({
-        text: "coba kirim ulang ini",
+      const asked = createMessageContext({ text: "budget", userId: 4242 });
+      await handler(asked.ctx);
+
+      expect(asked.replies).toHaveLength(2);
+      expect(asked.replies.join("\n")).not.toContain("(empty reply)");
+      expect(buttonLabels(asked.replyOptions[0])).toEqual([
+        "20% (recommended)",
+        "10%",
+      ]);
+
+      const firstTap = createMessageContext({
+        callbackData: buttonData(asked.replyOptions[0], 1),
         userId: 4242,
       });
 
-      await handleMessage(ctx);
+      await handler(firstTap.ctx);
 
-      const sent = replies.join("\n");
-      expect(sent).toContain("Mana yang mau dikirim ulang?");
-      expect(sent).toContain("Recap Pengeluaran Bulanan");
-      expect(sent).toContain("Rencana Dana Darurat");
-      expect(sent).not.toContain("(empty reply)");
+      expect(calls.sendStream).toBe(1);
+      expect(firstTap.edits.at(0)?.text).toContain("✅ 10%");
+
+      const secondTap = createMessageContext({
+        callbackData: buttonData(asked.replyOptions[1], 0),
+        userId: 4242,
+      });
+
+      await handler(secondTap.ctx);
+
+      expect(calls.sendStream).toBe(2);
+      expect(getLastStreamInput()).toMatchObject({
+        message:
+          "Answers\n\nQ: Target tabungan?\nA: 10%\n\nQ: Fokus kurangi apa?\nA: Makan di luar",
+      });
+
+      const repeatTap = createMessageContext({
+        callbackData: buttonData(asked.replyOptions[0], 0),
+        userId: 4242,
+      });
+
+      await handler(repeatTap.ctx);
+
+      expect(calls.sendStream).toBe(2);
+      expect(repeatTap.callbackAnswers).toEqual(["This question is closed."]);
+    });
+  });
+
+  test("ignores question button taps from users who are not paired", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        allowedUserIds: [4242],
+        botToken: "1234567890:TEST",
+      });
+
+      const { calls, handler } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        {
+          steps: [
+            { questionnaire: BUDGET_QUESTIONNAIRE, type: "questionnaire" },
+            { reply: "", type: "resolve" },
+          ],
+          streaming: true,
+        }
+      );
+
+      const asked = createMessageContext({ text: "budget", userId: 4242 });
+      await handler(asked.ctx);
+
+      for (const replyOptions of asked.replyOptions) {
+        const stranger = createMessageContext({
+          callbackData: buttonData(replyOptions, 0),
+          chatId: 4242,
+          userId: 777,
+        });
+
+        await handler(stranger.ctx);
+        expect(stranger.edits).toEqual([]);
+      }
+
+      expect(calls.sendStream).toBe(1);
     });
   });
 
@@ -2591,3 +2640,51 @@ describe("concurrent chats in different orgs", () => {
     });
   });
 });
+
+const BUDGET_QUESTIONNAIRE = {
+  id: "budget",
+  questions: [
+    {
+      allowCustomAnswer: false,
+      choices: [
+        { id: "twenty", label: "20%", recommended: true },
+        { id: "ten", label: "10%" },
+      ],
+      id: "target",
+      prompt: "Target tabungan?",
+    },
+    {
+      allowCustomAnswer: true,
+      choices: [
+        { id: "food", label: "Makan di luar" },
+        { id: "shop", label: "Belanja online" },
+      ],
+      id: "focus",
+      prompt: "Fokus kurangi apa?",
+    },
+  ],
+  title: "Budget",
+} satisfies AgentQuestionnaire;
+
+function inlineButtons(
+  replyOptions: Parameters<Context["reply"]>[1]
+): Array<{ callback_data?: string; text: string }> {
+  const markup = replyOptions?.reply_markup;
+
+  if (!(markup && "inline_keyboard" in markup)) {
+    return [];
+  }
+
+  return markup.inline_keyboard.flat();
+}
+
+function buttonLabels(replyOptions: Parameters<Context["reply"]>[1]) {
+  return inlineButtons(replyOptions).map((button) => button.text);
+}
+
+function buttonData(
+  replyOptions: Parameters<Context["reply"]>[1],
+  index: number
+): string {
+  return inlineButtons(replyOptions)[index]?.callback_data ?? "";
+}
