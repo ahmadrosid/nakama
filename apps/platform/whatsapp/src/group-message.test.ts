@@ -3,6 +3,7 @@ import {
   explainGroupMessageHandling,
   extraJidsFromGroupParticipants,
   isWhatsAppBotAddress,
+  rememberWhatsAppBotMessage,
   stripWhatsAppBotMention,
   type WhatsAppAccount,
 } from "./group-message";
@@ -41,14 +42,27 @@ describe("group-message helpers", () => {
       }).shouldHandle
     ).toBe(false);
 
+    rememberWhatsAppBotMessage("BOT_MSG_1");
+
     expect(
       explainGroupMessageHandling({
         me,
         mentionedJids: [],
+        quotedMessageId: "BOT_MSG_1",
         quotedParticipant: me.lid ?? null,
         text: "follow up",
       }).shouldHandle
     ).toBe(true);
+
+    expect(
+      explainGroupMessageHandling({
+        me,
+        mentionedJids: [],
+        quotedMessageId: "OWNER_TYPED_MSG",
+        quotedParticipant: me.id,
+        text: "follow up",
+      })
+    ).toEqual({ reason: "no-trigger", shouldHandle: false });
 
     expect(
       explainGroupMessageHandling({
