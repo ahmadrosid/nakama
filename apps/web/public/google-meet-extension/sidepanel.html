@@ -2,16 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta content="dark" name="color-scheme">
+    <meta content="light dark" name="color-scheme">
     <title>Nakama transcript</title>
     <style>
     :root {
-      --bg: #0a0a0b;
-      --card: #18181b;
-      --muted: #a1a1aa;
-      --border: #27272a;
-      --accent: #f59e0b;
-      color-scheme: dark;
+      --bg: #fafafa;
+      --fg: #171717;
+      --muted: #636363;
+      --border: #e5e5e5;
+      --accent: #b45309;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0a0a0b;
+        --fg: #fafafa;
+        --muted: #a1a1aa;
+        --border: #27272a;
+        --accent: #f59e0b;
+        color-scheme: dark;
+      }
     }
     * {
       box-sizing: border-box;
@@ -22,7 +32,7 @@
       font:
         14px / 1.5 system-ui,
         sans-serif;
-      color: #fafafa;
+      color: var(--fg);
       background: var(--bg);
     }
     h1 {

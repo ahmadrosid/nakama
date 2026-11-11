@@ -2,18 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta content="dark" name="color-scheme">
+    <meta content="light dark" name="color-scheme">
     <title>Nakama Meet</title>
     <style>
-    /* Match Nakama's dark theme in apps/web/src/index.css. */
+    /* Match Nakama's themes in apps/web/src/index.css. */
     :root {
-      --background: #0a0a0b;
-      --foreground: #fafafa;
-      --card: #18181b;
-      --primary: #f59e0b;
-      --muted: #a1a1aa;
-      --border: #27272a;
-      color-scheme: dark;
+      --background: #fafafa;
+      --foreground: #171717;
+      --card: #ffffff;
+      --primary: #b45309;
+      --primary-hover: #92400e;
+      --primary-foreground: #ffffff;
+      --muted: #636363;
+      --border: #e5e5e5;
+      --hover: #f4f4f5;
+      --success: #15803d;
+      --success-bg: #dcfce7;
+      --success-border: #86efac;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #0a0a0b;
+        --foreground: #fafafa;
+        --card: #18181b;
+        --primary: #f59e0b;
+        --primary-hover: #fbbf24;
+        --primary-foreground: #0a0a0b;
+        --muted: #a1a1aa;
+        --border: #27272a;
+        --hover: #27272a;
+        --success: #4ade80;
+        --success-bg: #14532d33;
+        --success-border: #166534;
+        color-scheme: dark;
+      }
     }
     * {
       box-sizing: border-box;
@@ -74,7 +97,7 @@
       white-space: nowrap;
     }
     #connection[data-connected="true"] {
-      color: #4ade80;
+      color: var(--success);
     }
     ol {
       display: grid;
@@ -99,9 +122,9 @@
       border-radius: 50%;
     }
     .step[data-done="true"] {
-      color: #4ade80;
-      background: #14532d33;
-      border-color: #166534;
+      color: var(--success);
+      background: var(--success-bg);
+      border-color: var(--success-border);
     }
     button {
       width: 100%;
@@ -150,7 +173,7 @@
       letter-spacing: 0.1em;
     }
     button:hover:not(:disabled) {
-      background: var(--border);
+      background: var(--hover);
     }
     button:focus-visible {
       outline: 2px solid var(--primary);
@@ -162,13 +185,13 @@
     }
     #start,
     #connect {
-      color: var(--background);
+      color: var(--primary-foreground);
       background: var(--primary);
       border-color: transparent;
     }
     #start:hover:not(:disabled),
     #connect:hover:not(:disabled) {
-      background: #fbbf24;
+      background: var(--primary-hover);
     }
     #status {
       min-height: 66px;
