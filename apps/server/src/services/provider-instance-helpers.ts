@@ -49,6 +49,7 @@ import {
   validateOpenCodeGoCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
+import { readChatgptPlanTypeFromAccessToken } from "../providers/chatgpt/oauth";
 import {
   type CreateProviderForInstanceOptions,
   createProviderForInstance,
@@ -69,6 +70,11 @@ export function toProviderInstanceSummary(
 
   return {
     baseUrl: instance.baseUrl ?? null,
+    chatgptPlanType:
+      chatgptConnected && instance.chatgptAccessToken
+        ? (readChatgptPlanTypeFromAccessToken(instance.chatgptAccessToken) ??
+          undefined)
+        : undefined,
     createdAt: instance.createdAt,
     customModels: instance.customModels?.length
       ? instance.customModels
