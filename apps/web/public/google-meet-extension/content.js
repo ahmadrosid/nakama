@@ -2,7 +2,9 @@
 
 const chrome = globalThis.chrome;
 
-const isMeeting = /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(location.pathname);
+const isMeeting = /^\/(?:meet\/)?[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(
+  location.pathname
+);
 
 // The transcript lives in the side panel. This badge only tells people in
 // the call that Nakama is recording.

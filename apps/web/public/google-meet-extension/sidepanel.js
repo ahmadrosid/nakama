@@ -38,7 +38,7 @@ async function refresh() {
 
   const onMeet =
     url.origin === "https://meet.google.com" &&
-    /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(url.pathname);
+    /^\/(?:meet\/)?[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(url.pathname);
 
   const badge = document.querySelector("#connection");
   badge.textContent = connected ? "✓ Connected" : "Not connected";

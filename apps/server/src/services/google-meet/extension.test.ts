@@ -320,6 +320,9 @@ function extension(server: { captureProtocol?: number } = {}) {
     },
     runtimeMessages,
     session,
+    setTabUrl(id: number, url: string) {
+      tabs.set(id, { id, url });
+    },
   };
 }
 
@@ -435,6 +438,18 @@ test("start captures the tab first, then calls Nakama with the key", async () =>
     body: JSON.stringify({ meetingId: "meeting" }),
     path: "/v1/meet/extension/leave",
   });
+});
+
+test("start accepts a /meet/<code> tab and sends Nakama the short URL", async () => {
+  const ext = extension();
+  ext.connected();
+  ext.setTabUrl(2, "https://meet.google.com/meet/rbi-wghm-grt?authuser=0");
+  expect(await ext.dispatch("START")).toEqual({ ok: true });
+  expect(
+    JSON.parse(
+      ext.requests.find((request) => request.path.endsWith("/start"))!.body!
+    )
+  ).toEqual({ url: "https://meet.google.com/rbi-wghm-grt" });
 });
 
 test("start refuses a Nakama that does not speak capture protocol 3", async () => {

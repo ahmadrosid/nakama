@@ -10,7 +10,8 @@ const PAIR_MAX_MS = 5 * 60 * 1000;
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
-const MEET_PATH = /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/;
+// Meet serves calls at /<code> and at /meet/<code>; Nakama stores /<code>.
+const MEET_PATH = /^\/(?:meet\/)?([a-z]{3}-[a-z]{4}-[a-z]{3})\/?$/;
 
 let starting = false;
 
@@ -352,7 +353,7 @@ async function start() {
 
     await ensureOffscreen();
     meeting = await post("/v1/meet/extension/start", {
-      url: url.origin + url.pathname,
+      url: `https://meet.google.com/${MEET_PATH.exec(url.pathname)[1]}`,
     });
 
     if (
