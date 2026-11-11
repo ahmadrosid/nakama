@@ -109,6 +109,21 @@ export function parseAgentQuestionnaireAnswersMessage(
   return answers.length > 0 ? answers : null;
 }
 
+/**
+ * Questionnaire answers anywhere in a message, also when a channel puts a
+ * note (such as a group-chat line) before the "Answers" block.
+ */
+export function findAgentQuestionnaireAnswers(
+  value: string
+): AgentQuestionAnswer[] | null {
+  const lines = value.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === ANSWERS_HEADER);
+
+  return start === -1
+    ? null
+    : parseAgentQuestionnaireAnswersMessage(lines.slice(start).join("\n"));
+}
+
 function choiceLetter(index: number): string {
   return String.fromCharCode("a".charCodeAt(0) + index);
 }

@@ -232,6 +232,7 @@ import {
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
+import { findAgentQuestionnaireAnswers } from "@nakama/core/agent-questionnaire";
 import { isDocxFile, isLegacyDocFile } from "@nakama/core/artifact-mime";
 import {
   type ChannelConfigScope,
@@ -459,6 +460,9 @@ export interface CreateSessionOptions {
 
 /** Per-session settings a chat is built with. Branches copy them. */
 type SessionRunSettings = Pick<StoredSessionRecord, "model" | "thinkingEffort">;
+
+const QUESTIONNAIRE_ANSWERS_CONTEXT =
+  "The user's message answers the questions you asked with ask_user_question. Continue the task with these answers and write a reply.";
 
 /** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
@@ -6826,6 +6830,12 @@ export class AgentService {
 
         if (todoContext.trim()) {
           parts.push(todoContext.trim());
+        }
+
+        // Channels send questionnaire answers as text; tell the model this
+        // turn continues the task, so it does not end without a reply.
+        if (findAgentQuestionnaireAnswers(context?.userMessage ?? "")) {
+          parts.push(QUESTIONNAIRE_ANSWERS_CONTEXT);
         }
 
         if (this.composioService && userId) {
