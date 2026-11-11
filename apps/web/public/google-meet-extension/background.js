@@ -453,9 +453,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sender.url?.startsWith(chrome.runtime.getURL(file))
     );
 
-  const fromMeetTab =
-    Boolean(sender.tab?.id) &&
-    ["MEET_STATE", "MEET_TRANSCRIPT"].includes(message.type);
+  const fromMeetTab = Boolean(sender.tab?.id) && message.type === "MEET_STATE";
 
   if (!(fromExtensionPage || fromMeetTab)) {
     return;
@@ -474,10 +472,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === "MEET_STATE" && fromMeetTab) {
     work = meetingSessionForTab(sender.tab.id).then((session) =>
       session ? { meetingId: session.meetingId, status: session.status } : null
-    );
-  } else if (message.type === "MEET_TRANSCRIPT" && fromMeetTab) {
-    work = meetingSessionForTab(sender.tab.id).then((session) =>
-      session ? transcript(session, message.after ?? 0) : null
     );
   } else if (message.type === "TRANSCRIPT" && fromExtensionPage) {
     work = getSession().then(async (session) => {

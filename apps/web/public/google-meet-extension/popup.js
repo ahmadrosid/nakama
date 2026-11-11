@@ -22,6 +22,8 @@ const openSidePanel = document.querySelector("#open-side-panel");
 
 let busy = false;
 
+let activeTabId;
+
 async function refresh() {
   const [state, tabs] = await Promise.all([
     chrome.runtime.sendMessage({ type: "STATE" }),
@@ -29,6 +31,7 @@ async function refresh() {
   ]);
 
   const url = new URL(tabs[0]?.url || "about:blank");
+  activeTabId = tabs[0]?.id;
 
   const recording = ["starting", "recording"].includes(
     state?.captureSession?.status
@@ -154,7 +157,19 @@ connectForm.onsubmit = async (event) => {
 
 disconnect.onclick = () => run("DISCONNECT");
 
-start.onclick = () => run("START");
+start.onclick = () => {
+  // The transcript shows in the side panel. Chrome opens it only during the
+  // click, so ask before anything else is awaited.
+  if (activeTabId) {
+    chrome.sidePanel
+      .open({ tabId: activeTabId })
+      .catch((error) =>
+        console.warn("[Nakama Meet] side panel did not open", error.message)
+      );
+  }
+
+  return run("START");
+};
 
 stop.onclick = () => run("STOP");
 

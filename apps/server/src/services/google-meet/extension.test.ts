@@ -486,7 +486,7 @@ test("disconnect deletes the key and an open pairing", async () => {
   expect((await ext.dispatch("STATE")).connected).toBe(false);
 });
 
-test("the recording Meet tab reads its transcript, and captions send nothing", async () => {
+test("the Meet tab can read only its recording state, not the transcript or captions", async () => {
   const ext = extension();
   ext.connected();
   await ext.dispatch("START");
@@ -497,21 +497,16 @@ test("the recording Meet tab reads its transcript, and captions send nothing", a
       caption: { speakerName: "A", text: "hello" },
     })
   ).toBeUndefined();
+  expect(
+    await ext.fromPage("MEET_TRANSCRIPT", 2, { after: 0 })
+  ).toBeUndefined();
   await Bun.sleep(1);
   expect(ext.requests).toHaveLength(count);
   expect(await ext.fromPage("MEET_STATE", 2)).toEqual({
     meetingId: "meeting",
     status: "recording",
   });
-  expect(await ext.fromPage("MEET_TRANSCRIPT", 1)).toBeNull();
-  expect(ext.requests).toHaveLength(count);
-  await ext.fromPage("MEET_TRANSCRIPT", 2, { after: 4 });
-  expect(ext.requests.at(-1)).toEqual({
-    authorization: "Bearer nmk_test",
-    body: undefined,
-    method: "GET",
-    path: "/v1/meet/extension/transcript?after=4&meetingId=meeting",
-  });
+  expect(await ext.fromPage("MEET_STATE", 1)).toBeNull();
 });
 
 test("audio worklet encodes every mono sample as PCM16 and tolerates empty input", () => {
@@ -557,11 +552,17 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
   expect(messages).toHaveLength(3);
 });
 
-test("content script on a Meet call has no page bridge and no caption scraper", async () => {
+test("content script on a Meet call shows only the recording badge", async () => {
   const windowListeners: string[] = [];
   const sent: string[] = [];
+  const created: { style: { display?: string } }[] = [];
 
-  const element = () => ({ append() {}, style: {} });
+  const element = () => {
+    const node = { append() {}, style: {} };
+    created.push(node);
+
+    return node;
+  };
 
   runInNewContext(extensionFile("content.js"), {
     chrome: {
@@ -571,13 +572,13 @@ test("content script on a Meet call has no page bridge and no caption scraper", 
         async sendMessage(message: { type: string }) {
           sent.push(message.type);
 
-          return null;
+          return { status: "recording" };
         },
       },
     },
     document: {
       createElement: element,
-      documentElement: element(),
+      documentElement: { append() {} },
       querySelector: () => null,
     },
     location: {
@@ -594,6 +595,64 @@ test("content script on a Meet call has no page bridge and no caption scraper", 
   await Bun.sleep(1);
   expect(windowListeners).not.toContain("message");
   expect(sent).toEqual(["MEET_STATE"]);
+  expect(created).toHaveLength(1);
+  expect(created[0]?.style.display).toBe("block");
+});
+
+test("popup Start opens the side panel for the Meet tab, then starts", async () => {
+  const calls: string[] = [];
+  let startClick!: () => Promise<void>;
+
+  const element = (selector: string) => {
+    const node = { dataset: {} };
+
+    if (selector === "#start") {
+      return new Proxy(node, {
+        set(target, key, value) {
+          if (key === "onclick") {
+            startClick = value;
+          }
+
+          return Reflect.set(target, key, value);
+        },
+      });
+    }
+
+    return node;
+  };
+
+  runInNewContext(extensionFile("popup.js"), {
+    chrome: {
+      runtime: {
+        async sendMessage(message: { type: string }) {
+          calls.push(message.type);
+
+          return message.type === "STATE" ? { connected: true } : { ok: true };
+        },
+      },
+      sidePanel: {
+        async open({ tabId }: { tabId: number }) {
+          calls.push(`sidePanel ${tabId}`);
+        },
+      },
+      storage: { onChanged: { addListener() {} } },
+      tabs: {
+        async query() {
+          return [{ id: 7, url: "https://meet.google.com/abc-defg-hij" }];
+        },
+      },
+    },
+    clearInterval() {},
+    console: { warn() {} },
+    document: { querySelector: element },
+    setInterval: () => 1,
+    URL,
+    window: { addEventListener() {} },
+  });
+  await Bun.sleep(1);
+  calls.length = 0;
+  await startClick();
+  expect(calls.slice(0, 2)).toEqual(["sidePanel 7", "START"]);
 });
 
 test("manifest asks only for Meet and the Nakama origin the user picks", () => {
