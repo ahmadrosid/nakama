@@ -15,6 +15,7 @@ import {
   type ProviderClient,
   type ProviderInstance,
   parseWireApi,
+  readChatgptOAuthFromInstance,
   readXaiOAuthFromInstance,
   resolveOllamaHostMode,
   type UserConfig,
@@ -49,7 +50,7 @@ import {
   validateOpenCodeGoCustomModels,
   validateOpenRouterCustomModels,
 } from "../providers";
-import { readChatgptPlanTypeFromAccessToken } from "../providers/chatgpt/oauth";
+import { readChatgptPlanType } from "../providers/chatgpt/oauth";
 import {
   type CreateProviderForInstanceOptions,
   createProviderForInstance,
@@ -70,11 +71,10 @@ export function toProviderInstanceSummary(
 
   return {
     baseUrl: instance.baseUrl ?? null,
-    chatgptPlanType:
-      chatgptConnected && instance.chatgptAccessToken
-        ? (readChatgptPlanTypeFromAccessToken(instance.chatgptAccessToken) ??
-          undefined)
-        : undefined,
+    // Same token check as the automatic image pick.
+    chatgptPlanType: readChatgptPlanType(
+      chatgptConnected ? readChatgptOAuthFromInstance(instance) : null
+    ),
     createdAt: instance.createdAt,
     customModels: instance.customModels?.length
       ? instance.customModels

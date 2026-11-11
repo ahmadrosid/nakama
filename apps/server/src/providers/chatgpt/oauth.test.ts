@@ -6,7 +6,7 @@ import {
   fetchChatgptCodexModels,
   parseChatgptCodexModelsPayload,
   readChatgptAccountIdFromAccessToken,
-  readChatgptPlanTypeFromAccessToken,
+  readChatgptPlanType,
   refreshChatgptOAuthToken,
 } from "./oauth";
 
@@ -195,38 +195,39 @@ describe("readChatgptAccountIdFromAccessToken", () => {
       });
 
       expect(readChatgptAccountIdFromAccessToken(token)).toBe("acct_123");
-      expect(readChatgptPlanTypeFromAccessToken(token)).toBeNull();
+      expect(readChatgptPlanType({ accessToken: token })).toBeUndefined();
     }
   );
 });
 
-describe("readChatgptPlanTypeFromAccessToken", () => {
+describe("readChatgptPlanType", () => {
   test.each(["free", "plus"])("reads plan type %s", (plan) => {
     const token = buildJwt({
       [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_plan_type: plan },
     });
 
-    expect(readChatgptPlanTypeFromAccessToken(token)).toBe(plan);
+    expect(readChatgptPlanType({ accessToken: token })).toBe(plan);
   });
 
-  test("returns null when the claim is missing", () => {
-    expect(readChatgptPlanTypeFromAccessToken(buildJwt({}))).toBeNull();
+  test("returns nothing when the claim or the token is missing", () => {
+    expect(readChatgptPlanType({ accessToken: buildJwt({}) })).toBeUndefined();
+    expect(readChatgptPlanType(null)).toBeUndefined();
   });
 
-  test("returns null for an empty plan type", () => {
+  test("returns nothing for an empty plan type", () => {
     const token = buildJwt({
       [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_plan_type: "" },
     });
 
-    expect(readChatgptPlanTypeFromAccessToken(token)).toBeNull();
+    expect(readChatgptPlanType({ accessToken: token })).toBeUndefined();
   });
 
   test.each([
     "not-a-jwt",
     "a.%%%.c",
     `a.${Buffer.from("{").toString("base64url")}.c`,
-  ])("returns null for a malformed token %s", (token) => {
-    expect(readChatgptPlanTypeFromAccessToken(token)).toBeNull();
+  ])("returns nothing for a malformed token %s", (accessToken) => {
+    expect(readChatgptPlanType({ accessToken })).toBeUndefined();
   });
 });
 

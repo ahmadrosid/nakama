@@ -2,12 +2,14 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import type { OpenRouterRoutingSettings } from "@nakama/core/contract";
+import { CHATGPT_JWT_CLAIM_PATH } from "../providers/chatgpt/oauth";
 import { getModelsForProviderInstance } from "../providers/compatible-models";
 import {
   applyProviderInstanceUpdate,
   buildProviderInstanceFromCreateRequest,
   modelExistsOnInstance,
   resolveProfileProviderSelection,
+  toProviderInstanceSummary,
 } from "./provider-instance-helpers";
 
 function createProviderInstance(
@@ -620,5 +622,42 @@ describe("buildProviderInstanceFromCreateRequest", () => {
       getModelsForProviderInstance(instance).map((model) => model.id)
     ).toEqual(["gpt-6-sol", "gpt-6-luna"]);
     expect(modelExistsOnInstance(instance, "gpt-6-astra")).toBe(false);
+  });
+});
+
+describe("toProviderInstanceSummary", () => {
+  const freeToken = `h.${Buffer.from(
+    JSON.stringify({
+      [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_plan_type: "free" },
+    })
+  ).toString("base64url")}.s`;
+
+  const connectedChatgpt = createProviderInstance({
+    apiKey: "",
+    chatgptAccessToken: freeToken,
+    chatgptAccountId: "acct_1",
+    chatgptRefreshToken: "refresh",
+    chatgptTokenExpiresAt: "2099-01-01T00:00:00.000Z",
+    id: "chatgpt",
+    label: "ChatGPT",
+    type: "chatgpt",
+  });
+
+  test("reports the plan of a connected ChatGPT account", () => {
+    expect(toProviderInstanceSummary(connectedChatgpt, 0).chatgptPlanType).toBe(
+      "free"
+    );
+  });
+
+  test.each([
+    { chatgptAccountId: "", name: "a disconnected account" },
+    { chatgptAccessToken: "", name: "an account with no access token" },
+    { chatgptTokenExpiresAt: "", name: "an account with no token expiry" },
+    { name: "another provider type", type: "openai" as const },
+  ])("leaves the plan out for $name", ({ name: _name, ...overrides }) => {
+    expect(
+      toProviderInstanceSummary({ ...connectedChatgpt, ...overrides }, 0)
+        .chatgptPlanType
+    ).toBeUndefined();
   });
 });

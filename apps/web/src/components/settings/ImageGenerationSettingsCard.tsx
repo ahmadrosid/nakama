@@ -1,3 +1,4 @@
+import type { ProviderInstanceSummary } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -26,12 +27,10 @@ const IMAGE_GENERATION_OFF_VALUE = "off";
 
 type ImageGenerationChoice = SettingsModelOption;
 
-interface ImageGenerationProviderSummary {
-  chatgptPlanType?: string;
-  hasApiKey: boolean;
-  id: string;
-  type: string;
-}
+type ImageGenerationProviderSummary = Pick<
+  ProviderInstanceSummary,
+  "chatgptPlanType" | "hasApiKey" | "id" | "type"
+>;
 
 /**
  * The picker's choices and labels. Every ChatGPT model makes images with the
@@ -41,8 +40,7 @@ interface ImageGenerationProviderSummary {
 function imageGenerationChoices(
   models: Parameters<typeof groupModelsByProvider>[0],
   providers: ImageGenerationProviderSummary[],
-  selection: string,
-  currentProviderId: string | null
+  selection: string | null
 ) {
   const groups = groupModelsByProvider(models);
 
@@ -102,7 +100,7 @@ function imageGenerationChoices(
           label: group.providerLabel,
           // A saved ChatGPT pick keeps its own value, so it shows selected.
           value:
-            chatgptGroupOf(selection) === group
+            selection && chatgptGroupOf(selection) === group
               ? selection
               : encodeModelSelection(
                   group.providerId,
@@ -151,29 +149,31 @@ function imageGenerationChoices(
     );
   };
 
-  // Same rule as the server's automatic pick: the default provider when it is
-  // a connected ChatGPT, else the first connected ChatGPT.
-  const automaticChatgptId =
-    currentProviderId && connectedChatgptIds.has(currentProviderId)
-      ? currentProviderId
-      : [...connectedChatgptIds][0];
-
-  const imageChatgptId = selection
-    ? chatgptGroupOf(selection)?.providerId
-    : automaticChatgptId;
-
-  // ChatGPT Free has no image generation tool.
-  const chatgptFreeNote = providers.some(
-    (provider) =>
-      provider.id === imageChatgptId && provider.chatgptPlanType === "free"
+  const freeChatgptIds = new Set(
+    providers.flatMap((provider) =>
+      connectedChatgptIds.has(provider.id) &&
+      provider.chatgptPlanType === "free"
+        ? [provider.id]
+        : []
+    )
   );
+
+  // ChatGPT Free has no image tool. The automatic pick skips Free accounts, so
+  // it only fails when every connected ChatGPT is Free. `null`: not loaded.
+  const chatgptFreeNote =
+    selection === ""
+      ? freeChatgptIds.size > 0 &&
+        freeChatgptIds.size === connectedChatgptIds.size
+      : selection !== null &&
+        freeChatgptIds.has(chatgptGroupOf(selection)?.providerId ?? "");
 
   return { chatgptFreeNote, choices, labelOf, providerAvailable };
 }
 
 export function ImageGenerationSettingsCard() {
   const [formError, setFormError] = useState<string | null>(null);
-  const [selection, setSelection] = useState<string>("");
+  // null until the saved model loads, so it does not read as the automatic pick.
+  const [selection, setSelection] = useState<string | null>(null);
   const [savedHint, setSavedHint] = useState<string | null>(null);
   const { data: modelsResponse } = useModelsQuery();
   const { data: imageGenerationSettings } = useImageGenerationSettings();
@@ -184,20 +184,20 @@ export function ImageGenerationSettingsCard() {
       imageGenerationChoices(
         modelsResponse?.models ?? [],
         modelsResponse?.providers ?? [],
-        selection,
-        modelsResponse?.currentProviderId ?? null
+        selection
       ),
-    [
-      modelsResponse?.currentProviderId,
-      modelsResponse?.models,
-      modelsResponse?.providers,
-      selection,
-    ]
+    [modelsResponse?.models, modelsResponse?.providers, selection]
   );
 
+  const savedModel = imageGenerationSettings
+    ? (imageGenerationSettings.model ?? "")
+    : null;
+
   useEffect(() => {
-    setSelection(imageGenerationSettings?.model ?? "");
-  }, [imageGenerationSettings?.model]);
+    if (savedModel !== null) {
+      setSelection(savedModel);
+    }
+  }, [savedModel]);
 
   useEffect(() => {
     if (!savedHint) {

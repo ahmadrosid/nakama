@@ -10,6 +10,7 @@ import {
 } from "@nakama/core";
 import {
   CHATGPT_CODEX_BASE_URL,
+  readChatgptPlanType,
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
 import { getDefaultModel } from "../providers/models";
@@ -63,10 +64,13 @@ export function resolveChatgptImageGenerationSelection(
   };
 }
 
+const CHATGPT_FREE_IMAGE_MESSAGE =
+  "ChatGPT Free accounts can't generate images. Pick another image model in Settings → AI Providers (/settings/providers#image-generation).";
+
 /**
  * No image model saved: a connected ChatGPT subscription makes images, so a
- * ChatGPT user does not need an admin to pick a model first. The default
- * provider wins when it is a ChatGPT one.
+ * ChatGPT user does not need an admin to pick a model first. A paid account
+ * wins over a Free one, then the default provider over the others.
  */
 export function resolveDefaultChatgptImageGenerationSelection(
   userConfig: UserConfig | null | undefined
@@ -78,10 +82,19 @@ export function resolveDefaultChatgptImageGenerationSelection(
       readChatgptOAuthFromInstance(provider) !== null
   );
 
+  // ChatGPT Free has no image tool. The plan can be stale until the token
+  // refreshes, so a Free account is still used when it is the only one.
+  const paid = connected.filter(
+    (provider) =>
+      readChatgptPlanType(readChatgptOAuthFromInstance(provider)) !== "free"
+  );
+
+  const candidates = paid.length > 0 ? paid : connected;
+
   const instance =
-    connected.find(
+    candidates.find(
       (provider) => provider.id === userConfig?.defaultProviderId
-    ) ?? connected[0];
+    ) ?? candidates[0];
 
   if (!instance) {
     return null;
@@ -245,6 +258,12 @@ export async function generateImageWithChatgpt(
 
   if (!response.ok) {
     const body = await response.text().catch(rethrowTimeout);
+
+    // Codex answers a Free account's image call with a raw 400.
+    if (response.status === 400 && readChatgptPlanType(oauth) === "free") {
+      throw new NakamaApiError(CHATGPT_FREE_IMAGE_MESSAGE, 400);
+    }
+
     throw buildProviderHttpError(
       "ChatGPT image generation",
       response.status,
