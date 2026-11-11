@@ -21,6 +21,7 @@ interface StoreData {
     meetingId: string;
     origin: string;
     status: string;
+    stoppedAt?: number;
     tabId: number;
   };
   meetKey?: string;
@@ -458,8 +459,11 @@ test("start captures the tab first, then calls Nakama with the key", async () =>
   await ext.captureEvent("CAPTURE_STARTED");
   expect(ext.session.captureSession?.status).toBe("recording");
   expect(ext.badge()).toBe("REC");
+  expect(ext.session.captureSession?.stoppedAt).toBeUndefined();
   await ext.captureEvent("CAPTURE_STOPPED");
   expect(ext.session.captureSession?.status).toBe("stopped");
+  // The side panel shows the final length from startedAt and stoppedAt.
+  expect(ext.session.captureSession?.stoppedAt).toBeGreaterThan(0);
   expect(ext.requests.at(-1)).toMatchObject({
     authorization: "Bearer nmk_test",
     body: JSON.stringify({ meetingId: "meeting" }),
@@ -1114,7 +1118,12 @@ test("side panel renders live turns safely, restores on reopen and stops polling
   recording = false;
   reopened.poll();
   await Bun.sleep(0);
-  expect(reopened.element("#status").textContent).toBe("Transcript ready");
+  // A finished meeting swaps the recording card for the saved card.
+  expect(reopened.element("#done-card").hidden).toBe(false);
+  expect(reopened.element("#done-card").dataset.state).toBe("saved");
+  expect(reopened.element("#done-actions").hidden).toBe(false);
+  expect(reopened.element("#recording-card").hidden).toBe(true);
+  expect(reopened.element("#full-transcript").hidden).toBe(true);
   const finishedCount = transcriptRequests;
   reopened.poll();
   await Bun.sleep(0);

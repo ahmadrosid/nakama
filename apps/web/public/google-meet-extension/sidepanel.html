@@ -264,6 +264,63 @@
       border-color: var(--rec-border);
       border-radius: 999px;
     }
+    #done-card .done-head {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .done-icon {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      color: var(--success);
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      border-radius: 50%;
+    }
+    #done-card[data-state="finishing"] .done-icon {
+      color: var(--primary);
+      background: transparent;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      animation: spin 900ms linear infinite;
+    }
+    #done-card[data-state="finishing"] .done-icon svg {
+      display: none;
+    }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    .done-copy {
+      display: grid;
+      min-width: 0;
+    }
+    #done-meta {
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+    }
+    .done-actions,
+    .done-row {
+      display: grid;
+      gap: 8px;
+    }
+    .done-row {
+      grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    }
+    #open-saved {
+      font-weight: 600;
+      color: var(--primary-foreground);
+      background: var(--primary);
+      border-color: transparent;
+    }
+    #open-saved:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
     #live {
       display: grid;
       gap: 8px;
@@ -323,6 +380,9 @@
     @media (prefers-reduced-motion: reduce) {
       button {
         transition: none;
+      }
+      #done-card[data-state="finishing"] .done-icon {
+        animation: none;
       }
     }
     </style>
@@ -413,9 +473,38 @@
       <span id="meeting-info"></span>
       <button hidden id="stop" type="button">Stop transcription</button>
     </section>
+    <section aria-label="Meeting result" class="card" hidden id="done-card">
+      <div class="done-head">
+        <span aria-hidden="true" class="done-icon">
+          <svg
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2.2"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </span>
+        <div class="done-copy">
+          <h2 id="done-title">Transcript saved</h2>
+          <span id="done-meta"></span>
+        </div>
+      </div>
+      <div class="done-actions" id="done-actions">
+        <button id="open-saved" type="button">Open in Nakama</button>
+        <div class="done-row">
+          <button id="copy-text" type="button">Copy text</button>
+          <button id="record-again" type="button">Record again</button>
+        </div>
+      </div>
+    </section>
     <section aria-label="Live transcript" hidden id="live">
       <div class="live-heading">
-        <h2>Live transcript</h2>
+        <h2 id="live-title">Live transcript</h2>
         <button hidden id="full-transcript" type="button">
           Open in Nakama
         </button>

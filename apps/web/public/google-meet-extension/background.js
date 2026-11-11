@@ -556,6 +556,8 @@ async function updateCaptureState(message) {
         : message.type === "CAPTURE_ERROR"
           ? "error"
           : "stopped",
+      // The side panel shows the final length from these two times.
+      stoppedAt: isRecording ? undefined : (session.stoppedAt ?? Date.now()),
     },
   });
   await setBadge(

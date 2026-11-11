@@ -38,6 +38,21 @@ let startedAt;
 
 let transcriptMeeting;
 
+let meetingState;
+
+let onMeetNow = false;
+
+let sessionNow;
+
+let meetingHeading = "";
+
+let lineCount = 0;
+
+// Copy text keeps the newest lines only, so a long call cannot grow it forever.
+const COPY_LIMIT = 10_000;
+
+const copyLines = [];
+
 function formatElapsed(milliseconds) {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
   const hours = Math.floor(seconds / 3600);
@@ -74,16 +89,19 @@ async function refresh() {
   const session = state?.captureSession;
 
   recordingNow = recording;
+  sessionNow = session;
   startedAt = session?.startedAt;
 
   const onMeet =
     url.origin === "https://meet.google.com" &&
     /^\/(?:meet\/)?[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(url.pathname);
 
+  onMeetNow = onMeet;
+
   const badge = document.querySelector("#connection");
-  badge.textContent = connected ? "✓ Connected" : "Not connected";
+  badge.textContent = connected ? "Connected" : "Not connected";
   badge.dataset.connected = String(connected);
-  document.querySelector("#meeting").textContent = recording
+  meetingHeading = recording
     ? "Transcribing your meeting"
     : connected && onMeet
       ? "Ready to transcribe"
@@ -107,9 +125,6 @@ async function refresh() {
     origin.value = state.origin;
   }
 
-  document.querySelector("#setup").hidden = recording;
-  document.querySelector("#recording-card").hidden = !recording;
-  live.hidden = !(recording || transcriptMeeting);
   tickTimer();
 
   const meetingPath = new URL(session?.tabUrl || "about:blank").pathname;
@@ -148,6 +163,56 @@ async function refresh() {
         : pairing
           ? "Approve this code in the Nakama tab."
           : "Enter your Nakama address, then connect.");
+  renderResult();
+}
+
+// After Stop the panel shows the meeting's result: finishing, then saved.
+function renderResult() {
+  const done =
+    Boolean(transcriptMeeting) &&
+    meetingState !== "failed" &&
+    (["transcribing", "finished"].includes(meetingState) || !recordingNow);
+
+  const saved = done && meetingState === "finished";
+
+  const doneCard = document.querySelector("#done-card");
+  doneCard.hidden = !done;
+  doneCard.dataset.state = saved ? "saved" : "finishing";
+  document.querySelector("#recording-card").hidden = !recordingNow || done;
+  document.querySelector("#setup").hidden = recordingNow || (done && onMeetNow);
+  document.querySelector("#meeting").textContent =
+    done && !onMeetNow ? "Next meeting" : meetingHeading;
+
+  const code =
+    MEET_CODE.exec(
+      new URL(sessionNow?.tabUrl || "about:blank").pathname
+    )?.[1] ?? "Google Meet";
+
+  const length = startedAt
+    ? formatElapsed((sessionNow?.stoppedAt ?? Date.now()) - startedAt)
+    : "";
+
+  document.querySelector("#done-title").textContent = saved
+    ? onMeetNow
+      ? "Transcript saved"
+      : "Transcript saved in Nakama"
+    : "Finishing transcript";
+  document.querySelector("#done-meta").textContent = [
+    code,
+    length,
+    saved
+      ? `${lineCount} ${lineCount === 1 ? "line" : "lines"}`
+      : "writing the last lines",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  document.querySelector("#done-actions").hidden = !saved;
+  recordAgain.hidden = !onMeetNow;
+  live.hidden = !(recordingNow || transcriptMeeting);
+  document.querySelector("#live-title").textContent = done
+    ? "Transcript"
+    : "Live transcript";
+  fullTranscript.hidden = !transcriptMeeting || done;
 }
 
 async function run(type, input = {}) {
@@ -155,6 +220,7 @@ async function run(type, input = {}) {
   connect.disabled =
     disconnect.disabled =
     start.disabled =
+    recordAgain.disabled =
     stop.disabled =
       true;
   status.textContent =
@@ -220,6 +286,22 @@ settings.onclick = () => {
 
 start.onclick = () => run("START");
 
+const recordAgain = document.querySelector("#record-again");
+
+recordAgain.onclick = () => run("START");
+
+document.querySelector("#copy-text").onclick = () => {
+  navigator.clipboard
+    .writeText(copyLines.join("\n"))
+    .then(() => {
+      status.textContent = "Transcript copied.";
+    })
+    .catch((error) => {
+      console.warn("[Nakama Meet] copy failed", error.message);
+      status.textContent = "Could not copy. Open the transcript in Nakama.";
+    });
+};
+
 stop.onclick = () => run("STOP");
 
 // The side panel stays open across tabs, so follow the tab the user is on.
@@ -282,6 +364,9 @@ function resetTranscript() {
   terminal = false;
   turnIds.clear();
   speakerTones.clear();
+  meetingState = undefined;
+  lineCount = 0;
+  copyLines.length = 0;
   transcript.replaceChildren();
   fullTranscript.hidden = true;
   live.hidden = !recordingNow;
@@ -366,6 +451,13 @@ async function refreshTranscript() {
       const label = document.createElement("strong");
       label.textContent = speaker;
       label.dataset.tone = speakerTones.get(speaker);
+      lineCount++;
+      copyLines.push(`${speaker}: ${segment.text}`);
+
+      if (copyLines.length > COPY_LIMIT) {
+        copyLines.shift();
+      }
+
       body.append(label, document.createTextNode(segment.text));
       turn.append(time, body);
       transcript.append(turn);
@@ -377,6 +469,7 @@ async function refreshTranscript() {
     }
 
     cursor = result.nextCursor;
+    meetingState = result.meeting.state;
     terminal =
       ["finished", "failed"].includes(result.meeting.state) &&
       result.segments.length === 0;
@@ -392,12 +485,15 @@ async function refreshTranscript() {
     } else if (result.meeting.state === "transcribing") {
       status.textContent = "Finishing transcript…";
     } else if (result.meeting.state === "finished") {
-      status.textContent = "Transcript ready";
+      status.textContent =
+        "You can close this panel. The transcript stays in Nakama.";
     } else if (turnIds.size === 0) {
       status.textContent = "Waiting for the first transcript…";
     } else if (result.meeting.state === "recording") {
       status.textContent = "Transcribing.";
     }
+
+    renderResult();
 
     if (result.segments.length) {
       setTimeout(() => void refreshTranscript(), 0);
@@ -411,13 +507,17 @@ async function refreshTranscript() {
   }
 }
 
-fullTranscript.onclick = async () => {
+async function openTranscript() {
   const result = await chrome.runtime.sendMessage({ type: "OPEN_TRANSCRIPT" });
 
   if (result?.error) {
     status.textContent = result.error;
   }
-};
+}
+
+fullTranscript.onclick = openTranscript;
+
+document.querySelector("#open-saved").onclick = openTranscript;
 
 const clockTimer = setInterval(tickTimer, 1000);
 
