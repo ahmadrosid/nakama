@@ -317,7 +317,7 @@ async function start() {
 
     const [tab] = await chrome.tabs.query({
       active: true,
-      currentWindow: true,
+      lastFocusedWindow: true,
     });
 
     const url = new URL(tab?.url || "about:blank");

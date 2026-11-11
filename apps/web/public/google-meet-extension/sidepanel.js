@@ -23,7 +23,7 @@ let busy = false;
 async function refresh() {
   const [state, tabs] = await Promise.all([
     chrome.runtime.sendMessage({ type: "STATE" }),
-    chrome.tabs.query({ active: true, currentWindow: true }),
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }),
   ]);
 
   const url = new URL(tabs[0]?.url || "about:blank");
@@ -73,8 +73,8 @@ async function refresh() {
   pairCode.textContent = pairing || "";
   disconnect.hidden = !(connected || pairing) || recording;
   disconnect.disabled = busy || recording;
-  start.hidden = !(connected && onMeet) || recording;
-  start.disabled = busy || recording || !connected || !onMeet;
+  start.hidden = !connected || recording;
+  start.disabled = busy || recording || !connected;
   stop.hidden = !recording;
   stop.disabled = busy || !recording;
   status.textContent =

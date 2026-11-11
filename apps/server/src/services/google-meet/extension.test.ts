@@ -701,7 +701,7 @@ test("side panel shows setup progress and only the available capture action", as
     await Bun.sleep(0);
     expect(element("#connect-form").hidden).toBe(connected || recording);
     expect(element("#disconnect").hidden).toBe(!connected || recording);
-    expect(element("#start").hidden).toBe(!(connected && onMeet) || recording);
+    expect(element("#start").hidden).toBe(!connected || recording);
     expect(element("#stop").hidden).toBe(!recording);
     expect(element("#connection").dataset.connected).toBe(String(connected));
     expect(element("#connect-step").dataset.done).toBe(String(connected));
