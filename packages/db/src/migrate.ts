@@ -82,6 +82,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
   atomic(migrateRegressionCasesTable);
+  atomic(migrateRegressionCaseRunsTable);
   atomic(migrateManagedSecretsTable);
   atomic(migrateArtifactsTable);
   atomic((database) =>
@@ -2628,4 +2629,29 @@ CREATE INDEX IF NOT EXISTS regression_cases_profile_created
 
   // The table first shipped without this column.
   addNullableTextColumnIfMissing(db, "regression_cases", "private_to_user_id");
+}
+
+function migrateRegressionCaseRunsTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS regression_case_runs (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  case_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('completed', 'failed')),
+  output TEXT,
+  error TEXT,
+  verdict TEXT CHECK(verdict IN ('pass', 'fail')),
+  verdict_by_user_id TEXT,
+  verdict_at TEXT,
+  created_by_user_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (case_id) REFERENCES regression_cases (id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL,
+  FOREIGN KEY (verdict_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS regression_case_runs_case_created
+  ON regression_case_runs (case_id, created_at DESC);
+  `);
 }
