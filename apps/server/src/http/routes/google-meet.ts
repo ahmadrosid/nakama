@@ -1,14 +1,179 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
-import type { MeetAction } from "@nakama/core/google-meet";
-import { meetingActionSchemas } from "../../services/google-meet/actions";
+import type { MeetAction, MeetActionResults } from "@nakama/core/google-meet";
+import type { Context } from "hono";
+import {
+  type MeetActionInput,
+  meetingActionSchemas,
+} from "../../services/google-meet/actions";
+import type { GoogleMeetService } from "../../services/google-meet/service";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
   requireOrgMemberFromContext,
 } from "../org-guards";
 import { json, readJson } from "../shared";
-import type { HonoApp } from "../types";
+import type { AppEnv, HonoApp } from "../types";
+
+const resultSchema = z.object({}).passthrough();
+
+const extensionRoutes = [
+  {
+    method: "post",
+    path: "/v1/meet/extension/pair",
+    operationId: "meet-extension-pair",
+    responses: {
+      200: {
+        description: "Pairing code",
+        content: {
+          "application/json": {
+            schema: z.object({
+              code: z.string(),
+              expiresIn: z.number(),
+              pairId: z.string(),
+            }),
+          },
+        },
+      },
+      429: { description: "Too many pending pairings" },
+    },
+  },
+  {
+    method: "get",
+    path: "/v1/meet/extension/pair/{pairId}",
+    operationId: "meet-extension-pair-status",
+    request: { params: z.object({ pairId: z.string() }) },
+    responses: {
+      200: {
+        description: "Pending, or the key once after approval",
+        content: {
+          "application/json": {
+            schema: z.object({
+              key: z.string().optional(),
+              status: z.enum(["pending", "approved"]),
+            }),
+          },
+        },
+      },
+      404: { description: "Pairing not found or expired" },
+    },
+  },
+  {
+    method: "get",
+    path: "/v1/meet/extension/status",
+    operationId: "meet-extension-status",
+    responses: {},
+  },
+  {
+    method: "post",
+    path: "/v1/meet/extension/start",
+    operationId: "meet-extension-start",
+    request: {
+      body: {
+        content: {
+          "application/json": { schema: meetingActionSchemas["start-capture"] },
+        },
+        required: true,
+      },
+    },
+    responses: {},
+  },
+  {
+    method: "post",
+    path: "/v1/meet/extension/leave",
+    operationId: "meet-extension-leave",
+    request: {
+      body: {
+        content: {
+          "application/json": { schema: meetingActionSchemas.leave },
+        },
+        required: true,
+      },
+    },
+    responses: {},
+  },
+  {
+    method: "get",
+    path: "/v1/meet/extension/transcript",
+    operationId: "meet-extension-transcript",
+    request: {
+      query: z.object({
+        after: z.string().optional(),
+        meetingId: z.string(),
+      }),
+    },
+    responses: {},
+  },
+] as const;
+
+function requireMeet(options: ServerOptions): GoogleMeetService {
+  if (!options.googleMeetService) {
+    throw new NakamaApiError("Google Meet is unavailable", 503);
+  }
+
+  return options.googleMeetService;
+}
+
+async function invokeMeet<Action extends MeetAction>(
+  service: GoogleMeetService,
+  orgId: string,
+  action: Action,
+  input: MeetActionInput,
+  actor: { id: string; role: "admin" | "member" },
+  signal: AbortSignal
+): Promise<MeetActionResults[Action]> {
+  try {
+    return await service.invoke(orgId, action, input, actor, signal);
+  } catch (error) {
+    if (error instanceof NakamaApiError) {
+      throw error;
+    }
+
+    throw new NakamaApiError(
+      error instanceof Error ? error.message : "Meeting action failed",
+      400
+    );
+  }
+}
+
+/**
+ * The extension routes take only `Authorization: Bearer <Meet key>`. Cookies
+ * and other tokens do not work here, and the key works nowhere else.
+ */
+async function requireExtensionKey(c: Context<AppEnv>, options: ServerOptions) {
+  const service = requireMeet(options);
+  const header = c.req.header("Authorization") ?? "";
+
+  const auth = header.startsWith("Bearer ")
+    ? await service.authenticateExtensionKey(header.slice(7).trim())
+    : null;
+
+  if (!auth) {
+    throw new NakamaApiError("Authentication required", 401);
+  }
+
+  return {
+    // A Meet key acts as a plain member: it reaches only its own meetings.
+    actor: { id: auth.userId, role: "member" as const },
+    orgId: auth.orgId,
+    service,
+  };
+}
+
+async function readMeetInput<Action extends keyof typeof meetingActionSchemas>(
+  request: Request,
+  action: Action
+) {
+  const parsed = meetingActionSchemas[action].safeParse(
+    await readJson(request, z.unknown())
+  );
+
+  if (!parsed.success) {
+    throw new NakamaApiError("Invalid meeting input", 400);
+  }
+
+  return parsed.data;
+}
 
 export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
   for (const [action, schema] of Object.entries(meetingActionSchemas)) {
@@ -24,9 +189,7 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
         responses: {
           200: {
             description: "Meeting action result",
-            content: {
-              "application/json": { schema: z.object({}).passthrough() },
-            },
+            content: { "application/json": { schema: resultSchema } },
           },
           400: { description: "Invalid request" },
           403: { description: "Forbidden" },
@@ -35,54 +198,123 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
     );
   }
 
+  for (const route of extensionRoutes) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        ...route,
+        tags: ["Google Meet"],
+        responses: {
+          200: {
+            description: "Meeting action result",
+            content: { "application/json": { schema: resultSchema } },
+          },
+          400: { description: "Invalid request" },
+          401: { description: "Unknown, revoked or expired Meet key" },
+          ...route.responses,
+        },
+      })
+    );
+  }
+
   app.post("/v1/meet/actions/:actionKey", async (c) => {
     const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-
-    if (!options.googleMeetService) {
-      throw new NakamaApiError("Google Meet is unavailable", 503);
-    }
-
+    const service = requireMeet(options);
     // SAFETY: The validated value satisfies the contract checked by this assertion.
     const action = c.req.param("actionKey") as MeetAction;
-    const schema = meetingActionSchemas[action];
 
     if (!Object.hasOwn(meetingActionSchemas, action)) {
       throw new NakamaApiError("Unknown meeting action", 404);
     }
 
-    const parsed = schema.safeParse(await readJson(c.req.raw, z.unknown()));
-
-    if (!parsed.success) {
-      throw new NakamaApiError("Invalid meeting input", 400);
-    }
+    const input = await readMeetInput(c.req.raw, action);
 
     if (action === "configure" && auth.orgRole !== "admin") {
       throw new NakamaApiError("Forbidden", 403);
     }
 
-    try {
-      return json(
-        await options.googleMeetService.invoke(
-          orgId,
-          action,
-          parsed.data,
-          {
-            id: auth.user.id,
-            role: auth.orgRole === "admin" ? "admin" : "member",
-          },
-          c.req.raw.signal
-        )
-      );
-    } catch (error) {
-      if (error instanceof NakamaApiError) {
-        throw error;
-      }
+    return json(
+      await invokeMeet(
+        service,
+        orgId,
+        action,
+        input,
+        {
+          id: auth.user.id,
+          role: auth.orgRole === "admin" ? "admin" : "member",
+        },
+        c.req.raw.signal
+      )
+    );
+  });
 
-      throw new NakamaApiError(
-        error instanceof Error ? error.message : "Meeting action failed",
-        400
-      );
+  // Public: the extension has no credentials yet. Rate-limited per address.
+  app.post("/v1/meet/extension/pair", (c) =>
+    json(requireMeet(options).startPairing(c.req.header("User-Agent") ?? null))
+  );
+
+  app.get("/v1/meet/extension/pair/:pairId", (c) =>
+    json(requireMeet(options).collectPairing(c.req.param("pairId")))
+  );
+
+  app.get("/v1/meet/extension/status", async (c) => {
+    const { actor, orgId, service } = await requireExtensionKey(c, options);
+
+    return json(
+      await invokeMeet(service, orgId, "meetings", {}, actor, c.req.raw.signal)
+    );
+  });
+
+  app.post("/v1/meet/extension/start", async (c) => {
+    const { actor, orgId, service } = await requireExtensionKey(c, options);
+    const input = await readMeetInput(c.req.raw, "start-capture");
+
+    return json(
+      await invokeMeet(
+        service,
+        orgId,
+        "start-capture",
+        input,
+        actor,
+        c.req.raw.signal
+      )
+    );
+  });
+
+  app.post("/v1/meet/extension/leave", async (c) => {
+    const { actor, orgId, service } = await requireExtensionKey(c, options);
+    const input = await readMeetInput(c.req.raw, "leave");
+
+    return json(
+      await invokeMeet(service, orgId, "leave", input, actor, c.req.raw.signal)
+    );
+  });
+
+  app.get("/v1/meet/extension/transcript", async (c) => {
+    const { actor, orgId, service } = await requireExtensionKey(c, options);
+    const query: MeetActionInput = { meetingId: c.req.query("meetingId") };
+
+    const after = c.req.query("after");
+
+    if (after !== undefined) {
+      query.after = Number(after);
     }
+
+    const parsed = meetingActionSchemas.transcript.safeParse(query);
+
+    if (!parsed.success) {
+      throw new NakamaApiError("Invalid meeting input", 400);
+    }
+
+    return json(
+      await invokeMeet(
+        service,
+        orgId,
+        "transcript",
+        parsed.data,
+        actor,
+        c.req.raw.signal
+      )
+    );
   });
 }
