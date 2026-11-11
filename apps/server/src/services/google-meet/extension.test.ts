@@ -1093,10 +1093,13 @@ test("side panel renders live turns safely, restores on reopen and stops polling
   const first = popup();
   await Bun.sleep(0);
   const turn = first.element("#transcript").children[0]!;
-  expect(turn.children.map((child) => child.textContent)).toEqual([
+  // A turn is [time, body]; the body holds the speaker and the text as text.
+  expect(turn.children).toHaveLength(2);
+  expect(turn.children[1]!.children.map((child) => child.textContent)).toEqual([
     "Speaker 1",
-    "\n<script>hello</script>",
+    "<script>hello</script>",
   ]);
+  expect(first.element("#live").hidden).toBe(false);
   first.poll();
   await Bun.sleep(0);
   expect(first.element("#transcript").children).toHaveLength(1);

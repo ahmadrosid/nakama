@@ -19,6 +19,12 @@
       --success: #15803d;
       --success-bg: #dcfce7;
       --success-border: #86efac;
+      --rec: #dc2626;
+      --rec-text: #b91c1c;
+      --rec-bg: #fef2f2;
+      --rec-border: #fecaca;
+      --speaker-a: #b45309;
+      --speaker-b: #0369a1;
       color-scheme: light;
     }
     @media (prefers-color-scheme: dark) {
@@ -35,13 +41,26 @@
         --success: #4ade80;
         --success-bg: #14532d33;
         --success-border: #166534;
+        --rec: #ef4444;
+        --rec-text: #fca5a5;
+        --rec-bg: #450a0a;
+        --rec-border: #7f1d1d;
+        --speaker-a: #fbbf24;
+        --speaker-b: #7dd3fc;
         color-scheme: dark;
       }
     }
     * {
       box-sizing: border-box;
     }
+    [hidden] {
+      display: none !important;
+    }
     body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 100vh;
       padding: 16px;
       margin: 0;
       font:
@@ -58,7 +77,6 @@
       display: flex;
       gap: 10px;
       align-items: center;
-      margin-bottom: 16px;
     }
     header svg {
       flex-shrink: 0;
@@ -70,42 +88,46 @@
       font-weight: 600;
       letter-spacing: -0.025em;
     }
-    main {
-      overflow: hidden;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-    }
-    .actions {
-      display: grid;
-      gap: 8px;
-      padding: 16px;
-    }
-    .summary {
-      padding: 16px 16px 0;
-    }
     h2 {
-      margin: 0 0 12px;
+      margin: 0;
       font-size: 16px;
       font-weight: 600;
     }
     #connection {
+      display: flex;
+      gap: 6px;
+      align-items: center;
       margin-left: auto;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
       white-space: nowrap;
     }
-    #connection[data-connected="true"] {
-      color: var(--success);
+    #connection::before {
+      width: 7px;
+      height: 7px;
+      content: "";
+      background: var(--muted);
+      border-radius: 50%;
     }
-    ol {
+    #connection[data-connected="true"]::before {
+      background: var(--success);
+    }
+    .card {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+    ol.steps {
       display: grid;
       gap: 10px;
       padding: 0;
       margin: 0;
       list-style: none;
     }
-    li {
+    ol.steps li {
       display: flex;
       gap: 8px;
       align-items: center;
@@ -125,24 +147,6 @@
       background: var(--success-bg);
       border-color: var(--success-border);
     }
-    button {
-      width: 100%;
-      min-height: 40px;
-      padding: 9px 12px;
-      font: inherit;
-      font-weight: 500;
-      color: var(--foreground);
-      cursor: pointer;
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      transition:
-        background-color 120ms ease,
-        opacity 120ms ease;
-    }
-    [hidden] {
-      display: none !important;
-    }
     form {
       display: grid;
       gap: 8px;
@@ -152,31 +156,35 @@
       color: var(--muted);
     }
     input {
-      min-height: 40px;
+      min-height: 44px;
       padding: 9px 12px;
       font: inherit;
       color: var(--foreground);
       background: transparent;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
     }
-    input:focus-visible {
-      outline: 2px solid var(--primary);
-      outline-offset: 3px;
-    }
-    #pair-code {
-      margin: 0;
-      font-size: 22px;
-      font-weight: 600;
-      text-align: center;
-      letter-spacing: 0.1em;
-    }
-    button:hover:not(:disabled) {
-      background: var(--hover);
-    }
+    input:focus-visible,
     button:focus-visible {
       outline: 2px solid var(--primary);
       outline-offset: 3px;
+    }
+    button {
+      min-height: 44px;
+      padding: 9px 14px;
+      font: inherit;
+      font-weight: 500;
+      color: var(--foreground);
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      transition:
+        background-color 120ms ease,
+        opacity 120ms ease;
+    }
+    button:hover:not(:disabled) {
+      background: var(--hover);
     }
     button:disabled {
       cursor: not-allowed;
@@ -184,6 +192,7 @@
     }
     #start,
     #connect {
+      font-weight: 600;
       color: var(--primary-foreground);
       background: var(--primary);
       border-color: transparent;
@@ -192,25 +201,124 @@
     #connect:hover:not(:disabled) {
       background: var(--primary-hover);
     }
+    #settings {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      padding: 0;
+      color: var(--muted);
+      border-color: transparent;
+    }
+    #pair-code {
+      margin: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 28px;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: 0.12em;
+    }
+    #settings-origin {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    #recording-card {
+      gap: 6px;
+      justify-items: center;
+      padding: 20px;
+      text-align: center;
+    }
+    .rec-label {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--rec-text);
+      letter-spacing: 0.06em;
+    }
+    .rec-label::before {
+      width: 8px;
+      height: 8px;
+      content: "";
+      background: var(--rec);
+      border-radius: 50%;
+    }
+    #timer {
+      font-size: 40px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+    #meeting-info {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #stop {
+      padding: 0 28px;
+      margin-top: 10px;
+      font-weight: 600;
+      color: var(--rec-text);
+      background: var(--rec-bg);
+      border-color: var(--rec-border);
+      border-radius: 999px;
+    }
+    #live {
+      display: grid;
+      gap: 8px;
+      min-height: 0;
+    }
+    .live-heading {
+      display: flex;
+      align-items: center;
+    }
+    .live-heading h2 {
+      font-size: 13px;
+    }
+    #full-transcript {
+      padding: 0 4px;
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--primary);
+      border-color: transparent;
+    }
+    #transcript {
+      display: grid;
+      gap: 14px;
+      max-height: 60vh;
+      padding: 0;
+      margin: 0;
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      list-style: none;
+    }
+    #transcript li {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 10px;
+    }
+    #transcript time {
+      padding-top: 1px;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+    }
+    #transcript strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--speaker-a);
+    }
+    #transcript strong[data-tone="b"] {
+      color: var(--speaker-b);
+    }
     #status {
-      min-height: 66px;
-      padding: 12px 16px;
       font-size: 12px;
       line-height: 1.6;
       color: var(--muted);
       text-wrap: pretty;
       overflow-wrap: anywhere;
-      border-top: 1px solid var(--border);
-    }
-    #transcript {
-      max-height: 60vh;
-      padding: 0 16px;
-      overflow-y: auto;
-      overflow-wrap: anywhere;
-      white-space: pre-wrap;
-    }
-    #transcript p {
-      margin: 12px 0;
     }
     @media (prefers-reduced-motion: reduce) {
       button {
@@ -241,47 +349,80 @@
       </svg>
       <h1>Nakama Meet</h1>
       <span id="connection">Checking…</span>
-    </header>
-    <main>
-      <div class="summary">
-        <h2 id="meeting">Getting ready</h2>
-        <ol aria-label="Transcription setup">
-          <li>
-            <span aria-hidden="true" class="step" id="connect-step">1</span
-            ><span id="connect-label">Connect Nakama</span>
-          </li>
-          <li>
-            <span aria-hidden="true" class="step" id="meet-step">2</span
-            ><span id="meet-label">Open Google Meet</span>
-          </li>
-        </ol>
-      </div>
-      <div class="actions">
-        <form hidden id="connect-form">
-          <label for="origin">Nakama address</label>
-          <input
-            autocomplete="url"
-            id="origin"
-            placeholder="https://nakama.example.com"
-            required
-            spellcheck="false"
-            type="text"
-          >
-          <button id="connect" type="submit">Connect</button>
-        </form>
-        <p hidden id="pair-code"></p>
-        <button hidden id="start" type="button">Start transcription</button>
-        <button hidden id="stop" type="button">Stop transcription</button>
-        <button hidden id="disconnect" type="button">Disconnect</button>
-      </div>
-      <button hidden id="full-transcript" type="button">
-        Open full transcript
+      <button
+        aria-controls="settings-panel"
+        aria-expanded="false"
+        aria-label="Settings"
+        hidden
+        id="settings"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+          />
+        </svg>
       </button>
-      <section aria-label="Live transcript" id="transcript"></section>
-      <div aria-live="polite" id="status" role="status">
-        Checking connection…
+    </header>
+    <section aria-label="Settings" class="card" hidden id="settings-panel">
+      <p id="settings-origin"></p>
+      <button hidden id="disconnect" type="button">Disconnect</button>
+    </section>
+    <section aria-label="Setup" class="card" id="setup">
+      <h2 id="meeting">Getting ready</h2>
+      <ol aria-label="Transcription setup" class="steps">
+        <li>
+          <span aria-hidden="true" class="step" id="connect-step">1</span
+          ><span id="connect-label">Connect Nakama</span>
+        </li>
+        <li>
+          <span aria-hidden="true" class="step" id="meet-step">2</span
+          ><span id="meet-label">Open Google Meet</span>
+        </li>
+      </ol>
+      <form hidden id="connect-form">
+        <label for="origin">Nakama address</label>
+        <input
+          autocomplete="url"
+          id="origin"
+          placeholder="https://nakama.example.com"
+          required
+          spellcheck="false"
+          type="text"
+        >
+        <button id="connect" type="submit">Connect</button>
+      </form>
+      <p hidden id="pair-code"></p>
+      <button hidden id="cancel-pair" type="button">Cancel</button>
+      <button hidden id="start" type="button">Start transcription</button>
+    </section>
+    <section aria-label="Recording" class="card" hidden id="recording-card">
+      <span class="rec-label">RECORDING</span>
+      <span id="timer">00:00</span>
+      <span id="meeting-info"></span>
+      <button hidden id="stop" type="button">Stop transcription</button>
+    </section>
+    <section aria-label="Live transcript" hidden id="live">
+      <div class="live-heading">
+        <h2>Live transcript</h2>
+        <button hidden id="full-transcript" type="button">
+          Open in Nakama
+        </button>
       </div>
-    </main>
+      <ol id="transcript"></ol>
+    </section>
+    <div aria-live="polite" id="status" role="status">Checking connection…</div>
     <script defer src="sidepanel.js"></script>
   </body>
 </html>
