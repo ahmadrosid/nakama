@@ -306,6 +306,45 @@ describe("AgentService usage pricing context", () => {
   });
 });
 
+describe("AgentService model list", () => {
+  setupTestConfigDir("nakama-chatgpt-plan-");
+
+  test("reports the plan of a connected ChatGPT account", async () => {
+    const claims = Buffer.from(
+      JSON.stringify({
+        "https://api.openai.com/auth": { chatgpt_plan_type: "free" },
+      })
+    ).toString("base64url");
+
+    const service = new AgentService(
+      {
+        defaultProviderId: "chatgpt",
+        providers: [
+          {
+            apiKey: "",
+            chatgptAccessToken: `h.${claims}.s`,
+            chatgptAccountId: "acct_1",
+            chatgptRefreshToken: "refresh",
+            chatgptTokenExpiresAt: "2099-01-01T00:00:00.000Z",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            id: "chatgpt",
+            label: "ChatGPT",
+            type: "chatgpt",
+          },
+        ],
+      },
+      null,
+      createInMemoryDatabaseAdapter()
+    );
+
+    const { providers } = await service.getModels();
+
+    expect(providers).toMatchObject([
+      { chatgptPlanType: "free", id: "chatgpt" },
+    ]);
+  });
+});
+
 describe("AgentService vision settings", () => {
   setupTestConfigDir("nakama-vision-settings-");
 

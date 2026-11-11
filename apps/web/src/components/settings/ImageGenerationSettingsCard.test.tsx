@@ -32,6 +32,7 @@ function chatgpt(id: string, plan: string): ProviderInstanceSummary {
 
 const providers: ProviderInstanceSummary[] = [
   chatgpt("chatgpt-free", "free"),
+  chatgpt("chatgpt-free-2", "free"),
   chatgpt("chatgpt-plus", "plus"),
   {
     createdAt: "2026-01-01T00:00:00Z",
@@ -44,7 +45,7 @@ const providers: ProviderInstanceSummary[] = [
 ];
 
 const models: ProviderModelOption[] = [
-  ...["chatgpt-free", "chatgpt-plus"].map((providerId) => ({
+  ...["chatgpt-free", "chatgpt-free-2", "chatgpt-plus"].map((providerId) => ({
     default: true,
     id: "gpt-5",
     name: "GPT-5",
@@ -57,6 +58,8 @@ const models: ProviderModelOption[] = [
 async function renderCard(options: {
   currentProviderId: string | null;
   model: string | null;
+  /** A saved-model request that never ends or fails. */
+  request?: "pending" | "failed";
   providerIds: readonly string[];
 }) {
   const shown = providers.filter((provider) =>
@@ -76,7 +79,15 @@ async function renderCard(options: {
   const getSettings = spyOn(
     client,
     "getImageGenerationSettings"
-  ).mockResolvedValue({ model: options.model });
+  ).mockImplementation(() => {
+    if (options.request === "pending") {
+      return new Promise<never>(() => undefined);
+    }
+
+    return options.request === "failed"
+      ? Promise.reject(new Error("offline"))
+      : Promise.resolve({ model: options.model });
+  });
 
   const container = document.createElement("div");
   document.body.append(container);
@@ -90,7 +101,11 @@ async function renderCard(options: {
 
   await act(async () => {
     root.render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
         <ImageGenerationSettingsCard />
       </QueryClientProvider>
     );
@@ -113,6 +128,13 @@ test.each([
   {
     currentProviderId: null,
     model: null,
+    name: "automatic pick when every ChatGPT account is Free",
+    note: true,
+    providerIds: ["chatgpt-free", "chatgpt-free-2"],
+  },
+  {
+    currentProviderId: null,
+    model: null,
     name: "automatic pick on a Plus account",
     note: false,
     providerIds: ["chatgpt-plus"],
@@ -120,23 +142,9 @@ test.each([
   {
     currentProviderId: "chatgpt-free",
     model: null,
-    name: "automatic pick on a Free default with Plus also connected",
-    note: true,
-    providerIds: ["chatgpt-plus", "chatgpt-free"],
-  },
-  {
-    currentProviderId: "chatgpt-plus",
-    model: null,
-    name: "automatic pick on a Plus default with Free also connected",
+    name: "automatic pick skips a Free default when Plus is connected",
     note: false,
     providerIds: ["chatgpt-free", "chatgpt-plus"],
-  },
-  {
-    currentProviderId: "openai",
-    model: null,
-    name: "automatic pick falls to the first ChatGPT account, which is Free",
-    note: true,
-    providerIds: ["chatgpt-free", "chatgpt-plus", "openai"],
   },
   {
     currentProviderId: "chatgpt-free",
@@ -165,6 +173,22 @@ test.each([
     name: "image generation off with a Free account connected",
     note: false,
     providerIds: ["chatgpt-free"],
+  },
+  {
+    currentProviderId: "chatgpt-free",
+    model: "chatgpt-plus::gpt-5",
+    name: "saved model still loading",
+    note: false,
+    providerIds: ["chatgpt-free"],
+    request: "pending" as const,
+  },
+  {
+    currentProviderId: "chatgpt-free",
+    model: "chatgpt-plus::gpt-5",
+    name: "saved model failed to load",
+    note: false,
+    providerIds: ["chatgpt-free"],
+    request: "failed" as const,
   },
 ])("Free plan note: $name", async ({ note, ...options }) => {
   expect(await renderCard(options)).toBe(note);

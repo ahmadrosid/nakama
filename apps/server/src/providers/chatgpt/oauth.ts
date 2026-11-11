@@ -122,14 +122,17 @@ export function readChatgptAccountIdFromAccessToken(
   return accountId && accountId.length > 0 ? accountId : null;
 }
 
-/** The ChatGPT subscription plan, such as `"free"` or `"plus"`. */
-export function readChatgptPlanTypeFromAccessToken(
-  accessToken: string
-): string | null {
-  const payload = decodeJwtPayload(accessToken);
-  const planType = payload?.[CHATGPT_JWT_CLAIM_PATH]?.chatgpt_plan_type;
+/** The ChatGPT plan in the access token, such as `"free"` or `"plus"`. */
+export function readChatgptPlanType(
+  oauth: Pick<ChatgptOAuthCredentials, "accessToken"> | null
+): string | undefined {
+  if (!oauth) {
+    return undefined;
+  }
 
-  return planType && planType.length > 0 ? planType : null;
+  const payload = decodeJwtPayload(oauth.accessToken);
+
+  return payload?.[CHATGPT_JWT_CLAIM_PATH]?.chatgpt_plan_type || undefined;
 }
 
 async function readTokenResponse(
