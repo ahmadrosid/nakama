@@ -584,12 +584,24 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
-// The toolbar button opens the side panel; there is no popup.
+// The toolbar button opens the side panel; there is no popup. Opening it
+// here, not with openPanelOnActionClick, makes the click count as invoking
+// the extension on that tab, which tab capture needs (activeTab). Older
+// installs saved the automatic behavior, so turn it off.
 chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
+  .setPanelBehavior({ openPanelOnActionClick: false })
   .catch((error) =>
     console.warn("[Nakama Meet] side panel behavior failed", error.message)
   );
+
+chrome.action.onClicked.addListener((tab) => {
+  // Call open() first: Chrome allows it only during the click.
+  chrome.sidePanel
+    .open({ windowId: tab.windowId })
+    .catch((error) =>
+      console.warn("[Nakama Meet] side panel did not open", error.message)
+    );
+});
 
 // A service worker restart drops timers; resume a pairing that is still open.
 chrome.storage.session.get("pairing").then(({ pairing }) => {

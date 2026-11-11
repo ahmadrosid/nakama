@@ -93,6 +93,11 @@ function extension(server: { captureProtocol?: number } = {}) {
   let errorStatus = 0;
   let badge = "";
   const panelBehavior: { openPanelOnActionClick: boolean }[] = [];
+  const openedPanels: { windowId: number }[] = [];
+
+  let actionClick: (tab: { id: number; windowId: number }) => void = () =>
+    undefined;
+
   let now = 1_000_000;
   let timerId = 0;
 
@@ -156,6 +161,11 @@ function extension(server: { captureProtocol?: number } = {}) {
 
   const chrome = {
     action: {
+      onClicked: {
+        addListener(fn: (tab: { id: number; windowId: number }) => void) {
+          actionClick = fn;
+        },
+      },
       async setBadgeBackgroundColor() {},
       async setBadgeText({ text }: { text: string }) {
         badge = text;
@@ -193,6 +203,9 @@ function extension(server: { captureProtocol?: number } = {}) {
       },
     },
     sidePanel: {
+      async open(options: { windowId: number }) {
+        openedPanels.push(options);
+      },
       async setPanelBehavior(behavior: { openPanelOnActionClick: boolean }) {
         panelBehavior.push(behavior);
       },
@@ -279,6 +292,9 @@ function extension(server: { captureProtocol?: number } = {}) {
       );
       await Bun.sleep(1);
     },
+    clickToolbar(tab: { id: number; windowId: number }) {
+      actionClick(tab);
+    },
     connected() {
       local.meetKey = "nmk_test";
       local.nakamaOrigin = ORIGIN;
@@ -318,6 +334,7 @@ function extension(server: { captureProtocol?: number } = {}) {
       return listeners[0]!(message, from, reply);
     },
     local,
+    openedPanels,
     openedTabs,
     order,
     pair(value: typeof pairStatus) {
@@ -652,7 +669,10 @@ test("content script on a Meet call shows only the recording badge", async () =>
 test("the toolbar button opens the side panel and there is no popup", async () => {
   const ext = extension();
   await Bun.sleep(1);
-  expect(ext.panelBehavior).toEqual([{ openPanelOnActionClick: true }]);
+  // The extension opens the panel itself so the click grants activeTab.
+  expect(ext.panelBehavior).toEqual([{ openPanelOnActionClick: false }]);
+  ext.clickToolbar({ id: 2, windowId: 9 });
+  expect(ext.openedPanels).toEqual([{ windowId: 9 }]);
   const manifest = JSON.parse(extensionFile("manifest.json"));
   expect(manifest.action.default_popup).toBeUndefined();
   expect(manifest.side_panel).toEqual({ default_path: "sidepanel.html" });
