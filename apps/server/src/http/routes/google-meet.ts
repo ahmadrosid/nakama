@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
 import type { MeetAction, MeetActionResults } from "@nakama/core/google-meet";
 import type { Context } from "hono";
+import { resolveRequestSelfOrigin } from "../../services/composio-callback-url";
 import {
   type MeetActionInput,
   meetingActionSchemas,
@@ -12,7 +13,7 @@ import {
   requireActiveOrgIdFromContext,
   requireOrgMemberFromContext,
 } from "../org-guards";
-import { json, readJson } from "../shared";
+import { isSecureRequest, json, readJson } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
 
 const resultSchema = z.object({}).passthrough();
@@ -76,7 +77,21 @@ const extensionRoutes = [
         required: true,
       },
     },
-    responses: {},
+    responses: {
+      200: {
+        description:
+          "Capture ticket. Open captureUrl, then send the ticket as the first message.",
+        content: {
+          "application/json": {
+            schema: z.object({
+              captureUrl: z.string(),
+              meetingId: z.string(),
+              ticket: z.string(),
+            }),
+          },
+        },
+      },
+    },
   },
   {
     method: "post",
@@ -120,10 +135,19 @@ async function invokeMeet<Action extends MeetAction>(
   action: Action,
   input: MeetActionInput,
   actor: { id: string; role: "admin" | "member" },
-  signal: AbortSignal
+  signal: AbortSignal,
+  captureSocketUrl?: string
 ): Promise<MeetActionResults[Action]> {
   try {
-    return await service.invoke(orgId, action, input, actor, signal);
+    return await service.invoke(
+      orgId,
+      action,
+      input,
+      actor,
+      signal,
+      undefined,
+      captureSocketUrl
+    );
   } catch (error) {
     if (error instanceof NakamaApiError) {
       throw error;
@@ -158,6 +182,18 @@ async function requireExtensionKey(c: Context<AppEnv>, options: ServerOptions) {
     orgId: auth.orgId,
     service,
   };
+}
+
+/** The capture socket on the origin the request came to. It holds no secret. */
+function captureSocketUrl(request: Request) {
+  const url = new URL(
+    "/v1/meet/capture",
+    resolveRequestSelfOrigin(request) ?? request.url
+  );
+
+  url.protocol = isSecureRequest(request) ? "wss:" : "ws:";
+
+  return url.href;
 }
 
 async function readMeetInput<Action extends keyof typeof meetingActionSchemas>(
@@ -260,25 +296,43 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
   app.get("/v1/meet/extension/status", async (c) => {
     const { actor, orgId, service } = await requireExtensionKey(c, options);
 
-    return json(
-      await invokeMeet(service, orgId, "meetings", {}, actor, c.req.raw.signal)
-    );
+    return json({
+      ...(await invokeMeet(
+        service,
+        orgId,
+        "meetings",
+        {},
+        actor,
+        c.req.raw.signal
+      )),
+      // Key clients use the capture socket on this server.
+      captureProtocol: 3,
+    });
   });
+
+  app.get("/v1/meet/capture", (c) =>
+    requireMeet(options).upgradeCapture(c.req.raw, c.env?.server)
+  );
 
   app.post("/v1/meet/extension/start", async (c) => {
     const { actor, orgId, service } = await requireExtensionKey(c, options);
     const input = await readMeetInput(c.req.raw, "start-capture");
 
-    return json(
-      await invokeMeet(
-        service,
-        orgId,
-        "start-capture",
-        input,
-        actor,
-        c.req.raw.signal
-      )
+    const started = await invokeMeet(
+      service,
+      orgId,
+      "start-capture",
+      input,
+      actor,
+      c.req.raw.signal,
+      captureSocketUrl(c.req.raw)
     );
+
+    return json({
+      captureUrl: started.capture.url,
+      meetingId: started.id,
+      ticket: started.capture.token,
+    });
   });
 
   app.post("/v1/meet/extension/leave", async (c) => {
