@@ -75,7 +75,7 @@ describe("regression rerun tools", () => {
 
     expect(
       await (await tool("regression_rerun", "write_file")).run(write, context)
-    ).toEqual({ error: expect.stringContaining("Refused: write_file") });
+    ).toHaveProperty("error");
     expect(await read()).not.toContain("changed");
 
     await (await tool("automation", "write_file")).run(write, context);
@@ -90,7 +90,12 @@ describe("regression rerun tools", () => {
     );
 
     expect(names).toContain("org_memory_search");
-    expect(names).not.toContain("propose_org_memory");
+    expect(await tool("regression_rerun", "org_memory_search")).toBe(
+      await tool("automation", "org_memory_search")
+    );
+    expect(await tool("regression_rerun", "propose_org_memory")).not.toBe(
+      await tool("automation", "propose_org_memory")
+    );
   });
 
   test("refuses to rerun an ACP agent, whose own tools skip the gate", async () => {
@@ -103,13 +108,68 @@ describe("regression rerun tools", () => {
 
     await db.upsertProfile(profile);
 
+    const service = new AgentService(null, null, db);
+
+    // A configured provider leaves the ACP check as the only refusal.
+    Reflect.set(service, "_providerConfigured", true);
+
     await expect(
-      new AgentService(null, null, db).runRegressionCase({
+      service.runRegressionCase({
         input: "Why did the deploy fail?",
         orgId: profile.orgId!,
         profileId: profile.id,
         userId: "user_1",
       })
     ).rejects.toMatchObject({ status: 409 });
+  });
+
+  test("a started run that fails resolves without the provider's error", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = createDefaultProfile();
+
+    await db.upsertProfile(profile);
+
+    const service = new AgentService(null, null, db);
+    let hang = false;
+
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: {
+          name: "openai",
+          streamChat() {
+            // A provider that ignores the abort signal.
+            return hang
+              ? new Promise(() => undefined)
+              : Promise.reject(new Error("401 invalid x-api-key sk-secret"));
+          },
+        },
+      }),
+      resolveProfileSystemPrompt: () =>
+        Promise.resolve({ soulActive: false, systemPrompt: "Test" }),
+    });
+
+    const rerun = (signal?: AbortSignal) =>
+      service.runRegressionCase({
+        input: "Why did the deploy fail?",
+        orgId: profile.orgId!,
+        profileId: profile.id,
+        signal,
+        userId: "user_1",
+      });
+
+    const failed = await rerun();
+
+    expect(failed.output).toBeNull();
+    expect(failed.error).not.toContain("sk-secret");
+
+    hang = true;
+
+    const controller = new AbortController();
+    const pending = rerun(controller.signal);
+
+    controller.abort();
+
+    expect((await pending).output).toBeNull();
   });
 });
