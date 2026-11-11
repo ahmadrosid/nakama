@@ -1,8 +1,10 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   MeetAction,
   MeetActionInput,
   MeetActionResults,
+  MeetExtensionKey,
   Meeting,
   MeetOverview,
 } from "@nakama/core/google-meet";
@@ -61,15 +63,35 @@ const auth = {
   user: { email: "admin@example.com", id: "admin", isPlatformAdmin: false },
 } as AuthContextValue;
 
+type Handlers = {
+  [Action in MeetAction]?: (
+    input?: MeetActionInput
+  ) => Promise<MeetActionResults[Action]>;
+};
+
 async function mountPage(
   recordings?: MeetActionResults["recordings"],
-  overview: () => Partial<MeetOverview> = () => ({})
+  overview: () => Partial<MeetOverview> = () => ({}),
+  {
+    handlers = {},
+    path = "/google-meet",
+  }: { handlers?: Handlers; path?: string } = {}
 ) {
   // SAFETY: each branch returns the result shape of the action it handles.
   const invoke = spyOn(client, "invokeGoogleMeet").mockImplementation(((
     action: MeetAction,
     input?: MeetActionInput
   ) => {
+    const handler = handlers[action];
+
+    if (handler) {
+      return handler(input);
+    }
+
+    if (action === "extension-keys") {
+      return Promise.resolve({ keys: [] });
+    }
+
     if (action === "meetings") {
       return Promise.resolve({
         canConfigure: true,
@@ -115,7 +137,7 @@ async function mountPage(
   await act(async () => {
     root.render(
       <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={["/google-meet"]}>
+        <MemoryRouter initialEntries={[path]}>
           <AuthContext.Provider value={auth}>
             <GoogleMeetPage />
           </AuthContext.Provider>
@@ -442,4 +464,126 @@ test("a self-hosted provider is saved with a name and its base URL", async () =>
   });
   expect(create.mock.calls[0]?.[0].label?.trim()).toBeTruthy();
   expect(select).toHaveBeenCalledWith("p-local::whisper-large-v3");
+});
+
+function calls(invoke: { mock: { calls: unknown[][] } }, action: MeetAction) {
+  return invoke.mock.calls.filter((call) => call[0] === action);
+}
+
+const browserKey: MeetExtensionKey = {
+  createdAt: 1000,
+  expiresAt: 9_000_000_000_000,
+  id: "key-1",
+  label: "Chrome on macOS",
+  lastUsedAt: null,
+};
+
+test("a pairing code is approved only after the member clicks Approve", async () => {
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    handlers: { "approve-extension": () => Promise.resolve(browserKey) },
+    path: "/google-meet?pair=k7q-4m2",
+  });
+
+  expect(calls(invoke, "approve-extension")).toEqual([]);
+
+  await act(async () => {
+    button(container, "Approve")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(invoke).toHaveBeenCalledWith(
+    "approve-extension",
+    { code: "K7Q-4M2" },
+    "org-a",
+    expect.anything()
+  );
+  expect(button(container, "Approve")).toBeUndefined();
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  // The list reloads so the new browser shows up.
+  expect(calls(invoke, "extension-keys").length).toBe(2);
+});
+
+test("a failed approval keeps the card and shows an error", async () => {
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    handlers: {
+      "approve-extension": () =>
+        Promise.reject(
+          new NakamaApiError("This code is wrong or has expired", 400)
+        ),
+    },
+    path: "/google-meet?pair=K7Q4M2",
+  });
+
+  await act(async () => {
+    button(container, "Approve")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(calls(invoke, "approve-extension").length).toBe(1);
+  expect(button(container, "Approve")).not.toBeUndefined();
+  expect(
+    container.querySelector('[aria-label="Connect browser"] [role="alert"]')
+  ).not.toBeNull();
+});
+
+test("a malformed pairing code sends no request", async () => {
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    path: "/google-meet?pair=0OI-1LU",
+  });
+
+  await act(async () => {
+    button(container, "Approve")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(calls(invoke, "approve-extension")).toEqual([]);
+  expect(
+    container.querySelector('[aria-label="Connect browser"] [role="alert"]')
+  ).not.toBeNull();
+});
+
+test("Remove revokes the browser key and reloads the list", async () => {
+  let keys = [
+    browserKey,
+    { ...browserKey, id: "key-2", label: "Chrome on Windows" },
+  ];
+
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    handlers: {
+      "extension-keys": () => Promise.resolve({ keys }),
+      "revoke-extension": (input) => {
+        keys = keys.filter((key) => key.id !== input?.keyId);
+
+        return Promise.resolve({ revoked: true });
+      },
+    },
+  });
+
+  const rows = () =>
+    [...container.querySelectorAll(".meet-key .meet-meeting-title")].map(
+      (row) => row.textContent
+    );
+
+  expect(rows()).toEqual(["Chrome on macOS", "Chrome on Windows"]);
+
+  await act(async () => {
+    container
+      .querySelectorAll<HTMLButtonElement>(".meet-key button")[1]
+      ?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(invoke).toHaveBeenCalledWith(
+    "revoke-extension",
+    { keyId: "key-2" },
+    "org-a",
+    expect.anything()
+  );
+  expect(rows()).toEqual(["Chrome on macOS"]);
+});
+
+test("connected browsers are not loaded while Meet is disabled", async () => {
+  const { invoke } = await mountPage(undefined, () => ({ enabled: false }));
+
+  expect(calls(invoke, "extension-keys")).toEqual([]);
 });
