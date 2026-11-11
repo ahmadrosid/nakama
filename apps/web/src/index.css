@@ -2018,6 +2018,13 @@ li[data-state="active"] .meet-step-mark {
   background: transparent;
   border: 0;
 }
+.meet-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 20px;
+}
 .meet-meeting:hover {
   background: color-mix(in oklab, var(--muted) 50%, transparent);
 }

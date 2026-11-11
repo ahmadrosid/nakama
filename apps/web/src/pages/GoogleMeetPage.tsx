@@ -1,8 +1,10 @@
+import { NakamaApiError } from "@nakama/core/api-error";
 import {
   formatTranscript,
   type MeetAction,
   type MeetActionInput,
   type MeetActionResults,
+  type MeetExtensionKey,
   type MeetImportProgress,
   type Meeting,
   type MeetOverview as Overview,
@@ -1605,6 +1607,224 @@ function LiveCaptureSetup({ liveReady }: { liveReady: boolean }) {
   );
 }
 
+// Same alphabet as the server's pairing codes: no 0/O, 1/I/L or U.
+const PAIR_CODE =
+  /^([23456789ABCDEFGHJKMNPQRSTVWXYZ]{3})-?([23456789ABCDEFGHJKMNPQRSTVWXYZ]{3})$/;
+
+function parsePairCode(value: string) {
+  const match = PAIR_CODE.exec(value.trim().toUpperCase());
+
+  return match ? `${match[1]}-${match[2]}` : null;
+}
+
+// The Meet extension opens ?pair=<code> so a member can approve it.
+function ExtensionApproval({
+  call,
+  enabled,
+  onApproved,
+}: {
+  call: MeetCall;
+  enabled: boolean;
+  onApproved(): void;
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [value, setValue] = React.useState(() => searchParams.get("pair"));
+  const code = value === null ? null : parsePairCode(value);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [approved, setApproved] = React.useState(false);
+
+  async function approve() {
+    if (!(code && enabled)) {
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+
+    try {
+      await call("approve-extension", { code });
+      setApproved(true);
+      dropPairParam();
+      onApproved();
+    } catch (reason) {
+      // A 400 is a wrong, used or expired code. Never show raw server text.
+      setError(
+        reason instanceof NakamaApiError && reason.status === 400
+          ? "This code is wrong, used or expired. Get a new code from the extension."
+          : "Could not connect this browser. Try again."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function dropPairParam() {
+    setSearchParams(
+      (params) => {
+        params.delete("pair");
+
+        return params;
+      },
+      { replace: true }
+    );
+  }
+
+  function close() {
+    setValue(null);
+    dropPairParam();
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  let blocked = "";
+
+  if (!code) {
+    blocked = "This code is not valid. Get a new code from the extension.";
+  } else if (!enabled) {
+    blocked = "Google Meet is disabled";
+  }
+
+  return (
+    <section aria-label="Connect browser" className="meet-setup">
+      <span aria-hidden="true" className="meet-setup-icon">
+        <Tick02Icon size={18} />
+      </span>
+      <div className="meet-setup-copy">
+        <strong>Connect browser</strong>
+        {code && <span className="meet-provider-model">{code}</span>}
+        {approved && <span role="status">Browser connected</span>}
+        {(error || blocked) && <p role="alert">{error || blocked}</p>}
+      </div>
+      {approved ? (
+        <Button onClick={close} variant="outline">
+          Done
+        </Button>
+      ) : (
+        <div className="meet-row">
+          <Button disabled={busy} onClick={close} variant="outline">
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || Boolean(blocked)}
+            onClick={() => void approve()}
+          >
+            {busy ? "Approving…" : "Approve"}
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatDay(time: number) {
+  return new Date(time).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function ExtensionKeys({
+  call,
+  enabled,
+  signal,
+}: {
+  call: MeetCall;
+  enabled: boolean;
+  signal: AbortSignal;
+}) {
+  const [keys, setKeys] = React.useState<MeetExtensionKey[] | null>(null);
+  const [error, setError] = React.useState("");
+  const [removing, setRemoving] = React.useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const result = await call("extension-keys");
+
+      if (!signal.aborted) {
+        setKeys(result.keys);
+        setError("");
+      }
+    } catch (reason) {
+      if (!signal.aborted) {
+        setError(formatError(reason));
+      }
+    }
+  }, [call, signal]);
+
+  React.useEffect(() => {
+    if (enabled) {
+      void load();
+    }
+  }, [enabled, load]);
+
+  async function remove(keyId: string) {
+    setRemoving(keyId);
+    setError("");
+
+    try {
+      await call("revoke-extension", { keyId });
+      await load();
+    } catch (reason) {
+      if (!signal.aborted) {
+        setError(formatError(reason));
+      }
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  if (!enabled) {
+    return null;
+  }
+
+  return (
+    <Card className="meet-card">
+      <div className="meet-card-heading">
+        <h2>Connected browsers</h2>
+      </div>
+      {error && (
+        <p className="meet-empty" role="alert">
+          {error}
+        </p>
+      )}
+      {keys?.length ? (
+        <ul className="meet-list">
+          {keys.map((key) => (
+            <li className="meet-key" key={key.id}>
+              <span className="meet-meta">
+                <span className="meet-meeting-title">{key.label}</span>
+                <span className="meet-status">
+                  Added {formatDay(key.createdAt)}
+                  {" · "}
+                  {key.lastUsedAt
+                    ? `Last used ${formatDay(key.lastUsedAt)}`
+                    : "Not used yet"}
+                </span>
+              </span>
+              <Button
+                disabled={removing !== null}
+                onClick={() => void remove(key.id)}
+                size="sm"
+                variant="outline"
+              >
+                {removing === key.id ? "Removing…" : "Remove"}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="meet-empty">
+          {keys ? "No connected browsers." : "Loading…"}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 // Admins connect or change the provider; members only see what is set.
 function TranscriptionPanel({
   onSaved,
@@ -1674,6 +1894,9 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [recordingPicker, setRecordingPicker] = React.useState(
     () => searchParams.get("import") === "recording"
   );
+
+  // Bumped after an approval so the browser list reloads.
+  const [keysVersion, setKeysVersion] = React.useState(0);
 
   React.useEffect(() => {
     if (searchParams.has("import")) {
@@ -1859,8 +2082,23 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
           overview={overview}
         />
       )}
-      {overview && !extensionConnected && (
-        <LiveCaptureSetup liveReady={overview.liveReady} />
+      {overview && (
+        <>
+          <ExtensionApproval
+            call={call}
+            enabled={overview.enabled}
+            onApproved={() => setKeysVersion((value) => value + 1)}
+          />
+          {!extensionConnected && (
+            <LiveCaptureSetup liveReady={overview.liveReady} />
+          )}
+          <ExtensionKeys
+            call={call}
+            enabled={overview.enabled}
+            key={keysVersion}
+            signal={signal}
+          />
+        </>
       )}
       {error && <p role="alert">{error}</p>}
       {live.map((meeting) => (
