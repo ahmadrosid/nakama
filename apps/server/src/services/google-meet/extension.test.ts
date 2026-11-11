@@ -3,59 +3,154 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { z } from "zod";
 
-interface ExtensionConnection {
-  tabId: number;
-  url: string;
-}
-
-interface ExtensionCaptureSession {
-  captureUrl: string;
-  connection: ExtensionConnection;
-  error?: string;
-  meetingId: string;
-  startedAt: number;
-  status: string;
-  tabId: number;
-  tabUrl: string;
-}
-
-interface ExtensionState {
-  captureSession?: ExtensionCaptureSession;
-  connection?: ExtensionConnection;
-}
-
-interface PageMessageEvent {
-  data: { type: string };
-  origin: string;
-  source: object;
-}
-
 interface StorageChanges {
-  connection?: { newValue?: ExtensionConnection };
+  meetKey?: { newValue?: string };
 }
 
-interface BridgeMessage {
-  connected: boolean;
-  type: "NAKAMA_MEET_EXTENSION";
+interface ExtensionRequest {
+  authorization?: string;
+  body?: string;
+  method: string;
+  path: string;
 }
 
-function extension() {
+interface StoreData {
+  captureSession?: {
+    captureUrl: string;
+    error?: string;
+    meetingId: string;
+    origin: string;
+    status: string;
+    tabId: number;
+  };
+  meetKey?: string;
+  nakamaOrigin?: string;
+  pairError?: string;
+  pairing?: { code: string };
+}
+
+interface MessageInput {
+  after?: number;
+  caption?: { speakerName: string; text: string };
+  origin?: string;
+}
+
+const ORIGIN = "https://nakama.example";
+
+const MEET_URL = "https://meet.google.com/abc-defg-hij?authuser=0";
+
+function extensionFile(file: string) {
+  return readFileSync(
+    new URL(
+      `../../../../web/public/google-meet-extension/${file}`,
+      import.meta.url
+    ),
+    "utf8"
+  );
+}
+
+function fakeStore(data: StoreData) {
+  return {
+    async get(keys: keyof StoreData | (keyof StoreData)[]) {
+      return Object.fromEntries(
+        (Array.isArray(keys) ? keys : [keys]).map((key) => [key, data[key]])
+      );
+    },
+    async remove(keys: keyof StoreData | (keyof StoreData)[]) {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        delete data[key];
+      }
+    },
+    async set(value: StoreData) {
+      Object.assign(data, value);
+    },
+  };
+}
+
+function extension(server: { captureProtocol?: number } = {}) {
   const listeners: Array<
     (message: any, sender: any, reply: any) => boolean | void
   > = [];
 
-  const state: ExtensionState = {};
-  const calls: Array<{ action: string; input: unknown }> = [];
+  const local: StoreData = {};
+  const session: StoreData = {};
+  const requests: ExtensionRequest[] = [];
+  const order: string[] = [];
+  const runtimeMessages: any[] = [];
+  const openedTabs: string[] = [];
+  const timers = new Map<number, { at: number; run: () => void }>();
 
   const tabs = new Map([
-    [1, { id: 1, url: "https://nakama.example/google-meet" }],
-    [2, { id: 2, url: "https://meet.google.com/abc-defg-hij?authuser=0" }],
+    [1, { id: 1, url: `${ORIGIN}/google-meet` }],
+    [2, { id: 2, url: MEET_URL }],
   ]);
 
-  let active = 1;
+  let active = 2;
   let failCapture = false;
-  const openedTabs: string[] = [];
+  let granted = true;
+  let pairStatus: "approved" | "gone" | "pending" = "pending";
+  let errorStatus = 0;
   let badge = "";
+  let now = 1_000_000;
+  let timerId = 0;
+
+  async function fetch(url: string, init: RequestInit = {}) {
+    const target = new URL(url);
+    const method = init.method ?? "GET";
+    // SAFETY: background.js always sends headers as a plain object.
+    const headers = (init.headers ?? {}) as Record<string, string>;
+
+    requests.push({
+      authorization: headers.Authorization,
+      body: init.body ? String(init.body) : undefined,
+      method,
+      path: target.pathname + target.search,
+    });
+    order.push(`${method} ${target.pathname}`);
+
+    if (headers.Authorization && errorStatus) {
+      return Response.json({ error: "Refused" }, { status: errorStatus });
+    }
+
+    if (target.pathname === "/v1/meet/extension/pair") {
+      return Response.json({ code: "K7Q-4M2", expiresIn: 300, pairId: "p1" });
+    }
+
+    if (target.pathname === "/v1/meet/extension/pair/p1") {
+      return pairStatus === "gone"
+        ? Response.json({ error: "Not found" }, { status: 404 })
+        : Response.json(
+            pairStatus === "approved"
+              ? { key: "nmk_test", status: "approved" }
+              : { status: "pending" }
+          );
+    }
+
+    if (target.pathname === "/v1/meet/extension/status") {
+      return Response.json({
+        captureProtocol: server.captureProtocol ?? 3,
+        configured: true,
+      });
+    }
+
+    if (target.pathname === "/v1/meet/extension/start") {
+      return Response.json({
+        captureUrl: "wss://nakama.example/v1/meet/capture",
+        meetingId: "meeting",
+        ticket: "ticket",
+      });
+    }
+
+    if (target.pathname === "/v1/meet/extension/transcript") {
+      return Response.json({
+        meeting: { id: "meeting", state: "recording" },
+        nextCursor: 0,
+        segments: [],
+      });
+    }
+
+    return Response.json({ ok: true });
+  }
 
   const chrome = {
     action: {
@@ -65,6 +160,11 @@ function extension() {
       },
     },
     offscreen: { async createDocument() {} },
+    permissions: {
+      async contains() {
+        return granted;
+      },
+    },
     runtime: {
       async getContexts() {
         return [];
@@ -79,11 +179,10 @@ function extension() {
         },
       },
       async sendMessage(message: any) {
+        runtimeMessages.push(message);
+
         if (message.type === "START_CAPTURE") {
-          expect(message.captureUrl).toBe(
-            z.object({ captureUrl: z.string() }).parse(state.captureSession)
-              .captureUrl
-          );
+          expect(message.captureUrl).toBe(session.captureSession?.captureUrl);
         }
 
         return failCapture
@@ -91,26 +190,11 @@ function extension() {
           : { ok: true };
       },
     },
-    storage: {
-      session: {
-        async get(keys: keyof ExtensionState | (keyof ExtensionState)[]) {
-          return Object.fromEntries(
-            (Array.isArray(keys) ? keys : [keys]).map((key) => [
-              key,
-              state[key],
-            ])
-          );
-        },
-        async remove(key: keyof ExtensionState) {
-          delete state[key];
-        },
-        async set(value: ExtensionState) {
-          Object.assign(state, value);
-        },
-      },
-    },
+    storage: { local: fakeStore(local), session: fakeStore(session) },
     tabCapture: {
       async getMediaStreamId() {
+        order.push("getMediaStreamId");
+
         return "stream";
       },
     },
@@ -118,39 +202,31 @@ function extension() {
       async create({ url }: { url: string }) {
         openedTabs.push(url);
       },
-      async get(id: number) {
-        return tabs.get(id);
-      },
       onRemoved: { addListener() {} },
       async query() {
         return [tabs.get(active)];
       },
-      async sendMessage(_id: number, message: any) {
-        calls.push(message);
-
-        return {
-          result:
-            message.action === "start-capture"
-              ? {
-                  capture: { url: "wss://capture.example/capture?token=test" },
-                  id: "meeting",
-                }
-              : { captureProtocol: 2, configured: true },
-        };
-      },
+      async sendMessage() {},
     },
   };
 
-  runInNewContext(
-    readFileSync(
-      new URL(
-        "../../../../web/public/google-meet-extension/background.js",
-        import.meta.url
-      ),
-      "utf8"
-    ),
-    { chrome, URL }
-  );
+  runInNewContext(extensionFile("background.js"), {
+    AbortSignal,
+    chrome,
+    clearTimeout(id: number) {
+      timers.delete(id);
+    },
+    console: { warn() {} },
+    Date: { now: () => now },
+    fetch,
+    setTimeout(run: () => void, ms: number) {
+      timers.set(++timerId, { at: now + ms, run });
+
+      return timerId;
+    },
+    URL,
+    URLSearchParams,
+  });
 
   const sender = {
     id: chrome.runtime.id,
@@ -161,97 +237,281 @@ function extension() {
     activate(id: number) {
       active = id;
     },
+    /** Moves the fake clock and runs due timers, one at a time. */
+    async advance(ms: number) {
+      const until = now + ms;
+
+      for (;;) {
+        const [id, next] =
+          [...timers].sort((a, b) => a[1].at - b[1].at)[0] ?? [];
+
+        if (!next || next.at > until) {
+          break;
+        }
+
+        timers.delete(id!);
+        now = next.at;
+        next.run();
+        await Bun.sleep(1);
+      }
+
+      now = until;
+    },
     badge: () => badge,
-    calls,
     async captureEvent(type: string) {
       listeners[1]!(
         { type },
         { ...sender, url: chrome.runtime.getURL("offscreen.html") },
         () => undefined
       );
-      await Bun.sleep(0);
+      await Bun.sleep(1);
     },
-    dispatch(type: string) {
+    connected() {
+      local.meetKey = "nmk_test";
+      local.nakamaOrigin = ORIGIN;
+    },
+    dispatch(type: string, input: MessageInput = {}) {
       return new Promise<any>((resolve) =>
-        listeners[0]!({ type }, sender, resolve)
+        listeners[0]!({ ...input, type }, sender, resolve)
       );
     },
     failCapture(value = true) {
       failCapture = value;
     },
-    fromPage(type: string) {
-      return listeners[0]!(
-        { type },
-        { ...sender, tab: tabs.get(1), url: tabs.get(1)!.url },
-        () => {
-          throw new Error("Page gained capture access");
+    fromPage(type: string, tabId = 1, input: MessageInput = {}) {
+      return new Promise<any>((resolve) => {
+        const handled = listeners[0]!(
+          { ...input, type },
+          { ...sender, tab: tabs.get(tabId), url: tabs.get(tabId)!.url },
+          resolve
+        );
+
+        if (handled !== true) {
+          resolve(undefined);
         }
-      );
+      });
     },
+    grant(value: boolean) {
+      granted = value;
+    },
+    local,
     openedTabs,
-    state,
-    tabs,
+    order,
+    pair(value: typeof pairStatus) {
+      pairStatus = value;
+    },
+    requests,
+    respondWith(status: number) {
+      errorStatus = status;
+    },
+    runtimeMessages,
+    session,
   };
 }
 
-test("extension connects once, starts the active Meet tab and rejects duplicate starts", async () => {
+test("pairing stores the key only after approval, then stops polling", async () => {
   const ext = extension();
-  expect(await ext.dispatch("CONNECT")).toEqual({ ok: true });
-  ext.activate(2);
-  expect(await ext.dispatch("START")).toEqual({ ok: true });
-  expect(
-    ext.calls.find((call) => call.action === "start-capture")?.input
-  ).toEqual({ url: "https://meet.google.com/abc-defg-hij" });
-  expect(ext.state.captureSession?.tabId).toBe(2);
-  expect((await ext.dispatch("START")).error).toBeDefined();
-  expect(
-    ext.calls.filter((call) => call.action === "start-capture")
-  ).toHaveLength(1);
-  expect(ext.fromPage("START")).toBeUndefined();
-  expect(ext.fromPage("CONNECT")).toBeUndefined();
-  await ext.captureEvent("CAPTURE_STARTED");
-  expect(ext.state.captureSession?.status).toBe("recording");
-  await ext.captureEvent("CAPTURE_STOPPED");
-  expect(ext.state.captureSession?.status).toBe("stopped");
-  expect(ext.calls.at(-1)).toMatchObject({
-    action: "leave",
-    input: { meetingId: "meeting" },
+  expect(await ext.dispatch("CONNECT", { origin: "nakama.example/" })).toEqual({
+    code: "K7Q-4M2",
+  });
+  expect(ext.openedTabs).toEqual([`${ORIGIN}/google-meet?pair=K7Q-4M2`]);
+  expect(ext.local).toEqual({ nakamaOrigin: ORIGIN });
+  expect((await ext.dispatch("STATE")).pairing).toEqual({ code: "K7Q-4M2" });
+  await ext.advance(2000);
+  expect(ext.requests.at(-1)?.path).toBe("/v1/meet/extension/pair/p1");
+  expect(ext.local.meetKey).toBeUndefined();
+  ext.pair("approved");
+  await ext.advance(2000);
+  expect(ext.local).toEqual({ meetKey: "nmk_test", nakamaOrigin: ORIGIN });
+  expect(ext.session.pairing).toBeUndefined();
+  const count = ext.requests.length;
+  await ext.advance(60_000);
+  expect(ext.requests).toHaveLength(count);
+  expect(ext.requests.every((request) => !request.authorization)).toBe(true);
+  expect(await ext.dispatch("STATE")).toMatchObject({
+    connected: true,
+    origin: ORIGIN,
   });
 });
 
-test("extension requires a connected Nakama tab and cancels sessions when capture fails", async () => {
+test("pairing gives up after 5 minutes and needs site access first", async () => {
   const ext = extension();
-  ext.activate(2);
-  expect((await ext.dispatch("START")).error).toBeDefined();
-  expect(ext.calls).toHaveLength(0);
-  ext.activate(1);
-  await ext.dispatch("CONNECT");
-  ext.activate(2);
-  ext.failCapture();
-  expect((await ext.dispatch("START")).error).toBeDefined();
-  expect(ext.calls.at(-1)).toMatchObject({
-    action: "leave",
-    input: { meetingId: "meeting" },
+  ext.grant(false);
+  expect(
+    (await ext.dispatch("CONNECT", { origin: ORIGIN })).error
+  ).toBeDefined();
+  expect(ext.requests).toHaveLength(0);
+  ext.grant(true);
+  await ext.dispatch("CONNECT", { origin: ORIGIN });
+  await ext.advance(5 * 60 * 1000);
+
+  const polls = ext.requests.filter((request) =>
+    request.path.startsWith("/v1/meet/extension/pair/")
+  ).length;
+
+  expect(polls).toBeGreaterThan(100);
+  expect(polls).toBeLessThanOrEqual(150);
+  await ext.advance(10 * 60 * 1000);
+  expect(
+    ext.requests.filter((request) =>
+      request.path.startsWith("/v1/meet/extension/pair/")
+    )
+  ).toHaveLength(polls);
+  expect(ext.local.meetKey).toBeUndefined();
+  expect(await ext.dispatch("STATE")).toMatchObject({
+    connected: false,
+    pairError: expect.any(String),
+    pairing: undefined,
   });
+});
+
+test("pairing stops when Nakama forgets the code", async () => {
+  const ext = extension();
+  await ext.dispatch("CONNECT", { origin: ORIGIN });
+  ext.pair("gone");
+  await ext.advance(2000);
+  const count = ext.requests.length;
+  await ext.advance(60_000);
+  expect(ext.requests).toHaveLength(count);
+  expect(ext.session.pairing).toBeUndefined();
+  expect(ext.session.pairError).toBeDefined();
+});
+
+test("start captures the tab first, then calls Nakama with the key", async () => {
+  const ext = extension();
+  ext.connected();
+  expect(await ext.dispatch("START")).toEqual({ ok: true });
+  expect(ext.order).toEqual([
+    "getMediaStreamId",
+    "GET /v1/meet/extension/status",
+    "POST /v1/meet/extension/start",
+  ]);
+  expect(
+    ext.requests.every((request) => request.authorization === "Bearer nmk_test")
+  ).toBe(true);
+  expect(JSON.parse(ext.requests[1]!.body!)).toEqual({
+    url: "https://meet.google.com/abc-defg-hij",
+  });
+  expect(ext.runtimeMessages.at(-1)).toEqual({
+    captureUrl: "wss://nakama.example/v1/meet/capture",
+    meetingId: "meeting",
+    streamId: "stream",
+    ticket: "ticket",
+    type: "START_CAPTURE",
+  });
+  expect(ext.session.captureSession).toMatchObject({
+    meetingId: "meeting",
+    origin: ORIGIN,
+    tabId: 2,
+  });
+  expect(JSON.stringify(ext.session)).not.toContain("ticket");
+  expect((await ext.dispatch("START")).error).toBeDefined();
+  expect(
+    ext.requests.filter((request) => request.path.endsWith("/start"))
+  ).toHaveLength(1);
+  expect(await ext.fromPage("START")).toBeUndefined();
+  expect(await ext.fromPage("CONNECT", 1, { origin: ORIGIN })).toBeUndefined();
+  await ext.captureEvent("CAPTURE_STARTED");
+  expect(ext.session.captureSession?.status).toBe("recording");
+  expect(ext.badge()).toBe("REC");
+  await ext.captureEvent("CAPTURE_STOPPED");
+  expect(ext.session.captureSession?.status).toBe("stopped");
+  expect(ext.requests.at(-1)).toMatchObject({
+    authorization: "Bearer nmk_test",
+    body: JSON.stringify({ meetingId: "meeting" }),
+    path: "/v1/meet/extension/leave",
+  });
+});
+
+test("start refuses a Nakama that does not speak capture protocol 3", async () => {
+  const ext = extension({ captureProtocol: 2 });
+  ext.connected();
+  expect((await ext.dispatch("START")).error).toBe("Update Nakama first.");
+  expect(ext.order).toEqual([
+    "getMediaStreamId",
+    "GET /v1/meet/extension/status",
+  ]);
+  expect(ext.session.captureSession).toBeUndefined();
+});
+
+test("a 401 clears the key and a 503 keeps it", async () => {
+  const ext = extension();
+  ext.connected();
+  ext.respondWith(503);
+  expect((await ext.dispatch("START")).error).toBe("Refused");
+  expect(ext.local.meetKey).toBe("nmk_test");
+  ext.respondWith(401);
+  expect((await ext.dispatch("START")).error).toBeDefined();
+  expect(ext.local.meetKey).toBeUndefined();
+  expect((await ext.dispatch("STATE")).connected).toBe(false);
+  const count = ext.requests.length;
+  expect((await ext.dispatch("START")).error).toBeDefined();
+  expect(ext.requests).toHaveLength(count);
+});
+
+test("start needs a key and leaves the meeting when capture fails", async () => {
+  const ext = extension();
+  expect((await ext.dispatch("START")).error).toBeDefined();
+  expect(ext.order).toHaveLength(0);
+  ext.connected();
+  ext.failCapture();
+  expect((await ext.dispatch("START")).error).toBe("Capture denied");
+  expect(ext.requests.at(-1)?.path).toBe("/v1/meet/extension/leave");
   expect(ext.openedTabs).toEqual([
     "chrome-extension://test-extension/microphone.html",
   ]);
-  const reopened = await ext.dispatch("STATE");
-  expect(reopened.captureSession).toMatchObject({
+  expect((await ext.dispatch("STATE")).captureSession).toMatchObject({
     error: "Capture denied",
     status: "error",
   });
   expect(ext.badge()).toBe("!");
-  ext.tabs.get(1)!.url = "https://other.example/google-meet";
-  const count = ext.calls.length;
-  expect((await ext.dispatch("START")).error).toBeDefined();
-  expect(ext.calls).toHaveLength(count);
-  ext.tabs.get(1)!.url = "https://nakama.example/google-meet";
   ext.failCapture(false);
   expect(await ext.dispatch("START")).toEqual({ ok: true });
   await ext.captureEvent("CAPTURE_STARTED");
   expect((await ext.dispatch("STATE")).captureSession.error).toBeUndefined();
-  expect(ext.badge()).toBe("REC");
+  expect((await ext.dispatch("DISCONNECT")).error).toBeDefined();
+  expect(ext.local.meetKey).toBe("nmk_test");
+});
+
+test("disconnect deletes the key and an open pairing", async () => {
+  const ext = extension();
+  await ext.dispatch("CONNECT", { origin: ORIGIN });
+  expect(await ext.dispatch("DISCONNECT")).toEqual({ ok: true });
+  const count = ext.requests.length;
+  await ext.advance(60_000);
+  expect(ext.requests).toHaveLength(count);
+  ext.connected();
+  await ext.dispatch("DISCONNECT");
+  expect(ext.local.meetKey).toBeUndefined();
+  expect((await ext.dispatch("STATE")).connected).toBe(false);
+});
+
+test("the recording Meet tab reads its transcript, and captions send nothing", async () => {
+  const ext = extension();
+  ext.connected();
+  await ext.dispatch("START");
+  await ext.captureEvent("CAPTURE_STARTED");
+  const count = ext.requests.length;
+  expect(
+    await ext.fromPage("MEET_CAPTION", 2, {
+      caption: { speakerName: "A", text: "hello" },
+    })
+  ).toBeUndefined();
+  await Bun.sleep(1);
+  expect(ext.requests).toHaveLength(count);
+  expect(await ext.fromPage("MEET_STATE", 2)).toEqual({
+    meetingId: "meeting",
+    status: "recording",
+  });
+  expect(await ext.fromPage("MEET_TRANSCRIPT", 1)).toBeNull();
+  expect(ext.requests).toHaveLength(count);
+  await ext.fromPage("MEET_TRANSCRIPT", 2, { after: 4 });
+  expect(ext.requests.at(-1)).toEqual({
+    authorization: "Bearer nmk_test",
+    body: undefined,
+    method: "GET",
+    path: "/v1/meet/extension/transcript?after=4&meetingId=meeting",
+  });
 });
 
 test("audio worklet encodes every mono sample as PCM16 and tolerates empty input", () => {
@@ -297,70 +557,63 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
   expect(messages).toHaveLength(3);
 });
 
-test.each(["connected", "throw", "reject", "invalidated"])(
-  "content bridge handles runtime state: %s",
-  async (state) => {
-    let receive!: (event: PageMessageEvent) => Promise<void>;
-    let sends = 0;
-    const messages: unknown[] = [];
+test("content script on a Meet call has no page bridge and no caption scraper", async () => {
+  const windowListeners: string[] = [];
+  const sent: string[] = [];
 
-    const page = {
-      addEventListener(_name: string, listener: typeof receive) {
-        receive = listener;
-      },
-      postMessage(message: BridgeMessage) {
-        messages.push(message);
-      },
-    };
+  const element = () => ({ append() {}, style: {} });
 
-    const location = {
-      hostname: "localhost",
-      origin: "http://localhost:3003",
-      pathname: "/settings",
-    };
+  runInNewContext(extensionFile("content.js"), {
+    chrome: {
+      runtime: {
+        id: "extension",
+        onMessage: { addListener() {} },
+        async sendMessage(message: { type: string }) {
+          sent.push(message.type);
 
-    runInNewContext(
-      readFileSync(
-        new URL(
-          "../../../../web/public/google-meet-extension/content.js",
-          import.meta.url
-        ),
-        "utf8"
-      ),
-      {
-        chrome: {
-          runtime: {
-            id: state === "invalidated" ? undefined : "extension",
-            onMessage: { addListener() {} },
-            sendMessage() {
-              sends++;
-
-              if (state === "throw") {
-                throw new Error("Extension context invalidated.");
-              }
-
-              return state === "reject"
-                ? Promise.reject(new Error("Extension context invalidated."))
-                : Promise.resolve({ connected: true });
-            },
-          },
+          return null;
         },
-        location,
-        window: page,
-      }
-    );
-    location.pathname = "/google-meet";
-    await receive({
-      data: { type: "NAKAMA_MEET_PING" },
-      origin: "http://localhost:3003",
-      source: page,
-    });
-    expect(messages).toEqual([
-      { connected: state === "connected", type: "NAKAMA_MEET_EXTENSION" },
-    ]);
-    expect(sends).toBe(state === "invalidated" ? 0 : 1);
-  }
-);
+      },
+    },
+    document: {
+      createElement: element,
+      documentElement: element(),
+      querySelector: () => null,
+    },
+    location: {
+      hostname: "meet.google.com",
+      origin: "https://meet.google.com",
+      pathname: "/abc-defg-hij",
+    },
+    window: {
+      addEventListener(name: string) {
+        windowListeners.push(name);
+      },
+    },
+  });
+  await Bun.sleep(1);
+  expect(windowListeners).not.toContain("message");
+  expect(sent).toEqual(["MEET_STATE"]);
+});
+
+test("manifest asks only for Meet and the Nakama origin the user picks", () => {
+  const manifest = JSON.parse(extensionFile("manifest.json"));
+  expect(JSON.stringify(manifest)).not.toContain("<all_urls>");
+  expect(manifest.version).toBe("0.3.0");
+  expect(manifest.host_permissions).toEqual(["https://meet.google.com/*"]);
+  expect(manifest.optional_host_permissions).toEqual([
+    "https://*/*",
+    "http://*/*",
+  ]);
+  expect(manifest.content_scripts).toEqual([
+    {
+      js: ["content.js"],
+      matches: ["https://meet.google.com/*"],
+      run_at: "document_idle",
+    },
+  ]);
+  expect(manifest.permissions).not.toContain("activeTab");
+});
 
 test("popup shows setup progress and only the available capture action", async () => {
   for (const [connected, onMeet, recording] of [
@@ -393,7 +646,7 @@ test("popup shows setup progress and only the available capture action", async (
             async sendMessage() {
               return {
                 captureSession: recording ? { status: "recording" } : undefined,
-                connection: connected ? { tabId: 1 } : undefined,
+                connected,
               };
             },
           },
@@ -418,7 +671,8 @@ test("popup shows setup progress and only the available capture action", async (
       }
     );
     await Bun.sleep(0);
-    expect(element("#connect").hidden).toBe(onMeet || recording);
+    expect(element("#connect-form").hidden).toBe(connected || recording);
+    expect(element("#disconnect").hidden).toBe(!connected || recording);
     expect(element("#start").hidden).toBe(!(connected && onMeet) || recording);
     expect(element("#stop").hidden).toBe(!recording);
     expect(element("#connection").dataset.connected).toBe(String(connected));
@@ -427,18 +681,6 @@ test("popup shows setup progress and only the available capture action", async (
       String(onMeet || recording)
     );
   }
-});
-
-test("extension clears a connection when its Nakama tab closes or navigates away", async () => {
-  const ext = extension();
-  await ext.dispatch("CONNECT");
-  ext.tabs.get(1)!.url = "https://other.example/";
-  expect((await ext.dispatch("STATE")).connection).toBeUndefined();
-  expect(ext.state.connection).toBeUndefined();
-  ext.tabs.get(1)!.url = "https://nakama.example/google-meet";
-  await ext.dispatch("CONNECT");
-  ext.tabs.delete(1);
-  expect((await ext.dispatch("STATE")).connection).toBeUndefined();
 });
 
 test.each([false, true])(
@@ -457,7 +699,7 @@ test.each([false, true])(
       },
     };
 
-    const captureUrl = "wss://capture.example/capture?token=test";
+    const captureUrl = "wss://nakama.example/v1/meet/capture";
     runInNewContext(
       readFileSync(
         new URL(
@@ -533,7 +775,21 @@ test.each([false, true])(
 
             const text = z.string().safeParse(frame);
 
-            if (text.success) {
+            if (!text.success) {
+              return;
+            }
+
+            const type = z
+              .object({ type: z.string() })
+              .parse(JSON.parse(text.data)).type;
+
+            if (type === "auth") {
+              // Audio produced before "ready" must not reach the server.
+              setTimeout(() => {
+                processor.port.onmessage({ data: new ArrayBuffer(8) });
+                socket.onmessage({ data: JSON.stringify({ type: "ready" }) });
+              }, 5);
+            } else {
               queueMicrotask(() =>
                 socket.onmessage({
                   data: JSON.stringify({ type: "capture-finalized" }),
@@ -551,7 +807,13 @@ test.each([false, true])(
 
     const result = await new Promise((resolve) =>
       listener(
-        { captureUrl, streamId: "stream", type: "START_CAPTURE" },
+        {
+          captureUrl,
+          meetingId: "meeting",
+          streamId: "stream",
+          ticket: "ticket",
+          type: "START_CAPTURE",
+        },
         sender,
         resolve
       )
@@ -570,33 +832,41 @@ test.each([false, true])(
     expect(socket.url).toBe(captureUrl);
     const frame = new ArrayBuffer(256);
     processor.port.onmessage({ data: frame });
-    expect(frames).toEqual([frame]);
+    expect(frames).toEqual([
+      JSON.stringify({ meetingId: "meeting", ticket: "ticket", type: "auth" }),
+      frame,
+    ]);
     expect(events).toEqual(["CAPTURE_STARTED"]);
     expect(stopped).toBe(0);
     await new Promise((resolve) =>
       listener({ type: "STOP_CAPTURE" }, sender, resolve)
     );
     expect(events).toEqual(["CAPTURE_STARTED", "CAPTURE_STOPPED"]);
+    expect(frames.at(-1)).toBe(JSON.stringify({ protocol: 3, type: "stop" }));
     expect(stopped).toBeGreaterThanOrEqual(2);
   }
 );
 
 test("popup transcript access is bound to its captured meeting and unavailable to pages", async () => {
   const ext = extension();
-  await ext.dispatch("CONNECT");
-  ext.activate(2);
+  ext.connected();
   await ext.dispatch("START");
   await ext.dispatch("TRANSCRIPT");
-  expect(ext.calls.at(-1)).toMatchObject({
-    action: "transcript",
-    input: { after: 0, meetingId: "meeting" },
-  });
-  expect(ext.fromPage("TRANSCRIPT")).toBeUndefined();
+  expect(ext.requests.at(-1)?.path).toBe(
+    "/v1/meet/extension/transcript?after=0&meetingId=meeting"
+  );
+  expect(await ext.fromPage("TRANSCRIPT")).toBeUndefined();
   await ext.captureEvent("CAPTURE_STOPPED");
   await ext.dispatch("TRANSCRIPT");
-  expect(ext.calls.at(-1)?.action).toBe("transcript");
-  ext.state.connection = { tabId: 99, url: "https://other.example" };
+  expect(ext.requests.at(-1)?.path).toStartWith(
+    "/v1/meet/extension/transcript"
+  );
+  ext.local.nakamaOrigin = "https://other.example";
+  const count = ext.requests.length;
   expect(await ext.dispatch("TRANSCRIPT")).toBeNull();
+  expect(ext.requests).toHaveLength(count);
+  expect(await ext.dispatch("OPEN_TRANSCRIPT")).toEqual({ ok: true });
+  expect(ext.openedTabs.at(-1)).toBe("https://other.example/google-meet");
 });
 
 test("popup renders live turns safely, restores on reopen and stops polling on close", async () => {
@@ -683,7 +953,7 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
 
               return {
                 captureSession: { status: recording ? "recording" : "stopped" },
-                connection: { tabId: 1 },
+                connected: true,
               };
             },
           },
@@ -730,7 +1000,7 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
       close: () => close(),
       element,
       poll: () => interval(),
-      reset: () => storageChanged({ connection: {} }, "session"),
+      reset: () => storageChanged({ meetKey: {} }, "local"),
     };
   }
 

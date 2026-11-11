@@ -118,8 +118,36 @@
         background-color 120ms ease,
         opacity 120ms ease;
     }
-    button[hidden] {
-      display: none;
+    [hidden] {
+      display: none !important;
+    }
+    form {
+      display: grid;
+      gap: 8px;
+    }
+    label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    input {
+      min-height: 40px;
+      padding: 9px 12px;
+      font: inherit;
+      color: var(--foreground);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    input:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+    }
+    #pair-code {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: 0.1em;
     }
     button:hover:not(:disabled) {
       background: var(--border);
@@ -132,12 +160,14 @@
       cursor: not-allowed;
       opacity: 0.45;
     }
-    #start {
+    #start,
+    #connect {
       color: var(--background);
       background: var(--primary);
       border-color: transparent;
     }
-    #start:hover:not(:disabled) {
+    #start:hover:not(:disabled),
+    #connect:hover:not(:disabled) {
       background: #fbbf24;
     }
     #status {
@@ -201,12 +231,23 @@
         </ol>
       </div>
       <div class="actions">
+        <form hidden id="connect-form">
+          <label for="origin">Nakama address</label>
+          <input
+            autocomplete="url"
+            id="origin"
+            placeholder="https://nakama.example.com"
+            required
+            spellcheck="false"
+            type="text"
+          >
+          <button id="connect" type="submit">Connect</button>
+        </form>
+        <p hidden id="pair-code"></p>
         <button id="open-side-panel" type="button">Open side panel</button>
-        <button hidden id="connect" type="button">
-          Connect this Nakama tab
-        </button>
         <button hidden id="start" type="button">Start transcription</button>
         <button hidden id="stop" type="button">Stop transcription</button>
+        <button hidden id="disconnect" type="button">Disconnect</button>
       </div>
       <button hidden id="full-transcript" type="button">
         Open full transcript

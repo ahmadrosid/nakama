@@ -7,10 +7,6 @@ const isMeet = location.hostname === "meet.google.com";
 const isMeeting =
   isMeet && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(location.pathname);
 
-const isNakamaMeetPage = () => location.pathname === "/google-meet";
-
-const pending = new Map();
-
 let transcriptPanel;
 
 let transcriptList;
@@ -22,80 +18,6 @@ let transcriptCursor = 0;
 let transcriptMeeting;
 
 let transcriptRunning = false;
-
-const captionRows = new WeakMap();
-
-let captionObserver;
-
-function sendCaption(row, speakerName, text) {
-  const state = captionRows.get(row) || {};
-
-  if (state.sentText === text && state.sentSpeakerName === speakerName) {
-    return;
-  }
-
-  clearTimeout(state.timer);
-  state.timer = setTimeout(() => {
-    if (state.text === text && state.speakerName === speakerName) {
-      state.sentText = text;
-      state.sentSpeakerName = speakerName;
-      void chrome.runtime.sendMessage({
-        caption: {
-          endMs: Date.now(),
-          id: `${captionSequence++}`,
-          speakerName,
-          startMs: state.startedAt,
-          text,
-        },
-        type: "MEET_CAPTION",
-      });
-    }
-  }, 1200);
-
-  if (state.text !== text || state.speakerName !== speakerName) {
-    state.startedAt = Date.now();
-  }
-
-  state.speakerName = speakerName;
-  state.text = text;
-  state.startedAt ||= Date.now();
-  captionRows.set(row, state);
-}
-
-let captionSequence = 0;
-
-function captureMeetCaptions() {
-  if (!isMeeting || captionObserver) {
-    return;
-  }
-
-  const scan = () => {
-    const region = document.querySelector(
-      '[role="region"][aria-label*="caption" i]'
-    );
-
-    if (!region) {
-      return;
-    }
-
-    for (const row of region.querySelectorAll(".nMcdL, [class*='nMcdL']")) {
-      const speakerName = row.querySelector(".NWpY1d")?.textContent?.trim();
-      const text = row.querySelector(".ygicle")?.textContent?.trim();
-
-      if (speakerName && text) {
-        sendCaption(row, speakerName, text);
-      }
-    }
-  };
-
-  captionObserver = new MutationObserver(scan);
-  captionObserver.observe(document.documentElement, {
-    characterData: true,
-    childList: true,
-    subtree: true,
-  });
-  setInterval(scan, 1000);
-}
 
 function createTranscriptPanel() {
   if (!isMeeting || transcriptPanel) {
@@ -196,14 +118,13 @@ async function refreshTranscript() {
       transcriptList.scrollTop = transcriptList.scrollHeight;
     }
   } catch {
-    // The panel retries on the next poll; Meet navigation can invalidate the bridge.
+    // The panel retries on the next poll; reloading the extension invalidates it.
   } finally {
     transcriptRunning = false;
   }
 }
 
 if (isMeeting) {
-  captureMeetCaptions();
   chrome.runtime
     .sendMessage({ type: "MEET_STATE" })
     .then((state) => {
@@ -214,40 +135,6 @@ if (isMeeting) {
     .catch(() => undefined);
 }
 
-window.addEventListener("message", async (event) => {
-  if (
-    !isNakamaMeetPage() ||
-    event.source !== window ||
-    event.origin !== location.origin
-  ) {
-    return;
-  }
-
-  if (event.data?.type === "NAKAMA_MEET_PING") {
-    let result = null;
-
-    try {
-      if (chrome.runtime?.id) {
-        result = await chrome.runtime.sendMessage({ type: "BRIDGE_STATE" });
-      }
-    } catch {
-      // Reloading the extension invalidates scripts in tabs until they refresh.
-    }
-
-    window.postMessage(
-      {
-        connected: result?.connected === true,
-        type: "NAKAMA_MEET_EXTENSION",
-      },
-      location.origin
-    );
-  }
-
-  if (event.data?.type === "NAKAMA_MEET_RESULT") {
-    pending.get(event.data.id)?.(event.data);
-  }
-});
-
 const badge = isMeeting ? document.createElement("div") : undefined;
 
 if (badge) {
@@ -257,27 +144,9 @@ if (badge) {
   document.documentElement.append(badge);
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender) => {
   if (sender.id !== chrome.runtime.id) {
     return;
-  }
-
-  if (message.type === "NAKAMA_MEET_ACTION" && isNakamaMeetPage()) {
-    const id = crypto.randomUUID();
-
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      sendResponse({ error: "Open Google Meet in Nakama and try again." });
-    }, 15_000);
-
-    pending.set(id, (response) => {
-      clearTimeout(timer);
-      pending.delete(id);
-      sendResponse({ error: response.error, result: response.result });
-    });
-    window.postMessage({ ...message, id }, location.origin);
-
-    return true;
   }
 
   if (message.type === "CAPTURE_STARTED" && badge) {

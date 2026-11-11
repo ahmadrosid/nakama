@@ -4,7 +4,15 @@ const chrome = globalThis.chrome;
 
 const status = document.querySelector("#status");
 
+const connectForm = document.querySelector("#connect-form");
+
+const origin = document.querySelector("#origin");
+
 const connect = document.querySelector("#connect");
+
+const pairCode = document.querySelector("#pair-code");
+
+const disconnect = document.querySelector("#disconnect");
 
 const start = document.querySelector("#start");
 
@@ -26,7 +34,9 @@ async function refresh() {
     state?.captureSession?.status
   );
 
-  const connected = Boolean(state?.connection);
+  const connected = state?.connected === true;
+
+  const pairing = state?.pairing?.code;
 
   const onMeet =
     url.origin === "https://meet.google.com" &&
@@ -54,38 +64,53 @@ async function refresh() {
   );
   document.querySelector("#meet-label").textContent =
     recording || onMeet ? "Google Meet open" : "Open Google Meet";
-  connect.hidden = url.pathname !== "/google-meet" || recording;
-  connect.textContent = connected
-    ? "Reconnect this Nakama tab"
-    : "Connect this Nakama tab";
+
+  if (!origin.value && state?.origin) {
+    origin.value = state.origin;
+  }
+
+  connectForm.hidden = connected || Boolean(pairing) || recording;
   connect.disabled = busy || recording;
+  pairCode.hidden = !pairing || connected;
+  pairCode.textContent = pairing || "";
+  disconnect.hidden = !(connected || pairing) || recording;
+  disconnect.disabled = busy || recording;
   start.hidden = !(connected && onMeet) || recording;
-  start.disabled = busy || recording || !state?.connection || !onMeet;
+  start.disabled = busy || recording || !connected || !onMeet;
   stop.hidden = !recording;
   stop.disabled = busy || !recording;
   status.textContent =
     state?.captureSession?.error ||
+    state?.pairError ||
     (recording
-      ? "Keep Nakama open while transcribing."
+      ? "Transcribing. You can close this popup."
       : connected
         ? onMeet
-          ? "Keep Nakama open while transcribing."
-          : "Open the extension in your Meet tab. Keep Nakama open."
-        : "Open Google Meet in Nakama, then connect here.");
+          ? "Ready."
+          : "Open the extension in your Meet tab."
+        : pairing
+          ? "Approve this code in the Nakama tab."
+          : "Enter your Nakama address, then connect.");
 }
 
-async function run(type) {
+async function run(type, input = {}) {
   busy = true;
-  connect.disabled = start.disabled = stop.disabled = true;
+  connect.disabled =
+    disconnect.disabled =
+    start.disabled =
+    stop.disabled =
+      true;
   status.textContent =
     type === "START"
       ? "Starting transcription…"
       : type === "STOP"
         ? "Stopping transcription…"
-        : "Connecting…";
+        : type === "DISCONNECT"
+          ? "Disconnecting…"
+          : "Connecting…";
 
   try {
-    const result = await chrome.runtime.sendMessage({ type });
+    const result = await chrome.runtime.sendMessage({ ...input, type });
 
     if (result?.error) {
       throw new Error(result.error);
@@ -100,7 +125,34 @@ async function run(type) {
   }
 }
 
-connect.onclick = () => run("CONNECT");
+connectForm.onsubmit = async (event) => {
+  event.preventDefault();
+  const value = origin.value.trim();
+  let url;
+
+  try {
+    url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+  } catch {
+    status.textContent = "Enter your Nakama address.";
+
+    return;
+  }
+
+  // Chrome asks for site access only during the click, so this comes first.
+  const granted = await chrome.permissions.request({
+    origins: [`${url.protocol}//${url.hostname}/*`],
+  });
+
+  if (!granted) {
+    status.textContent = "Allow access to your Nakama address to connect.";
+
+    return;
+  }
+
+  await run("CONNECT", { origin: url.origin });
+};
+
+disconnect.onclick = () => run("DISCONNECT");
 
 start.onclick = () => run("START");
 
@@ -125,9 +177,10 @@ openSidePanel.onclick = async () => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (
-    area === "session" &&
-    (changes.captureSession || changes.connection) &&
-    !busy
+    !busy &&
+    ((area === "session" &&
+      (changes.captureSession || changes.pairing || changes.pairError)) ||
+      (area === "local" && (changes.meetKey || changes.nakamaOrigin)))
   ) {
     refresh().catch((error) => {
       status.textContent = error.message;
@@ -169,8 +222,8 @@ function resetTranscript() {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (
-    area === "session" &&
-    (changes.connection ||
+    (area === "local" && (changes.meetKey || changes.nakamaOrigin)) ||
+    (area === "session" &&
       changes.captureSession?.newValue?.meetingId !==
         changes.captureSession?.oldValue?.meetingId)
   ) {

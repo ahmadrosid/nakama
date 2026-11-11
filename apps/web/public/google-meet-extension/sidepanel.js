@@ -28,7 +28,8 @@ async function refresh() {
     });
 
     if (!result) {
-      status.textContent = "Open Nakama and connect a Google Meet tab.";
+      status.textContent =
+        "Connect Nakama in the extension, then start transcription.";
 
       return;
     }
