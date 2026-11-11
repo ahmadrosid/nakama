@@ -481,10 +481,6 @@ function LiveMeeting({
         </span>
         {meeting.error && <p role="alert">{meeting.error}</p>}
       </div>
-      <p className="meet-live-warning">
-        <AlertCircleIcon aria-hidden="true" size={14} />
-        Keep this tab open until the call ends.
-      </p>
     </Card>
   );
 }
@@ -791,120 +787,6 @@ function readUploadContent(file: File) {
     reader.onerror = () => reject(new Error("Could not read file"));
     reader.readAsDataURL(file);
   });
-}
-
-function useExtensionBridge(
-  call: MeetCall,
-  signal: AbortSignal,
-  setConnected: (connected: boolean) => void,
-  setSelected: (meeting: Meeting) => void
-) {
-  React.useEffect(() => {
-    async function receive(event: MessageEvent) {
-      if (event.source !== window || event.origin !== window.location.origin) {
-        return;
-      }
-
-      const eventData = event.data;
-
-      if (!(eventData instanceof Object)) {
-        return;
-      }
-
-      if ("type" in eventData && eventData.type === "NAKAMA_MEET_EXTENSION") {
-        setConnected("connected" in eventData && eventData.connected === true);
-
-        return;
-      }
-
-      if (
-        !("type" in eventData) ||
-        eventData.type !== "NAKAMA_MEET_ACTION" ||
-        !("id" in eventData) ||
-        !("action" in eventData)
-      ) {
-        return;
-      }
-
-      const actions: Array<
-        | "meetings"
-        | "start-capture"
-        | "leave"
-        | "transcript"
-        | "show-transcript"
-      > = [
-        "meetings",
-        "start-capture",
-        "leave",
-        "transcript",
-        "show-transcript",
-      ];
-
-      const action = actions.find(
-        (candidate) => candidate === String(eventData.action)
-      );
-
-      if (!action) {
-        return;
-      }
-
-      const id = String(eventData.id);
-
-      const incoming =
-        "input" in eventData && eventData.input instanceof Object
-          ? eventData.input
-          : {};
-
-      const input: MeetActionInput = {
-        after: "after" in incoming ? Number(incoming.after) : undefined,
-        content: "content" in incoming ? String(incoming.content) : undefined,
-        enabled: "enabled" in incoming ? incoming.enabled === true : undefined,
-        filename:
-          "filename" in incoming ? String(incoming.filename) : undefined,
-        meetingId:
-          "meetingId" in incoming ? String(incoming.meetingId) : undefined,
-      };
-
-      try {
-        let result: MeetActionResults[MeetAction];
-
-        if (action === "show-transcript") {
-          const transcript = await call("transcript", input);
-          result = transcript;
-          setSelected(transcript.meeting);
-        } else {
-          result = await call(action, input);
-        }
-
-        window.postMessage(
-          { id, result, type: "NAKAMA_MEET_RESULT" },
-          window.location.origin
-        );
-      } catch (reason) {
-        if (signal.aborted) {
-          return;
-        }
-
-        window.postMessage(
-          { error: formatError(reason), id, type: "NAKAMA_MEET_RESULT" },
-          window.location.origin
-        );
-      }
-    }
-
-    window.addEventListener("message", receive);
-
-    const ping = () =>
-      window.postMessage({ type: "NAKAMA_MEET_PING" }, window.location.origin);
-
-    ping();
-    const timer = setInterval(ping, 3000);
-
-    return () => {
-      window.removeEventListener("message", receive);
-      clearInterval(timer);
-    };
-  }, [call, signal, setConnected, setSelected]);
 }
 
 function RecordingSources({
@@ -1591,7 +1473,7 @@ function LiveCaptureSetup({ liveReady }: { liveReady: boolean }) {
         <strong>Record live calls</strong>
         <span>
           {liveReady
-            ? "Install the Chrome extension, then choose Connect this Nakama tab."
+            ? "Install the Chrome extension, open its side panel and connect this Nakama address."
             : "Live calls need an OpenAI key."}
         </span>
       </div>
@@ -1730,10 +1612,12 @@ function formatDay(time: number) {
 function ExtensionKeys({
   call,
   enabled,
+  onLoaded,
   signal,
 }: {
   call: MeetCall;
   enabled: boolean;
+  onLoaded(count: number): void;
   signal: AbortSignal;
 }) {
   const [keys, setKeys] = React.useState<MeetExtensionKey[] | null>(null);
@@ -1747,13 +1631,14 @@ function ExtensionKeys({
       if (!signal.aborted) {
         setKeys(result.keys);
         setError("");
+        onLoaded(result.keys.length);
       }
     } catch (reason) {
       if (!signal.aborted) {
         setError(formatError(reason));
       }
     }
-  }, [call, signal]);
+  }, [call, onLoaded, signal]);
 
   React.useEffect(() => {
     if (enabled) {
@@ -1882,7 +1767,8 @@ function TranscriptionPanel({
 function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [error, setError] = React.useState("");
-  const [extensionConnected, setExtensionConnected] = React.useState(false);
+  // A paired browser holds a live Meet key; the page reads them, not the tab.
+  const [browserCount, setBrowserCount] = React.useState(0);
   const [busy, setBusy] = React.useState(false);
   const [settings, setSettings] = React.useState(false);
   const [deleting, setDeleting] = React.useState<Meeting | null>(null);
@@ -1927,8 +1813,6 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       setUploading(false);
     }
   }
-
-  useExtensionBridge(call, signal, setExtensionConnected, setSelected);
 
   React.useEffect(() => {
     let alive = true;
@@ -2026,10 +1910,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       <header className="meet-header">
         <div className="meet-row">
           <h1>Google Meet</h1>
-          <ConnectionStatus
-            connected={extensionConnected}
-            overview={overview}
-          />
+          <ConnectionStatus connected={browserCount > 0} overview={overview} />
         </div>
         <div className="meet-row">
           <input
@@ -2089,13 +1970,14 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
             enabled={overview.enabled}
             onApproved={() => setKeysVersion((value) => value + 1)}
           />
-          {!extensionConnected && (
+          {browserCount === 0 && (
             <LiveCaptureSetup liveReady={overview.liveReady} />
           )}
           <ExtensionKeys
             call={call}
             enabled={overview.enabled}
             key={keysVersion}
+            onLoaded={setBrowserCount}
             signal={signal}
           />
         </>

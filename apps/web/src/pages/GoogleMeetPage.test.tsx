@@ -587,3 +587,45 @@ test("connected browsers are not loaded while Meet is disabled", async () => {
 
   expect(calls(invoke, "extension-keys")).toEqual([]);
 });
+
+test("the status follows the browser keys, not an open tab", async () => {
+  let keys = [browserKey];
+
+  const { container } = await mountPage(undefined, undefined, {
+    handlers: {
+      "extension-keys": () => Promise.resolve({ keys }),
+      "revoke-extension": () => {
+        keys = [];
+
+        return Promise.resolve({ revoked: true });
+      },
+    },
+  });
+
+  const status = () => container.querySelector(".meet-connection")?.textContent;
+
+  const setup = () =>
+    container.querySelector('[aria-label="Live capture setup"]');
+
+  expect(status()).toBe("Extension connected");
+  expect(setup()).toBeNull();
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>(".meet-key button")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(status()).toBe("Extension not connected");
+  expect(setup()).not.toBeNull();
+});
+
+test("the page listens for no window messages from an extension", async () => {
+  const listen = spyOn(window, "addEventListener");
+
+  try {
+    await mountPage();
+    expect(listen.mock.calls.map(([type]) => type)).not.toContain("message");
+  } finally {
+    listen.mockRestore();
+  }
+});
