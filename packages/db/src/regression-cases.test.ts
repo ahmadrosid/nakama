@@ -142,4 +142,67 @@ describe("regression cases", () => {
     expect(message?.seq).toBe(2);
     expect(await db.getLastUserMessageForSession("missing")).toBeNull();
   });
+
+  test("stores a rerun and saves its mark within the org", async () => {
+    const db = createInMemoryDatabaseAdapter();
+
+    await db.createRegressionCase(record());
+
+    const run = {
+      caseId: "regcase_1",
+      createdAt: "2026-11-11T09:00:00.000Z",
+      createdByUserId: "user_1",
+      error: null,
+      id: "regrun_1",
+      orgId: "org_1",
+      output: "Run `deploy rollback`.",
+      status: "completed" as const,
+      verdict: null,
+      verdictAt: null,
+      verdictByUserId: null,
+    };
+
+    await db.createRegressionCaseRun(run);
+
+    expect(
+      await db.getRegressionCaseRun("org_1", "regcase_1", "regrun_1")
+    ).toEqual(run);
+    expect(
+      await db.getRegressionCaseRun("org_2", "regcase_1", "regrun_1")
+    ).toBeNull();
+
+    const mark = {
+      at: "2026-11-11T09:05:00.000Z",
+      userId: "user_1",
+      verdict: "pass" as const,
+    };
+
+    expect(
+      await db.setRegressionCaseRunVerdict(
+        "org_2",
+        "regcase_1",
+        "regrun_1",
+        mark
+      )
+    ).toBeNull();
+
+    const marked = {
+      ...run,
+      verdict: "pass",
+      verdictAt: mark.at,
+      verdictByUserId: "user_1",
+    };
+
+    expect(
+      await db.setRegressionCaseRunVerdict(
+        "org_1",
+        "regcase_1",
+        "regrun_1",
+        mark
+      )
+    ).toEqual(marked);
+    expect(
+      await db.getRegressionCaseRun("org_1", "regcase_1", "regrun_1")
+    ).toEqual(marked);
+  });
 });

@@ -1,4 +1,4 @@
-import type { AgentChannel } from "@nakama/core";
+import type { AgentChannel, ToolDefinition } from "@nakama/core";
 import { SKILL_MANAGE_CHANNELS } from "../tools/skill-manage-tool";
 import type { SessionKind } from "./session-runtime";
 
@@ -10,12 +10,17 @@ export type TurnKind =
   | "group_member"
   | "plugin_summarize"
   | "plugin_workflow"
+  | "regression_rerun"
   | "sub_agent";
 
 /** Turns that run once, outside a session. */
 export type OneShotKind = Extract<
   TurnKind,
-  "automation" | "group_member" | "plugin_summarize" | "sub_agent"
+  | "automation"
+  | "group_member"
+  | "plugin_summarize"
+  | "regression_rerun"
+  | "sub_agent"
 >;
 
 interface TurnPolicy {
@@ -37,6 +42,8 @@ interface TurnPolicy {
     mcpDiscovery: boolean;
     memoryWrite: boolean;
     question: boolean;
+    /** Every tool stays visible, but only read-only ones run. */
+    readOnly: boolean;
     skillManage: boolean | "by_channel";
     subAgent: boolean;
     todo: boolean;
@@ -60,6 +67,7 @@ const ALL_TOOLS = {
   mcpDiscovery: true,
   memoryWrite: true,
   question: true,
+  readOnly: false,
   skillManage: "by_channel",
   subAgent: true,
   todo: true,
@@ -74,6 +82,7 @@ const DELEGATED_TOOLS = {
   mcpDiscovery: false,
   memoryWrite: true,
   question: false,
+  readOnly: false,
   skillManage: false,
   subAgent: false,
   todo: false,
@@ -118,6 +127,13 @@ const TURN_POLICIES: Record<TurnKind, TurnPolicy> = {
     instructions: [],
     tools: { ...DELEGATED_TOOLS, subAgent: true },
   },
+  // Replays a saved case, so nothing it does may reach outside the run.
+  regression_rerun: {
+    channel: "automation",
+    instructions: [],
+    orgRole: "member",
+    tools: { ...DELEGATED_TOOLS, memoryWrite: false, readOnly: true },
+  },
   sub_agent: {
     channel: "subagent",
     instructions: SUB_AGENT_INSTRUCTIONS,
@@ -149,4 +165,39 @@ export function withTurnInstructions(
   return instructions.length > 0
     ? [prompt.trim(), "", ...instructions].join("\n")
     : prompt;
+}
+
+/** Platform tools a read-only turn may run, matched only on trusted sources. */
+export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "browser_read",
+  "extract_document_text",
+  "knowledge_base_search",
+  "org_memory_search",
+  "read_file",
+  "search_files",
+  "web_search",
+]);
+
+/**
+ * Tools outside `allowed` keep their place in the list, so the model still
+ * sees them, but a call returns a refusal and the tool never runs.
+ */
+export function refuseToolsOutside(
+  tools: ToolDefinition[],
+  allowed: ReadonlySet<ToolDefinition>
+): ToolDefinition[] {
+  return tools.map((tool) =>
+    allowed.has(tool)
+      ? tool
+      : {
+          ...tool,
+          // A hosted tool runs at the provider, past `run`.
+          hosted: false,
+          async run() {
+            return {
+              error: `Refused: ${tool.name} can change data, so it does not run during a regression rerun.`,
+            };
+          },
+        }
+  );
 }

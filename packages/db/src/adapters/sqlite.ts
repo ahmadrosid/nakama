@@ -56,6 +56,7 @@ import type {
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
   StoredRegressionCaseRecord,
+  StoredRegressionCaseRunRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
@@ -581,6 +582,20 @@ interface ArtifactShareRow {
   source_path: string;
   storage_path: string;
   token_hash: string;
+}
+
+interface RegressionCaseRunRow {
+  case_id: string;
+  created_at: string;
+  created_by_user_id: string | null;
+  error: string | null;
+  id: string;
+  org_id: string;
+  output: string | null;
+  status: string;
+  verdict: string | null;
+  verdict_at: string | null;
+  verdict_by_user_id: string | null;
 }
 
 interface RegressionCaseRow {
@@ -3746,6 +3761,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT ? OFFSET ?
   `);
 
+  const createRegressionCaseRunStmt = db.prepare(`
+    INSERT INTO regression_case_runs (
+      id, org_id, case_id, status, output, error, verdict, verdict_by_user_id,
+      verdict_at, created_by_user_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const getRegressionCaseRunStmt = db.prepare<
+    RegressionCaseRunRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT * FROM regression_case_runs
+    WHERE org_id = ? AND case_id = ? AND id = ?
+    LIMIT 1
+  `);
+
+  const setRegressionCaseRunVerdictStmt = db.prepare<
+    RegressionCaseRunRow,
+    SQLQueryBindings[]
+  >(`
+    UPDATE regression_case_runs
+    SET verdict = ?, verdict_by_user_id = ?, verdict_at = ?
+    WHERE org_id = ? AND case_id = ? AND id = ?
+    RETURNING *
+  `);
+
   const getOrgMemberStmt = db.prepare<
     {
       org_id: string;
@@ -4852,6 +4893,22 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createRegressionCaseRun(record) {
+      createRegressionCaseRunStmt.run(
+        record.id,
+        record.orgId,
+        record.caseId,
+        record.status,
+        record.output,
+        record.error,
+        record.verdict,
+        record.verdictByUserId,
+        record.verdictAt,
+        record.createdByUserId,
+        record.createdAt
+      );
+    },
+
     async createSharedAgentInstance(
       teamOrgId,
       publicationId,
@@ -5395,6 +5452,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getRegressionCaseStmt.get(orgId, profileId, caseId);
 
       return row ? toRegressionCaseRecord(row) : null;
+    },
+
+    async getRegressionCaseRun(orgId, caseId, runId) {
+      const row = getRegressionCaseRunStmt.get(orgId, caseId, runId);
+
+      return row ? toRegressionCaseRunRecord(row) : null;
     },
 
     async getSession(id) {
@@ -6301,6 +6364,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async setPendingMfaSecret(id, pendingTotpSecretEnc, updatedAt) {
       setPendingMfaSecretStmt.run(pendingTotpSecretEnc, updatedAt, id);
     },
+    async setRegressionCaseRunVerdict(orgId, caseId, runId, mark) {
+      const row = setRegressionCaseRunVerdictStmt.get(
+        mark.verdict,
+        mark.userId,
+        mark.at,
+        orgId,
+        caseId,
+        runId
+      );
+
+      return row ? toRegressionCaseRunRecord(row) : null;
+    },
+
     async setSessionOrder(userId, sessionIds) {
       db.transaction(() => {
         for (const [index, sessionId] of sessionIds.entries()) {
@@ -7851,6 +7927,26 @@ function toRegressionCaseRecord(
     sourceId: row.source_id,
     // SAFETY: The table CHECK constrains this column to the union values.
     sourceType: row.source_type as StoredRegressionCaseRecord["sourceType"],
+  };
+}
+
+function toRegressionCaseRunRecord(
+  row: RegressionCaseRunRow
+): StoredRegressionCaseRunRecord {
+  return {
+    caseId: row.case_id,
+    createdAt: row.created_at,
+    createdByUserId: row.created_by_user_id,
+    error: row.error,
+    id: row.id,
+    orgId: row.org_id,
+    output: row.output,
+    // SAFETY: The table CHECK constrains this column to the union values.
+    status: row.status as StoredRegressionCaseRunRecord["status"],
+    // SAFETY: The table CHECK constrains this column to the union values.
+    verdict: row.verdict as StoredRegressionCaseRunRecord["verdict"],
+    verdictAt: row.verdict_at,
+    verdictByUserId: row.verdict_by_user_id,
   };
 }
 

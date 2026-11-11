@@ -138,6 +138,30 @@ export interface RegressionCaseResponse {
   case: RegressionCase;
 }
 
+export type RegressionCaseRunStatus = "completed" | "failed";
+
+export type RegressionCaseVerdict = "pass" | "fail";
+
+/** One rerun of a case against its profile's current config. */
+export interface RegressionCaseRun {
+  caseId: string;
+  createdAt: string;
+  createdByUserId: string | null;
+  /** Set when the run failed; `output` is then null. */
+  error: string | null;
+  id: string;
+  output: string | null;
+  status: RegressionCaseRunStatus;
+  /** A member's mark. Nothing grades a run automatically. */
+  verdict: RegressionCaseVerdict | null;
+  verdictAt: string | null;
+  verdictByUserId: string | null;
+}
+
+export interface RegressionCaseRunResponse {
+  run: RegressionCaseRun;
+}
+
 export interface ListRegressionCasesResponse {
   cases: RegressionCase[];
   /** Pass as `offset` for the next page; null when the page is the last one. */
@@ -3448,6 +3472,11 @@ export interface ToolDefinition<Input = unknown, Output = unknown> {
   /** When true, this tool may run concurrently with other parallelSafe tools in the same turn. */
   parallelSafe?: boolean;
   parameters?: JsonSchema;
+  /**
+   * Set from an MCP server's `readOnlyHint`. A regression rerun runs only
+   * these and its allowlisted tools.
+   */
+  readOnly?: boolean;
   run(input: Input, context: ToolContext): Promise<Output>;
 }
 

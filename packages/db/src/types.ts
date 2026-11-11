@@ -8,7 +8,9 @@ import type {
   OrgPluginSummary,
   OrgRole,
   PluginReleaseSummary,
+  RegressionCaseRun,
   RegressionCaseSourceType,
+  RegressionCaseVerdict,
   ThinkingEffort,
 } from "@nakama/core";
 
@@ -147,6 +149,10 @@ export interface StoredRegressionCaseRecord {
   sourceAutomationId: string | null;
   sourceId: string;
   sourceType: RegressionCaseSourceType;
+}
+
+export interface StoredRegressionCaseRunRecord extends RegressionCaseRun {
+  orgId: string;
 }
 
 export interface StoredToolRecord {
@@ -424,6 +430,8 @@ export interface CachedMcpTool {
   description: string;
   inputSchema?: unknown;
   name: string;
+  /** The server's own claim that the tool changes nothing. */
+  readOnlyHint?: true;
 }
 
 export interface StoredSkillRecord {
@@ -973,6 +981,8 @@ export interface DatabaseAdapter {
 
   createRegressionCase(record: StoredRegressionCaseRecord): Promise<void>;
 
+  createRegressionCaseRun(record: StoredRegressionCaseRunRecord): Promise<void>;
+
   createSharedAgentInstance(
     teamOrgId: string,
     publicationId: string,
@@ -1191,6 +1201,11 @@ export interface DatabaseAdapter {
     profileId: string,
     caseId: string
   ): Promise<StoredRegressionCaseRecord | null>;
+  getRegressionCaseRun(
+    orgId: string,
+    caseId: string,
+    runId: string
+  ): Promise<StoredRegressionCaseRunRecord | null>;
   getSession(id: string): Promise<StoredSessionRecord | null>;
   getSessionQuestionnaire(
     sessionId: string
@@ -1568,6 +1583,13 @@ export interface DatabaseAdapter {
     pendingTotpSecretEnc: string,
     updatedAt: string
   ): Promise<void>;
+  /** Resolves to the marked run, or null when no such run is in the org. */
+  setRegressionCaseRunVerdict(
+    orgId: string,
+    caseId: string,
+    runId: string,
+    mark: { at: string; userId: string; verdict: RegressionCaseVerdict }
+  ): Promise<StoredRegressionCaseRunRecord | null>;
   setSessionOrder(userId: string, sessionIds: string[]): Promise<void>;
   setUserContext(
     orgId: string,
