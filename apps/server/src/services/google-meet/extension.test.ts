@@ -87,6 +87,7 @@ function extension(server: { captureProtocol?: number } = {}) {
 
   let active = 2;
   let failCapture = false;
+  let invoked = true;
   let granted = true;
   let pairStatus: "approved" | "gone" | "pending" = "pending";
   let errorStatus = 0;
@@ -201,6 +202,12 @@ function extension(server: { captureProtocol?: number } = {}) {
       async getMediaStreamId() {
         order.push("getMediaStreamId");
 
+        if (!invoked) {
+          throw new Error(
+            "Extension has not been invoked for the current page (see activeTab permission)."
+          );
+        }
+
         return "stream";
       },
     },
@@ -299,6 +306,9 @@ function extension(server: { captureProtocol?: number } = {}) {
     },
     grant(value: boolean) {
       granted = value;
+    },
+    invoke(value: boolean) {
+      invoked = value;
     },
     listen(
       message: { type: string },
@@ -450,6 +460,17 @@ test("start accepts a /meet/<code> tab and sends Nakama the short URL", async ()
       ext.requests.find((request) => request.path.endsWith("/start"))!.body!
     )
   ).toEqual({ url: "https://meet.google.com/rbi-wghm-grt" });
+});
+
+test("start without the toolbar click on the tab asks for it and calls no route", async () => {
+  const ext = extension();
+  ext.connected();
+  ext.invoke(false);
+  expect((await ext.dispatch("START")).error).toBe(
+    "Click the Nakama icon in the toolbar on this Meet tab, then start again."
+  );
+  expect(ext.requests).toHaveLength(0);
+  expect(ext.session.captureSession).toBeUndefined();
 });
 
 test("start refuses a Nakama that does not speak capture protocol 3", async () => {

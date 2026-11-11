@@ -5,7 +5,13 @@
   "description": "Capture Google Meet audio for a Nakama live transcript.",
   "minimum_chrome_version": "116",
   "icons": { "192": "icon.png" },
-  "permissions": ["offscreen", "sidePanel", "storage", "tabCapture"],
+  "permissions": [
+    "activeTab",
+    "offscreen",
+    "sidePanel",
+    "storage",
+    "tabCapture"
+  ],
   "host_permissions": ["https://meet.google.com/*"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js" },

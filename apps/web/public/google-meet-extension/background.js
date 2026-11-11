@@ -340,10 +340,20 @@ async function start() {
       throw new Error("Connect Nakama first.");
     }
 
-    // Obtain tab access while handling the user's extension click.
-    const streamId = await chrome.tabCapture.getMediaStreamId({
-      targetTabId: tab.id,
-    });
+    // Chrome allows tab capture only after the toolbar button was clicked on
+    // this tab (activeTab). The open side panel alone does not count.
+    let streamId;
+
+    try {
+      streamId = await chrome.tabCapture.getMediaStreamId({
+        targetTabId: tab.id,
+      });
+    } catch (error) {
+      console.warn("[Nakama Meet] tab capture refused", error.message);
+      throw new Error(
+        "Click the Nakama icon in the toolbar on this Meet tab, then start again."
+      );
+    }
 
     const status = await api("/v1/meet/extension/status");
 
