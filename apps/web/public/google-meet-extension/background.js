@@ -449,9 +449,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   const fromExtensionPage =
     !sender.tab &&
-    ["popup.html", "sidepanel.html"].some((file) =>
-      sender.url?.startsWith(chrome.runtime.getURL(file))
-    );
+    sender.url?.startsWith(chrome.runtime.getURL("sidepanel.html"));
 
   const fromMeetTab = Boolean(sender.tab?.id) && message.type === "MEET_STATE";
 
@@ -574,6 +572,13 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     await chrome.runtime.sendMessage({ type: "STOP_CAPTURE" });
   }
 });
+
+// The toolbar button opens the side panel; there is no popup.
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) =>
+    console.warn("[Nakama Meet] side panel behavior failed", error.message)
+  );
 
 // A service worker restart drops timers; resume a pairing that is still open.
 chrome.storage.session.get("pairing").then(({ pairing }) => {

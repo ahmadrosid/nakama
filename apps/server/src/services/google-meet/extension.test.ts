@@ -91,6 +91,7 @@ function extension(server: { captureProtocol?: number } = {}) {
   let pairStatus: "approved" | "gone" | "pending" = "pending";
   let errorStatus = 0;
   let badge = "";
+  const panelBehavior: { openPanelOnActionClick: boolean }[] = [];
   let now = 1_000_000;
   let timerId = 0;
 
@@ -190,6 +191,11 @@ function extension(server: { captureProtocol?: number } = {}) {
           : { ok: true };
       },
     },
+    sidePanel: {
+      async setPanelBehavior(behavior: { openPanelOnActionClick: boolean }) {
+        panelBehavior.push(behavior);
+      },
+    },
     storage: { local: fakeStore(local), session: fakeStore(session) },
     tabCapture: {
       async getMediaStreamId() {
@@ -230,7 +236,7 @@ function extension(server: { captureProtocol?: number } = {}) {
 
   const sender = {
     id: chrome.runtime.id,
-    url: chrome.runtime.getURL("popup.html"),
+    url: chrome.runtime.getURL("sidepanel.html"),
   };
 
   return {
@@ -294,12 +300,20 @@ function extension(server: { captureProtocol?: number } = {}) {
     grant(value: boolean) {
       granted = value;
     },
+    listen(
+      message: { type: string },
+      from: { id: string; url: string },
+      reply: (value: { error?: string } | undefined) => void
+    ) {
+      return listeners[0]!(message, from, reply);
+    },
     local,
     openedTabs,
     order,
     pair(value: typeof pairStatus) {
       pairStatus = value;
     },
+    panelBehavior,
     requests,
     respondWith(status: number) {
       errorStatus = status;
@@ -599,82 +613,35 @@ test("content script on a Meet call shows only the recording badge", async () =>
   expect(created[0]?.style.display).toBe("block");
 });
 
-test("popup Start opens the side panel for the Meet tab, then starts", async () => {
-  const calls: string[] = [];
-  let startClick!: () => Promise<void>;
-
-  const element = (selector: string) => {
-    const node = { dataset: {} };
-
-    if (selector === "#start") {
-      return new Proxy(node, {
-        set(target, key, value) {
-          if (key === "onclick") {
-            startClick = value;
-          }
-
-          return Reflect.set(target, key, value);
-        },
-      });
-    }
-
-    return node;
-  };
-
-  runInNewContext(extensionFile("popup.js"), {
-    chrome: {
-      runtime: {
-        async sendMessage(message: { type: string }) {
-          calls.push(message.type);
-
-          return message.type === "STATE" ? { connected: true } : { ok: true };
-        },
-      },
-      sidePanel: {
-        async open({ tabId }: { tabId: number }) {
-          calls.push(`sidePanel ${tabId}`);
-        },
-      },
-      storage: { onChanged: { addListener() {} } },
-      tabs: {
-        async query() {
-          return [{ id: 7, url: "https://meet.google.com/abc-defg-hij" }];
-        },
-      },
-    },
-    clearInterval() {},
-    console: { warn() {} },
-    document: { querySelector: element },
-    setInterval: () => 1,
-    URL,
-    window: { addEventListener() {} },
-  });
+test("the toolbar button opens the side panel and there is no popup", async () => {
+  const ext = extension();
   await Bun.sleep(1);
-  calls.length = 0;
-  await startClick();
-  expect(calls.slice(0, 2)).toEqual(["sidePanel 7", "START"]);
-});
-
-test("manifest asks only for Meet and the Nakama origin the user picks", () => {
+  expect(ext.panelBehavior).toEqual([{ openPanelOnActionClick: true }]);
   const manifest = JSON.parse(extensionFile("manifest.json"));
-  expect(JSON.stringify(manifest)).not.toContain("<all_urls>");
-  expect(manifest.version).toBe("0.3.0");
-  expect(manifest.host_permissions).toEqual(["https://meet.google.com/*"]);
-  expect(manifest.optional_host_permissions).toEqual([
-    "https://*/*",
-    "http://*/*",
-  ]);
-  expect(manifest.content_scripts).toEqual([
-    {
-      js: ["content.js"],
-      matches: ["https://meet.google.com/*"],
-      run_at: "document_idle",
-    },
-  ]);
-  expect(manifest.permissions).not.toContain("activeTab");
+  expect(manifest.action.default_popup).toBeUndefined();
+  expect(manifest.side_panel).toEqual({ default_path: "sidepanel.html" });
+
+  const fromOldPopup = await new Promise<{ error?: string } | undefined>(
+    (resolve) => {
+      const handled = ext.listen(
+        { type: "STATE" },
+        {
+          id: "test-extension",
+          url: "chrome-extension://test-extension/popup.html",
+        },
+        resolve
+      );
+
+      if (handled !== true) {
+        resolve(undefined);
+      }
+    }
+  );
+
+  expect(fromOldPopup).toBeUndefined();
 });
 
-test("popup shows setup progress and only the available capture action", async () => {
+test("side panel shows setup progress and only the available capture action", async () => {
   for (const [connected, onMeet, recording] of [
     [false, false, false],
     [true, false, false],
@@ -694,7 +661,7 @@ test("popup shows setup progress and only the available capture action", async (
     await runInNewContext(
       readFileSync(
         new URL(
-          "../../../../web/public/google-meet-extension/popup.js",
+          "../../../../web/public/google-meet-extension/sidepanel.js",
           import.meta.url
         ),
         "utf8"
@@ -711,6 +678,8 @@ test("popup shows setup progress and only the available capture action", async (
           },
           storage: { onChanged: { addListener() {} } },
           tabs: {
+            onActivated: { addListener() {} },
+            onUpdated: { addListener() {} },
             async query() {
               return [
                 {
@@ -906,7 +875,7 @@ test.each([false, true])(
   }
 );
 
-test("popup transcript access is bound to its captured meeting and unavailable to pages", async () => {
+test("side panel transcript access is bound to its captured meeting and unavailable to pages", async () => {
   const ext = extension();
   ext.connected();
   await ext.dispatch("START");
@@ -928,7 +897,7 @@ test("popup transcript access is bound to its captured meeting and unavailable t
   expect(ext.openedTabs.at(-1)).toBe("https://other.example/google-meet");
 });
 
-test("popup renders live turns safely, restores on reopen and stops polling on close", async () => {
+test("side panel renders live turns safely, restores on reopen and stops polling on close", async () => {
   let recording = true;
 
   const replies = [
@@ -988,7 +957,7 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
     runInNewContext(
       readFileSync(
         new URL(
-          "../../../../web/public/google-meet-extension/popup.js",
+          "../../../../web/public/google-meet-extension/sidepanel.js",
           import.meta.url
         ),
         "utf8"
@@ -1024,6 +993,8 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
             },
           },
           tabs: {
+            onActivated: { addListener() {} },
+            onUpdated: { addListener() {} },
             async query() {
               return [{ url: "https://meet.google.com/abc-defg-hij" }];
             },
