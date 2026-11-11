@@ -170,7 +170,9 @@ function resolveRequestListenerOrigin(request?: Request): string | undefined {
 }
 
 /** Where the request landed: the proxy-named origin behind a trusted proxy, the listener otherwise. */
-function resolveRequestSelfOrigin(request?: Request): string | undefined {
+export function resolveRequestSelfOrigin(
+  request?: Request
+): string | undefined {
   if (!request) {
     return;
   }

@@ -15,7 +15,7 @@ import type {
   Meeting,
 } from "@nakama/core/google-meet";
 import type { DatabaseAdapter } from "@nakama/db";
-import type { Server, ServerWebSocket } from "bun";
+import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
 import type { ComposioService } from "../composio-service";
 import { pluginActorFromContext } from "../tool-resolver";
@@ -31,6 +31,8 @@ import { createStreamMeeting, generateNextMeetingTitle } from "./worker";
 
 type Capture = {
   orgId: string;
+  /** 2: token in the URL on the capture listener. 3: ticket in the first message on the main server. */
+  protocol: 2 | 3;
   meetingId: string;
   directory: string;
   expiresAt: number;
@@ -110,13 +112,32 @@ function browserLabel(userAgent: string | null) {
   return system ? `${browser} on ${system}` : browser;
 }
 
-type SocketData = Capture & {
+// A protocol 3 client has this long to send its ticket.
+const CAPTURE_AUTH_TIMEOUT_MS = 5000;
+
+// Sockets that have not sent a ticket yet. Each lives at most 5 s.
+const MAX_PENDING_CAPTURE_SOCKETS = 100;
+
+const captureAuthSchema = z
+  .object({
+    meetingId: z.string().max(200),
+    ticket: z.string().max(200),
+    type: z.literal("auth"),
+  })
+  .strict();
+
+export type CaptureSocketData = {
+  /** Set on upgrade for protocol 2, and after the auth message for protocol 3. */
+  capture?: Capture;
+  authTimer?: ReturnType<typeof setTimeout>;
   abort?: AbortController;
   store?: MeetingStore;
   stream?: ReturnType<typeof createStreamMeeting>;
   stopTimer?: ReturnType<typeof setInterval>;
   done?: Promise<void>;
 };
+
+type SocketData = CaptureSocketData;
 
 // Agents only read meetings. Capture, imports, uploads, stop and delete
 // stay in the Google Meet page so an agent cannot change or remove data.
@@ -147,6 +168,29 @@ export class GoogleMeetService {
   private abort = new AbortController();
   private paused = false;
   private listener?: Server<SocketData>;
+
+  /** Socket handlers for the capture listener and the main server. */
+  readonly captureSocket: WebSocketHandler<SocketData> = {
+    close: (ws) => {
+      void this.finishSocket(ws, false);
+    },
+    maxPayloadLength: 48_000,
+    message: (ws, message) => this.socketMessage(ws, message),
+    open: (ws) => {
+      this.sockets.add(ws);
+
+      if (ws.data.capture) {
+        this.startStream(ws, ws.data.capture);
+
+        return;
+      }
+
+      ws.data.authTimer = setTimeout(
+        () => ws.close(1008, "Authentication timed out"),
+        CAPTURE_AUTH_TIMEOUT_MS
+      );
+    },
+  };
 
   constructor(
     private readonly db: DatabaseAdapter,
@@ -338,7 +382,9 @@ export class GoogleMeetService {
     input: MeetActionInput,
     actor: { id: string; role: "admin" | "member" },
     signal?: AbortSignal,
-    profileId?: string
+    profileId?: string,
+    /** The main server's capture socket URL. Set, start-capture issues a protocol 3 ticket. */
+    captureSocketUrl?: string
   ): Promise<MeetActionResults[Action]> {
     if (!actor.id || (actor.role !== "admin" && actor.role !== "member")) {
       return Promise.reject(new NakamaApiError("Forbidden", 403));
@@ -400,9 +446,10 @@ export class GoogleMeetService {
       const result = await run(input, {
         actionKey: action,
         actor,
-        captureUrl: async () => this.captureUrl(),
+        captureUrl: async () => captureSocketUrl ?? this.captureUrl(),
         composio: this.composio,
-        createCapture: (meeting) => this.createCapture(orgId, meeting),
+        createCapture: (meeting) =>
+          this.createCapture(orgId, meeting, captureSocketUrl),
         dataDir: this.directory(orgId),
         importProgress: {
           get: () => this.importProgress.get(`${orgId}:${actor.id}`) ?? null,
@@ -763,7 +810,11 @@ export class GoogleMeetService {
     return address;
   }
 
-  private createCapture(orgId: string, meeting: Meeting) {
+  private createCapture(
+    orgId: string,
+    meeting: Meeting,
+    captureSocketUrl?: string
+  ) {
     const token = crypto.randomUUID();
     const expiresAt = Date.now() + meeting.durationMinutes * 60_000;
 
@@ -772,6 +823,7 @@ export class GoogleMeetService {
       expiresAt,
       meetingId: meeting.id,
       orgId,
+      protocol: captureSocketUrl ? 3 : 2,
       timer: setTimeout(() => {
         this.sessions.delete(token);
         const store = new MeetingStore(this.directory(orgId), orgId);
@@ -791,7 +843,10 @@ export class GoogleMeetService {
 
     return {
       token,
-      url: `${this.captureUrl()}?meetingId=${meeting.id}&token=${token}`,
+      // Protocol 3 sends the ticket in the first message, never in the URL.
+      url:
+        captureSocketUrl ??
+        `${this.captureUrl()}?meetingId=${meeting.id}&token=${token}`,
     };
   }
 
@@ -804,6 +859,75 @@ export class GoogleMeetService {
     }
   }
 
+  /**
+   * Returns the capture for a ticket when every check passes: it exists, is
+   * for this protocol and meeting, has not expired, Meet is on, and the
+   * meeting is still queued and not stopped. The caller deletes it on use.
+   */
+  private captureForTicket(
+    token: string,
+    meetingId: string | null,
+    protocol: Capture["protocol"]
+  ) {
+    const session = this.sessions.get(token);
+
+    if (
+      this.paused ||
+      this.abort.signal.aborted ||
+      !session ||
+      session.protocol !== protocol ||
+      session.meetingId !== meetingId ||
+      session.expiresAt <= Date.now() ||
+      this.blockedOrganizations.has(session.orgId) ||
+      !meetEnabled(session.directory)
+    ) {
+      return null;
+    }
+
+    const store = new MeetingStore(session.directory, session.orgId);
+    const meeting = store.get(session.meetingId);
+    store.close();
+
+    if (meeting?.state !== "queued" || meeting.stopRequested) {
+      return null;
+    }
+
+    return session;
+  }
+
+  private useTicket(token: string) {
+    clearTimeout(this.sessions.get(token)?.timer);
+    this.sessions.delete(token);
+  }
+
+  /**
+   * Upgrades `GET /v1/meet/capture` on the main server. The socket carries no
+   * secret in its URL; it must send its ticket as the first message.
+   */
+  upgradeCapture(
+    request: Request,
+    server?: {
+      upgrade?: (request: Request, options: { data: SocketData }) => boolean;
+    }
+  ) {
+    if (!server?.upgrade || this.paused || this.abort.signal.aborted) {
+      return new Response(null, { status: 503 });
+    }
+
+    const pending = [...this.sockets].filter((ws) => !ws.data.capture).length;
+
+    if (pending >= MAX_PENDING_CAPTURE_SOCKETS) {
+      return new Response(null, { status: 429 });
+    }
+
+    if (!server.upgrade(request, { data: {} })) {
+      return new Response(null, { status: 426 });
+    }
+
+    // Bun answers the upgrade itself and ignores this response.
+    return new Response(null);
+  }
+
   private startListener() {
     this.listener = Bun.serve<SocketData>({
       fetch: (request, server) => {
@@ -814,119 +938,150 @@ export class GoogleMeetService {
         }
 
         const token = url.searchParams.get("token") ?? "";
-        const session = this.sessions.get(token);
 
-        if (
-          this.paused ||
-          !session ||
-          session.meetingId !== url.searchParams.get("meetingId") ||
-          session.expiresAt <= Date.now() ||
-          !meetEnabled(session.directory)
-        ) {
+        const session = this.captureForTicket(
+          token,
+          url.searchParams.get("meetingId"),
+          2
+        );
+
+        if (!session) {
           return new Response(null, { status: 401 });
         }
 
-        const store = new MeetingStore(session.directory, session.orgId);
-        const meeting = store.get(session.meetingId);
-        store.close();
-
-        if (meeting?.state !== "queued" || meeting.stopRequested) {
-          return new Response(null, { status: 401 });
-        }
-
-        if (!server.upgrade(request, { data: { ...session } })) {
+        if (!server.upgrade(request, { data: { capture: { ...session } } })) {
           return new Response(null, { status: 426 });
         }
 
-        clearTimeout(session.timer);
-        this.sessions.delete(token);
+        this.useTicket(token);
       },
       hostname: process.env.NAKAMA_MEET_CAPTURE_HOST ?? "127.0.0.1",
       port: Number(process.env.NAKAMA_MEET_CAPTURE_PORT ?? 0),
-      websocket: {
-        close: (ws) => {
-          void this.finishSocket(ws, false);
-        },
-        maxPayloadLength: 48_000,
-        message: async (ws, message) => {
-          try {
-            const text = z.string().safeParse(message);
+      websocket: this.captureSocket,
+    });
+  }
 
-            if (text.success) {
-              const event = z
-                .object({
-                  protocol: z.number().optional(),
-                  type: z.string().optional(),
-                })
-                .parse(JSON.parse(text.data));
+  private authenticateSocket(
+    ws: ServerWebSocket<SocketData>,
+    message: string | Buffer
+  ) {
+    let auth: z.infer<typeof captureAuthSchema> | undefined;
 
-              if (event.type === "stop") {
-                const done = this.finishSocket(ws, event.protocol === 2);
-                await ws.data.stream?.captured();
-                void done;
-                ws.send(JSON.stringify({ type: "capture-finalized" }));
-                ws.close();
-              }
-            } else {
-              const frame = z
-                .union([z.instanceof(ArrayBuffer), z.instanceof(Uint8Array)])
-                .parse(message);
+    try {
+      // A binary frame fails here: no audio before auth.
+      auth = captureAuthSchema.parse(JSON.parse(z.string().parse(message)));
+    } catch {
+      auth = undefined;
+    }
 
-              await ws.data.stream?.push(new Uint8Array(frame));
-            }
-          } catch {
-            ws.close(1011, "Audio stream failed");
-          }
-        },
-        open: (ws) => {
-          this.sockets.add(ws);
-          const { directory, orgId, meetingId } = ws.data;
-          const store = new MeetingStore(directory, orgId);
-          ws.data.store = store;
-          const meeting = store.get(meetingId);
+    const capture = auth
+      ? this.captureForTicket(auth.ticket, auth.meetingId, 3)
+      : null;
 
-          if (!meeting) {
-            ws.close(1008);
+    if (!(auth && capture)) {
+      ws.close(1008, "Authentication failed");
 
-            return;
-          }
+      return;
+    }
 
-          ws.data.abort = new AbortController();
+    this.useTicket(auth.ticket);
+    clearTimeout(ws.data.authTimer);
+    ws.data.capture = { ...capture };
+    this.startStream(ws, ws.data.capture);
+  }
 
-          const stream = createStreamMeeting(
-            meeting,
-            store,
-            directory,
-            this.openaiKey(),
-            AbortSignal.any([this.abort.signal, ws.data.abort.signal])
+  private async socketMessage(
+    ws: ServerWebSocket<SocketData>,
+    message: string | Buffer
+  ) {
+    const capture = ws.data.capture;
+
+    if (!capture) {
+      this.authenticateSocket(ws, message);
+
+      return;
+    }
+
+    try {
+      const text = z.string().safeParse(message);
+
+      if (text.success) {
+        const event = z
+          .object({
+            protocol: z.number().optional(),
+            type: z.string().optional(),
+          })
+          .parse(JSON.parse(text.data));
+
+        if (event.type === "stop") {
+          const done = this.finishSocket(
+            ws,
+            event.protocol === capture.protocol
           );
 
-          ws.data.stream = stream;
-          let stopSent = 0;
-          ws.data.stopTimer = setInterval(() => {
-            const current = store.get(meetingId);
+          await ws.data.stream?.captured();
 
-            if (!current || this.abort.signal.aborted) {
-              ws.close();
+          void done;
+          ws.send(JSON.stringify({ type: "capture-finalized" }));
+          ws.close();
+        }
+      } else {
+        const frame = z
+          .union([z.instanceof(ArrayBuffer), z.instanceof(Uint8Array)])
+          .parse(message);
 
-              return;
-            }
+        await ws.data.stream?.push(new Uint8Array(frame));
+      }
+    } catch {
+      ws.close(1011, "Audio stream failed");
+    }
+  }
 
-            if (current.stopRequested || Date.now() >= sessionEnd(meeting)) {
-              if (!stopSent) {
-                stopSent = Date.now();
-                ws.send(JSON.stringify({ type: "stop-requested" }));
-              } else if (Date.now() - stopSent > 5000) {
-                ws.close(1011, "Final audio flush timed out");
-              }
-            }
-          }, 500);
-          void stream.ready
-            .then(() => ws.send(JSON.stringify({ type: "ready" })))
-            .catch(() => ws.close(1011, "Transcription unavailable"));
-        },
-      },
-    });
+  private startStream(ws: ServerWebSocket<SocketData>, capture: Capture) {
+    const { directory, orgId, meetingId } = capture;
+    const store = new MeetingStore(directory, orgId);
+    ws.data.store = store;
+    const meeting = store.get(meetingId);
+
+    if (!meeting) {
+      ws.close(1008);
+
+      return;
+    }
+
+    ws.data.abort = new AbortController();
+
+    const stream = createStreamMeeting(
+      meeting,
+      store,
+      directory,
+      this.openaiKey(),
+      AbortSignal.any([this.abort.signal, ws.data.abort.signal])
+    );
+
+    ws.data.stream = stream;
+    let stopSent = 0;
+    ws.data.stopTimer = setInterval(() => {
+      const current = store.get(meetingId);
+
+      if (!current || this.abort.signal.aborted) {
+        ws.close();
+
+        return;
+      }
+
+      if (current.stopRequested || Date.now() >= sessionEnd(meeting)) {
+        if (!stopSent) {
+          stopSent = Date.now();
+          ws.send(JSON.stringify({ type: "stop-requested" }));
+        } else if (Date.now() - stopSent > 5000) {
+          ws.close(1011, "Final audio flush timed out");
+        }
+      }
+    }, 500);
+    void stream.ready
+      .then(() => ws.send(JSON.stringify({ type: "ready" })))
+      .catch(() => ws.close(1011, "Transcription unavailable"));
   }
 
   private finishSocket(
@@ -934,23 +1089,27 @@ export class GoogleMeetService {
     requestedStop: boolean
   ): Promise<void> {
     ws.data.done ??= (async () => {
+      clearTimeout(ws.data.authTimer);
       clearInterval(ws.data.stopTimer);
+      const capture = ws.data.capture;
 
       try {
         await ws.data.stream?.close(requestedStop);
       } catch {
-        ws.data.store?.update(
-          ws.data.meetingId,
-          "failed",
-          "Capture ended; partial transcript saved"
-        );
+        if (capture) {
+          ws.data.store?.update(
+            capture.meetingId,
+            "failed",
+            "Capture ended; partial transcript saved"
+          );
+        }
       } finally {
         ws.data.store?.close();
         this.sockets.delete(ws);
       }
 
-      if (!this.abort.signal.aborted) {
-        this.title(ws.data.orgId, ws.data.meetingId);
+      if (capture && !this.abort.signal.aborted) {
+        this.title(capture.orgId, capture.meetingId);
       }
     })();
 
@@ -964,7 +1123,9 @@ export class GoogleMeetService {
       }
     }
 
-    const active = [...this.sockets].filter((ws) => ws.data.orgId === orgId);
+    const active = [...this.sockets].filter(
+      (ws) => ws.data.capture?.orgId === orgId
+    );
 
     for (const ws of active) {
       ws.data.abort?.abort();

@@ -42,6 +42,8 @@ export function isPublicRouteRequest(
       /^\/v1\/meet\/extension\/(?:pair\/[^/]+|status|transcript)$/.test(
         pathname
       )) ||
+    // The capture socket sends a one-time ticket as its first message.
+    (method === "GET" && pathname === "/v1/meet/capture") ||
     (method === "GET" &&
       /^\/v1\/public\/artifact-shares\/[^/]+$/.test(pathname)) ||
     // Microsoft posts Teams activities with its own service token; the worker's
