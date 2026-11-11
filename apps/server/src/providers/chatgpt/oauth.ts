@@ -43,6 +43,8 @@ const jwtPayloadSchema = z.object({
   [CHATGPT_JWT_CLAIM_PATH]: z
     .object({
       chatgpt_account_id: z.string().optional(),
+      // A bad plan claim must not hide the account id.
+      chatgpt_plan_type: z.string().optional().catch(undefined),
     })
     .optional(),
 });
@@ -118,6 +120,16 @@ export function readChatgptAccountIdFromAccessToken(
   const accountId = payload?.[CHATGPT_JWT_CLAIM_PATH]?.chatgpt_account_id;
 
   return accountId && accountId.length > 0 ? accountId : null;
+}
+
+/** The ChatGPT subscription plan, such as `"free"` or `"plus"`. */
+export function readChatgptPlanTypeFromAccessToken(
+  accessToken: string
+): string | null {
+  const payload = decodeJwtPayload(accessToken);
+  const planType = payload?.[CHATGPT_JWT_CLAIM_PATH]?.chatgpt_plan_type;
+
+  return planType && planType.length > 0 ? planType : null;
 }
 
 async function readTokenResponse(

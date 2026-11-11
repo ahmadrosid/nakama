@@ -2166,6 +2166,8 @@ export interface ProviderInstanceSummary {
   /** The last 4 characters of the saved key, for admins only. */
   apiKeyEnding?: string;
   baseUrl?: string | null;
+  /** The connected ChatGPT account's plan, such as `"free"` or `"plus"`. */
+  chatgptPlanType?: string;
   createdAt: string;
   customModels?: CustomModelEntry[];
   hasApiKey: boolean;

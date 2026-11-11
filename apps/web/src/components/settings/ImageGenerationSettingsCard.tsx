@@ -27,6 +27,7 @@ const IMAGE_GENERATION_OFF_VALUE = "off";
 type ImageGenerationChoice = SettingsModelOption;
 
 interface ImageGenerationProviderSummary {
+  chatgptPlanType?: string;
   hasApiKey: boolean;
   id: string;
   type: string;
@@ -40,7 +41,8 @@ interface ImageGenerationProviderSummary {
 function imageGenerationChoices(
   models: Parameters<typeof groupModelsByProvider>[0],
   providers: ImageGenerationProviderSummary[],
-  selection: string
+  selection: string,
+  currentProviderId: string | null
 ) {
   const groups = groupModelsByProvider(models);
 
@@ -149,7 +151,24 @@ function imageGenerationChoices(
     );
   };
 
-  return { choices, labelOf, providerAvailable };
+  // Same rule as the server's automatic pick: the default provider when it is
+  // a connected ChatGPT, else the first connected ChatGPT.
+  const automaticChatgptId =
+    currentProviderId && connectedChatgptIds.has(currentProviderId)
+      ? currentProviderId
+      : [...connectedChatgptIds][0];
+
+  const imageChatgptId = selection
+    ? chatgptGroupOf(selection)?.providerId
+    : automaticChatgptId;
+
+  // ChatGPT Free has no image generation tool.
+  const chatgptFreeNote = providers.some(
+    (provider) =>
+      provider.id === imageChatgptId && provider.chatgptPlanType === "free"
+  );
+
+  return { chatgptFreeNote, choices, labelOf, providerAvailable };
 }
 
 export function ImageGenerationSettingsCard() {
@@ -160,14 +179,20 @@ export function ImageGenerationSettingsCard() {
   const { data: imageGenerationSettings } = useImageGenerationSettings();
   const saveImageGenerationMutation = useSaveImageGenerationSettings();
 
-  const { choices, labelOf, providerAvailable } = useMemo(
+  const { chatgptFreeNote, choices, labelOf, providerAvailable } = useMemo(
     () =>
       imageGenerationChoices(
         modelsResponse?.models ?? [],
         modelsResponse?.providers ?? [],
-        selection
+        selection,
+        modelsResponse?.currentProviderId ?? null
       ),
-    [modelsResponse?.models, modelsResponse?.providers, selection]
+    [
+      modelsResponse?.currentProviderId,
+      modelsResponse?.models,
+      modelsResponse?.providers,
+      selection,
+    ]
   );
 
   useEffect(() => {
@@ -187,8 +212,13 @@ export function ImageGenerationSettingsCard() {
   return (
     <SettingsModelTile
       footer={
-        savedHint || formError ? (
+        savedHint || formError || chatgptFreeNote ? (
           <>
+            {chatgptFreeNote ? (
+              <p className="text-muted-foreground text-xs" role="note">
+                ChatGPT Free accounts can't generate images.
+              </p>
+            ) : null}
             {savedHint ? (
               <p
                 className="text-emerald-700 text-xs dark:text-emerald-300"
