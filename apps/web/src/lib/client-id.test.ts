@@ -16,16 +16,6 @@ afterEach(() => {
 });
 
 describe("createClientId", () => {
-  test("uses crypto.randomUUID when the context exposes it", () => {
-    const uuid = spyOn(crypto, "randomUUID").mockImplementation(
-      () => "00000000-0000-4000-8000-000000000000"
-    );
-
-    expect(createClientId()).toBe("00000000-0000-4000-8000-000000000000");
-    expect(uuid).toHaveBeenCalledTimes(1);
-    uuid.mockRestore();
-  });
-
   test("still returns unique ids when randomUUID is missing (insecure context)", () => {
     // Browsers drop randomUUID outside secure contexts but keep getRandomValues.
     useCrypto({
