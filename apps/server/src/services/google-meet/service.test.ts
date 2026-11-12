@@ -232,7 +232,10 @@ test("queued capture blocks snapshots and disabling invalidates its ticket", asy
   );
 
   expect(capture.capture.url).toBe("ws://127.0.0.1:4310/v1/meet/capture");
-  await expect(service.withSnapshot(async () => true)).rejects.toThrow();
+  // A 409, so a scheduled backup keeps this reason for Settings
+  await expect(service.withSnapshot(async () => true)).rejects.toEqual(
+    expect.objectContaining({ status: 409 })
+  );
   await service.invoke("a", "configure", { enabled: false }, admin);
   expect(await service.withSnapshot(async () => true)).toBe(true);
 });

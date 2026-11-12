@@ -559,7 +559,7 @@ export interface NakamaUpgradeResponse {
 }
 
 export interface BackupStatusResponse {
-  /** The last scheduled backup's 409, until the next good backup. */
+  /** The last failed scheduled backup, until the next good backup. */
   lastError: { at: string; message: string } | null;
 }
 

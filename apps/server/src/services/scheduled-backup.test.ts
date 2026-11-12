@@ -7,6 +7,7 @@ import {
   realpath,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -181,7 +182,7 @@ describe("scheduled backups", () => {
       expect(await readdir(missing)).toHaveLength(1);
       expect(await readdir(root)).toEqual([]);
     } finally {
-      stop();
+      await stop();
     }
   });
 
@@ -212,65 +213,49 @@ describe("scheduled backups", () => {
     });
 
     await waitFor(() => hasBackup(empty));
-    stopRecent();
-    stopEmpty();
+    await stopRecent();
+    await stopEmpty();
 
     expect(exports).toBe(1);
     expect(await readdir(recent)).toHaveLength(1);
     expect(await readdir(empty)).toHaveLength(1);
   });
 
-  test("keeps a 409 for Settings until the next good backup", async () => {
+  test("keeps the last failed run for Settings until the next good backup", async () => {
     const dir = await tempDir();
-
-    const errors = spyOn(console, "error").mockImplementation(() => {});
-
-    // With no backup in the dir, the first run starts at once.
-    const run = async (
-      exportFile: () => Promise<BackupExportFile>,
-      done: () => boolean | Promise<boolean>
-    ) => {
-      const stop = await startScheduledBackups({ dir, exportFile, key });
-
-      try {
-        await waitFor(done);
-      } finally {
-        stop();
-      }
-    };
 
     const blocked = new NakamaApiError(
       "Cannot export a restorable backup: the server cannot read config.ini.",
       409
     );
 
-    try {
-      await run(
-        () => Promise.reject(new Error("disk full")),
-        () => errors.mock.calls.length > 0
-      );
-      expect(await readBackupError(dir)).toBeNull();
+    const tooBig = new NakamaApiError(
+      "Cannot export a restorable backup: ZIP exceeds the import limit.",
+      413
+    );
 
-      await run(
-        () => Promise.reject(blocked),
-        async () => (await readBackupError(dir)) !== null
-      );
-      expect(await readBackupError(dir)).toEqual({
-        at: expect.any(String),
-        message: blocked.message,
-      });
+    await runOnce(dir, () => Promise.reject(blocked));
+    expect(await readBackupError(dir)).toEqual({
+      at: expect.any(String),
+      message: blocked.message,
+    });
 
-      await run(
-        () => makeExportFile("zip"),
-        async () => (await readBackupError(dir)) === null
-      );
-      expect(await readdir(dir)).toHaveLength(1);
-    } finally {
-      errors.mockRestore();
-    }
+    // A later failure of another kind replaces the old record
+    await runOnce(dir, () => Promise.reject(tooBig));
+    expect((await readBackupError(dir))?.message).toBe(tooBig.message);
+
+    // A plain error is recorded too, without its raw detail
+    await runOnce(dir, () => Promise.reject(new Error("EIO /secret/path")));
+    const plain = await readBackupError(dir);
+    expect(plain).not.toBeNull();
+    expect(plain?.message).not.toContain("/secret/path");
+
+    await runOnce(dir, () => makeExportFile("zip"));
+    expect(await readBackupError(dir)).toBeNull();
+    expect(await readdir(dir)).toHaveLength(1);
   });
 
-  test("a written backup is not reported as failed when the old 409 cannot be cleared", async () => {
+  test("a written backup is not reported as failed when the old record cannot be cleared", async () => {
     const dir = await tempDir();
     // A folder with content where the error file goes: rm without recursive refuses it
     await mkdir(join(dir, "scheduled-backup-error.json", "x"), {
@@ -279,47 +264,171 @@ describe("scheduled backups", () => {
     const errors = spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      const stop = await startScheduledBackups({
-        dir,
-        exportFile: () => makeExportFile("zip"),
-        key,
-      });
+      await runOnce(dir, () => makeExportFile("zip"));
 
-      // The failed clear is the last step of the run
-      await waitFor(() => errors.mock.calls.length > 0);
-      stop();
-
-      const logged = errors.mock.calls.map((call) => String(call[0]));
-
-      const failed = logged.filter((line) => line.includes("backup failed"));
-
-      expect(failed).toEqual([]);
-      expect(logged).toHaveLength(1);
+      // Only the failed cleanup is logged: no failed run, no record attempt
+      expect(errors).toHaveBeenCalledTimes(1);
       expect(await readdir(dir)).toHaveLength(2);
     } finally {
       errors.mockRestore();
     }
   });
 
-  test("logs an error file it cannot read instead of treating it as no 409", async () => {
+  test("a written backup is not reported as failed when old backups cannot be removed", async () => {
+    const dir = await tempDir();
+    const old = new Date("2000-01-01T00:00:00Z");
+
+    // Seven old "backups" that are folders: unlink refuses them, so rotation fails
+    for (let day = 1; day <= 7; day += 1) {
+      const path = join(dir, `nakama-2000-01-0${day}T000000Z.zip.enc`);
+      await mkdir(path);
+      await utimes(path, old, old);
+    }
+
+    await writeFile(
+      join(dir, "scheduled-backup-error.json"),
+      JSON.stringify({ at: old.toISOString(), message: "old failure" })
+    );
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await runOnce(dir, () => makeExportFile("zip"));
+
+      expect(await readBackupError(dir)).toBeNull();
+      expect(errors).toHaveBeenCalledTimes(1);
+      expect(await readdir(dir)).toHaveLength(8);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  test("a failure it cannot write to disk still replaces the old record", async () => {
+    const dir = await tempDir();
+    const file = join(dir, "scheduled-backup-error.json");
+
+    await writeFile(
+      file,
+      JSON.stringify({ at: new Date().toISOString(), message: "old failure" })
+    );
+    // A folder with content where the temp record goes: the record write fails
+    await mkdir(join(`${file}.tmp`, "x"), { recursive: true });
+
+    const blocked = new NakamaApiError("disk is full", 409);
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await runOnce(dir, () => Promise.reject(blocked));
+      expect((await readBackupError(dir))?.message).toBe(blocked.message);
+
+      await runOnce(dir, () => makeExportFile("zip"));
+      expect(await readBackupError(dir)).toBeNull();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  test("stop waits for a run that already started and does not schedule another", async () => {
+    const dir = await tempDir();
+    let release = () => {};
+
+    let exports = 0;
+
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    let started = () => {};
+
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+
+    const stop = await startScheduledBackups({
+      dir,
+      exportFile: async () => {
+        exports += 1;
+        started();
+        await gate;
+
+        return makeExportFile("zip");
+      },
+      key,
+    });
+
+    await running;
+    const stopped = stop();
+    release();
+    await stopped;
+
+    expect(exports).toBe(1);
+    expect(await readdir(dir)).toHaveLength(1);
+  });
+
+  test("fails on an error record it cannot read instead of reporting no failure", async () => {
     const dir = await tempDir();
     const file = join(dir, "scheduled-backup-error.json");
     const errors = spyOn(console, "error").mockImplementation(() => {});
 
     try {
       expect(await readBackupError(dir)).toBeNull();
-      expect(errors).not.toHaveBeenCalled();
 
       await writeFile(file, "not json");
-      expect(await readBackupError(dir)).toBeNull();
-      expect(errors).toHaveBeenCalledTimes(1);
+      const invalid = await readBackupError(dir).catch((error) => error);
+      expect(invalid).toEqual(expect.objectContaining({ status: 500 }));
 
+      const unreadable = expect.objectContaining({
+        message: invalid.message,
+        status: 500,
+      });
+
+      await writeFile(file, JSON.stringify({ at: "yesterday", message: "x" }));
+      await expect(readBackupError(dir)).rejects.toEqual(unreadable);
+
+      // A read error (EISDIR) gets the same fixed line; its fs detail goes to the log only
       await rm(file);
       await mkdir(file);
-      expect(await readBackupError(dir)).toBeNull();
-      expect(errors).toHaveBeenCalledTimes(2);
+      await expect(readBackupError(dir)).rejects.toEqual(unreadable);
+      expect(errors).toHaveBeenCalledTimes(3);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  test("a run that throws does not make stop reject", async () => {
+    const dir = await tempDir();
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      // String() cannot convert this, so describe throws inside the catch
+      await runOnce(dir, () => Promise.reject(Object.create(null)));
+      expect(errors).toHaveBeenCalled();
     } finally {
       errors.mockRestore();
     }
   });
 });
+
+/** Starts the scheduler on a dir with no backup, so it runs at once, and stops after that run. */
+async function runOnce(
+  dir: string,
+  exportFile: () => Promise<BackupExportFile>
+): Promise<void> {
+  let started = () => {};
+
+  const running = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+
+  const stop = await startScheduledBackups({
+    dir,
+    exportFile: () => {
+      started();
+
+      return exportFile();
+    },
+    key,
+  });
+
+  await running;
+  await stop();
+}

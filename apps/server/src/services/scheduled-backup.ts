@@ -26,49 +26,67 @@ const KEEP = 7;
 
 const NAME = /^nakama-.+\.zip\.enc$/;
 
-// The last 409 of a scheduled backup, for Settings. The next good backup removes it.
+// The last failed scheduled backup, for Settings. The next good backup removes it.
 const ERROR_FILE = "scheduled-backup-error.json";
 
-const backupErrorSchema = z.object({ at: z.string(), message: z.string() });
+const backupErrorSchema = z.object({
+  at: z.iso.datetime(),
+  message: z.string(),
+});
 
+type BackupError = NonNullable<BackupStatusResponse["lastError"]>;
+
+// Failures this process could not write to disk (for example, the disk is full).
+// One entry per backup dir; it is newer than any record on disk.
+const unrecordedErrors = new Map<string, BackupError>();
+
+/** Throws when the record exists but cannot be read, so Settings shows that it cannot check. */
 export async function readBackupError(
   dir: string
 ): Promise<BackupStatusResponse["lastError"]> {
-  let raw: string;
+  const unrecorded = unrecordedErrors.get(dir);
 
-  try {
-    raw = await readFile(join(dir, ERROR_FILE), "utf8");
-  } catch (error) {
-    // No file means no recorded 409. Any other read error could hide stopped backups, so log it
-    if (getNodeErrorCode(error) !== "ENOENT") {
-      console.error(
-        `Nakama cannot read ${ERROR_FILE}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-
-    return null;
+  if (unrecorded) {
+    return unrecorded;
   }
 
+  let detail: string;
+
   try {
-    const parsed = backupErrorSchema.safeParse(JSON.parse(raw));
+    const raw = await readFile(join(dir, ERROR_FILE), "utf8");
+    const parsed = backupErrorSchema.safeParse(parseJsonOrNull(raw));
 
     if (parsed.success) {
       return parsed.data;
     }
-  } catch {
-    // Not JSON, logged below like a record of the wrong shape
+
+    detail = "not a backup error record";
+  } catch (error) {
+    if (isMissing(error)) {
+      return null;
+    }
+
+    detail = describe(error);
   }
 
-  console.error(`Nakama cannot read ${ERROR_FILE}: not a backup error record`);
+  // The fs detail can hold a path, so it stays in the log; the admin gets a fixed line
+  console.error(`Nakama cannot read ${ERROR_FILE}: ${detail}`);
 
-  return null;
+  throw new NakamaApiError(
+    `Cannot read ${ERROR_FILE}. The server log has the details.`,
+    500
+  );
 }
 
-async function recordBackupError(dir: string, message: string): Promise<void> {
-  const path = join(dir, ERROR_FILE);
-  const record = { at: new Date().toISOString(), message };
-  await writeFile(`${path}.tmp`, JSON.stringify(record), { mode: 0o600 });
-  await rename(`${path}.tmp`, path);
+/** Renamed into place, so a crash mid-write never leaves a file that looks complete. */
+async function writeAtomically(path: string, data: Uint8Array | string) {
+  try {
+    await writeFile(`${path}.tmp`, data, { mode: 0o600 });
+    await rename(`${path}.tmp`, path);
+  } catch (error) {
+    await rm(`${path}.tmp`, { force: true });
+    throw error;
+  }
 }
 
 export function isEncryptedBackup(data: Uint8Array): boolean {
@@ -304,10 +322,15 @@ export async function writeBackup(options: {
     await exported.cleanup();
   }
 
-  const backups = await listBackups(options.dir);
+  // The backup is written; a failed rotation must not report it as failed
+  try {
+    const backups = await listBackups(options.dir);
 
-  for (const old of backups.slice(0, -KEEP)) {
-    await unlink(join(options.dir, old));
+    for (const old of backups.slice(0, -KEEP)) {
+      await unlink(join(options.dir, old));
+    }
+  } catch (error) {
+    console.error(`Nakama cannot remove old backups: ${describe(error)}`);
   }
 
   return path;
@@ -316,67 +339,99 @@ export async function writeBackup(options: {
 /**
  * Writes one backup a day. The first one is due a day after the newest file
  * already in the dir, so a crash loop cannot rotate out a week of good backups.
+ * The returned stop waits for a run that already started.
  */
 export async function startScheduledBackups(options: {
   dir: string;
   exportFile: () => Promise<BackupExportFile>;
   key: Buffer;
-}): Promise<() => void> {
+}): Promise<() => Promise<void>> {
   await mkdir(options.dir, { mode: 0o700, recursive: true });
   const newest = (await listBackups(options.dir)).at(-1);
   const last = newest ? (await stat(join(options.dir, newest))).mtimeMs : 0;
   let timer: ReturnType<typeof setTimeout>;
+  let running: Promise<void> = Promise.resolve();
+  let stopped = false;
+
+  const run = async () => {
+    const errorPath = join(options.dir, ERROR_FILE);
+
+    try {
+      const path = await writeBackup(options);
+      console.log(`Nakama backup written to ${path}`);
+      unrecordedErrors.delete(options.dir);
+
+      // Its own catch: the backup is written, a failed cleanup must not report it as failed
+      try {
+        await rm(errorPath, { force: true });
+      } catch (clearError) {
+        console.error(
+          `Nakama cannot clear ${ERROR_FILE}: ${describe(clearError)}`
+        );
+      }
+    } catch (error) {
+      console.error(`Nakama backup failed: ${describe(error)}`);
+
+      // Every failure replaces the record, so Settings always shows the last run.
+      // Only a NakamaApiError is written for an admin; other details stay in the log.
+      const message =
+        error instanceof NakamaApiError
+          ? error.message
+          : "The scheduled backup failed. The server log has the details.";
+
+      const record = { at: new Date().toISOString(), message };
+
+      try {
+        await writeAtomically(errorPath, JSON.stringify(record));
+        unrecordedErrors.delete(options.dir);
+      } catch (recordError) {
+        // Keep it in memory, so Settings does not show an older record or no failure
+        unrecordedErrors.set(options.dir, record);
+        console.error(
+          `Nakama cannot record the backup error: ${describe(recordError)}`
+        );
+      }
+    }
+  };
 
   const schedule = (delay: number) => {
-    timer = setTimeout(async () => {
-      try {
-        const path = await writeBackup(options);
-        console.log(`Nakama backup written to ${path}`);
-
-        // Its own catch: the backup is written, a failed cleanup must not report it as failed
-        try {
-          await rm(join(options.dir, ERROR_FILE), { force: true });
-        } catch (clearError) {
-          console.error(
-            `Nakama cannot clear ${ERROR_FILE}: ${clearError instanceof Error ? clearError.message : String(clearError)}`
-          );
-        }
-      } catch (error) {
-        console.error(
-          `Nakama backup failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-
-        if (error instanceof NakamaApiError && error.status === 409) {
-          try {
-            await recordBackupError(options.dir, error.message);
-          } catch (recordError) {
-            console.error(
-              `Nakama cannot record the backup error: ${recordError instanceof Error ? recordError.message : String(recordError)}`
-            );
+    timer = setTimeout(() => {
+      // A run that throws must not stop the daily schedule
+      running = run()
+        .catch((error) => {
+          console.error("Nakama backup run failed:", error);
+        })
+        .then(() => {
+          if (!stopped) {
+            schedule(DAY_MS);
           }
-        }
-      }
-
-      schedule(DAY_MS);
+        });
     }, delay);
     timer.unref();
   };
 
   schedule(Math.max(0, last + DAY_MS - Date.now()));
 
-  return () => clearTimeout(timer);
+  return async () => {
+    stopped = true;
+    clearTimeout(timer);
+    await running;
+  };
 }
 
-function getNodeErrorCode<T>(error: T): string | undefined {
-  if (!(error instanceof Error && "code" in error)) {
-    return;
+/** Null for text that is not JSON, so the schema check rejects it. */
+function parseJsonOrNull(raw: string) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
-
-  const code = error.code;
-
-  return isString(code) ? code : undefined;
 }
 
-function isString<T>(value: T): value is T & string {
-  return Object.prototype.toString.call(value) === "[object String]";
+function isMissing<T>(error: T): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function describe<T>(error: T): string {
+  return error instanceof Error ? error.message : String(error);
 }
