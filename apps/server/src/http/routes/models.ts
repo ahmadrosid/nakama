@@ -39,6 +39,7 @@ import {
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
+import { ChannelConfigBusyError } from "@nakama/core/channel-config-shared";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   checkSlackTokensMatch,
@@ -3004,6 +3005,10 @@ export function registerModelRoutes(
         await agent.setWhatsAppSettings(await channelOwner(c), body)
       );
     } catch (error) {
+      if (error instanceof ChannelConfigBusyError) {
+        return errorResponse("WhatsApp settings are busy. Try again.", 503);
+      }
+
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
@@ -3020,6 +3025,10 @@ export function registerModelRoutes(
         await agent.regenerateWhatsAppPairingCode(await channelOwner(c))
       );
     } catch (error) {
+      if (error instanceof ChannelConfigBusyError) {
+        return errorResponse("WhatsApp settings are busy. Try again.", 503);
+      }
+
       const message = error instanceof Error ? error.message : String(error);
 
       return errorResponse(message, 400);
@@ -3039,6 +3048,10 @@ export function registerModelRoutes(
 
       return json<WhatsAppSettingsResponse>(settings);
     } catch (error) {
+      if (error instanceof ChannelConfigBusyError) {
+        return errorResponse("WhatsApp settings are busy. Try again.", 503);
+      }
+
       const message = error instanceof Error ? error.message : String(error);
 
       return errorResponse(message, 400);

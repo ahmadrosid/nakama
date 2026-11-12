@@ -10,6 +10,7 @@ import {
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import {
   WhatsAppLinkStatusCard,
+  WhatsAppPairPhoneRow,
   WhatsAppSettingsLinkingSection,
 } from "@/components/whatsapp-settings-linking-section";
 
@@ -89,12 +90,8 @@ export function WhatsAppSettingsCardContent({
 
   const linking = (
     <WhatsAppSettingsLinkingSection
-      copied={copied}
-      onCopyPairingCode={onCopyPairingCode}
       onReconnect={onReconnect}
-      onRegeneratePairingCode={onRegeneratePairingCode}
       paired={paired}
-      pairingCode={pairingCode}
       reconnectPending={reconnectPending}
       regeneratePending={regeneratePending}
       rowClassName={paneItemClass}
@@ -204,6 +201,14 @@ export function WhatsAppSettingsCardContent({
               </Button>
             </div>
           </SettingsRow>
+          <WhatsAppPairPhoneRow
+            copied={copied}
+            onCopyPairingCode={onCopyPairingCode}
+            onRegeneratePairingCode={onRegeneratePairingCode}
+            pairingCode={pairingCode}
+            regeneratePending={regeneratePending}
+            savePending={savePending}
+          />
         </CardContent>
       </Card>
       <ChannelSettings>
