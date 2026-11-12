@@ -1,4 +1,4 @@
-import { afterEach, expect, setSystemTime, test } from "bun:test";
+import { afterEach, expect, setSystemTime, spyOn, test } from "bun:test";
 import { createPublicKey, randomBytes, verify } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -245,6 +245,55 @@ function connectResult(
 
   return back;
 }
+
+test("withnakama.com sends Connect on to a workspace, and only its own subdomain is trusted", async () => {
+  const realFetch = globalThis.fetch;
+
+  // acme.localhost is the workspace; it answers on the fake cloud.
+  const toCloud = spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+    realFetch(
+      String(input).replace("://acme.localhost:", "://127.0.0.1:"),
+      init
+    )
+  );
+
+  try {
+    const { agent, cloud } = await setup();
+    const port = new URL(cloud.url).port;
+    const directory = `http://localhost:${port}`;
+    const workspace = `http://acme.localhost:${port}`;
+
+    const { connectUrl } = await agent.startNakamaCloudSignIn({
+      cloudUrl: directory,
+    });
+
+    expect(new URL(connectUrl).origin).toBe(directory);
+
+    const back = connectResult(cloud, connectUrl);
+
+    for (const named of [
+      "https://evil.test",
+      `http://acme.localhost.evil.test:${port}`,
+      `http://acme.localhost:${Number(port) + 1}`,
+      `https://acme.localhost:${port}`,
+      `${workspace}/path`,
+    ]) {
+      back.searchParams.set("cloud", named);
+      expect((await fetch(back)).status).toBe(400);
+    }
+
+    expect(agent.nakamaCloudStatus().signedIn).toBe(false);
+
+    back.searchParams.set("cloud", workspace);
+    expect((await fetch(back)).status).toBe(200);
+    expect(agent.nakamaCloudStatus()).toMatchObject({
+      cloudUrl: workspace,
+      signedIn: true,
+    });
+  } finally {
+    toCloud.mockRestore();
+  }
+});
 
 test("a sign-in that cannot load the team's models does not sign in", async () => {
   const { agent, cloud } = await setup({ modelsStatus: 403 });

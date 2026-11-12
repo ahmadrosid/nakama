@@ -90,6 +90,46 @@ function sameText(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+const IP_HOST = /^(\d+\.){3}\d+$|^\[/;
+
+/**
+ * The server that answered the Connect. withnakama.com sends the Connect page
+ * on to the workspace the person picks, and that workspace names itself in
+ * `cloud`. Only a subdomain of the start address, on the same scheme and port,
+ * is trusted. Null refuses the callback.
+ */
+function answeringCloud(startUrl: string, named: string | null): string | null {
+  if (!named) {
+    return startUrl;
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(named);
+  } catch {
+    return null;
+  }
+
+  const start = new URL(startUrl);
+
+  if (url.href !== `${url.origin}/` || url.username || url.password) {
+    return null;
+  }
+
+  if (url.origin === start.origin) {
+    return startUrl;
+  }
+
+  const subdomain =
+    !IP_HOST.test(start.hostname) &&
+    url.hostname.endsWith(`.${start.hostname}`);
+
+  return subdomain && url.protocol === start.protocol && url.port === start.port
+    ? url.origin
+    : null;
+}
+
 /**
  * Signs this computer in to Nakama Cloud in the person's own browser. The
  * Connect page sends the result back to a one-time 127.0.0.1 address
@@ -185,7 +225,7 @@ export class NakamaCloudSignIn {
 
     const key = await this.deviceKey();
     const state = randomBytes(24).toString("base64url");
-    const cloudUrl = new URL(input.cloudUrl).origin;
+    const startUrl = new URL(input.cloudUrl).origin;
 
     const server = Bun.serve({
       fetch: async (request) => {
@@ -198,6 +238,7 @@ export class NakamaCloudSignIn {
         const params = url.searchParams;
         const computerId = params.get("computerId")?.trim() ?? "";
         const confirmCode = params.get("confirmCode")?.trim() ?? "";
+        const cloudUrl = answeringCloud(startUrl, params.get("cloud"));
 
         // A cancelled or replaced sign-in (a request on a kept-open
         // connection) must not use the code: that would activate the computer.
@@ -206,7 +247,8 @@ export class NakamaCloudSignIn {
             this.listener === server &&
             sameText(params.get("state") ?? "", state) &&
             computerId &&
-            confirmCode
+            confirmCode &&
+            cloudUrl
           )
         ) {
           return new Response(FAILED_PAGE, {
@@ -272,7 +314,7 @@ export class NakamaCloudSignIn {
       }
     }, SIGN_IN_WINDOW_MS).unref();
 
-    const connectUrl = new URL("/desktop/connect", cloudUrl);
+    const connectUrl = new URL("/desktop/connect", startUrl);
     connectUrl.searchParams.set("install", key.installId);
     connectUrl.searchParams.set("key", key.publicKey);
     connectUrl.searchParams.set(

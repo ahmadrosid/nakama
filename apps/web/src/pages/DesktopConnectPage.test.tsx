@@ -90,6 +90,7 @@ test("the return address carries the state and the new computer", () => {
   const url = new URL(
     connectReturnUrl(request, {
       account: "ada@example.com",
+      cloud: "https://acme.withnakama.com",
       computerId: "computer_1",
       confirmCode: "code_1",
       orgId: "org_a",
@@ -100,6 +101,7 @@ test("the return address carries the state and the new computer", () => {
   expect(url.origin).toBe("http://127.0.0.1:53111");
   expect(Object.fromEntries(url.searchParams)).toEqual({
     account: "ada@example.com",
+    cloud: "https://acme.withnakama.com",
     computerId: "computer_1",
     confirmCode: "code_1",
     orgId: "org_a",
@@ -288,7 +290,9 @@ test("Connect enrolls the key for the org, and a bad link shows no Connect butto
     name: "Ada's MacBook",
     publicKey: "a2V5",
   });
-  expect(
-    new URL(assigned[0] ?? "http://x").searchParams.get("computerId")
-  ).toBe("computer_1");
+  const back = new URL(assigned[0] ?? "http://x").searchParams;
+
+  expect(back.get("computerId")).toBe("computer_1");
+  // The app may have opened withnakama.com; this server names itself.
+  expect(back.get("cloud")).toBe(window.location.origin);
 });

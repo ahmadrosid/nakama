@@ -57,6 +57,7 @@ export function DesktopConnectPage() {
       window.location.assign(
         connectReturnUrl(request, {
           account: user?.email ?? "",
+          cloud: window.location.origin,
           computerId,
           confirmCode,
           orgId: org.id,

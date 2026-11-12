@@ -290,11 +290,16 @@ export function runFirstRun({
         return;
       }
 
+      // withnakama.com is not a Nakama server: its Connect page sends the
+      // browser on to the person's workspace, which the local server then
+      // calls. So only an address the person typed is checked here.
       const cloudUrl = choice.url
         ? normalizeCloudUrl(choice.url)
         : defaultCloudUrl();
 
-      await checkCloudServer(cloudUrl);
+      if (choice.url) {
+        await checkCloudServer(cloudUrl);
+      }
 
       waiting = new AbortController();
 

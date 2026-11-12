@@ -31,6 +31,8 @@ export function connectReturnUrl(
   request: ConnectRequest,
   result: {
     account: string;
+    /** This server's origin: the app may have opened withnakama.com, which sent it here. */
+    cloud: string;
     computerId: string;
     confirmCode: string;
     orgId: string;
@@ -40,6 +42,7 @@ export function connectReturnUrl(
   // RETURN_ADDRESS allows no query, so the result is the whole query.
   const query = new URLSearchParams({
     account: result.account,
+    cloud: result.cloud,
     computerId: result.computerId,
     confirmCode: result.confirmCode,
     orgId: result.orgId,
