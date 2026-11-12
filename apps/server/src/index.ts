@@ -46,7 +46,6 @@ import {
   loadConfig,
   log,
   NAKAMA_API_VERSION,
-  normalizeBaseUrl,
   resolveWebPublicUrlConfig,
   setManagedSecretResolver,
   setManagedSecretWriter,
@@ -654,24 +653,16 @@ console.log(`Nakama server listening on ${serverUrl}`);
 
 const publicUrlConfig = resolveWebPublicUrlConfig();
 
-let publicWebUrl =
-  publicUrlConfig.url === undefined ? "not configured" : "invalid URL";
-
 const parsedPublicUrl =
   publicUrlConfig.url && URL.canParse(publicUrlConfig.url)
     ? new URL(publicUrlConfig.url)
     : null;
 
-if (parsedPublicUrl && ["http:", "https:"].includes(parsedPublicUrl.protocol)) {
-  parsedPublicUrl.username = "";
-  parsedPublicUrl.password = "";
-  parsedPublicUrl.search = "";
-  parsedPublicUrl.hash = "";
-  publicWebUrl = normalizeBaseUrl(parsedPublicUrl.toString());
-}
-
 const publicUrlLogFields = {
-  publicWebUrl,
+  publicWebUrl:
+    parsedPublicUrl && ["http:", "https:"].includes(parsedPublicUrl.protocol)
+      ? parsedPublicUrl.origin + parsedPublicUrl.pathname
+      : "not configured",
   source: publicUrlConfig.source,
   trustProxy: process.env.NAKAMA_TRUST_PROXY === "true",
 };
