@@ -45,16 +45,30 @@ export type MeetAction =
   | "transcript"
   | "leave"
   | "delete"
-  | "configure";
+  | "configure"
+  | "approve-extension"
+  | "revoke-extension"
+  | "extension-keys";
 
 export interface MeetActionInput {
   after?: number;
+  code?: string;
   content?: string;
   enabled?: boolean;
   fileId?: string;
   filename?: string;
+  keyId?: string;
   meetingId?: string;
   messageId?: string;
+}
+
+/** A browser paired with the Google Meet extension. The key itself is never returned. */
+export interface MeetExtensionKey {
+  createdAt: number;
+  expiresAt: number;
+  id: string;
+  label: string;
+  lastUsedAt: number | null;
 }
 
 export interface MeetImportProgress {
@@ -68,7 +82,6 @@ export interface MeetImportProgress {
 
 export interface MeetOverview {
   canConfigure: boolean;
-  captureProtocol: number;
   /** Uploads and imports can be transcribed. */
   configured: boolean;
   enabled: boolean;
@@ -81,8 +94,10 @@ export interface MeetOverview {
 }
 
 export interface MeetActionResults {
+  "approve-extension": MeetExtensionKey;
   configure: { configured: boolean; enabled: boolean };
   delete: { deleted: boolean };
+  "extension-keys": { keys: MeetExtensionKey[] };
   "import-progress": { progress: MeetImportProgress | null };
   "import-recording": Meeting;
   leave: Meeting & { stopRequested: number };
@@ -99,6 +114,7 @@ export interface MeetActionResults {
       date: string;
     }[];
   };
+  "revoke-extension": { revoked: boolean };
   "start-capture": Meeting & { capture: { token: string; url: string } };
   status: { meeting: Meeting };
   transcript: {

@@ -39,12 +39,16 @@ function privateJson(path: string, data: { enabled: boolean }) {
 }
 
 export const meetingActionSchemas = {
+  "approve-extension": z
+    .object({ code: z.string().trim().min(1).max(16) })
+    .strict(),
   configure: z
     .object({
       enabled: z.boolean().optional(),
     })
     .strict(),
   delete: z.object({ meetingId: z.string() }).strict(),
+  "extension-keys": z.object({}).strict(),
   "import-progress": z.object({}).strict(),
   "import-recording": z
     .object({
@@ -55,6 +59,7 @@ export const meetingActionSchemas = {
   leave: z.object({ meetingId: z.string() }).strict(),
   meetings: z.object({}).strict(),
   recordings: z.object({}).strict(),
+  "revoke-extension": z.object({ keyId: z.string().max(64) }).strict(),
   "start-capture": z
     .object({
       durationMinutes: z.number().int().min(1).max(120).optional(),
@@ -79,7 +84,6 @@ export const meetingActionSchemas = {
 export interface MeetExecutionContext {
   actionKey: string;
   actor: { id: string; role: "admin" | "member" };
-  captureUrl?(): Promise<string>;
   composio?: Pick<
     ComposioService,
     "listMeetRecordings" | "downloadMeetRecording"
@@ -104,11 +108,15 @@ export interface MeetExecutionContext {
 
 export interface MeetActionInput {
   after?: number;
+  code?: string;
   content?: string;
   durationMinutes?: number;
   enabled?: boolean;
+  fileId?: string;
   filename?: string;
+  keyId?: string;
   meetingId?: string;
+  messageId?: string;
   url?: string;
 }
 
@@ -237,7 +245,6 @@ export async function run(
     if (action === "meetings") {
       return {
         canConfigure: context.actor.role === "admin",
-        captureProtocol: 2,
         ...(await transcriptionStatus(context, openaiKey)),
         enabled,
         liveReady: Boolean(openaiKey),
@@ -256,11 +263,10 @@ export async function run(
         throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
       }
 
-      if (!(context.captureUrl && context.createCapture)) {
-        throw new Error("Capture service unavailable");
+      // Only an HTTP route knows the capture socket URL of the main server.
+      if (!context.createCapture) {
+        throw new Error("Capture socket URL is missing");
       }
-
-      await context.captureUrl();
 
       const meeting = store.create(
         String(input.url ?? "").trim(),

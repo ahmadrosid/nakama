@@ -2,34 +2,52 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta content="dark" name="color-scheme">
+    <meta content="light dark" name="color-scheme">
     <title>Nakama Meet · Microphone access</title>
     <style>
+    :root {
+      --bg: #fafafa;
+      --fg: #171717;
+      --muted: #636363;
+      --primary: #b45309;
+      --primary-foreground: #ffffff;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0a0a0b;
+        --fg: #fafafa;
+        --muted: #a1a1aa;
+        --primary: #f59e0b;
+        --primary-foreground: #0a0a0b;
+        color-scheme: dark;
+      }
+    }
     body {
       max-width: 440px;
       padding: 24px;
       margin: 12vh auto;
       font: 16px / 1.6 system-ui;
-      color: #fafafa;
-      background: #0a0a0b;
+      color: var(--fg);
+      background: var(--bg);
     }
     h1 {
       font-size: 24px;
     }
     p {
-      color: #a1a1aa;
+      color: var(--muted);
     }
     button {
       padding: 12px 18px;
       font: inherit;
-      color: #0a0a0b;
+      color: var(--primary-foreground);
       cursor: pointer;
-      background: #f59e0b;
+      background: var(--primary);
       border: 0;
       border-radius: 8px;
     }
     button:focus-visible {
-      outline: 2px solid #fafafa;
+      outline: 2px solid var(--fg);
       outline-offset: 4px;
     }
     button:disabled {

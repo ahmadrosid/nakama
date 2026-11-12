@@ -1,8 +1,10 @@
+import { NakamaApiError } from "@nakama/core/api-error";
 import {
   formatTranscript,
   type MeetAction,
   type MeetActionInput,
   type MeetActionResults,
+  type MeetExtensionKey,
   type MeetImportProgress,
   type Meeting,
   type MeetOverview as Overview,
@@ -479,10 +481,6 @@ function LiveMeeting({
         </span>
         {meeting.error && <p role="alert">{meeting.error}</p>}
       </div>
-      <p className="meet-live-warning">
-        <AlertCircleIcon aria-hidden="true" size={14} />
-        Keep this tab open until the call ends.
-      </p>
     </Card>
   );
 }
@@ -789,120 +787,6 @@ function readUploadContent(file: File) {
     reader.onerror = () => reject(new Error("Could not read file"));
     reader.readAsDataURL(file);
   });
-}
-
-function useExtensionBridge(
-  call: MeetCall,
-  signal: AbortSignal,
-  setConnected: (connected: boolean) => void,
-  setSelected: (meeting: Meeting) => void
-) {
-  React.useEffect(() => {
-    async function receive(event: MessageEvent) {
-      if (event.source !== window || event.origin !== window.location.origin) {
-        return;
-      }
-
-      const eventData = event.data;
-
-      if (!(eventData instanceof Object)) {
-        return;
-      }
-
-      if ("type" in eventData && eventData.type === "NAKAMA_MEET_EXTENSION") {
-        setConnected("connected" in eventData && eventData.connected === true);
-
-        return;
-      }
-
-      if (
-        !("type" in eventData) ||
-        eventData.type !== "NAKAMA_MEET_ACTION" ||
-        !("id" in eventData) ||
-        !("action" in eventData)
-      ) {
-        return;
-      }
-
-      const actions: Array<
-        | "meetings"
-        | "start-capture"
-        | "leave"
-        | "transcript"
-        | "show-transcript"
-      > = [
-        "meetings",
-        "start-capture",
-        "leave",
-        "transcript",
-        "show-transcript",
-      ];
-
-      const action = actions.find(
-        (candidate) => candidate === String(eventData.action)
-      );
-
-      if (!action) {
-        return;
-      }
-
-      const id = String(eventData.id);
-
-      const incoming =
-        "input" in eventData && eventData.input instanceof Object
-          ? eventData.input
-          : {};
-
-      const input: MeetActionInput = {
-        after: "after" in incoming ? Number(incoming.after) : undefined,
-        content: "content" in incoming ? String(incoming.content) : undefined,
-        enabled: "enabled" in incoming ? incoming.enabled === true : undefined,
-        filename:
-          "filename" in incoming ? String(incoming.filename) : undefined,
-        meetingId:
-          "meetingId" in incoming ? String(incoming.meetingId) : undefined,
-      };
-
-      try {
-        let result: MeetActionResults[MeetAction];
-
-        if (action === "show-transcript") {
-          const transcript = await call("transcript", input);
-          result = transcript;
-          setSelected(transcript.meeting);
-        } else {
-          result = await call(action, input);
-        }
-
-        window.postMessage(
-          { id, result, type: "NAKAMA_MEET_RESULT" },
-          window.location.origin
-        );
-      } catch (reason) {
-        if (signal.aborted) {
-          return;
-        }
-
-        window.postMessage(
-          { error: formatError(reason), id, type: "NAKAMA_MEET_RESULT" },
-          window.location.origin
-        );
-      }
-    }
-
-    window.addEventListener("message", receive);
-
-    const ping = () =>
-      window.postMessage({ type: "NAKAMA_MEET_PING" }, window.location.origin);
-
-    ping();
-    const timer = setInterval(ping, 3000);
-
-    return () => {
-      window.removeEventListener("message", receive);
-      clearInterval(timer);
-    };
-  }, [call, signal, setConnected, setSelected]);
 }
 
 function RecordingSources({
@@ -1589,7 +1473,7 @@ function LiveCaptureSetup({ liveReady }: { liveReady: boolean }) {
         <strong>Record live calls</strong>
         <span>
           {liveReady
-            ? "Install the Chrome extension, then choose Connect this Nakama tab."
+            ? "Install the Chrome extension, open its side panel and connect this Nakama address."
             : "Live calls need an OpenAI key."}
         </span>
       </div>
@@ -1602,6 +1486,227 @@ function LiveCaptureSetup({ liveReady }: { liveReady: boolean }) {
         Download extension
       </a>
     </section>
+  );
+}
+
+// Same alphabet as the server's pairing codes: no 0/O, 1/I/L or U.
+const PAIR_CODE =
+  /^([23456789ABCDEFGHJKMNPQRSTVWXYZ]{3})-?([23456789ABCDEFGHJKMNPQRSTVWXYZ]{3})$/;
+
+function parsePairCode(value: string) {
+  const match = PAIR_CODE.exec(value.trim().toUpperCase());
+
+  return match ? `${match[1]}-${match[2]}` : null;
+}
+
+// The Meet extension opens ?pair=<code> so a member can approve it.
+function ExtensionApproval({
+  call,
+  enabled,
+  onApproved,
+}: {
+  call: MeetCall;
+  enabled: boolean;
+  onApproved(): void;
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [value, setValue] = React.useState(() => searchParams.get("pair"));
+  const code = value === null ? null : parsePairCode(value);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [approved, setApproved] = React.useState(false);
+
+  async function approve() {
+    if (!(code && enabled)) {
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+
+    try {
+      await call("approve-extension", { code });
+      setApproved(true);
+      dropPairParam();
+      onApproved();
+    } catch (reason) {
+      // A 400 is a wrong, used or expired code. Never show raw server text.
+      setError(
+        reason instanceof NakamaApiError && reason.status === 400
+          ? "This code is wrong, used or expired. Get a new code from the extension."
+          : "Could not connect this browser. Try again."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function dropPairParam() {
+    setSearchParams(
+      (params) => {
+        params.delete("pair");
+
+        return params;
+      },
+      { replace: true }
+    );
+  }
+
+  function close() {
+    setValue(null);
+    dropPairParam();
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  let blocked = "";
+
+  if (!code) {
+    blocked = "This code is not valid. Get a new code from the extension.";
+  } else if (!enabled) {
+    blocked = "Google Meet is disabled";
+  }
+
+  return (
+    <section aria-label="Connect browser" className="meet-setup">
+      <span aria-hidden="true" className="meet-setup-icon">
+        <Tick02Icon size={18} />
+      </span>
+      <div className="meet-setup-copy">
+        <strong>Connect browser</strong>
+        {code && <span className="meet-provider-model">{code}</span>}
+        {approved && <span role="status">Browser connected</span>}
+        {(error || blocked) && <p role="alert">{error || blocked}</p>}
+      </div>
+      {approved ? (
+        <Button onClick={close} variant="outline">
+          Done
+        </Button>
+      ) : (
+        <div className="meet-row">
+          <Button disabled={busy} onClick={close} variant="outline">
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || Boolean(blocked)}
+            onClick={() => void approve()}
+          >
+            {busy ? "Approving…" : "Approve"}
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatDay(time: number) {
+  return new Date(time).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function ExtensionKeys({
+  call,
+  enabled,
+  onLoaded,
+  signal,
+}: {
+  call: MeetCall;
+  enabled: boolean;
+  onLoaded(count: number): void;
+  signal: AbortSignal;
+}) {
+  const [keys, setKeys] = React.useState<MeetExtensionKey[] | null>(null);
+  const [error, setError] = React.useState("");
+  const [removing, setRemoving] = React.useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const result = await call("extension-keys");
+
+      if (!signal.aborted) {
+        setKeys(result.keys);
+        setError("");
+        onLoaded(result.keys.length);
+      }
+    } catch (reason) {
+      if (!signal.aborted) {
+        setError(formatError(reason));
+      }
+    }
+  }, [call, onLoaded, signal]);
+
+  React.useEffect(() => {
+    if (enabled) {
+      void load();
+    }
+  }, [enabled, load]);
+
+  async function remove(keyId: string) {
+    setRemoving(keyId);
+    setError("");
+
+    try {
+      await call("revoke-extension", { keyId });
+      await load();
+    } catch (reason) {
+      if (!signal.aborted) {
+        setError(formatError(reason));
+      }
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  if (!enabled) {
+    return null;
+  }
+
+  return (
+    <Card className="meet-card">
+      <div className="meet-card-heading">
+        <h2>Connected browsers</h2>
+      </div>
+      {error && (
+        <p className="meet-empty" role="alert">
+          {error}
+        </p>
+      )}
+      {keys?.length ? (
+        <ul className="meet-list">
+          {keys.map((key) => (
+            <li className="meet-key" key={key.id}>
+              <span className="meet-meta">
+                <span className="meet-meeting-title">{key.label}</span>
+                <span className="meet-status">
+                  Added {formatDay(key.createdAt)}
+                  {" · "}
+                  {key.lastUsedAt
+                    ? `Last used ${formatDay(key.lastUsedAt)}`
+                    : "Not used yet"}
+                </span>
+              </span>
+              <Button
+                disabled={removing !== null}
+                onClick={() => void remove(key.id)}
+                size="sm"
+                variant="outline"
+              >
+                {removing === key.id ? "Removing…" : "Remove"}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="meet-empty">
+          {keys ? "No connected browsers." : "Loading…"}
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -1662,7 +1767,8 @@ function TranscriptionPanel({
 function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [error, setError] = React.useState("");
-  const [extensionConnected, setExtensionConnected] = React.useState(false);
+  // A paired browser holds a live Meet key; the page reads them, not the tab.
+  const [browserCount, setBrowserCount] = React.useState(0);
   const [busy, setBusy] = React.useState(false);
   const [settings, setSettings] = React.useState(false);
   const [deleting, setDeleting] = React.useState<Meeting | null>(null);
@@ -1674,6 +1780,41 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [recordingPicker, setRecordingPicker] = React.useState(
     () => searchParams.get("import") === "recording"
   );
+
+  // Bumped after an approval so the browser list reloads.
+  const [keysVersion, setKeysVersion] = React.useState(0);
+
+  // Extension v0.2 sends its actions through this page. Answer each with an
+  // update message and run nothing.
+  React.useEffect(() => {
+    function refuse(event: MessageEvent) {
+      const data: unknown = event.data;
+
+      if (
+        event.source !== window ||
+        event.origin !== window.location.origin ||
+        !(data instanceof Object) ||
+        !("type" in data) ||
+        data.type !== "NAKAMA_MEET_ACTION" ||
+        !("id" in data)
+      ) {
+        return;
+      }
+
+      window.postMessage(
+        {
+          error: "Update the Nakama Meet extension to v0.3.",
+          id: String(data.id),
+          type: "NAKAMA_MEET_RESULT",
+        },
+        window.location.origin
+      );
+    }
+
+    window.addEventListener("message", refuse);
+
+    return () => window.removeEventListener("message", refuse);
+  }, []);
 
   React.useEffect(() => {
     if (searchParams.has("import")) {
@@ -1704,8 +1845,6 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       setUploading(false);
     }
   }
-
-  useExtensionBridge(call, signal, setExtensionConnected, setSelected);
 
   React.useEffect(() => {
     let alive = true;
@@ -1803,10 +1942,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       <header className="meet-header">
         <div className="meet-row">
           <h1>Google Meet</h1>
-          <ConnectionStatus
-            connected={extensionConnected}
-            overview={overview}
-          />
+          <ConnectionStatus connected={browserCount > 0} overview={overview} />
         </div>
         <div className="meet-row">
           <input
@@ -1859,8 +1995,24 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
           overview={overview}
         />
       )}
-      {overview && !extensionConnected && (
-        <LiveCaptureSetup liveReady={overview.liveReady} />
+      {overview && (
+        <>
+          <ExtensionApproval
+            call={call}
+            enabled={overview.enabled}
+            onApproved={() => setKeysVersion((value) => value + 1)}
+          />
+          {browserCount === 0 && (
+            <LiveCaptureSetup liveReady={overview.liveReady} />
+          )}
+          <ExtensionKeys
+            call={call}
+            enabled={overview.enabled}
+            key={keysVersion}
+            onLoaded={setBrowserCount}
+            signal={signal}
+          />
+        </>
       )}
       {error && <p role="alert">{error}</p>}
       {live.map((meeting) => (

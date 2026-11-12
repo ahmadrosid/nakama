@@ -18,7 +18,8 @@ export type JsonValue =
 export type AutomationTrigger =
   | { type: "manual" }
   | { type: "schedule"; cron: string; timezone?: string }
-  | { type: "runAt"; at: string; timezone?: string };
+  | { type: "runAt"; at: string; timezone?: string }
+  | { type: "webhook" };
 
 export interface AutomationStep {
   id: string;
@@ -81,6 +82,8 @@ export interface StoredAutomation extends AutomationDefinition {
   /** The last person who saved it; runs use their Composio sign-ins. */
   runAsUserId?: string | null;
   updatedAt: string;
+  /** Computed, not saved: set when the install has a public URL. */
+  webhookUrl?: string;
 }
 
 export type AutomationRunStatus = "running" | "completed" | "failed";
@@ -99,6 +102,8 @@ export interface AutomationRunRecord {
   progress?: ChatMessage[];
   /** Present when the API resolves read state for the current user. */
   read?: boolean;
+  /** Set when a signed webhook started the run. */
+  source?: "webhook";
   startedAt: string;
   status: AutomationRunStatus;
 }
@@ -136,6 +141,30 @@ export interface RegressionCase {
 
 export interface RegressionCaseResponse {
   case: RegressionCase;
+}
+
+export type RegressionCaseRunStatus = "completed" | "failed";
+
+export type RegressionCaseVerdict = "pass" | "fail";
+
+/** One rerun of a case against its profile's current config. */
+export interface RegressionCaseRun {
+  caseId: string;
+  createdAt: string;
+  createdByUserId: string | null;
+  /** Set when the run failed; `output` is then null. */
+  error: string | null;
+  id: string;
+  output: string | null;
+  status: RegressionCaseRunStatus;
+  /** A member's mark. Nothing grades a run automatically. */
+  verdict: RegressionCaseVerdict | null;
+  verdictAt: string | null;
+  verdictByUserId: string | null;
+}
+
+export interface RegressionCaseRunResponse {
+  run: RegressionCaseRun;
 }
 
 export interface ListRegressionCasesResponse {
@@ -1510,6 +1539,11 @@ export interface RunAutomationResponse {
   run: AutomationRunRecord;
 }
 
+/** The secret is shown only in this response. */
+export interface CreateAutomationWebhookSecretResponse {
+  secret: string;
+}
+
 export interface ListAutomationRunsResponse {
   runs: AutomationRunRecord[];
 }
@@ -2224,6 +2258,8 @@ export interface ProviderInstanceSummary {
   /** The last 4 characters of the saved key, for admins only. */
   apiKeyEnding?: string;
   baseUrl?: string | null;
+  /** The connected ChatGPT account's plan, such as `"free"` or `"plus"`. */
+  chatgptPlanType?: string;
   createdAt: string;
   customModels?: CustomModelEntry[];
   hasApiKey: boolean;
@@ -3507,6 +3543,11 @@ export interface ToolDefinition<Input = unknown, Output = unknown> {
   /** When true, this tool may run concurrently with other parallelSafe tools in the same turn. */
   parallelSafe?: boolean;
   parameters?: JsonSchema;
+  /**
+   * Set from an MCP server's `readOnlyHint`. A regression rerun runs only
+   * these and its allowlisted tools.
+   */
+  readOnly?: boolean;
   run(input: Input, context: ToolContext): Promise<Output>;
 }
 

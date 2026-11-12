@@ -185,6 +185,8 @@ describe("inbound message routing", () => {
       )
     ).toBe(true);
 
+    rememberWhatsAppOutbound({ id: "BOT_MSG_1", jid: "120363@g.us" });
+
     expect(
       handles(
         {
@@ -194,7 +196,7 @@ describe("inbound message routing", () => {
           },
           message: {
             extendedTextMessage: {
-              contextInfo: { participant: ME.lid },
+              contextInfo: { participant: ME.lid, stanzaId: "BOT_MSG_1" },
               text: "follow up",
             },
           },
@@ -202,6 +204,24 @@ describe("inbound message routing", () => {
         ME
       )
     ).toBe(true);
+
+    expect(
+      handles(
+        {
+          key: {
+            participant: "9999999999@s.whatsapp.net",
+            remoteJid: "120363@g.us",
+          },
+          message: {
+            extendedTextMessage: {
+              contextInfo: { participant: ME.id, stanzaId: "OWNER_TYPED_MSG" },
+              text: "follow up",
+            },
+          },
+        },
+        ME
+      )
+    ).toBe(false);
 
     expect(
       handles(
@@ -239,6 +259,7 @@ describe("inbound message routing", () => {
       me: ME,
       mentionedJids: [ME.lid],
       messageId: null,
+      quotedMessageId: null,
       quotedParticipant: null,
       quotedText: null,
       senderJid: "9999999999@s.whatsapp.net",
@@ -263,6 +284,7 @@ describe("inbound message routing", () => {
                 conversation:
                   "Update Daily Well PHSS 20-08-2026\nSFT-01 Unload flow",
               },
+              stanzaId: "QUOTED_MSG_1",
             },
             text: "@Nakama ini data laporan hari berikutnya",
           },
@@ -271,6 +293,7 @@ describe("inbound message routing", () => {
       ME
     );
 
+    expect(inbound?.quotedMessageId).toBe("QUOTED_MSG_1");
     expect(inbound?.quotedParticipant).toBe("6281352311912@s.whatsapp.net");
     expect(inbound?.quotedText).toBe(
       "Update Daily Well PHSS 20-08-2026\nSFT-01 Unload flow"

@@ -21,12 +21,42 @@ An automation is a name, a prompt, a profile, and one trigger:
 | `manual` | none | Never starts by itself |
 | `schedule` | 5-field cron plus a timezone | Runs each time the cron matches |
 | `runAt` | an ISO timestamp plus a timezone | Tries to run once at that instant, then disables itself |
+| `webhook` | none | Never starts by itself. A signed request from another service starts a run |
 
 The **profile** is which agent soul, tools, and skills the run uses. Edit an automation to pick a different profile; the detail view shows the bound profile name. Creating from the API without a `profileId` uses the org default profile. Creating from chat without a `profileId` uses the chat profile. Members cannot bind Super Nakama.
 
 Cron is validated on save, so a malformed expression is rejected rather than silently never firing. The timezone defaults to the one in your user config. `nextRunAt` is computed from the cron and shown in the list, which is the fastest way to check that a schedule means what you think it means.
 
 A `runAt` automation whose timestamp has already passed is not scheduled. Disabled automations are not scheduled either, whatever their trigger.
+
+### Start a run from GitHub
+
+A webhook trigger lets GitHub start a run when something happens in a repository, such as a push, a new issue, or a pull request. The agent reacts within seconds and you do not need a schedule that polls for changes.
+
+Before you start:
+
+- GitHub must reach Nakama over public HTTPS. Put Nakama behind a reverse proxy with TLS (see [Docker](/docker)). Set `NAKAMA_WEB_PUBLIC_URL` (or `web_public_url` in `config.ini`) to that HTTPS address, and the webhook URL on the automation uses it. When it is not set, the webhook URL uses the address in your browser. A `localhost` address does not work.
+- The server must have `NAKAMA_SECRETS_KEY` set. Make one with `openssl rand -base64 32`. Without it, Nakama refuses to make a webhook secret.
+- If the profile has the email tool, only an org admin can make the secret.
+
+Set it up:
+
+1. Open the automation, select **Edit**, choose **On webhook** under **How often?**, and select **Save changes**.
+2. On the automation, select **New secret**, then **Make secret**. Copy the secret now: Nakama shows it only once. Copy the webhook URL too.
+3. In GitHub, open the repository **Settings → Webhooks → Add webhook**.
+4. Paste the URL into **Payload URL**, set **Content type** to `application/json`, paste the secret into **Secret**, pick the events, and select **Add webhook**.
+
+What to expect:
+
+- GitHub sends a `ping` first. Nakama accepts it and does not start a run.
+- Each accepted delivery starts one run, marked **Webhook** in the run history. The same delivery sent twice starts only one run.
+- A delivery that arrives while a run is active, or while the automation is turned off, gets `409` and starts nothing. Use **Redeliver** in GitHub later.
+- Payloads over 256 KiB get `413`.
+- The signature covers only the body. Keep the secret and the payloads private: anyone with a signed request can send it again.
+- The agent gets the payload as data after your prompt, with an instruction never to follow text inside it. Write the prompt so it says what to do with the event.
+- Runs use the sign-ins of the person who made the secret. When someone else changes the prompt, profile, delivery, or tool limit, runs use their sign-ins and the old secret stops working. Make a new secret and update it in GitHub.
+- The secret also stops working when the person who made it loses access: they are removed from the organization, changed from admin to member, or disabled, they change or reset their password, or a platform admin signs them out of all sessions. GitHub then gets `401`. Make a new secret and update it in GitHub.
+- **New secret** replaces the old secret at once. Update it in GitHub. Changing the trigger away from **On webhook** deletes the secret, so you need a new one if you switch back.
 
 ### The worker and schedule reloads
 

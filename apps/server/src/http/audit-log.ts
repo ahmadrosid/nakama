@@ -232,6 +232,12 @@ export function describeAuditEvent(
     return event("profile.export", "profile", match[1]);
   }
 
+  match = pathname.match(/^\/v1\/automations\/([^/]+)\/webhook-secret$/);
+
+  if (match && method === "POST") {
+    return event("automation.webhook_secret_rotate", "automation", match[1]);
+  }
+
   // DELETE /v1/sessions/:id clears or purges a chat session (routes/sessions.ts).
   match = pathname.match(/^\/v1\/sessions\/([^/]+)$/);
 

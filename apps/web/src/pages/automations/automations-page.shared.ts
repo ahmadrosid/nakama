@@ -82,6 +82,10 @@ export function describeTrigger(
     return { label: `Once, ${trigger.at}`, note: trigger.timezone };
   }
 
+  if (trigger.type === "webhook") {
+    return { label: "On webhook" };
+  }
+
   const preset = readSchedulePreset(trigger);
 
   if (preset?.frequency === "hourly") {
@@ -117,6 +121,10 @@ export function summarizeAutomationListMeta(
 
   if (automation.trigger.type === "runAt") {
     return "One-time run";
+  }
+
+  if (automation.trigger.type === "webhook") {
+    return "Webhook automation";
   }
 
   return "Scheduled automation";
@@ -260,6 +268,10 @@ export function schedulePresetTrigger(
     return { type: "manual" };
   }
 
+  if (frequency === "webhook") {
+    return { type: "webhook" };
+  }
+
   const preset = readSchedulePreset(trigger);
 
   const day =
@@ -289,7 +301,7 @@ export function schedulePresetTrigger(
 
   return {
     cron: `${preset?.minute ?? "0"} ${hour} ${day} * ${weekday}`,
-    timezone: trigger.type === "manual" ? undefined : trigger.timezone,
+    timezone: "timezone" in trigger ? trigger.timezone : undefined,
     type: "schedule",
   };
 }
@@ -299,7 +311,7 @@ export function previewAutomationSchedule(
   timezone: string,
   now = new Date()
 ): string | null {
-  if (trigger.type === "manual") {
+  if (trigger.type === "manual" || trigger.type === "webhook") {
     return null;
   }
 

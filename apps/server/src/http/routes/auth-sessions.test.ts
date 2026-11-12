@@ -271,6 +271,12 @@ describe("browser session governance", () => {
     await loginUserSession(app, "admin@example.com", PASSWORD);
     const victim = await databaseAdapter.getUserByEmail("admin@example.com");
     expect(victim).not.toBeNull();
+    await databaseAdapter.putAutomationWebhookSecret({
+      automationId: "auto_webhook",
+      createdAt: new Date().toISOString(),
+      createdByUserId: victim?.id ?? "",
+      encryptedValue: "enc",
+    });
 
     const response = await app.fetch(
       new Request(
@@ -286,11 +292,18 @@ describe("browser session governance", () => {
     // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { revoked: number };
     expect(body.revoked).toBeGreaterThanOrEqual(2);
+    expect(await databaseAdapter.listAutomationWebhookSecrets()).toEqual([]);
   });
   test("an org admin who is not a platform admin cannot force-revoke anyone", async () => {
     const { app, databaseAdapter } = await createApp();
     const owner = await setupFreshInstallSession(app, databaseAdapter);
     const victim = await databaseAdapter.getUserByEmail("admin@example.com");
+    await databaseAdapter.putAutomationWebhookSecret({
+      automationId: "auto_webhook",
+      createdAt: new Date().toISOString(),
+      createdByUserId: victim?.id ?? "",
+      encryptedValue: "enc",
+    });
 
     await seedOrgAdmin(databaseAdapter, {
       email: "orgadmin@example.com",
@@ -316,6 +329,9 @@ describe("browser session governance", () => {
 
     expect(response.status).toBe(403);
     // Refused, not partially applied: the owner is still signed in.
+    expect(await databaseAdapter.listAutomationWebhookSecrets()).toHaveLength(
+      1
+    );
     const stillLive = await listSessions(app, owner);
     expect(stillLive.sessions.length).toBeGreaterThan(0);
   });

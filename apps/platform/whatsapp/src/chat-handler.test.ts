@@ -16,6 +16,7 @@ import {
 import * as baileys from "@whiskeysockets/baileys";
 import { WhatsAppAuthStore } from "./auth-store";
 import { createChatHandler, resetChatLocksForTests } from "./chat-handler";
+import { resetWhatsAppBotMessagesForTests } from "./group-message";
 import { resetWhatsAppOutboundForTests } from "./inbound-message";
 import {
   createMockClient,
@@ -84,6 +85,8 @@ function createMockSocket() {
         jid,
         text: "text" in content ? (content.text ?? "") : "",
       });
+
+      return { key: { id: `BOT_MSG_${sent.length}` } };
     },
     sendPresenceUpdate: async () => {},
   };
@@ -136,6 +139,7 @@ beforeEach(() => {
   resetActiveStreamsForTests();
   resetChatLocksForTests();
   resetWhatsAppOutboundForTests();
+  resetWhatsAppBotMessagesForTests();
 });
 
 describe("createChatHandler", () => {
@@ -781,6 +785,7 @@ function groupInbound(options: {
   senderJid?: string;
   senderJids?: string[];
   mentionedJids?: string[];
+  quotedMessageId?: string | null;
   quotedParticipant?: string | null;
   quotedText?: string | null;
   fromMe?: boolean;
@@ -793,6 +798,7 @@ function groupInbound(options: {
     jid: GROUP_JID,
     me: BOT_ME,
     mentionedJids: options.mentionedJids ?? [],
+    quotedMessageId: options.quotedMessageId ?? null,
     quotedParticipant: options.quotedParticipant ?? null,
     quotedText: options.quotedText ?? null,
     senderJid,
@@ -905,6 +911,51 @@ describe("createChatHandler group chats", () => {
 
       expect(calls.sendStream).toBe(1);
       expect(calls.createSession).toBe(1);
+    });
+  });
+
+  test("group reply triggers the agent only when it quotes a Nakama message", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
+
+      // The linked number is the owner's own number: a reply to a message the
+      // owner typed by hand quotes the same address as a reply to Nakama.
+      await handleMessage(
+        groupInbound({
+          fromMe: true,
+          quotedMessageId: "OWNER_TYPED_MSG",
+          quotedParticipant: BOT_ME.id,
+          text: "dapat dari reddit",
+        })
+      );
+
+      expect(calls.sendStream).toBe(0);
+      expect(calls.createSession).toBe(0);
+
+      await handleMessage(
+        groupInbound({
+          mentionedJids: [BOT_ME.id],
+          text: "@Nakama hello",
+        })
+      );
+
+      expect(calls.sendStream).toBe(1);
+
+      await handleMessage(
+        groupInbound({
+          quotedMessageId: "BOT_MSG_1",
+          quotedParticipant: BOT_ME.lid,
+          text: "follow up",
+        })
+      );
+
+      expect(calls.sendStream).toBe(2);
     });
   });
 

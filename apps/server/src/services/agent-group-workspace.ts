@@ -15,10 +15,14 @@ import {
 import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import type { GroupDocument } from "./agent-group-store";
 
-/** A posted attachment: a document's text, or an image not saved yet. */
+/**
+ * A posted attachment: a document's text, or an image or a ZIP's files not
+ * saved yet. A ZIP's `text` lists its files and holds its documents' text.
+ */
 export type PostedDocument =
   | GroupDocument
-  | { filename: string; image: Buffer };
+  | { filename: string; image: Buffer }
+  | { files: [string, Uint8Array][]; filename: string; text: string };
 
 /** Longest memory members see, the same cap as a profile's MEMORY.md. */
 export const GROUP_MEMORY_CHARS = 4096;
@@ -47,6 +51,20 @@ export function groupWorkspace(sharedDir: string) {
 
     mkdirSync(dirname(memoryPath), { recursive: true });
     writeFileSync(memoryPath, trimmed ? `${trimmed}\n` : "");
+  };
+
+  const uploads = join(sharedDir, "uploads");
+
+  /** Removes saved images and ZIP folders, given their paths in the shared folder. */
+  const removeUploads = (paths: string[]) => {
+    for (const path of paths) {
+      const file = resolve(sharedDir, path);
+
+      // Only what saveUploads wrote; a stored path never leaves uploads/.
+      if (dirname(file) === uploads) {
+        rmSync(file, { force: true, recursive: true });
+      }
+    }
   };
 
   return {
@@ -162,41 +180,61 @@ export function groupWorkspace(sharedDir: string) {
       rmSync(dirname(sharedDir), { force: true, recursive: true });
     },
 
-    /** Removes saved images, given their paths in the shared folder. */
-    removeImages(paths: string[]): void {
-      const uploads = join(sharedDir, "uploads");
-
-      for (const path of paths) {
-        const file = resolve(sharedDir, path);
-
-        // Only what saveImages wrote; a stored path never leaves uploads/.
-        if (dirname(file) === uploads) {
-          rmSync(file, { force: true });
-        }
-      }
-    },
+    removeUploads,
 
     /**
-     * Saves a valid post's images under shared/uploads; the agents get each
-     * one's path to open with read_file.
+     * Saves a valid post's images and ZIP files under shared/uploads; the
+     * agents get each one's path to open with read_file. A save that fails
+     * removes what it wrote, so no file is left that no message owns.
      */
-    saveImages(posted: PostedDocument[]): GroupDocument[] {
-      return posted.map((document) => {
-        if (!("image" in document)) {
-          return document;
-        }
+    saveUploads(posted: PostedDocument[]): GroupDocument[] {
+      const saved: string[] = [];
 
-        const path = `uploads/${randomUUID().slice(0, 8)}${extname(document.filename) || ".png"}`;
+      try {
+        return posted.map((document) => {
+          if ("files" in document) {
+            const folder = `uploads/${randomUUID().slice(0, 8)}`;
 
-        mkdirSync(join(sharedDir, "uploads"), { recursive: true });
-        writeFileSync(join(sharedDir, path), document.image);
+            mkdirSync(uploads, { recursive: true });
+            // Not recursive: a folder already there is not this ZIP's to remove.
+            mkdirSync(join(sharedDir, folder));
+            saved.push(folder);
 
-        return {
-          filename: document.filename,
-          path,
-          text: `Image saved at ${join(sharedDir, path)}. Open it with read_file to see it.`,
-        };
-      });
+            // readZipUpload let no path leave the folder.
+            for (const [name, bytes] of document.files) {
+              const file = join(sharedDir, folder, name);
+
+              mkdirSync(dirname(file), { recursive: true });
+              writeFileSync(file, bytes);
+            }
+
+            return {
+              filename: document.filename,
+              folder,
+              text: `Files saved in ${join(sharedDir, folder)}. Open them with read_file.\n${document.text}`,
+            };
+          }
+
+          if (!("image" in document)) {
+            return document;
+          }
+
+          const path = `uploads/${randomUUID().slice(0, 8)}${extname(document.filename) || ".png"}`;
+
+          mkdirSync(uploads, { recursive: true });
+          writeFileSync(join(sharedDir, path), document.image);
+          saved.push(path);
+
+          return {
+            filename: document.filename,
+            path,
+            text: `Image saved at ${join(sharedDir, path)}. Open it with read_file to see it.`,
+          };
+        });
+      } catch (error) {
+        removeUploads(saved);
+        throw error;
+      }
     },
   };
 }

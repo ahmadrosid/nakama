@@ -33,6 +33,7 @@ import type {
   StoredAutomationRecord,
   StoredAutomationRunRecord,
   StoredAutomationRunStepRecord,
+  StoredAutomationWebhookSecret,
   StoredBrowserSessionRecord,
   StoredComposioToolkitRecord,
   StoredComposioUserConnectionRecord,
@@ -57,6 +58,7 @@ import type {
   StoredProfileComposioToolkitRecord,
   StoredProfileRecord,
   StoredRegressionCaseRecord,
+  StoredRegressionCaseRunRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
@@ -124,6 +126,7 @@ interface AutomationRunRow {
   id: string;
   output: string | null;
   progress: string | null;
+  source: string | null;
   started_at: string;
   status: string;
 }
@@ -616,6 +619,20 @@ interface ArtifactShareRow {
   token_hash: string;
 }
 
+interface RegressionCaseRunRow {
+  case_id: string;
+  created_at: string;
+  created_by_user_id: string | null;
+  error: string | null;
+  id: string;
+  org_id: string;
+  output: string | null;
+  status: string;
+  verdict: string | null;
+  verdict_at: string | null;
+  verdict_by_user_id: string | null;
+}
+
 interface RegressionCaseRow {
   created_at: string;
   created_by_user_id: string | null;
@@ -776,6 +793,53 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "DELETE FROM managed_secrets WHERE scope = ? AND name = ?"
   );
 
+  const webhookSecretColumns =
+    "automation_id AS automationId, encrypted_value AS encryptedValue, created_by_user_id AS createdByUserId, created_at AS createdAt";
+
+  const getAutomationWebhookSecretStmt = db.prepare<
+    StoredAutomationWebhookSecret,
+    SQLQueryBindings[]
+  >(
+    `SELECT ${webhookSecretColumns} FROM automation_webhook_secrets WHERE automation_id = ?`
+  );
+
+  const listAutomationWebhookSecretsStmt = db.prepare<
+    StoredAutomationWebhookSecret,
+    SQLQueryBindings[]
+  >(`SELECT ${webhookSecretColumns} FROM automation_webhook_secrets`);
+
+  const putAutomationWebhookSecretStmt = db.prepare(`
+    INSERT INTO automation_webhook_secrets (
+      automation_id,
+      encrypted_value,
+      created_by_user_id,
+      created_at
+    )
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(automation_id) DO UPDATE SET
+      encrypted_value = excluded.encrypted_value,
+      created_by_user_id = excluded.created_by_user_id,
+      created_at = excluded.created_at
+  `);
+
+  const deleteAutomationWebhookSecretStmt = db.prepare(
+    "DELETE FROM automation_webhook_secrets WHERE automation_id = ?"
+  );
+
+  const deleteUserAutomationWebhookSecretsStmt = db.prepare(
+    "DELETE FROM automation_webhook_secrets WHERE created_by_user_id = ?"
+  );
+
+  const deleteUserOrgAutomationWebhookSecretsStmt = db.prepare(`
+    DELETE FROM automation_webhook_secrets
+    WHERE created_by_user_id = ?
+      AND automation_id IN (SELECT id FROM automations WHERE org_id = ?)
+  `);
+
+  const replaceAutomationWebhookSecretStmt = db.prepare(
+    "UPDATE automation_webhook_secrets SET encrypted_value = ? WHERE automation_id = ? AND encrypted_value = ?"
+  );
+
   const replaceManagedSecretStmt = db.prepare(
     "UPDATE managed_secrets SET encrypted_value = ?, version = version + 1 WHERE scope = ? AND name = ?"
   );
@@ -784,6 +848,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     (
       secrets: Array<
         Pick<StoredManagedSecret, "scope" | "name" | "encryptedValue">
+      >,
+      webhookSecrets: Array<
+        Pick<
+          StoredAutomationWebhookSecret,
+          "automationId" | "encryptedValue"
+        > & { previousEncryptedValue: string }
       >
     ) => {
       for (const secret of secrets) {
@@ -795,6 +865,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           ).changes !== 1
         ) {
           throw new Error("Managed secret changed during key rotation.");
+        }
+      }
+
+      for (const secret of webhookSecrets) {
+        if (
+          replaceAutomationWebhookSecretStmt.run(
+            secret.encryptedValue,
+            secret.automationId,
+            secret.previousEncryptedValue
+          ).changes !== 1
+        ) {
+          throw new Error("Webhook secret changed during key rotation.");
         }
       }
     }
@@ -860,13 +942,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
 
   const insertAutomationRunStmt = db.prepare(`
-    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error, progress)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error, progress, source, input)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const updateAutomationRunStmt = db.prepare(`
     UPDATE automation_runs
-    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?, progress = ?
+    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?, progress = ?,
+      input = CASE WHEN ? = 'running' THEN input ELSE NULL END
     WHERE id = ?
   `);
 
@@ -923,7 +1006,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const failExhaustedAutomationRunsStmt = db.prepare(`
     UPDATE automation_runs
-    SET status = 'failed', completed_at = ?, error = ?
+    SET status = 'failed', completed_at = ?, error = ?, input = NULL
     WHERE status = 'running' AND resume_count >= ?
   `);
 
@@ -931,13 +1014,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     {
       automation_id: string;
       id: string;
+      input: string | null;
     },
     SQLQueryBindings[]
   >(`
     UPDATE automation_runs
     SET resume_count = resume_count + 1
     WHERE status = 'running'
-    RETURNING id, automation_id
+    RETURNING id, automation_id, input
   `);
 
   const insertAutomationRunStepStmt = db.prepare(`
@@ -2367,6 +2451,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE created_at < ?
   `);
 
+  const claimAutomationWebhookDeliveryStmt = db.prepare(`
+    INSERT OR IGNORE INTO automation_webhook_deliveries (
+      automation_id,
+      delivery_id,
+      created_at
+    )
+    VALUES (?, ?, ?)
+  `);
+
+  const pruneAutomationWebhookDeliveriesStmt = db.prepare(`
+    DELETE FROM automation_webhook_deliveries
+    WHERE created_at < ?
+  `);
+
+  const releaseAutomationWebhookDeliveryStmt = db.prepare(`
+    DELETE FROM automation_webhook_deliveries
+    WHERE automation_id = ? AND delivery_id = ?
+  `);
+
   const listComposioToolkitsForOrgStmt = db.prepare<
     ComposioToolkitRow,
     SQLQueryBindings[]
@@ -2869,6 +2972,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       deleteErasedUserBrowserSessionsStmt.run(input.id);
       deleteErasedUserPasswordResetsStmt.run(input.id);
       deleteErasedUserComposioConnectionsStmt.run(input.id);
+      deleteUserAutomationWebhookSecretsStmt.run(input.id);
 
       return anonymizeErasedUserStmt.run(
         input.email,
@@ -3051,6 +3155,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updateUserPasswordStmt.run(passwordHash, consumedAt, token.user_id);
       revokeBrowserSessionsForUserStmt.run(consumedAt, token.user_id);
       revokeComputersForUserStmt.run(consumedAt, token.user_id);
+      deleteUserAutomationWebhookSecretsStmt.run(token.user_id);
 
       return token.user_id;
     }
@@ -3847,6 +3952,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE org_id = ? AND profile_id = ?
     ORDER BY created_at DESC, id DESC
     LIMIT ? OFFSET ?
+  `);
+
+  const createRegressionCaseRunStmt = db.prepare(`
+    INSERT INTO regression_case_runs (
+      id, org_id, case_id, status, output, error, verdict, verdict_by_user_id,
+      verdict_at, created_by_user_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const getRegressionCaseRunStmt = db.prepare<
+    RegressionCaseRunRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT * FROM regression_case_runs
+    WHERE org_id = ? AND case_id = ? AND id = ?
+    LIMIT 1
+  `);
+
+  const setRegressionCaseRunVerdictStmt = db.prepare<
+    RegressionCaseRunRow,
+    SQLQueryBindings[]
+  >(`
+    UPDATE regression_case_runs
+    SET verdict = ?, verdict_by_user_id = ?, verdict_at = ?
+    WHERE org_id = ? AND case_id = ? AND id = ?
+    RETURNING *
   `);
 
   const getOrgMemberStmt = db.prepare<
@@ -4685,10 +4816,34 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       statement.get();
     },
 
+    async claimAutomationWebhookDelivery(automationId, deliveryId, createdAt) {
+      const createdAtMs = Date.parse(createdAt);
+
+      if (Number.isFinite(createdAtMs)) {
+        pruneAutomationWebhookDeliveriesStmt.run(
+          new Date(
+            createdAtMs - NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS
+          ).toISOString()
+        );
+      }
+
+      return (
+        claimAutomationWebhookDeliveryStmt.run(
+          automationId,
+          deliveryId,
+          createdAt
+        ).changes > 0
+      );
+    },
+
     async claimInterruptedAutomationRuns(maxResumes) {
       return claimInterruptedAutomationRunsTransaction
         .immediate(maxResumes, new Date().toISOString())
-        .map((row) => ({ automationId: row.automation_id, id: row.id }));
+        .map((row) => ({
+          automationId: row.automation_id,
+          id: row.id,
+          input: row.input ?? undefined,
+        }));
     },
 
     async claimNotificationWebhookDelivery(destinationId, eventId, createdAt) {
@@ -4969,6 +5124,22 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createRegressionCaseRun(record) {
+      createRegressionCaseRunStmt.run(
+        record.id,
+        record.orgId,
+        record.caseId,
+        record.status,
+        record.output,
+        record.error,
+        record.verdict,
+        record.verdictByUserId,
+        record.verdictAt,
+        record.createdByUserId,
+        record.createdAt
+      );
+    },
+
     async createSharedAgentInstance(
       teamOrgId,
       publicationId,
@@ -5064,6 +5235,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = deleteAutomationStmt.run(id);
 
       return result.changes > 0;
+    },
+    async deleteAutomationWebhookSecret(automationId) {
+      deleteAutomationWebhookSecretStmt.run(automationId);
+    },
+    async deleteAutomationWebhookSecretsForUser(userId, orgId) {
+      if (orgId) {
+        deleteUserOrgAutomationWebhookSecretsStmt.run(userId, orgId);
+      } else {
+        deleteUserAutomationWebhookSecretsStmt.run(userId);
+      }
     },
 
     async deleteComposioToolkit(id) {
@@ -5348,6 +5529,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row?.read_through_at ?? null;
     },
 
+    async getAutomationWebhookSecret(automationId) {
+      return getAutomationWebhookSecretStmt.get(automationId) ?? null;
+    },
+
     async getBrowserSessionBySessionTokenHash(sessionTokenHash) {
       const row = getBrowserSessionByTokenHashStmt.get(sessionTokenHash);
 
@@ -5584,6 +5769,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getRegressionCaseStmt.get(orgId, profileId, caseId);
 
       return row ? toRegressionCaseRecord(row) : null;
+    },
+
+    async getRegressionCaseRun(orgId, caseId, runId) {
+      const row = getRegressionCaseRunStmt.get(orgId, caseId, runId);
+
+      return row ? toRegressionCaseRunRecord(row) : null;
     },
 
     async getSession(id) {
@@ -5857,7 +6048,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.deliveryStatus ?? null,
         record.deliveryError ?? null,
-        record.progress ? JSON.stringify(record.progress) : null
+        record.progress ? JSON.stringify(record.progress) : null,
+        record.source ?? null,
+        record.input ?? null
       );
     },
 
@@ -5968,6 +6161,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toAutomationRecord(row));
     },
+    async listAutomationWebhookSecrets() {
+      return listAutomationWebhookSecretsStmt.all();
+    },
 
     async listBrowserSessionsForUser(userId, now) {
       const rows = listBrowserSessionsForUserStmt.all(userId, now);
@@ -6042,6 +6238,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toLlmUsageModelStatsRecord(row));
     },
+
     async listManagedSecrets() {
       // SAFETY: managed_secrets columns and its source constraint match this row type.
       const rows = listManagedSecretsStmt.all() as Array<{
@@ -6386,6 +6583,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async publishOrgSharedResource(record) {
       return publishOrgSharedResourceTransaction(record);
     },
+    async putAutomationWebhookSecret(secret) {
+      putAutomationWebhookSecretStmt.run(
+        secret.automationId,
+        secret.encryptedValue,
+        secret.createdByUserId,
+        secret.createdAt
+      );
+    },
     async putManagedSecret(secret) {
       putManagedSecretStmt.run(
         secret.scope,
@@ -6393,6 +6598,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         secret.source,
         secret.encryptedValue
       );
+    },
+
+    async releaseAutomationWebhookDelivery(automationId, deliveryId) {
+      releaseAutomationWebhookDeliveryStmt.run(automationId, deliveryId);
     },
 
     async releaseMonthlyLlmQuota(orgId, reservationId) {
@@ -6432,8 +6641,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return result.changes > 0;
     },
-    async replaceManagedSecrets(secrets) {
-      replaceManagedSecretsTransaction(secrets);
+    async replaceManagedSecrets(secrets, webhookSecrets) {
+      replaceManagedSecretsTransaction(secrets, webhookSecrets);
     },
 
     async replaceMessagesForSession(sessionId, messages) {
@@ -6511,6 +6720,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async setPendingMfaSecret(id, pendingTotpSecretEnc, updatedAt) {
       setPendingMfaSecretStmt.run(pendingTotpSecretEnc, updatedAt, id);
     },
+    async setRegressionCaseRunVerdict(orgId, caseId, runId, mark) {
+      const row = setRegressionCaseRunVerdictStmt.get(
+        mark.verdict,
+        mark.userId,
+        mark.at,
+        orgId,
+        caseId,
+        runId
+      );
+
+      return row ? toRegressionCaseRunRecord(row) : null;
+    },
+
     async setSessionOrder(userId, sessionIds) {
       db.transaction(() => {
         for (const [index, sessionId] of sessionIds.entries()) {
@@ -6585,6 +6807,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.deliveryStatus ?? null,
         record.deliveryError ?? null,
         record.progress ? JSON.stringify(record.progress) : null,
+        record.status,
         record.id
       );
     },
@@ -6970,6 +7193,7 @@ function toAutomationRunRecord(
     progress: row.progress
       ? (parseJson(row.progress) as StoredAutomationRunRecord["progress"])
       : undefined,
+    source: row.source === "webhook" ? "webhook" : null,
     startedAt: row.started_at,
     // SAFETY: The adapter writes this row value through its typed contract.
     status: row.status as StoredAutomationRunRecord["status"],
@@ -8062,6 +8286,26 @@ function toRegressionCaseRecord(
     sourceId: row.source_id,
     // SAFETY: The table CHECK constrains this column to the union values.
     sourceType: row.source_type as StoredRegressionCaseRecord["sourceType"],
+  };
+}
+
+function toRegressionCaseRunRecord(
+  row: RegressionCaseRunRow
+): StoredRegressionCaseRunRecord {
+  return {
+    caseId: row.case_id,
+    createdAt: row.created_at,
+    createdByUserId: row.created_by_user_id,
+    error: row.error,
+    id: row.id,
+    orgId: row.org_id,
+    output: row.output,
+    // SAFETY: The table CHECK constrains this column to the union values.
+    status: row.status as StoredRegressionCaseRunRecord["status"],
+    // SAFETY: The table CHECK constrains this column to the union values.
+    verdict: row.verdict as StoredRegressionCaseRunRecord["verdict"],
+    verdictAt: row.verdict_at,
+    verdictByUserId: row.verdict_by_user_id,
   };
 }
 

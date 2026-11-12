@@ -977,6 +977,7 @@ export function registerOrgMemberRoutes(
     }
 
     await orgService.removeMember(orgId, userId);
+    await options.googleMeetService?.revokeExtensionKeys(userId, orgId);
 
     return new Response(null, { status: 204 });
   });

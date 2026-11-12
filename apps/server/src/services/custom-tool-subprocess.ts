@@ -253,7 +253,12 @@ export async function spawnJsonTool(
         context.signal?.addEventListener("abort", onAbort, { once: true });
       }
 
+      // A child still waiting on a host call at the deadline was held up by
+      // the host, not by its own code.
+      let waitingOnHost = false;
+
       const sigtermTimer = setTimeout(() => {
+        waitingOnHost = hostRequestPending;
         killChild();
         timedOut = true;
       }, timeoutMs);
@@ -292,8 +297,11 @@ export async function spawnJsonTool(
 
         if (timedOut) {
           reject(
-            new Error(
-              `${label} timed out after ${timeoutMs}ms (exit code ${exitCode ?? "null"}): ${tail}`
+            Object.assign(
+              new Error(
+                `${label} timed out after ${timeoutMs}ms (exit code ${exitCode ?? "null"}): ${tail}`
+              ),
+              { timedOut: true as const, waitingOnHost }
             )
           );
 

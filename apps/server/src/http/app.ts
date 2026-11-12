@@ -54,6 +54,7 @@ import { registerPlatformOrgRoutes } from "./routes/platform-orgs";
 import { registerPluginRoutes } from "./routes/plugins";
 import { registerProfilePortabilityRoutes } from "./routes/profile-portability";
 import { registerProfileRoutes } from "./routes/profiles";
+import { registerRegressionCaseRunRoutes } from "./routes/regression-case-runs";
 import { registerRegressionCaseRoutes } from "./routes/regression-cases";
 import { registerSessionRoutes } from "./routes/sessions";
 import {
@@ -481,6 +482,7 @@ export function createHonoApp(options: ServerOptions) {
   registerProfileRoutes(app, options);
   registerProfilePortabilityRoutes(app, options);
   registerRegressionCaseRoutes(app, options);
+  registerRegressionCaseRunRoutes(app, options);
   registerArtifactShareRoutes(app, options);
   registerMcpRoutes(app, options);
   registerSkillsMarketplaceRoutes(app);

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getGroupSharedDir } from "@nakama/core";
+import { strToU8, type Zippable, zipSync } from "fflate";
 import { setupTestConfigDir } from "../test-config-dir";
 import { closeAgentGroupDatabases } from "./agent-group-store";
 import { ORG_ID, setup, USER_ID } from "./agent-group-test-setup";
@@ -215,6 +216,105 @@ describe("group attachments", () => {
     service.delete(ORG_ID, USER_ID, group.id);
 
     expect(existsSync(dirname(sharedDir))).toBe(false);
+  });
+
+  test("a ZIP's files are saved for the agents, its documents reach them, and deleting the session removes them", async () => {
+    const contexts: string[] = [];
+
+    const { service } = setup(({ context }) => {
+      contexts.push(context ?? "");
+
+      return "ok";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    const zip = zipSync({
+      "__MACOSX/._notes.txt": strToU8("junk"),
+      "notes.txt": strToU8("Q3 revenue was 42"),
+      "src/run.py": strToU8("print(1)"),
+    });
+
+    const { run, session } = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "check this",
+      await readGroupDocuments([
+        {
+          data: Buffer.from(zip).toString("base64"),
+          filename: "project.zip",
+          mediaType: "application/zip",
+        },
+      ])
+    );
+
+    await run;
+
+    const folder = contexts[0]?.match(/Files saved in (\S+)\./)?.[1] ?? "";
+
+    expect(contexts[0]).toContain("Q3 revenue was 42");
+    expect(dirname(folder)).toBe(uploadsOf(group.id));
+    expect(readFileSync(join(folder, "src/run.py"), "utf8")).toBe("print(1)");
+    expect(existsSync(join(folder, "__MACOSX"))).toBe(false);
+
+    const [message] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      session.id
+    ).messages;
+
+    expect(message?.files).toEqual(["project.zip"]);
+    expect(message?.images).toBeUndefined();
+
+    service.deleteSession(ORG_ID, USER_ID, group.id, session.id);
+
+    expect(existsSync(folder)).toBe(false);
+  });
+
+  test("a ZIP whose files cannot all be saved in its folder is rejected", async () => {
+    const archives: Zippable[] = [
+      { "../escape.txt": strToU8("x") },
+      { notes: strToU8("x"), "notes/a.txt": strToU8("y") },
+      // One file on a case-insensitive disk such as macOS or Windows.
+      { "README.md": strToU8("x"), "readme.md": strToU8("y") },
+      { Notes: strToU8("x"), "notes/a.txt": strToU8("y") },
+      { [`${"a".repeat(256)}.txt`]: strToU8("x") },
+    ];
+
+    for (const files of archives) {
+      await expect(
+        readGroupDocuments([
+          {
+            data: Buffer.from(zipSync(files)).toString("base64"),
+            filename: "bad.zip",
+            mediaType: "application/zip",
+          },
+        ])
+      ).rejects.toMatchObject({ status: 400 });
+    }
+  });
+
+  test("a first message whose files cannot be saved leaves no chat and no files", async () => {
+    const { service } = setup(() => "ok");
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    // Past the checks of readGroupDocuments, as when the disk refuses a write.
+    expect(() =>
+      service.start(ORG_ID, USER_ID, group.id, "", [
+        { filename: "ok.zip", files: [["ok.txt", strToU8("x")]], text: "" },
+        {
+          filename: "bad.zip",
+          files: [[`${"a".repeat(300)}.txt`, strToU8("x")]],
+          text: "",
+        },
+      ])
+    ).toThrow();
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toEqual([]);
+    expect(readdirSync(uploadsOf(group.id))).toEqual([]);
   });
 
   test("a document of an unsupported type is rejected", async () => {

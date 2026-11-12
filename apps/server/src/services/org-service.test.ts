@@ -581,6 +581,273 @@ describe("OrgService", () => {
     expect(sessionB?.revokedAt).toBeTruthy();
   });
 
+  describe("webhook secrets of a member who loses access", () => {
+    async function setup() {
+      const { authService, databaseAdapter, orgService } = createOrgService();
+
+      const created = await orgService.createOrganization({
+        admin: {
+          email: "admin@acme.com",
+          name: "Acme Admin",
+          phone: "+628123456789",
+        },
+        name: "Acme",
+        slug: "acme-webhook-secrets",
+      });
+
+      const orgId = created.organization.id;
+
+      const second = await orgService.createOrganization(
+        { name: "Beta", slug: "beta-webhook-secrets" },
+        created.adminMember!.member.userId
+      );
+
+      const addMember = async (
+        email: string,
+        role: "admin" | "member" = "member"
+      ) => {
+        const added = await orgService.addMember({
+          email,
+          name: email,
+          orgId,
+          phone: "+628111111111",
+          role,
+        });
+
+        return {
+          password: added.temporaryPassword!,
+          userId: added.member.userId,
+        };
+      };
+
+      const memberA = await addMember("a@acme.com");
+      const memberB = await addMember("b@acme.com");
+      const adminC = await addMember("c@acme.com", "admin");
+
+      const automations = new AutomationService(databaseAdapter, {
+        getUserTimezone: async () => "UTC",
+        secrets: new ManagedSecrets(
+          databaseAdapter,
+          Buffer.alloc(32, 1).toString("base64")
+        ),
+      });
+
+      const makeSecret = async (inOrgId: string, userId: string) => {
+        const automation = await automations.create(
+          inOrgId,
+          {
+            description: "Review",
+            name: "PR review",
+            prompt: "Review the pull request.",
+            trigger: { type: "webhook" },
+          },
+          undefined,
+          { orgRole: "member", userId }
+        );
+
+        await automations.createWebhookSecret(automation.id, inOrgId, userId);
+
+        return automation.id;
+      };
+
+      const remaining = async () =>
+        (await databaseAdapter.listAutomationWebhookSecrets())
+          .map((secret) => secret.automationId)
+          .sort();
+
+      return {
+        adminC,
+        adminUserId: created.adminMember!.member.userId,
+        automations,
+        databaseAdapter,
+        makeSecret,
+        memberA,
+        memberB,
+        orgId,
+        orgService,
+        remaining,
+        secondOrgId: second.organization.id,
+      };
+    }
+
+    test("removing a member deletes only their webhook secrets in that org", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+      const other = await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId);
+
+      expect(await ctx.remaining()).toEqual([b, other].sort());
+      expect(await ctx.remaining()).not.toContain(a);
+    });
+
+    test("removing the last admin is blocked and keeps their webhook secrets", async () => {
+      const ctx = await setup();
+      await ctx.databaseAdapter.deleteOrgMember(
+        ctx.secondOrgId,
+        "user_local_client"
+      );
+      const secret = await ctx.makeSecret(ctx.secondOrgId, ctx.adminUserId);
+
+      await expect(
+        ctx.orgService.removeMember(ctx.secondOrgId, ctx.adminUserId)
+      ).rejects.toMatchObject({ status: 409 });
+      expect(await ctx.remaining()).toEqual([secret]);
+    });
+
+    test("erasing the last admin is blocked and keeps their webhook secrets", async () => {
+      const ctx = await setup();
+      await ctx.databaseAdapter.deleteOrgMember(
+        ctx.secondOrgId,
+        "user_local_client"
+      );
+      const secret = await ctx.makeSecret(ctx.orgId, ctx.adminUserId);
+
+      await expect(
+        ctx.orgService.eraseUser(ctx.adminUserId, ctx.adminC.userId)
+      ).rejects.toMatchObject({ status: 409 });
+      expect(await ctx.remaining()).toEqual([secret]);
+    });
+
+    test("disabling a member deletes only their webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.disableMember(ctx.orgId, ctx.memberA.userId);
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("changing a password deletes the user's webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.changePassword({
+        currentPassword: ctx.memberA.password,
+        newPassword: "new-password-123",
+        userId: ctx.memberA.userId,
+      });
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("a wrong current password keeps the user's webhook secrets", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+
+      await expect(
+        ctx.orgService.changePassword({
+          currentPassword: "wrong-password-123",
+          newPassword: "new-password-123",
+          userId: ctx.memberA.userId,
+        })
+      ).rejects.toThrow();
+      expect(await ctx.remaining()).toEqual([a]);
+    });
+
+    test("erasing a user deletes their webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.eraseUser(ctx.memberA.userId, ctx.adminUserId);
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("a password reset deletes the user's webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await expect(
+        ctx.orgService.resetPassword({
+          newPassword: "new-password-123",
+          token: "tc_reset_invalid",
+        })
+      ).rejects.toThrow();
+      expect(await ctx.remaining()).toHaveLength(3);
+
+      const requested = await ctx.orgService.requestPasswordReset(
+        "a@acme.com",
+        true
+      );
+
+      await ctx.orgService.resetPassword({
+        newPassword: "new-password-123",
+        token: requested.token!,
+      });
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("demoting an admin deletes their webhook secrets in that org only", async () => {
+      const ctx = await setup();
+      const c = await ctx.makeSecret(ctx.orgId, ctx.adminC.userId);
+      const other = await ctx.makeSecret(ctx.secondOrgId, ctx.adminC.userId);
+
+      await ctx.orgService.updateMember(ctx.orgId, ctx.adminC.userId, {
+        name: "Renamed",
+      });
+      await ctx.orgService.updateMember(ctx.orgId, ctx.memberA.userId, {
+        role: "admin",
+      });
+      expect(await ctx.remaining()).toEqual([c, other].sort());
+
+      await ctx.orgService.updateMember(ctx.orgId, ctx.adminC.userId, {
+        role: "member",
+      });
+
+      expect(await ctx.remaining()).toEqual([other]);
+    });
+
+    test("removing the maker revokes a secret that another member steered", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+
+      await ctx.automations.update(
+        a,
+        ctx.orgId,
+        { prompt: "Summarize the pull request." },
+        { orgRole: "member", userId: ctx.memberB.userId }
+      );
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberB.userId);
+      expect(await ctx.remaining()).toEqual([a]);
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId);
+      expect(await ctx.remaining()).toEqual([]);
+    });
+
+    test("a failed revoke keeps the membership so a retry can finish", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+
+      spyOn(
+        ctx.databaseAdapter,
+        "deleteAutomationWebhookSecretsForUser"
+      ).mockRejectedValueOnce(new Error("db down"));
+
+      await expect(
+        ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId)
+      ).rejects.toThrow("db down");
+      expect(
+        await ctx.databaseAdapter.getOrgMember(ctx.orgId, ctx.memberA.userId)
+      ).not.toBeNull();
+      expect(await ctx.remaining()).toEqual([a]);
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId);
+      expect(await ctx.remaining()).toEqual([]);
+    });
+  });
+
   test("updates own profile email phone and name", async () => {
     const { orgService } = createOrgService();
 
@@ -1590,7 +1857,7 @@ describe("OrgService", () => {
   });
 
   test("permanent deletion removes tool secrets from the global config", async () => {
-    const { orgService, authService } = createOrgService();
+    const { authService, databaseAdapter: db, orgService } = createOrgService();
 
     const bootstrapped = await orgService.bootstrapInitialSetup({
       admin: {
@@ -1648,6 +1915,31 @@ describe("OrgService", () => {
       sessionId: "session_kept_org",
     });
 
+    for (const [orgId, automationId] of [
+      [bootstrapped.organization.id, "auto_deleted"],
+      [kept.organization.id, "auto_kept"],
+    ] as const) {
+      const now = new Date().toISOString();
+
+      await db.upsertAutomation({
+        createdAt: now,
+        definition: { trigger: { type: "webhook" } },
+        enabled: true,
+        id: automationId,
+        name: "Webhook",
+        orgId,
+        profileId: "profile_webhook",
+        updatedAt: now,
+        version: 1,
+      });
+      await db.putAutomationWebhookSecret({
+        automationId,
+        createdAt: now,
+        createdByUserId: bootstrapped.user.id,
+        encryptedValue: "enc",
+      });
+    }
+
     await orgService.archiveOrganization(
       bootstrapped.organization.id,
       bootstrapped.user.id
@@ -1656,6 +1948,11 @@ describe("OrgService", () => {
       bootstrapped.organization.id
     );
 
+    expect(
+      (await db.listAutomationWebhookSecrets()).map(
+        (secret) => secret.automationId
+      )
+    ).toEqual(["auto_kept"]);
     expect(
       await loadToolApiKey(bootstrapped.organization.id, "tool_deleted_org")
     ).toBeUndefined();

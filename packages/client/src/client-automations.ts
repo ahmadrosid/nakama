@@ -5,6 +5,7 @@ import type {
   AutomationRunRecord,
   AutomationSchedule,
   CreateAutomationRequest,
+  CreateAutomationWebhookSecretResponse,
   CreateWorkflowRequest,
   DraftAutomationResponse,
   GetWorkflowRunResponse,
@@ -93,6 +94,16 @@ export class AutomationsClient extends PluginsClient {
     );
 
     return response.run;
+  }
+
+  /** The secret is returned only here; a new call replaces the old one. */
+  async createAutomationWebhookSecret(automationId: string): Promise<string> {
+    const response = await this.request<CreateAutomationWebhookSecretResponse>(
+      `/v1/automations/${encodeURIComponent(automationId)}/webhook-secret`,
+      { method: "POST" }
+    );
+
+    return response.secret;
   }
 
   async listAutomationSchedules(): Promise<AutomationSchedule[]> {
