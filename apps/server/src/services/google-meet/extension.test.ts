@@ -11,6 +11,7 @@ interface ExtensionRequest {
   authorization?: string;
   body?: string;
   method: string;
+  origin: string;
   path: string;
 }
 
@@ -112,6 +113,7 @@ function extension(server: { captureProtocol?: number } = {}) {
       authorization: headers.Authorization,
       body: init.body ? String(init.body) : undefined,
       method,
+      origin: target.origin,
       path: target.pathname + target.search,
     });
     order.push(`${method} ${target.pathname}`);
@@ -555,6 +557,48 @@ test("disconnect deletes the key and an open pairing", async () => {
   await ext.dispatch("DISCONNECT");
   expect(ext.local.meetKey).toBeUndefined();
   expect((await ext.dispatch("STATE")).connected).toBe(false);
+});
+
+test("disconnect revokes the key on Nakama, and says so when Nakama cannot", async () => {
+  const ext = extension();
+  ext.connected();
+  expect(await ext.dispatch("DISCONNECT")).toEqual({ ok: true });
+  expect(ext.requests.at(-1)).toMatchObject({
+    authorization: "Bearer nmk_test",
+    method: "POST",
+    origin: ORIGIN,
+    path: "/v1/meet/extension/disconnect",
+  });
+  expect(ext.local.meetKey).toBeUndefined();
+
+  // Nakama is down: the key still goes from this browser.
+  ext.connected();
+  ext.respondWith(503);
+  expect((await ext.dispatch("DISCONNECT")).error).toBeDefined();
+  expect(ext.local.meetKey).toBeUndefined();
+
+  // Nakama already revoked the key.
+  ext.connected();
+  ext.respondWith(401);
+  expect(await ext.dispatch("DISCONNECT")).toEqual({ ok: true });
+  expect(ext.local.meetKey).toBeUndefined();
+});
+
+test("connecting again revokes the old key on the old Nakama", async () => {
+  const ext = extension();
+  ext.connected();
+  expect(await ext.dispatch("CONNECT", { origin: "other.example" })).toEqual({
+    code: "K7Q-4M2",
+  });
+  expect(ext.order).toEqual([
+    "POST /v1/meet/extension/pair",
+    "POST /v1/meet/extension/disconnect",
+  ]);
+  expect(ext.requests[1]).toMatchObject({
+    authorization: "Bearer nmk_test",
+    origin: ORIGIN,
+  });
+  expect(ext.local).toEqual({ nakamaOrigin: "https://other.example" });
 });
 
 test("the Meet tab can read only its recording state, not the transcript or captions", async () => {

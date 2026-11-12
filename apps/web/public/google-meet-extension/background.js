@@ -142,6 +142,27 @@ function leave(meetingId) {
   );
 }
 
+/**
+ * Revokes this browser's key on Nakama. False when Nakama did not confirm it,
+ * so the key still works until a member removes the browser in Nakama.
+ */
+async function revokeKey() {
+  if (!(await chrome.storage.local.get("meetKey")).meetKey) {
+    return true;
+  }
+
+  try {
+    await api("/v1/meet/extension/disconnect", { method: "POST" });
+
+    return true;
+  } catch (error) {
+    console.warn("[Nakama Meet] key revoke failed", error.message);
+
+    // api() drops the key on a 401: Nakama no longer accepts it.
+    return !(await chrome.storage.local.get("meetKey")).meetKey;
+  }
+}
+
 function schedulePairingPoll() {
   clearTimeout(pairTimer);
   pairTimer = setTimeout(() => void pollPairing(), PAIR_POLL_MS);
@@ -236,6 +257,9 @@ async function connect(address) {
     ? Math.min(body.expiresIn * 1000, PAIR_MAX_MS)
     : PAIR_MAX_MS;
 
+  // The new pairing replaces the old key. A failure is logged in revokeKey;
+  // the old Nakama still lists that browser, so a member can remove it.
+  await revokeKey();
   await chrome.storage.local.remove("meetKey");
   await chrome.storage.local.set({ nakamaOrigin: origin });
   await chrome.storage.session.remove(["pairError", SESSION_KEY]);
@@ -262,8 +286,15 @@ async function disconnect() {
 
   clearTimeout(pairTimer);
   pairTimer = undefined;
+  const revoked = await revokeKey();
   await chrome.storage.local.remove("meetKey");
   await chrome.storage.session.remove(["pairError", "pairing", SESSION_KEY]);
+
+  if (!revoked) {
+    throw new Error(
+      "Disconnected here, but Nakama did not remove this browser. Remove it on the Google Meet page."
+    );
+  }
 
   return { ok: true };
 }

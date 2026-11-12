@@ -719,7 +719,7 @@ export class GoogleMeetService {
         store.renewExtensionKey(found.id);
       }
 
-      return { orgId, userId: found.userId };
+      return { keyId: found.id, orgId, userId: found.userId };
     } finally {
       store.close();
     }

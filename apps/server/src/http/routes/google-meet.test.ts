@@ -162,6 +162,43 @@ describe("Meet extension keys", () => {
     expect((await status(key)).status).toBe(200);
   });
 
+  test("disconnect revokes only the key that calls it", async () => {
+    const { app, pair, status } = await setup();
+    const key = await pair();
+    const other = await pair();
+
+    const disconnect = (value: string) =>
+      app.fetch(
+        new Request(`${base}/v1/meet/extension/disconnect`, {
+          headers: { Authorization: `Bearer ${value}` },
+          method: "POST",
+        })
+      );
+
+    const response = await disconnect(key);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ revoked: true });
+    expect((await status(key)).status).toBe(401);
+    expect((await status(other)).status).toBe(200);
+    expect((await disconnect(key)).status).toBe(401);
+  });
+
+  test("disconnect takes only a Meet key, not a browser session", async () => {
+    const { admin, app, pair, status } = await setup();
+    const key = await pair();
+
+    const response = await app.fetch(
+      new Request(`${base}/v1/meet/extension/disconnect`, {
+        headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(401);
+    expect((await status(key)).status).toBe(200);
+  });
+
   test("an expired key gets 401, and use renews it", async () => {
     const { pair, status } = await setup();
     const key = await pair();
