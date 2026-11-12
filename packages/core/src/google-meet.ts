@@ -82,7 +82,6 @@ export interface MeetImportProgress {
 
 export interface MeetOverview {
   canConfigure: boolean;
-  captureProtocol: number;
   /** Uploads and imports can be transcribed. */
   configured: boolean;
   enabled: boolean;

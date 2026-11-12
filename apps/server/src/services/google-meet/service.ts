@@ -15,7 +15,7 @@ import type {
   Meeting,
 } from "@nakama/core/google-meet";
 import type { DatabaseAdapter } from "@nakama/db";
-import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
 import type { ComposioService } from "../composio-service";
 import { pluginActorFromContext } from "../tool-resolver";
@@ -31,8 +31,6 @@ import { createStreamMeeting, generateNextMeetingTitle } from "./worker";
 
 type Capture = {
   orgId: string;
-  /** 2: token in the URL on the capture listener. 3: ticket in the first message on the main server. */
-  protocol: 2 | 3;
   meetingId: string;
   directory: string;
   expiresAt: number;
@@ -112,7 +110,7 @@ function browserLabel(userAgent: string | null) {
   return system ? `${browser} on ${system}` : browser;
 }
 
-// A protocol 3 client has this long to send its ticket.
+// A capture client has this long to send its ticket.
 const CAPTURE_AUTH_TIMEOUT_MS = 5000;
 
 // Sockets that have not sent a ticket yet. Each lives at most 5 s.
@@ -127,7 +125,7 @@ const captureAuthSchema = z
   .strict();
 
 export type CaptureSocketData = {
-  /** Set on upgrade for protocol 2, and after the auth message for protocol 3. */
+  /** Set after the auth message. */
   capture?: Capture;
   authTimer?: ReturnType<typeof setTimeout>;
   abort?: AbortController;
@@ -167,9 +165,8 @@ export class GoogleMeetService {
   private readonly pairingCodes = new Map<string, string>();
   private abort = new AbortController();
   private paused = false;
-  private listener?: Server<SocketData>;
 
-  /** Socket handlers for the capture listener and the main server. */
+  /** Socket handlers for `/v1/meet/capture` on the main server. */
   readonly captureSocket: WebSocketHandler<SocketData> = {
     close: (ws) => {
       void this.finishSocket(ws, false);
@@ -178,13 +175,6 @@ export class GoogleMeetService {
     message: (ws, message) => this.socketMessage(ws, message),
     open: (ws) => {
       this.sockets.add(ws);
-
-      if (ws.data.capture) {
-        this.startStream(ws, ws.data.capture);
-
-        return;
-      }
-
       ws.data.authTimer = setTimeout(
         () => ws.close(1008, "Authentication timed out"),
         CAPTURE_AUTH_TIMEOUT_MS
@@ -208,6 +198,17 @@ export class GoogleMeetService {
   ) {
     if (!isAbsolute(configDir)) {
       throw new Error("Google Meet configDir must be absolute");
+    }
+
+    const unused = [
+      "NAKAMA_MEET_CAPTURE_HOST",
+      "NAKAMA_MEET_CAPTURE_ORIGIN",
+      "NAKAMA_MEET_CAPTURE_PORT",
+    ].filter((name) => process.env[name] !== undefined);
+
+    if (unused.length) {
+      // Capture now runs on /v1/meet/capture of the main server.
+      console.warn(`${unused.join(", ")} is no longer used and is ignored.`);
     }
   }
 
@@ -383,7 +384,7 @@ export class GoogleMeetService {
     actor: { id: string; role: "admin" | "member" },
     signal?: AbortSignal,
     profileId?: string,
-    /** The main server's capture socket URL. Set, start-capture issues a protocol 3 ticket. */
+    /** The main server's capture socket URL. start-capture fails without it. */
     captureSocketUrl?: string
   ): Promise<MeetActionResults[Action]> {
     if (!actor.id || (actor.role !== "admin" && actor.role !== "member")) {
@@ -446,10 +447,10 @@ export class GoogleMeetService {
       const result = await run(input, {
         actionKey: action,
         actor,
-        captureUrl: async () => captureSocketUrl ?? this.captureUrl(),
         composio: this.composio,
-        createCapture: (meeting) =>
-          this.createCapture(orgId, meeting, captureSocketUrl),
+        createCapture: captureSocketUrl
+          ? (meeting) => this.createCapture(orgId, meeting, captureSocketUrl)
+          : undefined,
         dataDir: this.directory(orgId),
         importProgress: {
           get: () => this.importProgress.get(`${orgId}:${actor.id}`) ?? null,
@@ -783,37 +784,10 @@ export class GoogleMeetService {
     this.tasks.set(task, orgId);
   }
 
-  private captureUrl() {
-    if (!this.listener) {
-      this.startListener();
-    }
-
-    const hostname = process.env.NAKAMA_MEET_CAPTURE_HOST ?? "127.0.0.1";
-
-    const address =
-      process.env.NAKAMA_MEET_CAPTURE_ORIGIN ??
-      `ws://${hostname}:${this.listener!.port}/capture`;
-
-    const url = new URL(address);
-
-    if (
-      !["ws:", "wss:"].includes(url.protocol) ||
-      url.pathname !== "/capture" ||
-      url.search ||
-      url.hash ||
-      url.username ||
-      url.password
-    ) {
-      throw new Error("Invalid capture address");
-    }
-
-    return address;
-  }
-
   private createCapture(
     orgId: string,
     meeting: Meeting,
-    captureSocketUrl?: string
+    captureSocketUrl: string
   ) {
     const token = crypto.randomUUID();
     const expiresAt = Date.now() + meeting.durationMinutes * 60_000;
@@ -823,7 +797,6 @@ export class GoogleMeetService {
       expiresAt,
       meetingId: meeting.id,
       orgId,
-      protocol: captureSocketUrl ? 3 : 2,
       timer: setTimeout(() => {
         this.sessions.delete(token);
         const store = new MeetingStore(this.directory(orgId), orgId);
@@ -843,10 +816,8 @@ export class GoogleMeetService {
 
     return {
       token,
-      // Protocol 3 sends the ticket in the first message, never in the URL.
-      url:
-        captureSocketUrl ??
-        `${this.captureUrl()}?meetingId=${meeting.id}&token=${token}`,
+      // The client sends the ticket in the first message, never in the URL.
+      url: captureSocketUrl,
     };
   }
 
@@ -861,21 +832,16 @@ export class GoogleMeetService {
 
   /**
    * Returns the capture for a ticket when every check passes: it exists, is
-   * for this protocol and meeting, has not expired, Meet is on, and the
+   * for this meeting, has not expired, Meet is on, and the
    * meeting is still queued and not stopped. The caller deletes it on use.
    */
-  private captureForTicket(
-    token: string,
-    meetingId: string | null,
-    protocol: Capture["protocol"]
-  ) {
+  private captureForTicket(token: string, meetingId: string) {
     const session = this.sessions.get(token);
 
     if (
       this.paused ||
       this.abort.signal.aborted ||
       !session ||
-      session.protocol !== protocol ||
       session.meetingId !== meetingId ||
       session.expiresAt <= Date.now() ||
       this.blockedOrganizations.has(session.orgId) ||
@@ -914,6 +880,12 @@ export class GoogleMeetService {
       return new Response(null, { status: 503 });
     }
 
+    // The ticket goes in the first message. A URL with a query is an old
+    // client that puts its secret in the URL.
+    if (new URL(request.url).search) {
+      return new Response(null, { status: 400 });
+    }
+
     const pending = [...this.sockets].filter((ws) => !ws.data.capture).length;
 
     if (pending >= MAX_PENDING_CAPTURE_SOCKETS) {
@@ -926,39 +898,6 @@ export class GoogleMeetService {
 
     // Bun answers the upgrade itself and ignores this response.
     return new Response(null);
-  }
-
-  private startListener() {
-    this.listener = Bun.serve<SocketData>({
-      fetch: (request, server) => {
-        const url = new URL(request.url);
-
-        if (request.method !== "GET" || url.pathname !== "/capture") {
-          return new Response(null, { status: 404 });
-        }
-
-        const token = url.searchParams.get("token") ?? "";
-
-        const session = this.captureForTicket(
-          token,
-          url.searchParams.get("meetingId"),
-          2
-        );
-
-        if (!session) {
-          return new Response(null, { status: 401 });
-        }
-
-        if (!server.upgrade(request, { data: { capture: { ...session } } })) {
-          return new Response(null, { status: 426 });
-        }
-
-        this.useTicket(token);
-      },
-      hostname: process.env.NAKAMA_MEET_CAPTURE_HOST ?? "127.0.0.1",
-      port: Number(process.env.NAKAMA_MEET_CAPTURE_PORT ?? 0),
-      websocket: this.captureSocket,
-    });
   }
 
   private authenticateSocket(
@@ -975,7 +914,7 @@ export class GoogleMeetService {
     }
 
     const capture = auth
-      ? this.captureForTicket(auth.ticket, auth.meetingId, 3)
+      ? this.captureForTicket(auth.ticket, auth.meetingId)
       : null;
 
     if (!(auth && capture)) {
@@ -1014,10 +953,8 @@ export class GoogleMeetService {
           .parse(JSON.parse(text.data));
 
         if (event.type === "stop") {
-          const done = this.finishSocket(
-            ws,
-            event.protocol === capture.protocol
-          );
+          // A stop without protocol 3 is not a requested stop.
+          const done = this.finishSocket(ws, event.protocol === 3);
 
           await ws.data.stream?.captured();
 
@@ -1208,8 +1145,6 @@ export class GoogleMeetService {
       ...this.tasks.keys(),
       ...[...this.sockets].map((ws) => this.finishSocket(ws, false)),
     ]);
-    this.listener?.stop(true);
-    this.listener = undefined;
   }
 
   async reopen() {
