@@ -293,7 +293,8 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
           id: auth.user.id,
           role: auth.orgRole === "admin" ? "admin" : "member",
         },
-        c.req.raw.signal
+        c.req.raw.signal,
+        captureSocketUrl(c.req.raw)
       )
     );
   });

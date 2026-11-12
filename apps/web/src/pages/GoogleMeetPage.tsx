@@ -1784,6 +1784,38 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   // Bumped after an approval so the browser list reloads.
   const [keysVersion, setKeysVersion] = React.useState(0);
 
+  // Extension v0.2 sends its actions through this page. Answer each with an
+  // update message and run nothing.
+  React.useEffect(() => {
+    function refuse(event: MessageEvent) {
+      const data: unknown = event.data;
+
+      if (
+        event.source !== window ||
+        event.origin !== window.location.origin ||
+        !(data instanceof Object) ||
+        !("type" in data) ||
+        data.type !== "NAKAMA_MEET_ACTION" ||
+        !("id" in data)
+      ) {
+        return;
+      }
+
+      window.postMessage(
+        {
+          error: "Update the Nakama Meet extension to v0.3.",
+          id: String(data.id),
+          type: "NAKAMA_MEET_RESULT",
+        },
+        window.location.origin
+      );
+    }
+
+    window.addEventListener("message", refuse);
+
+    return () => window.removeEventListener("message", refuse);
+  }, []);
+
   React.useEffect(() => {
     if (searchParams.has("import")) {
       setSearchParams(

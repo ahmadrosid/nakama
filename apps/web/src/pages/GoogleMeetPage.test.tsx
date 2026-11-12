@@ -95,7 +95,6 @@ async function mountPage(
     if (action === "meetings") {
       return Promise.resolve({
         canConfigure: true,
-        captureProtocol: 1,
         configured: true,
         enabled: true,
         liveReady: true,
@@ -619,13 +618,49 @@ test("the status follows the browser keys, not an open tab", async () => {
   expect(setup()).not.toBeNull();
 });
 
-test("the page listens for no window messages from an extension", async () => {
-  const listen = spyOn(window, "addEventListener");
+test("a v0.2 extension action gets the update error and runs nothing", async () => {
+  const { invoke } = await mountPage();
+
+  const reply = spyOn(window, "postMessage").mockImplementation(
+    () => undefined
+  );
+
+  const before = invoke.mock.calls.length;
+
+  const send = (init: MessageEventInit) =>
+    act(async () => {
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: {
+            action: "start-capture",
+            id: "request",
+            input: { url: "https://meet.google.com/abc-defg-hij" },
+            type: "NAKAMA_MEET_ACTION",
+          },
+          ...init,
+        })
+      );
+      await Bun.sleep(10);
+    });
 
   try {
-    await mountPage();
-    expect(listen.mock.calls.map(([type]) => type)).not.toContain("message");
+    // Another origin or another window gets no answer.
+    await send({ origin: "https://evil.example", source: window });
+    await send({ origin: window.location.origin, source: null });
+    expect(reply).not.toHaveBeenCalled();
+
+    await send({ origin: window.location.origin, source: window });
+    expect(reply).toHaveBeenCalledTimes(1);
+    expect(reply).toHaveBeenCalledWith(
+      {
+        error: "Update the Nakama Meet extension to v0.3.",
+        id: "request",
+        type: "NAKAMA_MEET_RESULT",
+      },
+      window.location.origin
+    );
+    expect(invoke.mock.calls.length).toBe(before);
   } finally {
-    listen.mockRestore();
+    reply.mockRestore();
   }
 });

@@ -84,7 +84,6 @@ export const meetingActionSchemas = {
 export interface MeetExecutionContext {
   actionKey: string;
   actor: { id: string; role: "admin" | "member" };
-  captureUrl?(): Promise<string>;
   composio?: Pick<
     ComposioService,
     "listMeetRecordings" | "downloadMeetRecording"
@@ -246,7 +245,6 @@ export async function run(
     if (action === "meetings") {
       return {
         canConfigure: context.actor.role === "admin",
-        captureProtocol: 2,
         ...(await transcriptionStatus(context, openaiKey)),
         enabled,
         liveReady: Boolean(openaiKey),
@@ -265,11 +263,10 @@ export async function run(
         throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
       }
 
-      if (!(context.captureUrl && context.createCapture)) {
-        throw new Error("Capture service unavailable");
+      // Only an HTTP route knows the capture socket URL of the main server.
+      if (!context.createCapture) {
+        throw new Error("Capture socket URL is missing");
       }
-
-      await context.captureUrl();
 
       const meeting = store.create(
         String(input.url ?? "").trim(),
