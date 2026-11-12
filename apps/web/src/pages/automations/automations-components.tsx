@@ -45,10 +45,7 @@ import {
 import { type ReactNode, useContext, useMemo, useState } from "react";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
-import {
-  canUseRegressionCases,
-  SaveRegressionCaseDialog,
-} from "@/components/regression-cases";
+import { SaveRegressionCaseDialog } from "@/components/regression-cases";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { AuthContext } from "@/context/auth-context-shared";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
@@ -59,6 +56,7 @@ import {
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
+import { canAccessIntegrationsPage } from "@/lib/navigation";
 import {
   automationRunMessages,
   formatRunDuration,
@@ -1022,13 +1020,14 @@ function RunDetailPopup({
   onRerun: () => void;
 }) {
   const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
-  const [savingCase, setSavingCase] = useState(false);
+  // Tied to the run it came from, so switching runs closes it
+  const [caseRunId, setCaseRunId] = useState<string | null>(null);
 
   // Read without useAuth: the drawer also renders where no auth provider is mounted.
   const orgRole = useContext(AuthContext)?.activeOrg?.role;
 
   const canSaveCase =
-    canUseRegressionCases(orgRole) &&
+    canAccessIntegrationsPage(orgRole) &&
     selectedRun?.status === "completed" &&
     Boolean(selectedRun.output?.trim());
 
@@ -1068,7 +1067,7 @@ function RunDetailPopup({
         {canSaveCase ? (
           <Button
             aria-label="Save as test case"
-            onClick={() => setSavingCase(true)}
+            onClick={() => setCaseRunId(selectedRun?.id ?? null)}
             size="icon-sm"
             title="Save as test case"
             type="button"
@@ -1112,8 +1111,8 @@ function RunDetailPopup({
       {canSaveCase && selectedRun ? (
         <SaveRegressionCaseDialog
           expectedResult={selectedRun.output ?? ""}
-          onOpenChange={setSavingCase}
-          open={savingCase}
+          onOpenChange={(open) => setCaseRunId(open ? selectedRun.id : null)}
+          open={caseRunId === selectedRun.id}
           profileId={profileId}
           source={{
             automationId: selectedRun.automationId,

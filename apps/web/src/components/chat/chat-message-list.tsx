@@ -167,6 +167,12 @@ const virtuosoComponents: Components<MessageTurn> = {
   Item: VirtuosoItem,
 };
 
+/** The reply a test case is saved from; the server pairs it with the question before it. */
+export interface SaveCaseReply {
+  expectedResult: string;
+  messageIndex: number;
+}
+
 interface ChatMessageListProps {
   actionsDisabled?: boolean;
   branchingMessageId?: string | null;
@@ -179,8 +185,7 @@ interface ChatMessageListProps {
   onContinueToolSetup?: (setupId: string) => Promise<void>;
   onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
-  /** Offered on the last reply only: a case's input is the session's last user message. */
-  onSaveAsCase?: (expectedResult: string) => void;
+  onSaveAsCase?: (reply: SaveCaseReply) => void;
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   onSwitchModel?: () => void;
   profileId?: string | null;
@@ -427,9 +432,7 @@ function ChatMessageListSession({
               canPreviewCitations ? openCitationPreview : undefined
             }
             onRetryMessage={onRetryMessage}
-            onSaveAsCase={
-              turnIndex === turns.length - 1 ? onSaveAsCase : undefined
-            }
+            onSaveAsCase={onSaveAsCase}
             onSubmitQuestionnaire={onSubmitQuestionnaire}
             onSwitchModel={onSwitchModel}
             profileId={profileId}
@@ -582,7 +585,7 @@ function AssistantTurn({
   onBranchMessage?: (message: ChatListItem) => void;
   onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
-  onSaveAsCase?: (expectedResult: string) => void;
+  onSaveAsCase?: (reply: SaveCaseReply) => void;
   onSwitchModel?: () => void;
   onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   questionnaire?: AgentQuestionnaire | null;
@@ -1314,10 +1317,17 @@ function AssistantMessageActions({
   actionsDisabled?: boolean;
   onBranchMessage?: (message: ChatListItem) => void;
   onRetryMessage?: (message: ChatListItem) => void;
-  onSaveAsCase?: (expectedResult: string) => void;
+  onSaveAsCase?: (reply: SaveCaseReply) => void;
   usage?: ChatUsage;
 }) {
   const [copied, setCopied] = useState(false);
+
+  // The final reply, not every step of the turn: that is what an automation run keeps too.
+  const saveCaseReply =
+    onSaveAsCase && message.historyIndex != null
+      ? { expectedResult: message.content, messageIndex: message.historyIndex }
+      : null;
+
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -1389,7 +1399,7 @@ function AssistantMessageActions({
           <RefreshIcon aria-hidden className="size-4" />
         </button>
       ) : null}
-      {(onBranchMessage && branchCreatedAt) || onSaveAsCase ? (
+      {(onBranchMessage && branchCreatedAt) || saveCaseReply ? (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -1421,11 +1431,11 @@ function AssistantMessageActions({
                 </DropdownMenuItem>
               </>
             ) : null}
-            {onSaveAsCase ? (
+            {saveCaseReply ? (
               <DropdownMenuItem
                 className="gap-2"
                 disabled={busy || actionsDisabled}
-                onClick={() => onSaveAsCase(copyContent)}
+                onClick={() => onSaveAsCase?.(saveCaseReply)}
               >
                 <TestTube01Icon aria-hidden className="size-4" />
                 <span>Save as test case</span>

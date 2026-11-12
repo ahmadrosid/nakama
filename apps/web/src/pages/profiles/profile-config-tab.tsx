@@ -30,10 +30,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ExportProfileDialog } from "@/components/profiles/ExportProfileDialog";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
-import {
-  canUseRegressionCases,
-  RegressionCasesList,
-} from "@/components/regression-cases";
+import { RegressionCasesList } from "@/components/regression-cases";
 import { SlackSettingsCard } from "@/components/SlackSettingsCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { TeamsSettingsCard } from "@/components/TeamsSettingsCard";
@@ -48,7 +45,7 @@ import {
 } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { client, formatError } from "@/lib/client";
-import { profilePath } from "@/lib/navigation";
+import { canAccessIntegrationsPage, profilePath } from "@/lib/navigation";
 import { isProfileOwner } from "@/lib/profiles";
 import { queryKeys } from "@/lib/query-keys";
 import { buildProfileChannels } from "@/pages/profiles/profile-channels";
@@ -211,7 +208,7 @@ function profileTabAccess(
     showBehavior: isOrgAdmin || isOwner,
     showChannels: (canPack || isOwner) && !detail.isSuper,
     showPrompt: canPack || isOwner,
-    showTests: canUseRegressionCases(orgRole),
+    showTests: canAccessIntegrationsPage(orgRole),
   };
 }
 

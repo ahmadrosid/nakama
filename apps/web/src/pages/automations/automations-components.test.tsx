@@ -352,7 +352,7 @@ test("opens a run whose transcript saved an artifact", async () => {
   }
 });
 
-test("a completed run saves as a test case for members, not viewers", async () => {
+test("a completed run saves as a test case for org members only", async () => {
   const run: AutomationRunRecord = {
     automationId: "automation",
     completedAt: "2026-10-01T00:01:00Z",
@@ -368,73 +368,91 @@ test("a completed run saves as a test case for members, not viewers", async () =
     {} as Awaited<ReturnType<typeof client.createRegressionCase>>
   );
 
-  for (const role of ["viewer", "member"] as const) {
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-
-    try {
+  const until = async <T,>(find: () => T | null): Promise<T> => {
+    for (let attempt = 0; attempt < 50 && !find(); attempt += 1) {
       await act(async () => {
-        root.render(
-          <QueryClientProvider client={new QueryClient()}>
-            <AuthContext.Provider
-              value={
-                /* SAFETY: The drawer reads only the active org's role. */
-                { activeOrg: { role } } as AuthContextValue
-              }
-            >
-              <RunHistoryList
-                busy={false}
-                onRerun={() => {}}
-                profileId="profile"
-                running={false}
-                runs={[run]}
-              />
-            </AuthContext.Provider>
-          </QueryClientProvider>
-        );
+        await new Promise((resolve) => setTimeout(resolve, 10));
       });
-      await act(async () => {
-        container
-          .querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
-          .click();
-        await new Promise((resolve) => setTimeout(resolve, 30));
-      });
-
-      const save = document.querySelector<HTMLButtonElement>(
-        'button[aria-label="Save as test case"]'
-      );
-
-      if (role === "viewer") {
-        expect(save).toBeNull();
-        continue;
-      }
-
-      await act(async () => {
-        save!.click();
-        await new Promise((resolve) => setTimeout(resolve, 30));
-      });
-      await act(async () => {
-        document
-          .querySelector<HTMLButtonElement>('form button[type="submit"]')!
-          .click();
-        await new Promise((resolve) => setTimeout(resolve, 30));
-      });
-
-      expect(create).toHaveBeenCalledWith("profile", {
-        automationId: "automation",
-        expectedResult: "The report is ready.",
-        sourceId: "run",
-        sourceType: "automation_run",
-      });
-    } finally {
-      await act(async () => root.unmount());
-      container.remove();
     }
-  }
 
-  expect(create).toHaveBeenCalledTimes(1);
-  create.mockRestore();
+    return find()!;
+  };
+
+  try {
+    // No active org (role undefined) is the reachable non-member state
+    for (const role of [undefined, "member"] as const) {
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+
+      try {
+        await act(async () => {
+          root.render(
+            <QueryClientProvider client={new QueryClient()}>
+              <AuthContext.Provider
+                value={
+                  /* SAFETY: The drawer reads only the active org's role. */
+                  { activeOrg: role ? { role } : null } as AuthContextValue
+                }
+              >
+                <RunHistoryList
+                  busy={false}
+                  onRerun={() => {}}
+                  profileId="profile"
+                  running={false}
+                  runs={[run]}
+                />
+              </AuthContext.Provider>
+            </QueryClientProvider>
+          );
+        });
+        await act(async () => {
+          container
+            .querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+            .click();
+        });
+
+        // The drawer header renders before the run's actions
+        await until(() =>
+          document.querySelector('button[aria-label="Copy run ID"]')
+        );
+
+        const save = document.querySelector<HTMLButtonElement>(
+          'button[aria-label="Save as test case"]'
+        );
+
+        if (!role) {
+          expect(save).toBeNull();
+          continue;
+        }
+
+        await act(async () => save!.click());
+
+        const submit = await until(() =>
+          document.querySelector<HTMLButtonElement>(
+            'form button[type="submit"]'
+          )
+        );
+
+        await act(async () => submit.click());
+        await until(() => (create.mock.calls.length > 0 ? true : null));
+
+        expect(create).toHaveBeenCalledWith("profile", {
+          automationId: "automation",
+          expectedResult: "The report is ready.",
+          sourceId: "run",
+          sourceType: "automation_run",
+        });
+      } finally {
+        await act(async () => root.unmount());
+        container.remove();
+      }
+    }
+
+    expect(create).toHaveBeenCalledTimes(1);
+  } finally {
+    create.mockRestore();
+  }
 });
 
 test("marking runs read avoids duplicate requests and recovers after failure", async () => {

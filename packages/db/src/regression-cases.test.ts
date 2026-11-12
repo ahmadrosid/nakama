@@ -84,65 +84,6 @@ describe("regression cases", () => {
     expect(second.map((item) => item.id)).toEqual(["regcase_old"]);
   });
 
-  test("reads only the last user message", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = "2026-11-03T09:00:00.000Z";
-
-    await db.upsertSession({
-      agentQuestionnaire: null,
-      agentTodos: [],
-      channel: "web",
-      createdAt: now,
-      id: "session_1",
-      model: null,
-      profileId: "agent_1",
-      title: null,
-      userId: "user_1",
-    });
-
-    await db.appendMessagesForSession("session_1", [
-      {
-        createdAt: now,
-        id: "msg_1",
-        payload: { content: "First question", role: "user" },
-        seq: 0,
-        sessionId: "session_1",
-      },
-      {
-        createdAt: now,
-        id: "msg_2",
-        payload: { content: "First answer", role: "assistant" },
-        seq: 1,
-        sessionId: "session_1",
-      },
-      {
-        createdAt: now,
-        id: "msg_3",
-        payload: {
-          content: [
-            { data: "base64", mediaType: "audio/wav", type: "audio" },
-            { text: "Second question", type: "text" },
-          ],
-          role: "user",
-        },
-        seq: 2,
-        sessionId: "session_1",
-      },
-      {
-        createdAt: now,
-        id: "msg_4",
-        payload: { content: "Second answer", role: "assistant" },
-        seq: 3,
-        sessionId: "session_1",
-      },
-    ]);
-
-    const message = await db.getLastUserMessageForSession("session_1");
-
-    expect(message?.seq).toBe(2);
-    expect(await db.getLastUserMessageForSession("missing")).toBeNull();
-  });
-
   test("stores a rerun and saves its mark within the org", async () => {
     const db = createInMemoryDatabaseAdapter();
 

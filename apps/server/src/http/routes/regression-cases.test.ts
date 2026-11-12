@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { formatAgentQuestionnaireAnswersMessage } from "@nakama/core/agent-questionnaire";
 import type { DatabaseAdapter, StoredRegressionCaseRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
@@ -163,6 +164,7 @@ describe("regression case routes", () => {
         {
           body: JSON.stringify({
             expectedResult: "The deploy failed on the health check.",
+            messageIndex: 3,
             sourceId: "session_1",
             sourceType: "session",
           }),
@@ -287,6 +289,63 @@ describe("regression case routes", () => {
     expect(running.status).toBe(409);
   });
 
+  test("pairs a reply with the question before it, past questionnaire answers", async () => {
+    const { app, databaseAdapter } = createApp();
+
+    const { email, password, orgId, userId } = await seedOrgAdmin(
+      databaseAdapter,
+      { profileId: "agent_1" }
+    );
+
+    // [question, reply 0, questionnaire answers, reply 1]
+    await seedSession(databaseAdapter, {
+      id: "session_1",
+      profileId: "agent_1",
+      userId,
+      userMessages: [
+        "Why did the deploy fail?",
+        formatAgentQuestionnaireAnswersMessage([
+          {
+            answer: "Production",
+            prompt: "Which environment?",
+            questionId: "q1",
+          },
+        ]),
+      ],
+    });
+
+    const session = await loginUserSession(app, email, password, orgId);
+
+    const save = (messageIndex: number) =>
+      app.fetch(
+        new Request(
+          "http://localhost:4310/v1/profiles/agent_1/regression-cases",
+          {
+            body: JSON.stringify({
+              expectedResult: "Health check failed.",
+              messageIndex,
+              sourceId: "session_1",
+              sourceType: "session",
+            }),
+            headers: session.headers({
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            }),
+            method: "POST",
+          }
+        )
+      );
+
+    const afterAnswers = await save(3);
+    expect(afterAnswers.status).toBe(201);
+    expect((await afterAnswers.json()).case.input).toBe(
+      "Why did the deploy fail?"
+    );
+
+    expect((await save(2)).status).toBe(400);
+    expect((await save(9)).status).toBe(400);
+  });
+
   test("a chat with a running turn cannot be saved", async () => {
     const { app, databaseAdapter } = createApp();
 
@@ -318,6 +377,7 @@ describe("regression case routes", () => {
           {
             body: JSON.stringify({
               expectedResult: "Health check failed.",
+              messageIndex: 1,
               sourceId: "session_live",
               sourceType: "session",
             }),
@@ -364,6 +424,7 @@ describe("regression case routes", () => {
         {
           body: JSON.stringify({
             expectedResult: "Health check failed.",
+            messageIndex: 1,
             sourceId: "session_private",
             sourceType: "session",
           }),
@@ -449,6 +510,7 @@ describe("regression case routes", () => {
         {
           body: JSON.stringify({
             expectedResult: "Health check failed.",
+            messageIndex: 1,
             sourceId: "session_shared",
             sourceType: "session",
           }),
@@ -653,6 +715,7 @@ describe("regression case routes", () => {
         {
           body: JSON.stringify({
             expectedResult: "Health check failed.",
+            messageIndex: 1,
             sourceId: "session_a",
             sourceType: "session",
           }),
@@ -704,6 +767,7 @@ describe("regression case routes", () => {
         {
           body: JSON.stringify({
             expectedResult: "Health check failed.",
+            messageIndex: 1,
             sourceId: "session_a",
             sourceType: "session",
           }),
@@ -742,6 +806,7 @@ describe("regression case routes", () => {
         {
           body: JSON.stringify({
             expectedResult: "Health check failed.",
+            messageIndex: 1,
             sourceId: "session_1",
             sourceType: "session",
           }),

@@ -1,9 +1,12 @@
-import type { ListRegressionCasesResponse } from "@nakama/core/contract";
+import {
+  type CreateRegressionCaseRequest,
+  type ListRegressionCasesResponse,
+  MAX_REGRESSION_EXPECTED_RESULT_LENGTH,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -12,6 +15,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { Textarea } from "@nakama/ui/textarea";
 import { toast } from "@nakama/ui/toast";
 import {
+  type UseMutationResult,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
@@ -22,17 +26,23 @@ import { formatSessionTimestamp } from "@/lib/chat-history";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-/** The server's cap on `expectedResult`. */
-const MAX_EXPECTED_RESULT_LENGTH = 20_000;
+/** A create request without the text the member writes in the dialog. */
+type SaveCaseSource = CreateRegressionCaseRequest extends infer Request
+  ? Request extends unknown
+    ? Omit<Request, "expectedResult">
+    : never
+  : never;
 
-/** Viewers get 403 from both case routes, so they see neither the action nor the list. */
-export function canUseRegressionCases(orgRole: string | undefined): boolean {
-  return orgRole === "admin" || orgRole === "member";
+/** Cuts to the server's cap without splitting a surrogate pair; null when nothing was cut. */
+function cutToCap(text: string): string | null {
+  if (text.length <= MAX_REGRESSION_EXPECTED_RESULT_LENGTH) {
+    return null;
+  }
+
+  const cut = text.slice(0, MAX_REGRESSION_EXPECTED_RESULT_LENGTH);
+
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 }
-
-export type RegressionCaseSource =
-  | { sourceId: string; sourceType: "session" }
-  | { automationId: string; sourceId: string; sourceType: "automation_run" };
 
 export function SaveRegressionCaseDialog({
   expectedResult,
@@ -45,38 +55,9 @@ export function SaveRegressionCaseDialog({
   onOpenChange: (open: boolean) => void;
   open: boolean;
   profileId: string;
-  source: RegressionCaseSource;
-}) {
-  return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      {open ? (
-        <SaveRegressionCaseForm
-          initialExpected={expectedResult}
-          onDone={() => onOpenChange(false)}
-          profileId={profileId}
-          source={source}
-        />
-      ) : null}
-    </Dialog>
-  );
-}
-
-function SaveRegressionCaseForm({
-  initialExpected,
-  onDone,
-  profileId,
-  source,
-}: {
-  initialExpected: string;
-  onDone: () => void;
-  profileId: string;
-  source: RegressionCaseSource;
+  source: SaveCaseSource;
 }) {
   const queryClient = useQueryClient();
-
-  const [expected, setExpected] = useState(() =>
-    initialExpected.trim().slice(0, MAX_EXPECTED_RESULT_LENGTH)
-  );
 
   const save = useMutation({
     mutationFn: (expectedResult: string) =>
@@ -86,9 +67,49 @@ function SaveRegressionCaseForm({
         queryKey: queryKeys.profiles.regressionCases(profileId),
       });
       toast("Saved as a test case.");
-      onDone();
+      onOpenChange(false);
     },
   });
+
+  // Esc or an overlay click mid-save would let a second save start
+  const close = () => {
+    if (!save.isPending) {
+      save.reset();
+      onOpenChange(false);
+    }
+  };
+
+  return (
+    <Dialog
+      onOpenChange={(next) => {
+        if (!next) {
+          close();
+        }
+      }}
+      open={open}
+    >
+      {open ? (
+        <SaveRegressionCaseForm
+          initialExpected={expectedResult}
+          onCancel={close}
+          save={save}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function SaveRegressionCaseForm({
+  initialExpected,
+  onCancel,
+  save,
+}: {
+  initialExpected: string;
+  onCancel: () => void;
+  save: UseMutationResult<unknown, Error, string>;
+}) {
+  const [cut] = useState(() => cutToCap(initialExpected.trim()));
+  const [expected, setExpected] = useState(() => cut ?? initialExpected.trim());
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,10 +124,6 @@ function SaveRegressionCaseForm({
       <form className="space-y-6" onSubmit={handleSubmit}>
         <DialogHeader className="gap-2">
           <DialogTitle>Save as test case</DialogTitle>
-          <DialogDescription>
-            The last message sent in this run becomes the input. Edit the
-            result below to what a correct answer should say.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-2.5">
           <label
@@ -120,11 +137,18 @@ function SaveRegressionCaseForm({
             className="max-h-80 min-h-40 overflow-y-auto text-sm"
             disabled={save.isPending}
             id="regression-case-expected"
-            maxLength={MAX_EXPECTED_RESULT_LENGTH}
+            maxLength={MAX_REGRESSION_EXPECTED_RESULT_LENGTH}
             onChange={(event) => setExpected(event.target.value)}
             rows={8}
             value={expected}
           />
+          {cut === null ? null : (
+            <p className="text-muted-foreground text-sm" role="status">
+              The reply was cut to{" "}
+              {MAX_REGRESSION_EXPECTED_RESULT_LENGTH.toLocaleString()}{" "}
+              characters.
+            </p>
+          )}
           {save.error ? (
             <p
               className="rounded-md bg-destructive/10 px-3 py-2.5 text-destructive text-sm"
@@ -137,7 +161,7 @@ function SaveRegressionCaseForm({
         <DialogFooter className="gap-3 border-t-0 bg-transparent pt-0 sm:justify-end">
           <Button
             disabled={save.isPending}
-            onClick={onDone}
+            onClick={onCancel}
             type="button"
             variant="outline"
           >
@@ -166,7 +190,7 @@ export function RegressionCasesList({ profileId }: { profileId: string }) {
     return <p className="text-muted-foreground text-sm">Loading test cases…</p>;
   }
 
-  if (query.error) {
+  if (!query.data) {
     return (
       <p className="text-destructive text-sm" role="alert">
         {formatError(query.error)}
@@ -174,9 +198,17 @@ export function RegressionCasesList({ profileId }: { profileId: string }) {
     );
   }
 
-  const cases = query.data.pages.flatMap((page) => page.cases);
+  // Offset paging repeats a row when a case is saved between pages
+  const cases = [
+    ...new Map(
+      query.data.pages
+        .flatMap((page) => page.cases)
+        .map((item) => [item.id, item])
+    ).values(),
+  ];
 
-  if (cases.length === 0) {
+  // A page can filter to nothing (other members' private cases), so empty needs the last page
+  if (cases.length === 0 && !query.hasNextPage && !query.error) {
     return (
       <p className="text-muted-foreground text-sm">
         No test cases yet. Save one from a finished chat or automation run.
@@ -206,13 +238,26 @@ export function RegressionCasesList({ profileId }: { profileId: string }) {
           </li>
         ))}
       </ul>
-      {query.hasNextPage ? (
+      {query.error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {formatError(query.error)}
+        </p>
+      ) : null}
+      {query.hasNextPage || query.error ? (
         <Button
-          disabled={query.isFetchingNextPage}
-          onClick={() => void query.fetchNextPage()}
+          disabled={query.isFetching}
+          onClick={() =>
+            void (query.hasNextPage ? query.fetchNextPage() : query.refetch())
+          }
           variant="outline"
         >
-          {query.isFetchingNextPage ? <Spinner className="size-4" /> : "Load more"}
+          {query.isFetching ? (
+            <Spinner className="size-4" />
+          ) : query.hasNextPage ? (
+            "Load more"
+          ) : (
+            "Retry"
+          )}
         </Button>
       ) : null}
     </div>

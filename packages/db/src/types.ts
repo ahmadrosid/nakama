@@ -1139,9 +1139,6 @@ export interface DatabaseAdapter {
     id: string
   ): Promise<StoredComposioUserConnectionRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
-  getLastUserMessageForSession(
-    sessionId: string
-  ): Promise<StoredSessionMessageRecord | null>;
 
   getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
   getManagedSecret(
