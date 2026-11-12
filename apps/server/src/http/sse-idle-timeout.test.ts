@@ -142,6 +142,31 @@ describe("disableBunIdleTimeoutForLongHeldRequest", () => {
   });
 });
 
+test("a regression case rerun stays open until the run ends", () => {
+  for (const [path, method, expected] of [
+    ["/v1/profiles/agent_1/regression-cases/regcase_1/runs", "POST", [0]],
+    [
+      "/v1/profiles/agent_1/regression-cases/regcase_1/runs/regrun_1",
+      "PATCH",
+      [],
+    ],
+    ["/v1/profiles/agent_1/regression-cases/regcase_1", "GET", []],
+  ] as const) {
+    const calls: number[] = [];
+
+    disableBunIdleTimeoutForLongHeldRequest(
+      new Request(`http://localhost${path}`, { method }),
+      {
+        timeout(_request, seconds) {
+          calls.push(seconds);
+        },
+      }
+    );
+
+    expect(calls).toEqual([...expected]);
+  }
+});
+
 test("plugin action and official install connections stay open until completion", () => {
   for (const path of [
     "/v1/plugins/workflows/actions/run_workflow",

@@ -14,7 +14,7 @@ function createApp() {
   agent.runRegressionCase = async ({ input, orgId, profileId }) => {
     sent.push({ input, orgId, profileId });
 
-    return "Health check failed on the new pods.";
+    return { error: null, output: "Health check failed on the new pods." };
   };
 
   return {
@@ -128,23 +128,100 @@ describe("regression case run routes", () => {
     ).toMatchObject({ verdict: "pass", verdictByUserId: admin.userId });
   });
 
-  test("a rerun that throws is stored as failed with its error", async () => {
+  test("a run that fails after it starts is stored and cannot be marked", async () => {
     const { agent, app, databaseAdapter } = createApp();
     const admin = await seedOrgAdmin(databaseAdapter, { profileId: "agent_1" });
     const caseId = await seedCase(databaseAdapter, admin.orgId, "agent_1");
     const call = await signIn(app, admin);
 
     agent.runRegressionCase = () =>
-      Promise.reject(new Error("Provider is not configured."));
+      Promise.resolve({ error: "The rerun failed.", output: null });
 
     const rerun = await call(`agent_1/regression-cases/${caseId}/runs`, "POST");
 
     expect(rerun.status).toBe(201);
-    expect((await rerun.json()).run).toMatchObject({
-      error: "Provider is not configured.",
-      output: null,
-      status: "failed",
+
+    const { run } = await rerun.json();
+
+    expect(run).toMatchObject({ output: null, status: "failed" });
+
+    const mark = await call(
+      `agent_1/regression-cases/${caseId}/runs/${run.id}`,
+      "PATCH",
+      { verdict: "pass" }
+    );
+
+    expect(mark.status).toBe(409);
+    expect(
+      await databaseAdapter.getRegressionCaseRun(admin.orgId, caseId, run.id)
+    ).toMatchObject({ verdict: null });
+  });
+
+  test("a second rerun of the same case waits for the first", async () => {
+    const { agent, app, databaseAdapter } = createApp();
+    const admin = await seedOrgAdmin(databaseAdapter, { profileId: "agent_1" });
+    const caseId = await seedCase(databaseAdapter, admin.orgId, "agent_1");
+    const call = await signIn(app, admin);
+    let finish = () => {};
+
+    agent.runRegressionCase = () =>
+      new Promise((resolve) => {
+        finish = () => resolve({ error: null, output: "Done." });
+      });
+
+    const first = call(`agent_1/regression-cases/${caseId}/runs`, "POST");
+
+    await Bun.sleep(10);
+
+    const second = await call(
+      `agent_1/regression-cases/${caseId}/runs`,
+      "POST"
+    );
+
+    expect(second.status).toBe(409);
+
+    finish();
+    expect((await first).status).toBe(201);
+
+    agent.runRegressionCase = () =>
+      Promise.resolve({ error: null, output: "Again." });
+
+    expect(
+      (await call(`agent_1/regression-cases/${caseId}/runs`, "POST")).status
+    ).toBe(201);
+  });
+
+  test("an ACP agent profile is refused and no run is stored", async () => {
+    const databaseAdapter = createInMemoryDatabaseAdapter();
+    const agent = new AgentService(null, null, databaseAdapter);
+
+    // A configured provider leaves the ACP check as the only refusal.
+    Reflect.set(agent, "_providerConfigured", true);
+
+    const { app } = createMinimalHonoApp({
+      agent,
+      authService: new AuthService(),
+      databaseAdapter,
     });
+
+    const admin = await seedOrgAdmin(databaseAdapter, { profileId: "agent_1" });
+
+    const profile = await databaseAdapter.getProfileForOrg(
+      "agent_1",
+      admin.orgId
+    );
+
+    await databaseAdapter.upsertProfile({
+      ...profile!,
+      acpAgent: { args: [], command: "opencode" },
+    });
+
+    const caseId = await seedCase(databaseAdapter, admin.orgId, "agent_1");
+    const call = await signIn(app, admin);
+
+    const rerun = await call(`agent_1/regression-cases/${caseId}/runs`, "POST");
+
+    expect(rerun.status).toBe(409);
   });
 
   test("a member of another org cannot rerun or mark the case", async () => {

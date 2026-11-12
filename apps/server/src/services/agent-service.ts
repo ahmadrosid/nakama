@@ -185,6 +185,7 @@ import {
   loadUserVisionSettings,
   loadWebSearchSettingsPublic,
   loadWhatsAppSettingsPublic,
+  MODEL_CONNECTION_CLOSED_MESSAGE,
   messageContentHasImages,
   NakamaApiError,
   nanoid,
@@ -192,6 +193,7 @@ import {
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
+  ProviderStreamInterruptedError,
   parseAgentChannel,
   parseSentryDsn,
   partitionTools,
@@ -438,6 +440,7 @@ import {
 import {
   type OneShotKind,
   READ_ONLY_TOOL_NAMES,
+  REPLAYABLE_TOOL_NAMES,
   refuseToolsOutside,
   type TurnKind,
   turnPolicy,
@@ -2209,6 +2212,14 @@ export class AgentService {
     const orgRole = policy.orgRole ?? input.orgRole;
     const profile = await this.requireExecutionProfile(orgId, profileId);
 
+    // An ACP agent runs its own tools, past the read-only gate.
+    if (policy.tools?.readOnly && profile.acpAgent) {
+      throw new NakamaApiError(
+        "An ACP agent profile cannot be rerun read-only.",
+        409
+      );
+    }
+
     const tools = policy.tools
       ? [
           ...(await this.resolveProfileTools(profile, kind, {
@@ -2302,7 +2313,7 @@ export class AgentService {
 
         if (step.status !== "completed" || result === null) {
           const value =
-            REPLAYABLE_AUTOMATION_TOOLS.has(step.toolName) &&
+            REPLAYABLE_TOOL_NAMES.has(step.toolName) &&
             tools.some((item) => item.name === step.toolName)
               ? await executeToolCall(
                   tools,
@@ -2439,46 +2450,100 @@ export class AgentService {
   }
 
   /**
-   * Sends a saved case's input once to its profile's current config and
-   * returns the reply. Tools that may change data refuse instead of running.
+   * Sends a saved case's input once to its profile's current config. Tools
+   * outside the read-only list refuse instead of running. Throws only when the
+   * run is refused; a run that fails, ends early or gives no reply resolves
+   * with `error`.
    */
   async runRegressionCase(input: {
     input: string;
     orgId: string;
     profileId: string;
+    /** The caller's request; it ends the run when the caller goes away. */
+    signal?: AbortSignal;
     userId: string;
-  }): Promise<string> {
-    const profile = await this.requireExecutionProfile(
-      input.orgId,
-      input.profileId
-    );
+  }): Promise<
+    { error: string; output: null } | { error: null; output: string }
+  > {
+    // The deadline and the caller's signal cover setup too, so a hung tool or
+    // prompt lookup cannot hold the request and the case lock open.
+    const timeout = AbortSignal.timeout(REGRESSION_RERUN_TIMEOUT_MS);
+    const signals = { caller: input.signal, timeout };
 
-    // An ACP agent runs its own tools, past the read-only gate.
-    if (profile.acpAgent) {
-      throw new NakamaApiError(
-        "An ACP agent profile cannot be rerun read-only.",
-        409
-      );
-    }
+    const signal = input.signal
+      ? AbortSignal.any([input.signal, timeout])
+      : timeout;
 
-    if (!this._providerConfigured) {
-      throw new Error("Provider is not configured.");
-    }
+    // Setup or a harness that ignores the signal is not waited for.
+    const aborted = new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason);
+      }
 
-    const { chat, close } = await this.openOneShotChat("regression_rerun", {
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    });
+
+    // The loser of a race settles later with no one listening.
+    aborted.catch(() => undefined);
+
+    // This refuses an ACP agent profile first, which needs no provider.
+    const opening = this.openOneShotChat("regression_rerun", {
       orgId: input.orgId,
       profileId: input.profileId,
       userId: input.userId,
     });
 
-    try {
-      const reply = await chat.sendStream(
-        input.input,
-        { onChunk() {} },
-        { signal: AbortSignal.timeout(REGRESSION_RERUN_TIMEOUT_MS) }
-      );
+    // A chat that opens after the run gave up still ends its ACP access.
+    opening.then(
+      ({ close }) => {
+        if (signal.aborted) {
+          close();
+        }
+      },
+      (error) => {
+        if (signal.aborted) {
+          console.error("Regression rerun setup failed after it ended:", error);
+        }
+      }
+    );
 
-      return reply.trim();
+    let opened: Awaited<typeof opening>;
+
+    try {
+      opened = await Promise.race([opening, aborted]);
+    } catch (error) {
+      // Setup refused the run, as for an ACP profile or a missing profile.
+      if (!signal.aborted) {
+        throw error;
+      }
+
+      return { error: regressionRerunError(error, signals), output: null };
+    }
+
+    const { chat, close } = opened;
+
+    if (!this._providerConfigured) {
+      close();
+      throw new NakamaApiError("Provider is not configured.", 409);
+    }
+
+    try {
+      const sent = chat.sendStream(input.input, { onChunk() {} }, { signal });
+
+      sent.catch(() => undefined);
+
+      const reply = (await Promise.race([sent, aborted])).trim();
+
+      // No reply is no answer to judge, so the run is stored as failed.
+      if (!reply) {
+        return { error: "The rerun ended with no reply.", output: null };
+      }
+
+      return { error: null, output: reply };
+    } catch (error) {
+      return { error: regressionRerunError(error, signals), output: null };
     } finally {
       close();
     }
@@ -6286,8 +6351,7 @@ export class AgentService {
         storedTools.some(
           (record) =>
             record.name === tool.name &&
-            (record.handlerType === "builtin" ||
-              record.handlerType === "browser") &&
+            record.handlerType === "builtin" &&
             READ_ONLY_TOOL_NAMES.has(tool.name)
         )
       )
@@ -7508,21 +7572,39 @@ function parseAutomationToolArguments(serialized: string): AgentJsonRecord {
   return agentJsonRecordSchema.parse(parsed);
 }
 
-// The rerun answers in its request, so it ends before Bun's 255s idle timeout.
-const REGRESSION_RERUN_TIMEOUT_MS = 240_000;
+// The rerun request keeps its socket open, so this is the only deadline.
+const REGRESSION_RERUN_TIMEOUT_MS = 10 * 60_000;
 
-// parallelSafe means concurrent calls are allowed. It does not mean a tool has no side effects.
-const REPLAYABLE_AUTOMATION_TOOLS = new Set([
-  "knowledge_base_search",
-  "list_artifacts",
-  "list_profile_sessions",
-  "read_file",
-  "read_profile_session",
-  "read_session_history",
-  "search_files",
-  "web_fetch",
-  "web_search",
-]);
+/**
+ * What a member sees when a started rerun fails. Provider and tool errors can
+ * hold keys, hosts or paths, so no error message passes through. A provider's
+ * HTTP error is a NakamaApiError too, with the provider's raw body as its text.
+ */
+function regressionRerunError<ErrorValue>(
+  error: ErrorValue,
+  signals: { caller?: AbortSignal; timeout: AbortSignal }
+): string {
+  if (signals.timeout.aborted) {
+    return `The rerun timed out after ${REGRESSION_RERUN_TIMEOUT_MS / 60_000} minutes.`;
+  }
+
+  if (signals.caller?.aborted) {
+    return "The rerun was cancelled.";
+  }
+
+  if (error instanceof ProviderStreamInterruptedError) {
+    return MODEL_CONNECTION_CLOSED_MESSAGE;
+  }
+
+  // Providers map their own 429 to 502, so a 429 is the org's LLM quota.
+  if (error instanceof NakamaApiError && error.status === 429) {
+    return "The monthly LLM quota is reached.";
+  }
+
+  console.error("Regression rerun failed:", error);
+
+  return "The rerun failed. An admin can find the cause in the server log.";
+}
 
 function warnStepWrite(error: Error | string): void {
   console.warn(

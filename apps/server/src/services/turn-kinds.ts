@@ -132,7 +132,7 @@ const TURN_POLICIES: Record<TurnKind, TurnPolicy> = {
     channel: "automation",
     instructions: [],
     orgRole: "member",
-    tools: { ...DELEGATED_TOOLS, memoryWrite: false, readOnly: true },
+    tools: { ...DELEGATED_TOOLS, readOnly: true },
   },
   sub_agent: {
     channel: "subagent",
@@ -167,15 +167,32 @@ export function withTurnInstructions(
     : prompt;
 }
 
-/** Platform tools a read-only turn may run, matched only on trusted sources. */
+/**
+ * Platform tools that only read and keep their result inside the run. A
+ * read-only turn runs these, matched only on trusted sources.
+ */
 export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "browser_read",
   "extract_document_text",
   "knowledge_base_search",
+  "list_artifacts",
   "org_memory_search",
   "read_file",
   "search_files",
   "web_search",
+]);
+
+/**
+ * Tools a resumed automation may run again after a cut-off call. These also
+ * only read, but a rerun refuses the extra ones: web_fetch can send data to
+ * any host, and the session readers show the caller's own chats in an output
+ * that other members can read.
+ */
+export const REPLAYABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  ...READ_ONLY_TOOL_NAMES,
+  "list_profile_sessions",
+  "read_profile_session",
+  "read_session_history",
+  "web_fetch",
 ]);
 
 /**
@@ -195,7 +212,7 @@ export function refuseToolsOutside(
           hosted: false,
           async run() {
             return {
-              error: `Refused: ${tool.name} can change data, so it does not run during a regression rerun.`,
+              error: `Refused: ${tool.name} is not a read-only tool, so it does not run during a regression rerun.`,
             };
           },
         }
