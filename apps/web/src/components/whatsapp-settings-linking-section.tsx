@@ -114,7 +114,7 @@ export function WhatsAppPairPhoneRow({
       <SettingsRow
         description={
           pairingCode
-            ? "The code works for 10 minutes."
+            ? "The code works for 10 minutes and replaces the phone paired before."
             : "Use this when the agent has its own number."
         }
         label="Chat from your own WhatsApp"
