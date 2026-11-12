@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { CreateProviderRequest } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ComponentProps } from "react";
@@ -9,10 +9,11 @@ import {
   type AuthContextValue,
 } from "@/context/auth-context-shared";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
+import { client } from "@/lib/client";
 import { PROVIDER_OPTIONS } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 import { ProviderSelect } from "./ProviderSelect";
-import { ProviderSetupForm } from "./ProviderSetupForm";
+import { ProviderSetupForm, ProviderSetupFormBody } from "./ProviderSetupForm";
 
 let container: HTMLDivElement;
 
@@ -135,18 +136,95 @@ test("switching to a provider with no models does not save the last provider's m
 
   await act(async () => form?.handleProviderSelect("minimax"));
   await act(async () => form?.handleApiKeyChange("test-key"));
+
+  /* SAFETY: handleSubmit calls only preventDefault on the event. */
+  const submit = { preventDefault: () => undefined } as never;
+
+  await act(async () => form?.handleSubmit(submit));
+
+  // The server rejects a discovery provider with no model, so Add stops here.
+  expect(requests).toHaveLength(0);
+  expect(form?.modelsError).not.toBeNull();
+
   await act(async () =>
-    form?.handleSubmit(
-      /* SAFETY: handleSubmit calls only preventDefault on the event. */
-      { preventDefault: () => undefined } as never
+    form?.handleCustomModelsChange([{ id: "MiniMax-M3", name: "" }])
+  );
+  await act(async () => form?.handleSubmit(submit));
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    customModels: [{ default: true, id: "MiniMax-M3" }],
+    model: "MiniMax-M3",
+    type: "minimax",
+  });
+
+  queryClient.clear();
+});
+
+test("setup lists a discovery provider's models with the typed key", async () => {
+  const discover = spyOn(client, "discoverModels").mockResolvedValue(
+    /* SAFETY: The browse list reads only customModels from the response. */
+    { customModels: [{ id: "llama-4-scout" }] } as never
+  );
+
+  let form!: ReturnType<typeof useProviderSetupForm>;
+
+  function Harness() {
+    form = useProviderSetupForm();
+
+    return <ProviderSetupFormBody form={form} showModelPicker={false} />;
+  }
+
+  await act(async () =>
+    root.render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The form reads only isAuthenticated before anything is submitted. */
+            { isAuthenticated: false } as AuthContextValue
+          }
+        >
+          <AppContext.Provider
+            value={
+              /* SAFETY: createProvider is only called on submit, which this test never does. */
+              {
+                createProvider: () => Promise.reject(new Error("unused")),
+              } as never
+            }
+          >
+            <Harness />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
     )
   );
 
-  expect(requests).toHaveLength(1);
-  expect(requests[0]).toMatchObject({ type: "minimax" });
-  expect(requests[0]).not.toHaveProperty("model");
+  try {
+    await act(async () => form.handleProviderSelect("groq"));
+    await act(async () => form.handleApiKeyChange("gsk_test"));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
 
-  queryClient.clear();
+    expect(container.querySelector('label[for="provider-models"]')).not.toBe(
+      null
+    );
+    expect(discover.mock.calls).toEqual([
+      [
+        {
+          apiKey: "gsk_test",
+          baseUrl: "https://api.groq.com/openai/v1",
+          provider: "openai_compatible",
+        },
+      ],
+    ]);
+  } finally {
+    discover.mockRestore();
+  }
 });
 
 test("the provider picker lists only providers", async () => {
