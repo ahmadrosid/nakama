@@ -175,7 +175,7 @@ describe("Meet capture socket on the main server", () => {
     expect((await status.json()).captureProtocol).toBe(3);
   });
 
-  test("cookie start-capture returns the main server socket with no query and opens no other port", async () => {
+  test("only a Meet key starts a capture, on the main server socket, and no other port opens", async () => {
     // Before v0.3 this variable put a second listener on this port.
     const probe = Bun.listen({
       hostname: "127.0.0.1",
@@ -190,20 +190,20 @@ describe("Meet capture socket on the main server", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => undefined);
 
     try {
-      const { action, admin } = await serveCapture();
+      const { action, admin, origin, start } = await serveCapture();
 
-      const response = await action(admin, "start-capture", {
+      // A browser session cannot start a capture; only a Meet key can.
+      const cookie = await action(admin, "start-capture", {
         url: "https://meet.google.com/abc-defg-hij",
       });
 
-      expect(response.status).toBe(200);
+      expect(cookie.status).toBe(404);
 
-      const { capture } = z
-        .object({ capture: z.object({ token: z.string(), url: z.string() }) })
-        .parse(await response.json());
+      const started = await start();
 
-      expect(capture.url).toBe("ws://localhost:4310/v1/meet/capture");
-      expect(capture.url).not.toContain(capture.token);
+      expect(started.captureUrl).toBe(
+        `${origin.replace(/^http:/, "ws:")}/v1/meet/capture`
+      );
       await expect(fetch(`http://127.0.0.1:${port}/capture`)).rejects.toThrow();
     } finally {
       warn.mockRestore();

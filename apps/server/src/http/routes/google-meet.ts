@@ -227,6 +227,11 @@ async function readMeetInput<Action extends keyof typeof meetingActionSchemas>(
 
 export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
   for (const [action, schema] of Object.entries(meetingActionSchemas)) {
+    // Only a Meet key starts a capture, through /v1/meet/extension/start.
+    if (action === "start-capture") {
+      continue;
+    }
+
     app.openAPIRegistry.registerPath(
       createRoute({
         method: "post",
@@ -273,7 +278,10 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
     // SAFETY: The validated value satisfies the contract checked by this assertion.
     const action = c.req.param("actionKey") as MeetAction;
 
-    if (!Object.hasOwn(meetingActionSchemas, action)) {
+    if (
+      !Object.hasOwn(meetingActionSchemas, action) ||
+      action === "start-capture"
+    ) {
       throw new NakamaApiError("Unknown meeting action", 404);
     }
 
@@ -293,8 +301,7 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
           id: auth.user.id,
           role: auth.orgRole === "admin" ? "admin" : "member",
         },
-        c.req.raw.signal,
-        captureSocketUrl(c.req.raw)
+        c.req.raw.signal
       )
     );
   });
