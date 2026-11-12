@@ -8,7 +8,11 @@ import {
   type ProviderName,
   type StreamChatHandlers,
 } from "@nakama/core";
-import { buildProviderResponseError, buildTokenUsage } from "../shared";
+import {
+  buildProviderHttpError,
+  buildProviderResponseError,
+  buildTokenUsage,
+} from "../shared";
 import {
   buildAnthropicThinkingRequest,
   continueAnthropicUntilDone,
@@ -44,6 +48,17 @@ function createAnthropicClient(
 }
 
 function formatAnthropicError(error: Error, label: string): Error {
+  // Same mapping as the other adapters, so the user reads the provider's
+  // reason instead of a generic server error. Aborts and dropped connections
+  // carry no status and keep the plain error below.
+  if (error instanceof APIError && error.status !== undefined) {
+    return buildProviderHttpError(
+      label,
+      error.status,
+      error.error ? JSON.stringify(error.error) : error.message
+    );
+  }
+
   if (error instanceof APIError) {
     return new Error(
       `${label} request failed (${error.status}): ${error.message}`
