@@ -782,13 +782,20 @@ export async function syncWhatsAppOwnerPairing(
   const ownerPhone = isPhoneJid ? whatsAppUserDigits(options.ownerJid) : "";
   const ownerLid = options.ownerLid?.trim() || null;
 
+  // The first QR link pairs the owner and retires the setup code. After that,
+  // a live code invites another phone. Saving it restarts the worker, so this
+  // sync must not retire it on reconnect.
+  const keepPairingCode =
+    config.pairedJid !== null && hasActivePairingCode(config);
+
   const next: WhatsAppConfigFile = {
     ...config,
     pairedJid: config.pairedJid ?? options.ownerJid,
     // Preserve an existing chat LID. `me.lid` can be a device/account LID, which
     // does not always match the private self-chat JID used for inbound messages.
     pairedLid: config.pairedLid ?? ownerLid,
-    ...SPENT_PAIRING_SECRET,
+    pairingCode: keepPairingCode ? config.pairingCode : null,
+    pairingCodeExpiresAt: keepPairingCode ? config.pairingCodeExpiresAt : null,
     phoneNumber: ownerPhone || config.phoneNumber,
   };
 

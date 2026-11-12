@@ -5,8 +5,10 @@ import { ChannelIdentityInUseError } from "./channel-config-shared";
 import { withTempHomedir } from "./testing/channel-config-fixtures";
 import {
   loadWhatsAppConfigFile,
+  regenerateWhatsAppPairingCode,
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
+  verifyAndPairWhatsAppUser,
 } from "./whatsapp-config";
 
 describe("syncWhatsAppOwnerPairing", () => {
@@ -68,6 +70,33 @@ describe("syncWhatsAppOwnerPairing", () => {
       const saved = await loadWhatsAppConfigFile();
       expect(saved?.pairedJid).toBe("6281379292556@s.whatsapp.net");
       expect(saved?.pairedLid).toBe("236283431522503@lid");
+      expect(saved?.pairingCode).toBeNull();
+    });
+  });
+
+  test("a live code survives a reconnect and pairs another phone", async () => {
+    await withTempHomedir("nakama-core-wa-sync-", async () => {
+      await saveWhatsAppConfig({ profileId: "default" });
+      await syncWhatsAppOwnerPairing({
+        ownerJid: "6281379292556:12@s.whatsapp.net",
+      });
+      const { pairingCode } = await regenerateWhatsAppPairingCode();
+
+      // Saving the code restarts the worker, which syncs the owner again.
+      await syncWhatsAppOwnerPairing({
+        ownerJid: "6281379292556:13@s.whatsapp.net",
+      });
+
+      expect(pairingCode).not.toBeNull();
+
+      const paired = await verifyAndPairWhatsAppUser(
+        pairingCode ?? "",
+        "6289876543210@s.whatsapp.net"
+      );
+
+      expect(paired.ok).toBe(true);
+      const saved = await loadWhatsAppConfigFile();
+      expect(saved?.pairedJid).toBe("6289876543210@s.whatsapp.net");
       expect(saved?.pairingCode).toBeNull();
     });
   });
