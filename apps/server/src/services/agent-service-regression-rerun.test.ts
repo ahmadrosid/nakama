@@ -140,14 +140,15 @@ describe("regression rerun tools", () => {
     ).rejects.toMatchObject({ status: 409 });
   });
 
-  test("a started run that fails resolves without the provider's error", async () => {
+  test("a run that fails, gives no reply or loses its caller resolves as failed", async () => {
     const db = createInMemoryDatabaseAdapter();
     const profile = createDefaultProfile();
 
     await db.upsertProfile(profile);
 
     const service = new AgentService(null, null, db);
-    let hang = false;
+    let mode: "empty" | "provider_hang" | "reject" | "setup_hang" = "reject";
+    let leave = () => undefined;
 
     Object.assign(service, {
       _providerConfigured: true,
@@ -155,22 +156,41 @@ describe("regression rerun tools", () => {
         provider: {
           name: "openai",
           streamChat() {
-            // A provider that ignores the abort signal.
+            if (mode === "provider_hang") {
+              // A provider that ignores the abort signal.
+              leave();
+
+              return new Promise(() => undefined);
+            }
+
+            if (mode === "empty") {
+              return Promise.resolve({
+                assistantMessage: { content: " ", role: "assistant" },
+                content: " ",
+                toolCalls: [],
+              });
+            }
+
             // The real adapters wrap the provider's raw body in a NakamaApiError.
-            return hang
-              ? new Promise(() => undefined)
-              : Promise.reject(
-                  buildProviderHttpError(
-                    "OpenAI",
-                    401,
-                    '{"error":{"message":"Incorrect API key provided: sk-secret"}}'
-                  )
-                );
+            return Promise.reject(
+              buildProviderHttpError(
+                "OpenAI",
+                401,
+                '{"error":{"message":"Incorrect API key provided: sk-secret"}}'
+              )
+            );
           },
         },
       }),
-      resolveProfileSystemPrompt: () =>
-        Promise.resolve({ soulActive: false, systemPrompt: "Test" }),
+      resolveProfileSystemPrompt: () => {
+        if (mode === "setup_hang") {
+          leave();
+
+          return new Promise(() => undefined);
+        }
+
+        return Promise.resolve({ soulActive: false, systemPrompt: "Test" });
+      },
     });
 
     const rerun = (signal?: AbortSignal) =>
@@ -187,13 +207,24 @@ describe("regression rerun tools", () => {
     expect(failed.output).toBeNull();
     expect(failed.error).not.toContain("sk-secret");
 
-    hang = true;
+    // No reply is no answer, so it cannot be marked pass.
+    mode = "empty";
+    expect(await rerun()).toMatchObject({
+      error: expect.any(String),
+      output: null,
+    });
 
-    const controller = new AbortController();
-    const pending = rerun(controller.signal);
+    // A caller that leaves is not kept waiting, in the run or in its setup.
+    for (const stall of ["provider_hang", "setup_hang"] as const) {
+      const controller = new AbortController();
 
-    controller.abort();
+      mode = stall;
+      leave = () => controller.abort();
 
-    expect((await pending).output).toBeNull();
+      expect(await rerun(controller.signal)).toMatchObject({
+        error: expect.any(String),
+        output: null,
+      });
+    }
   });
 });

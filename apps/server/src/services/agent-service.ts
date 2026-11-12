@@ -2452,7 +2452,8 @@ export class AgentService {
   /**
    * Sends a saved case's input once to its profile's current config. Tools
    * outside the read-only list refuse instead of running. Throws only when the
-   * run cannot start; a run that fails after it starts resolves with `error`.
+   * run is refused; a run that fails, ends early or gives no reply resolves
+   * with `error`.
    */
   async runRegressionCase(input: {
     input: string;
@@ -2464,53 +2465,85 @@ export class AgentService {
   }): Promise<
     { error: string; output: null } | { error: null; output: string }
   > {
+    // The deadline and the caller's signal cover setup too, so a hung tool or
+    // prompt lookup cannot hold the request and the case lock open.
+    const timeout = AbortSignal.timeout(REGRESSION_RERUN_TIMEOUT_MS);
+    const signals = { caller: input.signal, timeout };
+
+    const signal = input.signal
+      ? AbortSignal.any([input.signal, timeout])
+      : timeout;
+
+    // Setup or a harness that ignores the signal is not waited for.
+    const aborted = new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason);
+      }
+
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    });
+
+    // The loser of a race settles later with no one listening.
+    aborted.catch(() => undefined);
+
     // This refuses an ACP agent profile first, which needs no provider.
-    const { chat, close } = await this.openOneShotChat("regression_rerun", {
+    const opening = this.openOneShotChat("regression_rerun", {
       orgId: input.orgId,
       profileId: input.profileId,
       userId: input.userId,
     });
+
+    // A chat that opens after the run gave up still ends its ACP access.
+    opening.then(
+      ({ close }) => {
+        if (signal.aborted) {
+          close();
+        }
+      },
+      (error) => {
+        if (signal.aborted) {
+          console.error("Regression rerun setup failed after it ended:", error);
+        }
+      }
+    );
+
+    let opened: Awaited<typeof opening>;
+
+    try {
+      opened = await Promise.race([opening, aborted]);
+    } catch (error) {
+      // Setup refused the run, as for an ACP profile or a missing profile.
+      if (!signal.aborted) {
+        throw error;
+      }
+
+      return { error: regressionRerunError(error, signals), output: null };
+    }
+
+    const { chat, close } = opened;
 
     if (!this._providerConfigured) {
       close();
       throw new NakamaApiError("Provider is not configured.", 409);
     }
 
-    const timeout = AbortSignal.timeout(REGRESSION_RERUN_TIMEOUT_MS);
-
-    const signal = input.signal
-      ? AbortSignal.any([input.signal, timeout])
-      : timeout;
-
     try {
       const sent = chat.sendStream(input.input, { onChunk() {} }, { signal });
 
-      // A harness that ignores the signal is not waited for.
-      const aborted = new Promise<never>((_, reject) => {
-        if (signal.aborted) {
-          reject(signal.reason);
-        }
-
-        signal.addEventListener("abort", () => reject(signal.reason), {
-          once: true,
-        });
-      });
-
-      // The loser of the race settles later with no one listening.
       sent.catch(() => undefined);
-      aborted.catch(() => undefined);
 
-      const reply = await Promise.race([sent, aborted]);
+      const reply = (await Promise.race([sent, aborted])).trim();
 
-      return { error: null, output: reply.trim() };
+      // No reply is no answer to judge, so the run is stored as failed.
+      if (!reply) {
+        return { error: "The rerun ended with no reply.", output: null };
+      }
+
+      return { error: null, output: reply };
     } catch (error) {
-      return {
-        error: regressionRerunError(error, {
-          cancelled: input.signal?.aborted === true,
-          timedOut: timeout.aborted,
-        }),
-        output: null,
-      };
+      return { error: regressionRerunError(error, signals), output: null };
     } finally {
       close();
     }
@@ -7539,13 +7572,13 @@ const REGRESSION_RERUN_TIMEOUT_MS = 10 * 60_000;
  */
 function regressionRerunError<ErrorValue>(
   error: ErrorValue,
-  ended: { cancelled: boolean; timedOut: boolean }
+  signals: { caller?: AbortSignal; timeout: AbortSignal }
 ): string {
-  if (ended.timedOut) {
+  if (signals.timeout.aborted) {
     return `The rerun timed out after ${REGRESSION_RERUN_TIMEOUT_MS / 60_000} minutes.`;
   }
 
-  if (ended.cancelled) {
+  if (signals.caller?.aborted) {
     return "The rerun was cancelled.";
   }
 
