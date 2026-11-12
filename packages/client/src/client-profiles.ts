@@ -21,6 +21,7 @@ import type {
   MoveProfileRequest,
   PatchSkillRequest,
   ProfileResponse,
+  RegressionCaseResponse,
   RunToolRequest,
   RunToolResponse,
   SkillFileResponse,
@@ -78,6 +79,27 @@ export class ProfilesClient extends SettingsClient {
 
     return this.request<ListProfileChangeHistoryResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/history${suffix}`
+    );
+  }
+
+  async rerunRegressionCase(
+    profileId: string,
+    caseId: string
+  ): Promise<RegressionCaseResponse> {
+    return this.request<RegressionCaseResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/regression-cases/${encodeURIComponent(caseId)}/rerun`,
+      { method: "POST" }
+    );
+  }
+
+  async markRegressionCase(
+    profileId: string,
+    caseId: string,
+    mark: "pass" | "fail"
+  ): Promise<RegressionCaseResponse> {
+    return this.request<RegressionCaseResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/regression-cases/${encodeURIComponent(caseId)}/mark`,
+      { body: JSON.stringify({ mark }), method: "POST" }
     );
   }
 
