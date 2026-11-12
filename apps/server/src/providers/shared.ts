@@ -507,6 +507,12 @@ export function buildProviderResponseError(message: string): NakamaApiError {
   return new NakamaApiError(message, 502);
 }
 
+// Account refusals that some providers send without a 401/402/403: OpenAI
+// sends an empty quota as a 429, Anthropic an empty balance as a 400.
+const ACCOUNT_ERROR_KINDS = new Set(["billing_error", "insufficient_quota"]);
+
+const LOW_CREDIT_MESSAGE = /credit balance is too low/i;
+
 /**
  * A rejected API key or an exhausted credit balance is the caller's account to
  * fix, not a Nakama bug: 400 so the global error handler's `status >= 500`
@@ -518,8 +524,19 @@ export function buildProviderHttpError(
   status: number,
   body: string
 ): NakamaApiError {
-  const clientStatus =
-    status === 401 || status === 402 || status === 403 ? 400 : 502;
+  const parsed = parseJsonRecord(body);
+  // Raw bodies nest the error under `error`; OpenAI SDK errors arrive flat.
+  const error = { ...parsed, ...readRecord(parsed.error) };
+
+  const accountRefused =
+    status === 401 ||
+    status === 402 ||
+    status === 403 ||
+    ACCOUNT_ERROR_KINDS.has(readProviderString(error.type) ?? "") ||
+    ACCOUNT_ERROR_KINDS.has(readProviderString(error.code) ?? "") ||
+    LOW_CREDIT_MESSAGE.test(readProviderString(error.message) ?? "");
+
+  const clientStatus = accountRefused ? 400 : 502;
 
   return new NakamaApiError(
     formatHttpErrorBody(label, status, body),

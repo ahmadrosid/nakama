@@ -2263,12 +2263,18 @@ export class PluginService {
       workspaceRoot: input.context.workspaceRoot,
     }).catch((error) => {
       // Plugin code that runs past its deadline failed like plugin code that
-      // throws: the caller gets the reason, and it is not a server bug.
-      if (error instanceof Error && "timedOut" in error) {
-        throw new PluginHostError(
-          "action_failed",
-          safeActionErrorMessage(error.message)
-        );
+      // throws: it is not a server bug. A deadline hit while the host still
+      // owed the plugin an answer is a host failure and keeps the 500 path.
+      if (
+        error instanceof Error &&
+        "timedOut" in error &&
+        "waitingOnHost" in error &&
+        !error.waitingOnHost
+      ) {
+        // The stderr tail is for the operator; members get the reason only.
+        console.warn(error.message);
+
+        throw new PluginHostError("action_failed", `${input.label} timed out.`);
       }
 
       throw error;

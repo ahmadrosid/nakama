@@ -164,14 +164,14 @@ describe("Anthropic provider streaming", () => {
   });
 
   test("a refused request is an API error with a client status for account errors", async () => {
-    const refuse = (status: number) =>
+    const refuse = (status: number, message = "refused") =>
       createAnthropicProvider({
         apiKey: "sk-ant-test",
         fetch: asTestFetch(
           async () =>
             new Response(
               JSON.stringify({
-                error: { message: "refused", type: "invalid_request_error" },
+                error: { message, type: "invalid_request_error" },
                 type: "error",
               }),
               { headers: { "Content-Type": "application/json" }, status }
@@ -187,6 +187,14 @@ describe("Anthropic provider streaming", () => {
 
     await expect(billing).rejects.toBeInstanceOf(NakamaApiError);
     await expect(billing).rejects.toMatchObject({ status: 400 });
+
+    // Anthropic sends an empty balance as a 400, not a 402.
+    const lowCredit = refuse(
+      400,
+      "Your credit balance is too low to access the Anthropic API."
+    );
+
+    await expect(lowCredit).rejects.toMatchObject({ status: 400 });
 
     const invalid = refuse(400);
 
