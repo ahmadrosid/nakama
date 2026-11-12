@@ -182,6 +182,7 @@ describe("Meet capture socket on the main server", () => {
       port: 0,
       socket: { data() {} },
     });
+
     const port = probe.port;
     probe.stop(true);
     const previous = process.env.NAKAMA_MEET_CAPTURE_PORT;
@@ -196,6 +197,7 @@ describe("Meet capture socket on the main server", () => {
       });
 
       expect(response.status).toBe(200);
+
       const { capture } = z
         .object({ capture: z.object({ token: z.string(), url: z.string() }) })
         .parse(await response.json());

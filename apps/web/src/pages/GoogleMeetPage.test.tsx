@@ -620,9 +620,11 @@ test("the status follows the browser keys, not an open tab", async () => {
 
 test("a v0.2 extension action gets the update error and runs nothing", async () => {
   const { invoke } = await mountPage();
+
   const reply = spyOn(window, "postMessage").mockImplementation(
     () => undefined
   );
+
   const before = invoke.mock.calls.length;
 
   const send = (init: MessageEventInit) =>
