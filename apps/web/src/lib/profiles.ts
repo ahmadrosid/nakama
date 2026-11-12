@@ -48,3 +48,15 @@ export function resolveInitialProfileId(
     profiles.find((profile) => profile.isDefault)?.id ?? profiles[0]?.id ?? ""
   );
 }
+
+/** Rerun and mark are member actions; viewers only read the case list. */
+export function canMarkRegressionCase(
+  user: { isPlatformAdmin?: boolean } | null | undefined,
+  orgRole: string | null | undefined
+): boolean {
+  return (
+    user?.isPlatformAdmin === true ||
+    orgRole === "admin" ||
+    orgRole === "member"
+  );
+}
