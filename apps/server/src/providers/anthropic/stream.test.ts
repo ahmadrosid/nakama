@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createAnthropicProvider } from "./index";
 
@@ -160,6 +161,37 @@ describe("Anthropic provider streaming", () => {
     });
     expect(chunks).toEqual(["Hel", "lo"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a refused request is an API error with a client status for account errors", async () => {
+    const refuse = (status: number) =>
+      createAnthropicProvider({
+        apiKey: "sk-ant-test",
+        fetch: asTestFetch(
+          async () =>
+            new Response(
+              JSON.stringify({
+                error: { message: "refused", type: "invalid_request_error" },
+                type: "error",
+              }),
+              { headers: { "Content-Type": "application/json" }, status }
+            )
+        ),
+        model: "claude-sonnet-4-6",
+      }).streamChat(
+        { messages: [{ content: "Hi", role: "user" }], system: "s" },
+        { onChunk: () => undefined }
+      );
+
+    const billing = refuse(402);
+
+    await expect(billing).rejects.toBeInstanceOf(NakamaApiError);
+    await expect(billing).rejects.toMatchObject({ status: 400 });
+
+    const invalid = refuse(400);
+
+    await expect(invalid).rejects.toBeInstanceOf(NakamaApiError);
+    await expect(invalid).rejects.toMatchObject({ status: 502 });
   });
 });
 

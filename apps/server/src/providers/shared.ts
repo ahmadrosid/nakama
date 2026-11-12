@@ -502,22 +502,24 @@ export function formatHttpErrorBody(
   return `${label} request failed (${status}): ${trimmed.slice(0, 500)}`;
 }
 
-/**
- * A rejected API key is the caller's config to fix, not a Nakama bug: 400 so
- * the global error handler's `status >= 500` check never reports it. Anything
- * else from the provider (rate limits, 5xx, timeouts) stays worth seeing.
- */
 /** A provider answered but the answer is unusable. The user sees the message. */
 export function buildProviderResponseError(message: string): NakamaApiError {
   return new NakamaApiError(message, 502);
 }
 
+/**
+ * A rejected API key or an exhausted credit balance is the caller's account to
+ * fix, not a Nakama bug: 400 so the global error handler's `status >= 500`
+ * check never reports it and the chat loop does not retry it. Anything else
+ * from the provider (rate limits, 5xx, timeouts) stays worth seeing.
+ */
 export function buildProviderHttpError(
   label: string,
   status: number,
   body: string
 ): NakamaApiError {
-  const clientStatus = status === 401 || status === 403 ? 400 : 502;
+  const clientStatus =
+    status === 401 || status === 402 || status === 403 ? 400 : 502;
 
   return new NakamaApiError(
     formatHttpErrorBody(label, status, body),

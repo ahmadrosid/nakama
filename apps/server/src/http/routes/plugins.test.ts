@@ -893,6 +893,49 @@ describe("plugin HTTP API", () => {
     );
   });
 
+  test("an action that runs past its deadline fails like an action error", async () => {
+    const { app, authService, databaseAdapter, pluginService } = createApp();
+    const admin = await setupFreshInstallSession(app, databaseAdapter);
+
+    const platform = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    await installRelease(
+      app,
+      platform,
+      pluginBundle("1.0.0", {
+        "actions/list.js":
+          "export async function run() { await new Promise((resolve) => setTimeout(resolve, 60_000)); }",
+      })
+    );
+    await pluginService.addOrgPlugin(admin.orgId!, "notes");
+    const added = await pluginService.getOrgPluginDetail(admin.orgId!, "notes");
+    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added!.revision);
+
+    const previousTimeout = process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
+    process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "1000";
+
+    try {
+      const timedOut = await jsonRequest(
+        app,
+        "/v1/plugins/notes/actions/list",
+        admin,
+        { body: JSON.stringify({ input: {} }), method: "POST" }
+      );
+
+      expect(timedOut.status).toBe(422);
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
+      } else {
+        process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = previousTimeout;
+      }
+    }
+  });
+
   test("cookie-authenticated mutations require CSRF including npm package installs", async () => {
     const { app, authService, databaseAdapter } = createApp();
     await setupFreshInstallSession(app, databaseAdapter);

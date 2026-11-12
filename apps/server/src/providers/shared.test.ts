@@ -261,7 +261,8 @@ describe("buildProviderHttpError", () => {
     expect(error.message).toBe(formatHttpErrorBody("OpenAI", 401, body));
   });
 
-  test("maps a 403 to 400 and every other provider failure to 502", () => {
+  test("maps a 402 or 403 to 400 and every other provider failure to 502", () => {
+    expect(buildProviderHttpError("OpenAI", 402, "").status).toBe(400);
     expect(buildProviderHttpError("OpenAI", 403, "").status).toBe(400);
     expect(buildProviderHttpError("OpenAI", 429, "").status).toBe(502);
     expect(buildProviderHttpError("OpenAI", 500, "").status).toBe(502);

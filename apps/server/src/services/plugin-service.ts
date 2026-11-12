@@ -2261,6 +2261,17 @@ export class PluginService {
             : undefined,
       },
       workspaceRoot: input.context.workspaceRoot,
+    }).catch((error) => {
+      // Plugin code that runs past its deadline failed like plugin code that
+      // throws: the caller gets the reason, and it is not a server bug.
+      if (error instanceof Error && "timedOut" in error) {
+        throw new PluginHostError(
+          "action_failed",
+          safeActionErrorMessage(error.message)
+        );
+      }
+
+      throw error;
     });
 
     const output = pluginRunnerOutputSchema.parse(result);

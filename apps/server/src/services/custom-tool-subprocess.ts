@@ -292,8 +292,11 @@ export async function spawnJsonTool(
 
         if (timedOut) {
           reject(
-            new Error(
-              `${label} timed out after ${timeoutMs}ms (exit code ${exitCode ?? "null"}): ${tail}`
+            Object.assign(
+              new Error(
+                `${label} timed out after ${timeoutMs}ms (exit code ${exitCode ?? "null"}): ${tail}`
+              ),
+              { timedOut: true as const }
             )
           );
 
