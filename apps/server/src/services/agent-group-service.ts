@@ -76,6 +76,28 @@ interface ThreadRun extends AgentGroupRun {
   hop: AbortController | null;
 }
 
+/**
+ * Saves the user's message with its uploads. When the message cannot be saved,
+ * such as on a session deleted meanwhile, its uploads are removed again.
+ */
+function appendUserMessage(
+  orgId: string,
+  session: StoredGroupSession,
+  content: string,
+  rootId: number | undefined,
+  posted: PostedDocument[]
+): void {
+  const workspace = workspaceOfGroup(orgId, session.groupId);
+  const documents = workspace.saveUploads(posted);
+
+  try {
+    appendAgentGroupMessage(orgId, session, null, content, rootId, documents);
+  } catch (error) {
+    workspace.removeUploads(documents.flatMap((d) => d.path ?? d.folder ?? []));
+    throw error;
+  }
+}
+
 export class AgentGroupService {
   // ponytail: run state lives in this process. A restart ends a run (saved
   // replies stay), and with several server instances behind one URL, Stop and
@@ -278,9 +300,8 @@ export class AgentGroupService {
     const root = requireThreadRoot(orgId, sessionId, rootId);
     const key = threadKey(sessionId, rootId);
     const active = this.threadRuns.get(key);
-    const documents = workspaceOfGroup(orgId, groupId).saveUploads(posted);
 
-    appendAgentGroupMessage(orgId, session, null, content, rootId, documents);
+    appendUserMessage(orgId, session, content, rootId, posted);
 
     if (active) {
       active.again = true;
@@ -348,14 +369,15 @@ export class AgentGroupService {
       )
     );
 
-    const run = this.post(
-      orgId,
-      userId,
-      groupId,
-      session.id,
-      content,
-      documents
-    );
+    let run: Promise<void>;
+
+    try {
+      run = this.post(orgId, userId, groupId, session.id, content, documents);
+    } catch (error) {
+      // A first message that cannot be saved leaves no empty chat behind.
+      deleteGroupSession(orgId, userId, groupId, session.id);
+      throw error;
+    }
 
     return { run, session: this.withActive(session) };
   }
@@ -413,17 +435,9 @@ export class AgentGroupService {
   ): Promise<void> {
     const session = requireSession(orgId, userId, groupId, sessionId);
     const active = this.runs.get(sessionId);
-    const documents = workspaceOfGroup(orgId, groupId).saveUploads(posted);
 
     if (active) {
-      appendAgentGroupMessage(
-        orgId,
-        session,
-        null,
-        content,
-        undefined,
-        documents
-      );
+      appendUserMessage(orgId, session, content, undefined, posted);
       active.inbox.push(content);
       // A new message outranks an earlier Stop.
       active.stopping = false;
@@ -453,14 +467,7 @@ export class AgentGroupService {
     this.runs.set(sessionId, run);
 
     try {
-      appendAgentGroupMessage(
-        orgId,
-        session,
-        null,
-        content,
-        undefined,
-        documents
-      );
+      appendUserMessage(orgId, session, content, undefined, posted);
     } catch (error) {
       this.runs.delete(sessionId);
       throw error;

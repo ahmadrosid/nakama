@@ -273,10 +273,14 @@ describe("group attachments", () => {
     expect(existsSync(folder)).toBe(false);
   });
 
-  test("a ZIP with a path outside its folder or a file in place of a folder is rejected", async () => {
+  test("a ZIP whose files cannot all be saved in its folder is rejected", async () => {
     const archives: Zippable[] = [
       { "../escape.txt": strToU8("x") },
       { notes: strToU8("x"), "notes/a.txt": strToU8("y") },
+      // One file on a case-insensitive disk such as macOS or Windows.
+      { "README.md": strToU8("x"), "readme.md": strToU8("y") },
+      { Notes: strToU8("x"), "notes/a.txt": strToU8("y") },
+      { [`${"a".repeat(256)}.txt`]: strToU8("x") },
     ];
 
     for (const files of archives) {
@@ -290,6 +294,27 @@ describe("group attachments", () => {
         ])
       ).rejects.toMatchObject({ status: 400 });
     }
+  });
+
+  test("a first message whose files cannot be saved leaves no chat and no files", async () => {
+    const { service } = setup(() => "ok");
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    // Past the checks of readGroupDocuments, as when the disk refuses a write.
+    expect(() =>
+      service.start(ORG_ID, USER_ID, group.id, "", [
+        { filename: "ok.zip", files: [["ok.txt", strToU8("x")]], text: "" },
+        {
+          filename: "bad.zip",
+          files: [[`${"a".repeat(300)}.txt`, strToU8("x")]],
+          text: "",
+        },
+      ])
+    ).toThrow();
+
+    expect(service.sessions(ORG_ID, USER_ID, group.id)).toEqual([]);
+    expect(readdirSync(uploadsOf(group.id))).toEqual([]);
   });
 
   test("a document of an unsupported type is rejected", async () => {
