@@ -335,6 +335,7 @@ const automationService = new AutomationService(database.adapter, {
   canSendEmail: (profileId, _orgId) =>
     hasAutomationEmailDeliveryPath(database.adapter, profileId),
   getUserTimezone: () => agent.getUserTimezone(),
+  secrets: managedSecrets,
 });
 
 const automationDeliveryService = new AutomationDeliveryService(

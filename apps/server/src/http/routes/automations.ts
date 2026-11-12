@@ -21,6 +21,7 @@ import {
   readJson,
 } from "../shared";
 import type { HonoApp } from "../types";
+import { registerAutomationWebhookRoutes } from "./automation-webhooks";
 
 export function registerAutomationRoutes(
   app: HonoApp,
@@ -88,6 +89,7 @@ export function registerAutomationRoutes(
           timezone: z.string().optional(),
           type: z.literal("runAt"),
         }),
+        z.object({ type: z.literal("webhook") }),
       ]),
     })
     .passthrough()
@@ -129,6 +131,7 @@ export function registerAutomationRoutes(
             timezone: z.string().optional(),
             type: z.literal("runAt"),
           }),
+          z.object({ type: z.literal("webhook") }),
         ])
         .optional(),
     })
@@ -581,5 +584,10 @@ export function registerAutomationRoutes(
 
       throw error;
     }
+  });
+
+  registerAutomationWebhookRoutes(app, options, {
+    automationIdParam,
+    errorSchema,
   });
 }

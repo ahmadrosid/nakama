@@ -95,3 +95,11 @@ export function useRunAutomationMutation() {
       invalidateAutomationQueries(queryClient, automationId),
   });
 }
+
+export function useCreateAutomationWebhookSecretMutation() {
+  // oxlint-disable-next-line react-doctor/query-mutation-missing-invalidation -- No query holds the secret; it is shown once and never refetched.
+  return useMutation({
+    mutationFn: (automationId: string) =>
+      client.createAutomationWebhookSecret(automationId),
+  });
+}

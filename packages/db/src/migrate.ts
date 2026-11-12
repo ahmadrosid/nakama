@@ -81,6 +81,8 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  atomic(migrateAutomationWebhookDeliveriesTable);
+  atomic(migrateAutomationWebhookSecretsTable);
   atomic(migrateRegressionCasesTable);
   atomic(migrateRegressionCaseRunsTable);
   atomic(migrateManagedSecretsTable);
@@ -97,6 +99,12 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateProfileSharedWithTeamColumn);
   atomic(migrateSessionOwners);
   atomic(migrateGenerateImageDefaultOn);
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "automation_runs", "source")
+  );
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "automation_runs", "input")
+  );
 }
 
 /**
@@ -2600,6 +2608,37 @@ CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
 
 CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
   ON notification_webhook_deliveries (created_at);
+  `);
+}
+
+function migrateAutomationWebhookDeliveriesTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS automation_webhook_deliveries (
+  automation_id TEXT NOT NULL,
+  delivery_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (automation_id, delivery_id),
+  FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS automation_webhook_deliveries_created_at
+  ON automation_webhook_deliveries (created_at);
+  `);
+}
+
+function migrateAutomationWebhookSecretsTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS automation_webhook_secrets (
+  automation_id TEXT PRIMARY KEY NOT NULL,
+  encrypted_value TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS automation_webhook_secrets_created_by_user_id
+  ON automation_webhook_secrets (created_by_user_id);
   `);
 }
 

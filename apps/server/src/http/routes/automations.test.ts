@@ -8,122 +8,14 @@ import {
   getTelegramConfigDir,
   getTelegramConfigPath,
 } from "@nakama/core";
-import {
-  createInMemoryDatabaseAdapter,
-  type DatabaseAdapter,
-} from "@nakama/db";
-import { AuthService } from "../../services/auth-service";
-import { AutomationService } from "../../services/automation-service";
-import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
-import { createMinimalHonoApp } from "../test-app-helpers";
-import { seedOrgForUser } from "../test-org-helpers";
 import {
-  type AppFetch,
-  loginUserSession,
-  setupFreshInstallSession,
-} from "../test-session-helpers";
+  createFixture,
+  loginMember,
+  PROFILE_ID,
+} from "./automation-route-test-fixtures";
 
 setupTestConfigDir("nakama-automation-routes-");
-
-const PROFILE_ID = "profile_default";
-
-const MEMBER_EMAIL = "member@example.com";
-
-const MEMBER_PASSWORD = "password123";
-
-interface RouteTestFixture {
-  app: ReturnType<typeof createMinimalHonoApp>["app"];
-  authService: AuthService;
-  automationService: AutomationService;
-  databaseAdapter: DatabaseAdapter;
-}
-
-function createFixture(): RouteTestFixture {
-  const databaseAdapter = createInMemoryDatabaseAdapter();
-  const authService = new AuthService();
-  const orgService = new OrgService(databaseAdapter, authService);
-
-  const automationService = new AutomationService(databaseAdapter, {
-    getUserTimezone: async () => "UTC",
-  });
-
-  const { app } = createMinimalHonoApp({
-    agent: { providerConfigured: true, runAutomation: async () => ({}) },
-    authService,
-    automationService,
-    databaseAdapter,
-    orgService,
-  });
-
-  return {
-    app,
-    authService,
-    automationService,
-    databaseAdapter,
-  };
-}
-
-async function seedProfile(
-  fixture: RouteTestFixture,
-  orgId: string
-): Promise<void> {
-  const now = new Date().toISOString();
-  await fixture.databaseAdapter.upsertProfile({
-    createdAt: now,
-    id: PROFILE_ID,
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default Bot",
-    orgId,
-    systemPrompt: "",
-    updatedAt: now,
-  });
-}
-
-/** A real signed-in member: the install owner is always an org admin. */
-async function loginMember(fixture: RouteTestFixture) {
-  // Hono's `fetch` is structurally narrower than the DOM `fetch` the shared
-  // session helper declares; the runtime shape is identical.
-  // SAFETY: This test controls the fixture shape at this boundary.
-  const app = fixture.app as AppFetch;
-
-  const install = await setupFreshInstallSession(
-    app,
-    fixture.databaseAdapter,
-    "owner@example.com"
-  );
-
-  if (!install.orgId) {
-    throw new Error("Install session did not return an org.");
-  }
-
-  const now = new Date().toISOString();
-  await fixture.databaseAdapter.createUser({
-    createdAt: now,
-    email: MEMBER_EMAIL,
-    id: "user_route_member",
-    passwordHash: await fixture.authService.hashPassword(MEMBER_PASSWORD),
-    updatedAt: now,
-  });
-  await seedOrgForUser(
-    fixture.databaseAdapter,
-    MEMBER_EMAIL,
-    install.orgId,
-    "member"
-  );
-  await seedProfile(fixture, install.orgId);
-
-  const session = await loginUserSession(
-    app,
-    MEMBER_EMAIL,
-    MEMBER_PASSWORD,
-    install.orgId
-  );
-
-  return { orgId: install.orgId, session };
-}
 
 async function writeChannelConfigs(orgId: string): Promise<string> {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-route-"));
@@ -306,6 +198,7 @@ describe("automation destination authorization over HTTP", () => {
 
     expect((await call("/runs", "GET")).status).toBe(403);
     expect((await call("/run", "POST")).status).toBe(403);
+    expect((await call("/webhook-secret", "POST")).status).toBe(403);
     expect(
       (await call("", "PUT", JSON.stringify({ enabled: false }))).status
     ).toBe(403);

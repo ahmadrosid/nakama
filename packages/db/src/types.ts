@@ -39,8 +39,11 @@ export interface StoredAutomationRunRecord {
   deliveryStatus?: string | null;
   error: string | null;
   id: string;
+  /** Webhook request body, replayed on resume. Never returned in run lists. */
+  input?: string | null;
   output: string | null;
   progress?: ChatMessage[];
+  source?: "webhook" | null;
   startedAt: string;
   status: AutomationRunStatus;
 }
@@ -840,6 +843,13 @@ export interface StoredAuditEvent {
   resourceType: string;
 }
 
+export interface StoredAutomationWebhookSecret {
+  automationId: string;
+  createdAt: string;
+  createdByUserId: string;
+  encryptedValue: string;
+}
+
 export interface StoredManagedSecret {
   encryptedValue: string | null;
   name: string;
@@ -884,13 +894,23 @@ export interface DatabaseAdapter {
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
   /**
+   * Atomically claims a delivery ID for an automation webhook. Prunes rows
+   * older than the replay window, then returns true on first claim and false
+   * on replay within that window.
+   */
+  claimAutomationWebhookDelivery(
+    automationId: string,
+    deliveryId: string,
+    createdAt: string
+  ): Promise<boolean>;
+  /**
    * Automation runs left `running` by a dead process: those already resumed
    * `maxResumes` times are failed, the rest have their resume count raised and
    * are returned for the caller to continue.
    */
   claimInterruptedAutomationRuns(
     maxResumes: number
-  ): Promise<Array<{ automationId: string; id: string }>>;
+  ): Promise<Array<{ automationId: string; id: string; input?: string }>>;
   /**
    * Atomically claims an idempotency key for a notification webhook delivery.
    * Prunes rows older than the replay window, then returns true on first claim
@@ -1006,6 +1026,12 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
+  deleteAutomationWebhookSecret(automationId: string): Promise<void>;
+  /** Deletes the secrets this user made; with `orgId`, only on that org's automations. */
+  deleteAutomationWebhookSecretsForUser(
+    userId: string,
+    orgId?: string
+  ): Promise<void>;
   deleteComposioToolkit(id: string): Promise<boolean>;
   deleteComposioUserConnection(id: string): Promise<boolean>;
   deleteManagedSecret(scope: string, name: string): Promise<void>;
@@ -1094,6 +1120,9 @@ export interface DatabaseAdapter {
     orgId: string,
     automationId: string
   ): Promise<string | null>;
+  getAutomationWebhookSecret(
+    automationId: string
+  ): Promise<StoredAutomationWebhookSecret | null>;
   getBrowserSessionBySessionTokenHash(
     sessionTokenHash: string
   ): Promise<StoredBrowserSessionRecord | null>;
@@ -1337,6 +1366,7 @@ export interface DatabaseAdapter {
 
   listAutomations(): Promise<StoredAutomationRecord[]>;
   listAutomationsForOrg(orgId: string): Promise<StoredAutomationRecord[]>;
+  listAutomationWebhookSecrets(): Promise<StoredAutomationWebhookSecret[]>;
   /** Live sessions for one user, newest first. Revoked and expired rows are left out. */
   listBrowserSessionsForUser(
     userId: string,
@@ -1513,7 +1543,16 @@ export interface DatabaseAdapter {
   publishOrgSharedResource(
     record: StoredOrgSharedResourceRecord
   ): Promise<StoredOrgSharedResourceRecord>;
+  /** Replaces the automation's secret, so the old one stops at once. */
+  putAutomationWebhookSecret(
+    secret: StoredAutomationWebhookSecret
+  ): Promise<void>;
   putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
+  /** Frees a claimed automation webhook delivery ID so a redelivery can run. */
+  releaseAutomationWebhookDelivery(
+    automationId: string,
+    deliveryId: string
+  ): Promise<void>;
   /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
   releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
 
@@ -1527,6 +1566,11 @@ export interface DatabaseAdapter {
   replaceManagedSecrets(
     secrets: Array<
       Pick<StoredManagedSecret, "scope" | "name" | "encryptedValue">
+    >,
+    webhookSecrets: Array<
+      Pick<StoredAutomationWebhookSecret, "automationId" | "encryptedValue"> & {
+        previousEncryptedValue: string;
+      }
     >
   ): Promise<void>;
   replaceMessagesForSession(
