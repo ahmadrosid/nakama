@@ -318,6 +318,52 @@ describe("generateImageWithOpenAI", () => {
 
     expect(requestedModel).toBe("cb/gpt-image-2");
   });
+
+  test("stops reading a runaway response instead of buffering it", async () => {
+    const chunk = new TextEncoder().encode("A".repeat(1024 * 1024));
+    const totalChunks = 48;
+    let pulled = 0;
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled === 0) {
+          controller.enqueue(
+            new TextEncoder().encode('{"data":[{"b64_json":"')
+          );
+        }
+
+        if (pulled === totalChunks) {
+          controller.enqueue(new TextEncoder().encode('"}]}'));
+          controller.close();
+
+          return;
+        }
+
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = asTestFetch(() =>
+      Promise.resolve(new Response(body, { status: 200 }))
+    );
+
+    try {
+      const error = await generateImageWithOpenAI({
+        apiKey: "gateway-key",
+        baseUrl: "https://gateway.example/v1",
+        prompt: "a cat",
+      }).catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(NakamaApiError);
+      expect(error).toMatchObject({ status: 502 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(pulled).toBeLessThan(totalChunks);
+  });
 });
 
 describe("generateImageWithOpenAI cancellation", () => {
