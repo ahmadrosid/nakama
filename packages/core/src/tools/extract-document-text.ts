@@ -214,8 +214,7 @@ export async function runExtractDocumentText(
     }
 
     // Decode one byte past the limit: truncateMailBody still sees that the
-    // file is longer, and it trims one character per pass, so a 5 MB string
-    // would hold the event loop for minutes.
+    // file is longer, and the parser never holds more than the limit.
     const converted = textParser
       ? {
           text: await textParser({
