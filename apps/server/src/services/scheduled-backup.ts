@@ -1,7 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { FileHandle } from "node:fs/promises";
 import {
-  lstat,
   mkdir,
   open,
   readdir,
@@ -30,12 +29,6 @@ const NAME = /^nakama-.+\.zip\.enc$/;
 // The last failed scheduled backup, for Settings. The next good backup removes it.
 const ERROR_FILE = "scheduled-backup-error.json";
 
-// A record is one short message; anything bigger is not ours.
-const MAX_ERROR_FILE_BYTES = 16 * 1024;
-
-// Fits MAX_ERROR_FILE_BYTES even when JSON escapes each character to 6 bytes.
-const MAX_ERROR_MESSAGE_CHARS = 2000;
-
 const backupErrorSchema = z.object({
   at: z.iso.datetime(),
   message: z.string(),
@@ -57,55 +50,32 @@ export async function readBackupError(
     return unrecorded;
   }
 
-  const path = join(dir, ERROR_FILE);
-  let info: Awaited<ReturnType<typeof lstat>>;
+  let detail: string;
 
   try {
-    info = await lstat(path);
+    const raw = await readFile(join(dir, ERROR_FILE), "utf8");
+    const parsed = backupErrorSchema.safeParse(parseJsonOrNull(raw));
+
+    if (parsed.success) {
+      return parsed.data;
+    }
+
+    detail = "not a backup error record";
   } catch (error) {
     if (isMissing(error)) {
       return null;
     }
 
-    throw new NakamaApiError(
-      `Cannot read ${ERROR_FILE}: ${describe(error)}`,
-      500
-    );
+    detail = describe(error);
   }
 
-  if (!info.isFile() || info.size > MAX_ERROR_FILE_BYTES) {
-    throw new NakamaApiError(
-      `Cannot read ${ERROR_FILE}: not a backup error record.`,
-      500
-    );
-  }
+  // The fs detail can hold a path, so it stays in the log; the admin gets a fixed line
+  console.error(`Nakama cannot read ${ERROR_FILE}: ${detail}`);
 
-  let raw: string;
-
-  try {
-    raw = await readFile(path, "utf8");
-  } catch (error) {
-    // A good backup removed it after the lstat
-    if (isMissing(error)) {
-      return null;
-    }
-
-    throw new NakamaApiError(
-      `Cannot read ${ERROR_FILE}: ${describe(error)}`,
-      500
-    );
-  }
-
-  const parsed = backupErrorSchema.safeParse(parseJsonOrNull(raw));
-
-  if (!parsed.success) {
-    throw new NakamaApiError(
-      `Cannot read ${ERROR_FILE}: not a backup error record.`,
-      500
-    );
-  }
-
-  return parsed.data;
+  throw new NakamaApiError(
+    `Cannot read ${ERROR_FILE}. The server log has the details.`,
+    500
+  );
 }
 
 /** Renamed into place, so a crash mid-write never leaves a file that looks complete. */
@@ -406,7 +376,7 @@ export async function startScheduledBackups(options: {
       // Only a NakamaApiError is written for an admin; other details stay in the log.
       const message =
         error instanceof NakamaApiError
-          ? error.message.slice(0, MAX_ERROR_MESSAGE_CHARS)
+          ? error.message
           : "The scheduled backup failed. The server log has the details.";
 
       const record = { at: new Date().toISOString(), message };
