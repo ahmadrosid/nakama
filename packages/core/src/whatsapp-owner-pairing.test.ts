@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ChannelIdentityInUseError } from "./channel-config-shared";
+import {
+  ChannelIdentityInUseError,
+  withPairingConfigLock,
+} from "./channel-config-shared";
 import { withTempHomedir } from "./testing/channel-config-fixtures";
 import {
+  getWhatsAppConfigDir,
   loadWhatsAppConfigFile,
   regenerateWhatsAppPairingCode,
   saveWhatsAppConfig,
@@ -82,7 +86,7 @@ describe("syncWhatsAppOwnerPairing", () => {
       });
       const { pairingCode } = await regenerateWhatsAppPairingCode();
 
-      // Saving the code restarts the worker, which syncs the owner again.
+      // A network reconnect syncs the owner again.
       await syncWhatsAppOwnerPairing({
         ownerJid: "6281379292556:13@s.whatsapp.net",
       });
@@ -98,6 +102,31 @@ describe("syncWhatsAppOwnerPairing", () => {
       const saved = await loadWhatsAppConfigFile();
       expect(saved?.pairedJid).toBe("6289876543210@s.whatsapp.net");
       expect(saved?.pairingCode).toBeNull();
+    });
+  });
+
+  test("a new code waits while the worker holds the config lock", async () => {
+    await withTempHomedir("nakama-core-wa-sync-", async () => {
+      await saveWhatsAppConfig({ profileId: "default" });
+      const before = (await loadWhatsAppConfigFile())?.pairingCode;
+
+      const regenerated: ReturnType<typeof regenerateWhatsAppPairingCode>[] =
+        [];
+
+      // The worker is in the middle of a pairing.
+      await withPairingConfigLock(getWhatsAppConfigDir(), async () => {
+        regenerated.push(regenerateWhatsAppPairingCode());
+        await Bun.sleep(100);
+
+        expect((await loadWhatsAppConfigFile())?.pairingCode).toBe(before);
+      });
+
+      const [settings] = await Promise.all(regenerated);
+
+      expect(settings?.pairingCode).not.toBe(before);
+      expect((await loadWhatsAppConfigFile())?.pairingCode).toBe(
+        settings?.pairingCode ?? ""
+      );
     });
   });
 

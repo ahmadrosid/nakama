@@ -240,51 +240,41 @@ export async function rememberWhatsAppPairedIdentities(
   jids: readonly string[],
   orgId: WhatsAppConfigScope = null
 ): Promise<void> {
-  const config = await loadWhatsAppConfigFile(orgId);
-
-  if (
-    !(
-      config &&
-      isWhatsAppUserAuthorized(jids, {
-        allowedPhones: [],
-        pairedJid: config.pairedJid,
-        pairedLid: config.pairedLid,
-      })
-    )
-  ) {
-    return;
-  }
-
   const phoneJid = jids.find(
     (jid) => whatsAppJidServer(jid) === "s.whatsapp.net"
   );
 
   const lidJid = jids.find((jid) => whatsAppJidServer(jid) === "lid");
 
-  const nextPairedJid =
-    phoneJid &&
-    config.pairedJid &&
-    isSameWhatsAppUserJid(phoneJid, config.pairedJid)
-      ? phoneJid
-      : config.pairedJid;
+  await updateWhatsAppConfigFile(orgId, (config) => {
+    if (
+      !isWhatsAppUserAuthorized(jids, {
+        allowedPhones: [],
+        pairedJid: config.pairedJid,
+        pairedLid: config.pairedLid,
+      })
+    ) {
+      return null;
+    }
 
-  const nextPairedLid = lidJid ?? config.pairedLid;
+    const nextPairedJid =
+      phoneJid &&
+      config.pairedJid &&
+      isSameWhatsAppUserJid(phoneJid, config.pairedJid)
+        ? phoneJid
+        : config.pairedJid;
 
-  if (
-    nextPairedJid === config.pairedJid &&
-    nextPairedLid === config.pairedLid
-  ) {
-    return;
-  }
+    const nextPairedLid = lidJid ?? config.pairedLid;
 
-  await writeWhatsAppConfigFile(
-    {
-      ...config,
-      pairedJid: nextPairedJid,
-      pairedLid: nextPairedLid,
-    },
-    orgId
-  );
+    if (
+      nextPairedJid === config.pairedJid &&
+      nextPairedLid === config.pairedLid
+    ) {
+      return null;
+    }
+
+    return { ...config, pairedJid: nextPairedJid, pairedLid: nextPairedLid };
+  });
 }
 
 export async function loadWhatsAppConfigFile(
@@ -340,20 +330,13 @@ export async function loadWhatsAppConfigFile(
 export async function ensureWhatsAppOutboundToken(
   orgId: WhatsAppConfigScope = null
 ): Promise<string | null> {
-  const config = await loadWhatsAppConfigFile(orgId);
-
-  if (!config) {
-    return null;
-  }
-
-  if (config.outboundToken) {
-    return config.outboundToken;
-  }
-
   const outboundToken = randomBytes(32).toString("hex");
-  await writeWhatsAppConfigFile({ ...config, outboundToken }, orgId);
 
-  return outboundToken;
+  const config = await updateWhatsAppConfigFile(orgId, (current) =>
+    current.outboundToken ? null : { ...current, outboundToken }
+  );
+
+  return config?.outboundToken ?? null;
 }
 
 export function toWhatsAppSettingsPublic(
@@ -431,6 +414,33 @@ async function writeWhatsAppConfigFile(
 
   await writeTextFile(getWhatsAppConfigPath(orgId), lines.join("\n"), {
     ensureDir: getWhatsAppConfigDir(orgId),
+  });
+}
+
+/**
+ * Change config.ini under the pairing lock, so the server and a running worker
+ * never write over each other's change. `change` returns null when there is
+ * nothing to write; then no lock is taken.
+ */
+async function updateWhatsAppConfigFile(
+  orgId: WhatsAppConfigScope,
+  change: (config: WhatsAppConfigFile) => WhatsAppConfigFile | null
+): Promise<WhatsAppConfigFile | null> {
+  const current = await loadWhatsAppConfigFile(orgId);
+
+  if (!(current && change(current))) {
+    return current;
+  }
+
+  return withPairingConfigLock(getWhatsAppConfigDir(orgId), async () => {
+    const config = await loadWhatsAppConfigFile(orgId);
+    const next = config ? change(config) : null;
+
+    if (next) {
+      await writeWhatsAppConfigFile(next, orgId);
+    }
+
+    return next ?? config;
   });
 }
 
@@ -583,16 +593,18 @@ export async function saveWhatsAppConfig(
   input: UpdateWhatsAppSettingsInput,
   orgId: WhatsAppConfigScope = null
 ): Promise<WhatsAppSettingsPublic> {
-  const existing = await loadWhatsAppConfigFile(orgId);
-  const next = buildSavedWhatsAppConfig(input, existing);
+  return withPairingConfigLock(getWhatsAppConfigDir(orgId), async () => {
+    const existing = await loadWhatsAppConfigFile(orgId);
+    const next = buildSavedWhatsAppConfig(input, existing);
 
-  if (isChannelOwner(orgId)) {
-    next.profileId = orgId.profileId;
-  }
+    if (isChannelOwner(orgId)) {
+      next.profileId = orgId.profileId;
+    }
 
-  await writeWhatsAppConfigFile(next, orgId);
+    await writeWhatsAppConfigFile(next, orgId);
 
-  return toWhatsAppSettingsPublic(next);
+    return toWhatsAppSettingsPublic(next);
+  });
 }
 
 function getWhatsAppAuthDir(orgId: WhatsAppConfigScope = null): string {
@@ -630,40 +642,38 @@ export async function resetWhatsAppSessionForReconnect(
     await releaseChannelClaims("whatsapp", orgId);
   }
 
-  const next: WhatsAppConfigFile = {
-    ...existing,
+  const next = await updateWhatsAppConfigFile(orgId, (config) => ({
+    ...config,
     outboundPort: null,
     outboundToken: null,
     pairedJid: null,
     pairedLid: null,
     ...SPENT_PAIRING_SECRET,
-  };
-
-  await writeWhatsAppConfigFile(next, orgId);
+  }));
 
   return toWhatsAppSettingsPublic(next);
 }
 
+/**
+ * A running worker reads config.ini on every message, so a new code needs no
+ * restart. The lock keeps it from undoing a pairing the worker writes meanwhile.
+ */
 export async function regenerateWhatsAppPairingCode(
   orgId: WhatsAppConfigScope = null
 ): Promise<WhatsAppSettingsPublic> {
-  const existing = await loadWhatsAppConfigFile(orgId);
+  const { code, expiresAt } = createPairingCodeSecret();
 
-  if (!existing) {
+  const next = await updateWhatsAppConfigFile(orgId, (config) => ({
+    ...config,
+    pairingCode: code,
+    pairingCodeExpiresAt: expiresAt,
+  }));
+
+  if (!next) {
     throw new Error(
       "Enable WhatsApp in this agent’s Connections before generating a pairing code."
     );
   }
-
-  const { code, expiresAt } = createPairingCodeSecret();
-
-  const next: WhatsAppConfigFile = {
-    ...existing,
-    pairingCode: code,
-    pairingCodeExpiresAt: expiresAt,
-  };
-
-  await writeWhatsAppConfigFile(next, orgId);
 
   return toWhatsAppSettingsPublic(next);
 }
@@ -764,9 +774,7 @@ export async function syncWhatsAppOwnerPairing(
   },
   orgId: WhatsAppConfigScope = null
 ): Promise<void> {
-  const config = await loadWhatsAppConfigFile(orgId);
-
-  if (!config) {
+  if (!(await loadWhatsAppConfigFile(orgId))) {
     return;
   }
 
@@ -782,33 +790,34 @@ export async function syncWhatsAppOwnerPairing(
   const ownerPhone = isPhoneJid ? whatsAppUserDigits(options.ownerJid) : "";
   const ownerLid = options.ownerLid?.trim() || null;
 
-  // The first QR link pairs the owner and retires the setup code. After that,
-  // a live code invites another phone. Saving it restarts the worker, so this
-  // sync must not retire it on reconnect.
-  const keepPairingCode =
-    config.pairedJid !== null && hasActivePairingCode(config);
+  await updateWhatsAppConfigFile(orgId, (config) => {
+    // The first QR link pairs the owner and retires the setup code. After
+    // that, a live code invites another phone, so a reconnect keeps it.
+    const keepPairingCode =
+      config.pairedJid !== null && hasActivePairingCode(config);
 
-  const next: WhatsAppConfigFile = {
-    ...config,
-    pairedJid: config.pairedJid ?? options.ownerJid,
-    // Preserve an existing chat LID. `me.lid` can be a device/account LID, which
-    // does not always match the private self-chat JID used for inbound messages.
-    pairedLid: config.pairedLid ?? ownerLid,
-    pairingCode: keepPairingCode ? config.pairingCode : null,
-    pairingCodeExpiresAt: keepPairingCode ? config.pairingCodeExpiresAt : null,
-    phoneNumber: ownerPhone || config.phoneNumber,
-  };
+    const next: WhatsAppConfigFile = {
+      ...config,
+      pairedJid: config.pairedJid ?? options.ownerJid,
+      // Preserve an existing chat LID. `me.lid` can be a device/account LID,
+      // which does not always match the private self-chat JID used for
+      // inbound messages.
+      pairedLid: config.pairedLid ?? ownerLid,
+      pairingCode: keepPairingCode ? config.pairingCode : null,
+      pairingCodeExpiresAt: keepPairingCode
+        ? config.pairingCodeExpiresAt
+        : null,
+      phoneNumber: ownerPhone || config.phoneNumber,
+    };
 
-  if (
-    next.pairedJid === config.pairedJid &&
-    next.pairedLid === config.pairedLid &&
-    next.pairingCode === config.pairingCode &&
-    next.pairingCodeExpiresAt === config.pairingCodeExpiresAt
-  ) {
-    return;
-  }
+    const unchanged =
+      next.pairedJid === config.pairedJid &&
+      next.pairedLid === config.pairedLid &&
+      next.pairingCode === config.pairingCode &&
+      next.pairingCodeExpiresAt === config.pairingCodeExpiresAt;
 
-  await writeWhatsAppConfigFile(next, orgId);
+    return unchanged ? null : next;
+  });
 }
 
 function parseIniBoolean(
@@ -862,12 +871,8 @@ export async function saveWhatsAppOutboundPort(
   port: number,
   orgId: WhatsAppConfigScope = null
 ): Promise<void> {
-  const config = await loadWhatsAppConfigFile(orgId);
-
-  if (config) {
-    await writeWhatsAppConfigFile(
-      { ...config, outboundPort: String(port) },
-      orgId
-    );
-  }
+  await updateWhatsAppConfigFile(orgId, (config) => ({
+    ...config,
+    outboundPort: String(port),
+  }));
 }

@@ -2052,14 +2052,11 @@ export class AgentService {
       : save();
   }
 
-  async regenerateWhatsAppPairingCode(
+  // No worker restart: the worker reads config.ini on every message.
+  regenerateWhatsAppPairingCode(
     orgId: ChannelConfigScope
   ): Promise<WhatsAppSettingsResponse> {
-    return isChannelOwner(orgId) && this.channelWorkers
-      ? this.channelWorkers.saveChannelConfig("whatsapp", orgId, () =>
-          regenerateWhatsAppPairingCode(orgId)
-        )
-      : regenerateWhatsAppPairingCode(orgId);
+    return regenerateWhatsAppPairingCode(orgId);
   }
 
   async runAutomationPrompt(
