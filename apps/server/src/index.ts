@@ -44,7 +44,10 @@ import {
   getActiveProviderInstance,
   getUserConfigDir,
   loadConfig,
+  log,
   NAKAMA_API_VERSION,
+  normalizeBaseUrl,
+  resolveWebPublicUrlConfig,
   setManagedSecretResolver,
   setManagedSecretWriter,
   writeRuntimeServerUrl,
@@ -70,7 +73,10 @@ import { AuthService } from "./services/auth-service";
 import { AutomationDeliveryService } from "./services/automation-delivery-service";
 import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
-import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
+import {
+  isLoopbackComposioCallbackBaseUrl,
+  resolveComposioCallbackBaseUrl,
+} from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
@@ -645,6 +651,47 @@ if (server.port !== requestedPort) {
 }
 
 console.log(`Nakama server listening on ${serverUrl}`);
+
+const publicUrlConfig = resolveWebPublicUrlConfig();
+
+let publicWebUrl =
+  publicUrlConfig.url === undefined ? "not configured" : "invalid URL";
+
+const parsedPublicUrl =
+  publicUrlConfig.url && URL.canParse(publicUrlConfig.url)
+    ? new URL(publicUrlConfig.url)
+    : null;
+
+if (parsedPublicUrl && ["http:", "https:"].includes(parsedPublicUrl.protocol)) {
+  parsedPublicUrl.username = "";
+  parsedPublicUrl.password = "";
+  parsedPublicUrl.search = "";
+  parsedPublicUrl.hash = "";
+  publicWebUrl = normalizeBaseUrl(parsedPublicUrl.toString());
+}
+
+const publicUrlLogFields = {
+  publicWebUrl,
+  source: publicUrlConfig.source,
+  trustProxy: process.env.NAKAMA_TRUST_PROXY === "true",
+};
+
+log("info", "Public web URL", publicUrlLogFields);
+
+if (
+  process.env.NAKAMA_DESKTOP !== "1" &&
+  parsedPublicUrl?.protocol === "http:" &&
+  isLoopbackComposioCallbackBaseUrl(parsedPublicUrl.toString())
+) {
+  log(
+    "warn",
+    "Public web URL points to loopback. Set a reachable NAKAMA_WEB_PUBLIC_URL or update the saved web public URL, then restart Nakama.",
+    {
+      ...publicUrlLogFields,
+      code: "loopback_public_url",
+    }
+  );
+}
 
 console.log(`Nakama database ready at ${config.databaseUrl}`);
 

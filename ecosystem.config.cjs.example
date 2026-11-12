@@ -6,6 +6,7 @@ module.exports = {
       script: "/path/to/.bun/bin/bun",
       args: "run start",
       interpreter: "none",
+      // Reload env changes with pm2 restart nakama --update-env.
       env: {
         NODE_ENV: "production",
         NAKAMA_PORT: "4310",
