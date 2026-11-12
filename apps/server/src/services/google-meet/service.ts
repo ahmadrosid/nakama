@@ -137,8 +137,9 @@ export type CaptureSocketData = {
 
 type SocketData = CaptureSocketData;
 
-// Agents only read meetings. Capture, imports, uploads, stop and delete
-// stay in the Google Meet page so an agent cannot change or remove data.
+// Agents only read meetings. Imports, uploads, stop and delete stay in the
+// Google Meet page, and only the extension's Meet key starts a capture, so an
+// agent cannot change or remove data.
 const descriptions = {
   meetings:
     "List your assigned profile's meetings with their state. Chrome starts live capture.",
