@@ -1,12 +1,12 @@
 import { NakamaApiError } from "@nakama/core/api-error";
 import {
   formatTranscript,
-  type MeetAction,
   type MeetActionInput,
   type MeetActionResults,
   type MeetExtensionKey,
   type MeetImportProgress,
   type Meeting,
+  type MeetSessionAction,
   type MeetOverview as Overview,
   type TranscriptSegment,
 } from "@nakama/core/google-meet";
@@ -58,7 +58,7 @@ import {
   openRouterModelsQueryOptions,
 } from "@/lib/openrouter-models";
 
-type MeetCall = <Action extends MeetAction>(
+type MeetCall = <Action extends MeetSessionAction>(
   action: Action,
   input?: MeetActionInput,
   signal?: AbortSignal
@@ -1881,7 +1881,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
     };
   }, [call, signal]);
 
-  async function action(name: MeetAction, input: MeetActionInput) {
+  async function action(name: MeetSessionAction, input: MeetActionInput) {
     setBusy(true);
     setError("");
 
@@ -2065,7 +2065,7 @@ function OrganizationMeetPage({ orgId }: { orgId: string }) {
   React.useEffect(() => {
     const abort = new AbortController();
     setScope({
-      call: async <Action extends MeetAction>(
+      call: async <Action extends MeetSessionAction>(
         action: Action,
         input?: MeetActionInput,
         signal?: AbortSignal
