@@ -93,7 +93,7 @@ function resolveWebAuthnContext(request: Request) {
 }
 
 export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
-  const { authService, databaseAdapter, orgService } = options;
+  const { authService, databaseAdapter, oidcService, orgService } = options;
 
   const issueBackupCodes = async (
     userId: string,
@@ -763,6 +763,14 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     if (user.disabledAt) {
       return errorResponse("Account disabled", 403);
+    }
+
+    // SSO-only install: the first account stays the break-glass.
+    if (oidcService?.config.disablePasswordLogin && user.id !== "user_admin") {
+      return errorResponse(
+        `Password sign-in is disabled. Continue with ${oidcService.config.providerName}.`,
+        403
+      );
     }
 
     const passkeys = await databaseAdapter.listPasskeys(user.id);

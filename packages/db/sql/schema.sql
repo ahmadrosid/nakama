@@ -884,3 +884,32 @@ CREATE TABLE IF NOT EXISTS org_team_creation_requests (
   completed_at TEXT,
   PRIMARY KEY (parent_org_id, request_id)
 );
+
+-- OIDC sign-in: one-time state consumed on callback; identities link a
+-- provider's issuer+subject to a user.
+
+CREATE TABLE IF NOT EXISTS oidc_auth_states (
+  state TEXT PRIMARY KEY NOT NULL,
+  nonce TEXT NOT NULL,
+  code_verifier TEXT NOT NULL,
+  web_origin TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_oidc_identities (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL,
+  issuer TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  email TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_oidc_identities_issuer_subject_unique
+  ON user_oidc_identities (issuer, subject);
+
+CREATE INDEX IF NOT EXISTS user_oidc_identities_user_idx
+  ON user_oidc_identities (user_id);

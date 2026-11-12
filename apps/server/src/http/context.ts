@@ -5,6 +5,7 @@ import type { AutomationService } from "../services/automation-service";
 import type { ComposioService } from "../services/composio-service";
 import type { GoogleMeetService } from "../services/google-meet/service";
 import type { McpService } from "../services/mcp-service";
+import type { OidcService } from "../services/oidc-service";
 import type { OrgMemoryService } from "../services/org-memory-service";
 import type { OrgService } from "../services/org-service";
 import type { PluginService } from "../services/plugin-service";
@@ -22,6 +23,8 @@ export interface ServerOptions {
   databaseAdapter?: DatabaseAdapter | null;
   googleMeetService?: GoogleMeetService | null;
   mcpService: McpService;
+  /** SSO sign-in; set only when NAKAMA_OIDC_ISSUER_URL is configured. */
+  oidcService?: OidcService | null;
   /**
    * Release the SQLite file before a restore moves the data root. Set only on
    * Windows, which cannot move an open database.

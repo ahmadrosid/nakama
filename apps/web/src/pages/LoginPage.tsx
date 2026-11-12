@@ -177,6 +177,7 @@ function LoginFormFields({
   passkeyRequired,
   passkeyTotpEnabled,
   password,
+  passwordEnabled,
   totpEnabled,
   useBackupCode,
 }: {
@@ -196,12 +197,13 @@ function LoginFormFields({
   passkeyRequired: boolean;
   passkeyTotpEnabled: boolean;
   password: string;
+  passwordEnabled: boolean;
   totpEnabled: boolean;
   useBackupCode: boolean;
 }) {
   return (
     <>
-      {mfaRequired || passkeyRequired ? null : (
+      {!passwordEnabled || mfaRequired || passkeyRequired ? null : (
         <>
           <div>
             <label className="mb-1 block font-medium text-sm" htmlFor="email">
@@ -279,34 +281,22 @@ function LoginFormFields({
   );
 }
 
-function LoginFormActions({
-  demoLogin,
-  error,
-  isSubmitting,
-  mfaRequired,
+function LoginAlternateSignIns({
   onPasskeyLogin,
-  passkeyRequired,
+  passwordEnabled,
+  ssoProviderName,
 }: {
-  demoLogin: boolean;
-  error: string | null;
-  isSubmitting: boolean;
-  mfaRequired: boolean;
   onPasskeyLogin: () => void;
-  passkeyRequired: boolean;
+  passwordEnabled: boolean;
+  ssoProviderName: string | null;
 }) {
+  if (!(passwordEnabled || ssoProviderName)) {
+    return null;
+  }
+
   return (
     <>
-      {error ? (
-        <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
-          {error}
-        </div>
-      ) : null}
-      {passkeyRequired ? null : (
-        <Button className="w-full" disabled={isSubmitting} type="submit">
-          {isSubmitting ? "Verifying..." : mfaRequired ? "Verify" : "Sign in"}
-        </Button>
-      )}
-      {mfaRequired || passkeyRequired || demoLogin ? null : (
+      {passwordEnabled ? (
         <>
           <div className="flex items-center gap-3 text-muted-foreground text-xs uppercase">
             <span className="h-px flex-1 bg-border" />
@@ -322,15 +312,71 @@ function LoginFormActions({
             Sign in with a passkey
           </Button>
         </>
-      )}
-      {mfaRequired || passkeyRequired || demoLogin ? null : (
+      ) : null}
+      {ssoProviderName ? (
+        <Button
+          className="w-full"
+          onClick={() => {
+            window.location.assign("/v1/auth/oidc/start");
+          }}
+          type="button"
+          variant="outline"
+        >
+          Continue with {ssoProviderName}
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
+function LoginFormActions({
+  demoLogin,
+  error,
+  isSubmitting,
+  mfaRequired,
+  onPasskeyLogin,
+  passkeyRequired,
+  passwordEnabled,
+  ssoProviderName,
+}: {
+  demoLogin: boolean;
+  error: string | null;
+  isSubmitting: boolean;
+  mfaRequired: boolean;
+  onPasskeyLogin: () => void;
+  passkeyRequired: boolean;
+  passwordEnabled: boolean;
+  ssoProviderName: string | null;
+}) {
+  const showAlternates = !(mfaRequired || passkeyRequired || demoLogin);
+
+  return (
+    <>
+      {error ? (
+        <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
+          {error}
+        </div>
+      ) : null}
+      {passwordEnabled && !passkeyRequired ? (
+        <Button className="w-full" disabled={isSubmitting} type="submit">
+          {isSubmitting ? "Verifying..." : mfaRequired ? "Verify" : "Sign in"}
+        </Button>
+      ) : null}
+      {showAlternates ? (
+        <LoginAlternateSignIns
+          onPasskeyLogin={onPasskeyLogin}
+          passwordEnabled={passwordEnabled}
+          ssoProviderName={ssoProviderName}
+        />
+      ) : null}
+      {showAlternates && passwordEnabled ? (
         <Link
           className="block text-center font-medium text-primary text-sm hover:underline"
           to="/reset-password"
         >
           Forgot password?
         </Link>
-      )}
+      ) : null}
     </>
   );
 }
@@ -410,6 +456,13 @@ export function LoginPage() {
   if (health?.userConfigured === false) {
     return <Navigate replace to={SETUP_PATH} />;
   }
+
+  // Missing fields on an older server keep the password form; the server
+  // refuses to start with SSO enabled but password login impossible.
+  const passwordEnabled = health?.passwordLoginEnabled !== false;
+
+  const ssoProviderName =
+    health?.oidcConfigured === true ? (health.oidcProviderName ?? "SSO") : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -507,6 +560,7 @@ export function LoginPage() {
             passkeyRequired={passkeyRequired}
             passkeyTotpEnabled={passkeyTotpEnabled}
             password={password}
+            passwordEnabled={passwordEnabled}
             totpEnabled={passkeyFallbackAvailable ? passkeyTotpEnabled : true}
             useBackupCode={useBackupCode}
           />
@@ -517,6 +571,8 @@ export function LoginPage() {
             mfaRequired={mfaRequired}
             onPasskeyLogin={() => void handlePasskeyLogin()}
             passkeyRequired={passkeyRequired}
+            passwordEnabled={passwordEnabled}
+            ssoProviderName={ssoProviderName}
           />
         </form>
       </div>
