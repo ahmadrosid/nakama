@@ -185,6 +185,7 @@ import {
   loadUserVisionSettings,
   loadWebSearchSettingsPublic,
   loadWhatsAppSettingsPublic,
+  MODEL_CONNECTION_CLOSED_MESSAGE,
   messageContentHasImages,
   NakamaApiError,
   nanoid,
@@ -192,6 +193,7 @@ import {
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
+  ProviderStreamInterruptedError,
   parseAgentChannel,
   parseSentryDsn,
   partitionTools,
@@ -438,6 +440,7 @@ import {
 import {
   type OneShotKind,
   READ_ONLY_TOOL_NAMES,
+  REPLAYABLE_TOOL_NAMES,
   refuseToolsOutside,
   type TurnKind,
   turnPolicy,
@@ -2310,7 +2313,7 @@ export class AgentService {
 
         if (step.status !== "completed" || result === null) {
           const value =
-            READ_ONLY_TOOL_NAMES.has(step.toolName) &&
+            REPLAYABLE_TOOL_NAMES.has(step.toolName) &&
             tools.some((item) => item.name === step.toolName)
               ? await executeToolCall(
                   tools,
@@ -6305,8 +6308,7 @@ export class AgentService {
         storedTools.some(
           (record) =>
             record.name === tool.name &&
-            (record.handlerType === "builtin" ||
-              record.handlerType === "session") &&
+            record.handlerType === "builtin" &&
             READ_ONLY_TOOL_NAMES.has(tool.name)
         )
       )
@@ -7532,22 +7534,28 @@ const REGRESSION_RERUN_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * What a member sees when a started rerun fails. Provider and tool errors can
- * hold keys, hosts or paths, so only Nakama's own errors pass through.
+ * hold keys, hosts or paths, so no error message passes through. A provider's
+ * HTTP error is a NakamaApiError too, with the provider's raw body as its text.
  */
 function regressionRerunError<ErrorValue>(
   error: ErrorValue,
   ended: { cancelled: boolean; timedOut: boolean }
 ): string {
-  if (error instanceof NakamaApiError) {
-    return error.message;
-  }
-
   if (ended.timedOut) {
     return `The rerun timed out after ${REGRESSION_RERUN_TIMEOUT_MS / 60_000} minutes.`;
   }
 
   if (ended.cancelled) {
     return "The rerun was cancelled.";
+  }
+
+  if (error instanceof ProviderStreamInterruptedError) {
+    return MODEL_CONNECTION_CLOSED_MESSAGE;
+  }
+
+  // Providers map their own 429 to 502, so a 429 is the org's LLM quota.
+  if (error instanceof NakamaApiError && error.status === 429) {
+    return "The monthly LLM quota is reached.";
   }
 
   console.error("Regression rerun failed:", error);

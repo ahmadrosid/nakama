@@ -168,21 +168,31 @@ export function withTurnInstructions(
 }
 
 /**
- * Platform tools that only read. A read-only turn runs these, matched only on
- * trusted sources, and a resumed automation may repeat a cut-off call.
+ * Platform tools that only read and keep their result inside the run. A
+ * read-only turn runs these, matched only on trusted sources.
  */
 export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
   "extract_document_text",
   "knowledge_base_search",
   "list_artifacts",
-  "list_profile_sessions",
   "org_memory_search",
   "read_file",
+  "search_files",
+  "web_search",
+]);
+
+/**
+ * Tools a resumed automation may run again after a cut-off call. These also
+ * only read, but a rerun refuses the extra ones: web_fetch can send data to
+ * any host, and the session readers show the caller's own chats in an output
+ * that other members can read.
+ */
+export const REPLAYABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  ...READ_ONLY_TOOL_NAMES,
+  "list_profile_sessions",
   "read_profile_session",
   "read_session_history",
-  "search_files",
   "web_fetch",
-  "web_search",
 ]);
 
 /**

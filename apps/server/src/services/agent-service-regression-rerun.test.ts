@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { ToolContext, ToolDefinition } from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { buildProviderHttpError } from "../providers/shared";
 import { setupTestConfigDir } from "../test-config-dir";
+import { createSessionTools } from "../tools/session-tools";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import type { TurnKind } from "./turn-kinds";
@@ -29,12 +31,17 @@ describe("regression rerun tools", () => {
 
     await db.upsertProfile(profile);
 
-    for (const name of ["read_file", "write_file"]) {
+    for (const [name, handlerType] of [
+      ["read_file", "builtin"],
+      ["write_file", "builtin"],
+      ["web_fetch", "builtin"],
+      ["read_profile_session", "session"],
+    ] as const) {
       await db.upsertTool({
         createdAt: now,
         description: name,
         handlerConfig: { name },
-        handlerType: "builtin",
+        handlerType,
         id: `tool_${name}`,
         name,
         updatedAt: now,
@@ -43,6 +50,8 @@ describe("regression rerun tools", () => {
     }
 
     const service = new AgentService(null, null, db);
+
+    service.setServerTools({ session: createSessionTools(service) });
 
     const resolve =
       privateServiceAccess<AgentServiceProfileToolsAccess>(
@@ -84,6 +93,14 @@ describe("regression rerun tools", () => {
     expect(await tool("regression_rerun", "read_file")).toBe(
       await tool("automation", "read_file")
     );
+
+    // web_fetch reaches other hosts, and a session reader puts the caller's
+    // own chats in an output that other members can read.
+    for (const name of ["web_fetch", "read_profile_session"]) {
+      expect(await tool("regression_rerun", name)).not.toBe(
+        await tool("automation", name)
+      );
+    }
 
     const names = (await resolve(profile, "regression_rerun")).map(
       (item) => item.name
@@ -139,9 +156,16 @@ describe("regression rerun tools", () => {
           name: "openai",
           streamChat() {
             // A provider that ignores the abort signal.
+            // The real adapters wrap the provider's raw body in a NakamaApiError.
             return hang
               ? new Promise(() => undefined)
-              : Promise.reject(new Error("401 invalid x-api-key sk-secret"));
+              : Promise.reject(
+                  buildProviderHttpError(
+                    "OpenAI",
+                    401,
+                    '{"error":{"message":"Incorrect API key provided: sk-secret"}}'
+                  )
+                );
           },
         },
       }),
