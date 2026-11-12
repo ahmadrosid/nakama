@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createAnthropicProvider } from "./index";
 
@@ -47,6 +48,40 @@ describe("Anthropic provider streaming", () => {
       },
       { onChunk: () => undefined }
     );
+  });
+
+  test("streams xhigh with the model's own output limit", async () => {
+    let maxTokens: unknown;
+
+    const provider = createAnthropicProvider({
+      apiKey: "sk-ant-test",
+      fetch: asTestFetch(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          maxTokens = JSON.parse(String(init?.body)).max_tokens;
+
+          return new Response(
+            streamFromChunks([
+              'event: message_start\r\ndata:{"type":"message_start","message":{"usage":{"input_tokens":4}}}\r\n\r\n',
+              'event: content_block_start\r\ndata:{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"OK"}}\r\n\r\n',
+              'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}\r\n\r\n',
+            ]),
+            { headers: { "Content-Type": "text/event-stream" } }
+          );
+        }
+      ),
+      model: "claude-opus-5-5",
+    });
+
+    await provider.streamChat(
+      {
+        messages: [{ content: "Hello", role: "user" }],
+        providerOptions: { thinking: { effort: "xhigh", enabled: true } },
+        system: "Be helpful.",
+      },
+      { onChunk: () => undefined }
+    );
+
+    expect(maxTokens).toBe(128_000);
   });
 
   test("sends Opus 5.5 binding controls on streamed requests", async () => {
@@ -126,6 +161,45 @@ describe("Anthropic provider streaming", () => {
     });
     expect(chunks).toEqual(["Hel", "lo"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a refused request is an API error with a client status for account errors", async () => {
+    const refuse = (status: number, message = "refused") =>
+      createAnthropicProvider({
+        apiKey: "sk-ant-test",
+        fetch: asTestFetch(
+          async () =>
+            new Response(
+              JSON.stringify({
+                error: { message, type: "invalid_request_error" },
+                type: "error",
+              }),
+              { headers: { "Content-Type": "application/json" }, status }
+            )
+        ),
+        model: "claude-sonnet-4-6",
+      }).streamChat(
+        { messages: [{ content: "Hi", role: "user" }], system: "s" },
+        { onChunk: () => undefined }
+      );
+
+    const billing = refuse(402);
+
+    await expect(billing).rejects.toBeInstanceOf(NakamaApiError);
+    await expect(billing).rejects.toMatchObject({ status: 400 });
+
+    // Anthropic sends an empty balance as a 400, not a 402.
+    const lowCredit = refuse(
+      400,
+      "Your credit balance is too low to access the Anthropic API."
+    );
+
+    await expect(lowCredit).rejects.toMatchObject({ status: 400 });
+
+    const invalid = refuse(400);
+
+    await expect(invalid).rejects.toBeInstanceOf(NakamaApiError);
+    await expect(invalid).rejects.toMatchObject({ status: 502 });
   });
 });
 

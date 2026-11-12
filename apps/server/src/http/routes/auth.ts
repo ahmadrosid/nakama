@@ -1638,6 +1638,8 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       newPassword: body.newPassword,
       userId: auth.user.id,
     });
+    // A paired Meet browser is a credential too.
+    await options.googleMeetService?.revokeExtensionKeys(auth.user.id);
 
     const response = c.json({ ok: true }, 200);
     clearBrowserSessionCookies(response.headers);
@@ -1692,7 +1694,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     // The route is public, so the audit row has no caller to name. Tell it
     // whose password changed.
-    c.set("auditResourceId", await orgService.resetPassword(body));
+    const userId = await orgService.resetPassword(body);
+    c.set("auditResourceId", userId);
+    await options.googleMeetService?.revokeExtensionKeys(userId);
 
     return c.json({ ok: true }, 200);
   });
@@ -1912,6 +1916,9 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     if (!user) {
       return errorResponse("User not found", 404);
     }
+
+    // Breach containment: webhook secrets the user made end with their sessions.
+    await databaseAdapter.deleteAutomationWebhookSecretsForUser(userId);
 
     const revoked = await databaseAdapter.revokeBrowserSessionsForUser(
       userId,

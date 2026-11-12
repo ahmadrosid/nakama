@@ -219,7 +219,9 @@ export function buildChatSystemPrompt(
 
     if (tools.some((tool) => tool.name === "ask_user_question")) {
       sections.push(
-        "Whenever you ask the user a question or need a detail from them, call ask_user_question. Do not ask questions in plain reply text, even when you could continue with placeholders.",
+        "A broad or vague request is not a reason to ask. Pick the most common reading, do the work, state your assumption in one line, and offer to adjust.",
+        "Ask the user only for facts you cannot guess or find with your tools (a private link, a name, a date), or before an action that is hard to undo.",
+        "When you do ask, call ask_user_question. Do not ask questions in plain reply text.",
         "For open details such as a date, link, or name, offer likely answers as choices and set allowCustomAnswer to true.",
         "Ask one concise batch at a time and wait for the user's answers before proceeding."
       );

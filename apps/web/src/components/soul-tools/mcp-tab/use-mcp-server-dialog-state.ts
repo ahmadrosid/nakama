@@ -119,9 +119,9 @@ function applyMcpFormReset({
 
   if (!server) {
     setters.setName("");
-    setters.setKind("signin");
+    setters.setKind("http");
     setters.setUrl("");
-    setters.setHeaders([emptyHeaderRow()]);
+    setters.setHeaders([{ key: "Authorization", value: "" }]);
     setters.setCommand("");
     setters.setArgs([]);
     setters.setEnv([emptyHeaderRow()]);
@@ -340,7 +340,7 @@ export function useMcpServerDialogState({
   );
 
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<McpServerKind>("signin");
+  const [kind, setKind] = useState<McpServerKind>("http");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [command, setCommand] = useState("");

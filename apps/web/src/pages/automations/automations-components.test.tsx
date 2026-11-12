@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import type {
   AutomationRunRecord,
   StoredAutomation,
@@ -7,14 +7,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { VirtuosoMockContext } from "react-virtuoso";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import {
   AuthContext,
   type AuthContextValue,
 } from "@/context/auth-context-shared";
+import { ThemeProvider } from "@/context/theme-context";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
+import { AutomationDetailPanel } from "./automation-detail-panel";
 import { AutomationEditorForm, RunHistoryList } from "./automations-components";
 import {
   type AutomationsPageState,
@@ -264,6 +267,88 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
     } else {
       Reflect.deleteProperty(Element.prototype, "getAnimations");
     }
+  }
+});
+
+test("opens a run whose transcript saved an artifact", async () => {
+  const artifactPath =
+    "/home/test/.nakama/orgs/org_1/profiles/profile/artifacts/report.md";
+
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: "Saved the report.",
+    progress: [
+      {
+        content: "",
+        role: "assistant",
+        toolCalls: [
+          {
+            arguments: { content: "# Report", path: "artifacts/report.md" },
+            id: "call-1",
+            name: "write_file",
+          },
+        ],
+      },
+      {
+        content: JSON.stringify({ bytesWritten: 8, path: artifactPath }),
+        name: "write_file",
+        role: "tool",
+        toolCallId: "call-1",
+      },
+      { content: "Saved the report.", role: "assistant" },
+    ],
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ThemeProvider>
+            <AuthContext.Provider
+              value={
+                /* SAFETY: The artifact chip reads only the authentication flags. */
+                { isAuthenticated: true, isLoading: false } as AuthContextValue
+              }
+            >
+              <VirtuosoMockContext.Provider
+                value={{ itemHeight: 100, viewportHeight: 2000 }}
+              >
+                <RunHistoryList
+                  busy={false}
+                  onRerun={() => {}}
+                  profileId="profile"
+                  running={false}
+                  runs={[run]}
+                />
+              </VirtuosoMockContext.Provider>
+            </AuthContext.Provider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      );
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+        .click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    const conversation = document.querySelector('[role="dialog"] [role="log"]');
+    expect(conversation).not.toBeNull();
+    expect(conversation!.textContent).toContain("report.md");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
   }
 });
 
@@ -749,6 +834,345 @@ test("editor limits tools to what the user leaves ticked", async () => {
     );
     expect(draft.toolLimit).toBeUndefined();
   } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});
+
+function webhookAutomation(
+  trigger: StoredAutomation["trigger"],
+  id = "automation"
+): StoredAutomation {
+  return {
+    createdAt: "2026-10-01T00:00:00Z",
+    description: "",
+    enabled: true,
+    id,
+    name: "Task",
+    profileId: "agent",
+    prompt: "Run task",
+    steps: [],
+    trigger,
+    updatedAt: "2026-10-01T00:00:00Z",
+    version: 1,
+  };
+}
+
+test("editor shows the webhook trigger and warns before a save drops it", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { enabled: false } },
+  });
+
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const patches: Partial<StoredAutomation>[] = [];
+
+  function render(
+    trigger: StoredAutomation["trigger"],
+    savedTrigger?: StoredAutomation["trigger"]
+  ) {
+    return act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <AutomationEditorForm
+            automation={webhookAutomation(trigger)}
+            busy={false}
+            onChange={(patch) => patches.push(patch)}
+            profiles={[]}
+            savedTrigger={savedTrigger}
+          />
+        </QueryClientProvider>
+      )
+    );
+  }
+
+  function clickPill(label: string) {
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (item) => item.textContent === label
+    )!;
+
+    return act(async () => button.click());
+  }
+
+  try {
+    await render({ type: "webhook" }, { type: "webhook" });
+
+    const webhookPill = Array.from(container.querySelectorAll("button")).find(
+      (item) => item.textContent === "On webhook"
+    );
+
+    expect(webhookPill?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).not.toContain("undefined");
+    expect(container.textContent).not.toContain("Next run");
+    expect(container.querySelector('input[type="time"]')).toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    await clickPill("Every day");
+    expect(patches.pop()?.trigger).toEqual({
+      cron: "0 7 * * *",
+      timezone: undefined,
+      type: "schedule",
+    });
+
+    await render({ type: "manual" }, { type: "webhook" });
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+
+    await clickPill("On webhook");
+    expect(patches.pop()?.trigger).toEqual({ type: "webhook" });
+
+    await render({ type: "webhook" });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    await render({ type: "manual" });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    queryClient.clear();
+  }
+});
+
+test("run history marks runs that a webhook started", async () => {
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: null,
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  try {
+    await act(async () =>
+      root.render(
+        <RunHistoryList
+          busy={false}
+          onRerun={() => {}}
+          profileId="profile"
+          running={false}
+          runs={[{ ...run, id: "hook", source: "webhook" }, run]}
+        />
+      )
+    );
+
+    const rows = Array.from(container.querySelectorAll("li"));
+
+    const badges = (row: Element) =>
+      Array.from(row.querySelectorAll("span")).filter(
+        (span) => span.textContent === "Webhook"
+      ).length;
+
+    expect(rows.map(badges)).toEqual([1, 0]);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+function renderDetailPanel(
+  root: ReturnType<typeof createRoot>,
+  queryClient: QueryClient,
+  automation: StoredAutomation
+) {
+  return act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <AutomationDetailPanel
+          busy={false}
+          handleRun={async () => {}}
+          handleToggleEnabled={async () => {}}
+          key={automation.id}
+          openEdit={() => {}}
+          runningId={null}
+          runs={[]}
+          runsLoading={false}
+          selected={automation}
+          selectedProfileName="Agent"
+          selectedRunSummary={{
+            completed: 0,
+            failed: 0,
+            running: 0,
+            unread: 0,
+          }}
+          setDeleteTarget={() => {}}
+        />
+      </QueryClientProvider>
+    )
+  );
+}
+
+function buttonByLabel(label: string) {
+  return Array.from(document.querySelectorAll("button")).find(
+    (item) => item.textContent?.trim() === label
+  );
+}
+
+test("detail panel shows the webhook URL and a new secret only once", async () => {
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const createSecret = spyOn(client, "createAutomationWebhookSecret")
+    .mockResolvedValueOnce("new-secret-value")
+    .mockRejectedValueOnce(new Error("Set NAKAMA_SECRETS_KEY"));
+
+  const codes = () =>
+    Array.from(container.querySelectorAll("code")).map(
+      (code) => code.textContent
+    );
+
+  try {
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "manual" }, "a/b")
+    );
+    expect(codes()).toEqual([]);
+    expect(buttonByLabel("New secret")).toBeUndefined();
+
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" }, "a/b")
+    );
+    expect(codes()).toEqual([
+      `${window.location.origin}/v1/automations/a%2Fb/webhook`,
+    ]);
+
+    const configured =
+      "https://nakama.example.com/v1/automations/a%2Fb/webhook";
+
+    await renderDetailPanel(root, queryClient, {
+      ...webhookAutomation({ type: "webhook" }, "a/b"),
+      webhookUrl: configured,
+    });
+    expect(codes()).toEqual([configured]);
+
+    await act(async () => buttonByLabel("New secret")!.click());
+    await act(async () => {
+      buttonByLabel("Make secret")!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(createSecret).toHaveBeenLastCalledWith("a/b");
+    expect(codes()).toContain("new-secret-value");
+
+    await act(async () => buttonByLabel("New secret")!.click());
+    await act(async () => {
+      buttonByLabel("Make secret")!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(createSecret).toHaveBeenCalledTimes(2);
+    expect(
+      document.querySelector('[role="dialog"] [role="alert"]')
+    ).not.toBeNull();
+    expect(codes()).toContain("new-secret-value");
+
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" }, "other")
+    );
+    expect(codes()).not.toContain("new-secret-value");
+  } finally {
+    createSecret.mockRestore();
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});
+
+test("a double click on Make secret sends one request", async () => {
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  let resolveSecret: (value: string) => void = () => {};
+
+  const createSecret = spyOn(
+    client,
+    "createAutomationWebhookSecret"
+  ).mockReturnValue(
+    new Promise<string>((resolve) => {
+      resolveSecret = resolve;
+    })
+  );
+
+  try {
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" })
+    );
+    await act(async () => buttonByLabel("New secret")!.click());
+    await act(async () => {
+      const confirm = buttonByLabel("Make secret")!;
+      confirm.click();
+      confirm.click();
+    });
+    expect(createSecret).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSecret("pending-secret");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain("pending-secret");
+  } finally {
+    createSecret.mockRestore();
+    await act(async () => root.unmount());
+    container.remove();
+    queryClient.clear();
+  }
+});
+
+test("copy button shows copied, or a failure when the clipboard is missing", async () => {
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  const writeText = mock(async (_text: string) => {});
+
+  function setClipboard(value: { writeText: typeof writeText } | undefined) {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value,
+    });
+  }
+
+  try {
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" })
+    );
+
+    setClipboard({ writeText });
+    await act(async () => buttonByLabel("Copy")!.click());
+    expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/v1/automations/automation/webhook`
+    );
+    expect(buttonByLabel("Copied")).toBeDefined();
+
+    await renderDetailPanel(
+      root,
+      queryClient,
+      webhookAutomation({ type: "webhook" }, "other")
+    );
+    setClipboard(undefined);
+    await act(async () => buttonByLabel("Copy")!.click());
+    expect(buttonByLabel("Copy failed")).toBeDefined();
+  } finally {
+    if (original) {
+      Object.defineProperty(navigator, "clipboard", original);
+    } else {
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
+
     await act(async () => root.unmount());
     container.remove();
     queryClient.clear();

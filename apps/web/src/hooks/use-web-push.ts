@@ -168,10 +168,39 @@ function toStoredSubscription(subscription: PushSubscription) {
 async function subscribeThisDevice(
   registration: ServiceWorkerRegistration
 ): Promise<void> {
-  const subscription = await registration.pushManager.subscribe({
-    applicationServerKey: urlBase64ToBytes(await client.getPushPublicKey()),
-    userVisibleOnly: true,
-  });
+  const applicationServerKey = urlBase64ToBytes(
+    await client.getPushPublicKey()
+  );
+
+  let subscription: PushSubscription;
+
+  try {
+    subscription = await registration.pushManager.subscribe({
+      applicationServerKey,
+      userVisibleOnly: true,
+    });
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      error.name === "AbortError" &&
+      (error.message === "Registration failed - push service error" ||
+        error.message === "Registration failed - push service not available")
+    ) {
+      // SAFETY: Brave supplies this optional API. Other browsers lack it.
+      const { brave } = navigator as Navigator & {
+        brave?: { isBrave: () => Promise<boolean> };
+      };
+
+      if (await brave?.isBrave().catch(() => false)) {
+        throw new Error(
+          "Brave could not start push messaging. In brave://settings/privacy, check that “Use Google services for push messaging” is on. If you turn it on, restart Brave and try again.",
+          { cause: error }
+        );
+      }
+    }
+
+    throw error;
+  }
 
   try {
     await client.savePushSubscription(toStoredSubscription(subscription));

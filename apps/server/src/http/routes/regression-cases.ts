@@ -142,7 +142,7 @@ function toRegressionCase(record: StoredRegressionCaseRecord): RegressionCase {
 }
 
 /** Copied input from a private chat stays with that chat's owner. */
-function canRead(
+export function canReadRegressionCase(
   record: StoredRegressionCaseRecord,
   auth: RequestAuthContext
 ): boolean {
@@ -432,7 +432,7 @@ export function registerRegressionCaseRoutes(
 
     return json<ListRegressionCasesResponse>({
       cases: records
-        .filter((record) => canRead(record, auth))
+        .filter((record) => canReadRegressionCase(record, auth))
         .map(toRegressionCase),
       nextOffset: records.length === limit ? offset + records.length : null,
     });
@@ -452,7 +452,7 @@ export function registerRegressionCaseRoutes(
       caseId
     );
 
-    if (!(record && canRead(record, auth))) {
+    if (!(record && canReadRegressionCase(record, auth))) {
       return errorResponse("Regression case not found", 404);
     }
 

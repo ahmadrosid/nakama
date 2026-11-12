@@ -1407,6 +1407,143 @@ test("a member changes thinking effort for this chat only", async () => {
   }
 });
 
+test("lowering a saved max that a model shows as high saves high", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  const previousStorage = globalThis.localStorage;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: () => null, removeItem() {}, setItem() {} },
+  });
+
+  const updateSession = spyOn(client, "updateSession").mockResolvedValue();
+  const setThinking = spyOn(client, "setThinkingSettings");
+
+  const spies = [
+    // SAFETY: The mock covers only the fields this page test reads.
+    spyOn(client, "getMe").mockResolvedValue({
+      activeOrgId: "org1",
+      id: "u1",
+      isPlatformAdmin: false,
+      orgId: "org1",
+    } as never),
+    // SAFETY: This test supplies only the organization row used by the page.
+    spyOn(client, "listUserOrgs").mockResolvedValue({
+      orgs: [{ id: "org1", name: "Org" }],
+    } as never),
+    spyOn(client, "getSessionMessages").mockResolvedValue({
+      channel: "web",
+      messageMeta: [],
+      messages: [],
+      model: "or1::google/gemini-3.6-flash",
+      questionnaire: null,
+      thinkingEffort: "max",
+      todos: [],
+    }),
+    // SAFETY: The page reads only `active` from this session status fixture.
+    spyOn(client, "getSessionStatus").mockResolvedValue({
+      active: false,
+    } as never),
+    // SAFETY: The models query waits only for providerConfigured.
+    spyOn(client, "health").mockResolvedValue({
+      ok: true,
+      providerConfigured: true,
+    } as never),
+    // SAFETY: The page reads only the model list and provider id here.
+    spyOn(client, "getModels").mockResolvedValue({
+      currentProviderId: "or1",
+      models: [
+        {
+          id: "google/gemini-3.6-flash",
+          name: "Gemini 3.6 Flash",
+          provider: "openrouter",
+          providerId: "or1",
+          supportsThinking: true,
+        },
+      ],
+    } as never),
+    spyOn(client, "getThinkingSettings").mockResolvedValue({
+      effort: "medium",
+      enabled: true,
+    }),
+    // SAFETY: The test reads only profile id and skills from this fixture.
+    spyOn(client, "getProfile").mockResolvedValue({
+      profile: { id: "p1", skills: [] },
+    } as never),
+    // SAFETY: This fixture supplies the profile row used by the page test.
+    spyOn(client, "listProfiles").mockResolvedValue({
+      profiles: [{ id: "p1", name: "P1" }],
+    } as never),
+  ];
+
+  let page!: ChatPageState;
+
+  function Probe() {
+    page = useChatPage();
+
+    return null;
+  }
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/chat/p1/s1"]}>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <AppProvider>
+                <Routes>
+                  <Route
+                    element={<Probe />}
+                    path="/chat/:profileId?/:sessionId?"
+                  />
+                </Routes>
+              </AppProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      )
+    );
+    await settle();
+
+    // Gemini takes no level above high, so the saved max shows as high.
+    expect(page.thinkingEffort).toBe("high");
+
+    await act(async () => page.handleThinkingEffortChange("high"));
+    await settle();
+
+    expect(updateSession).toHaveBeenCalledWith("s1", {
+      thinkingEffort: "high",
+    });
+    expect(setThinking).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    updateSession.mockRestore();
+    setThinking.mockRestore();
+
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+
+    queryClient.clear();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: previousStorage,
+    });
+  }
+});
+
 test.each([false, true])(
   "a new chat with a draft sends it at once only when asked (send: %s)",
   async (send) => {

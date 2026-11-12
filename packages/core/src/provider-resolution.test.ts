@@ -19,6 +19,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("command_code")).toBe("command_code");
+    expect(parseProviderName("standardcompute")).toBe("standardcompute");
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("netra")).toBe("netra");
     expect(parseProviderName("doubao")).toBe("doubao");
@@ -169,6 +170,9 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("command_code")).toBe(
       "https://api.commandcode.ai/provider/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("standardcompute")).toBe(
+      "https://api.stdcmpt.com/v1"
     );
   });
 

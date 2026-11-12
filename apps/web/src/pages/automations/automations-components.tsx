@@ -4,6 +4,7 @@ import type {
   AutomationRunRecord,
   AutomationRunStatus,
   AutomationToolLimit,
+  AutomationTrigger,
   ProfileSummary,
   StoredAutomation,
 } from "@nakama/core/contract";
@@ -44,6 +45,8 @@ import { type ReactNode, useMemo, useState } from "react";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useUserTimezone } from "@/hooks/use-timezones";
 import {
   formatFutureRelativeTime,
@@ -248,12 +251,14 @@ export function AutomationEditorForm({
   busy,
   onChange,
   profiles,
+  savedTrigger,
   toolOptions,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
   profiles: ProfileSummary[];
+  savedTrigger?: AutomationTrigger;
   toolOptions?: AutomationToolOptions;
 }) {
   const scheduleTrigger =
@@ -315,6 +320,7 @@ export function AutomationEditorForm({
         automation={automation}
         busy={busy}
         onChange={onChange}
+        savedTrigger={savedTrigger}
       />
       <DeliverySettingsFields
         busy={busy}
@@ -427,10 +433,12 @@ function AutomationScheduleFields({
   automation,
   busy,
   onChange,
+  savedTrigger,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
+  savedTrigger?: AutomationTrigger;
 }) {
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
@@ -438,8 +446,9 @@ function AutomationScheduleFields({
   const preset = readSchedulePreset(automation.trigger);
 
   const frequency =
-    automation.trigger.type === "manual"
-      ? "manual"
+    automation.trigger.type === "manual" ||
+    automation.trigger.type === "webhook"
+      ? automation.trigger.type
       : (preset?.frequency ?? "custom");
 
   return (
@@ -455,6 +464,7 @@ function AutomationScheduleFields({
               ["weekdays", "Weekdays"],
               ["weekly", "Weekly"],
               ["monthly", "Monthly"],
+              ["webhook", "On webhook"],
             ] as const
           ).map(([value, label]) => (
             <Button
@@ -582,6 +592,15 @@ function AutomationScheduleFields({
             </Select>
           </Field>
         ) : null}
+        {savedTrigger?.type === "webhook" &&
+        automation.trigger.type !== "webhook" ? (
+          <p
+            className="text-pretty text-amber-700 text-xs dark:text-amber-400"
+            role="alert"
+          >
+            Saving deletes the webhook secret. Webhook calls stop working.
+          </p>
+        ) : null}
         {frequency === "custom" ? (
           <p className="text-muted-foreground text-sm">
             {automation.trigger.type === "runAt"
@@ -603,7 +622,10 @@ function AutomationScheduleFields({
 function AutomationNextRun({ automation }: { automation: StoredAutomation }) {
   const { data: userTimezone, isError } = useUserTimezone();
 
-  if (automation.trigger.type === "manual") {
+  if (
+    automation.trigger.type === "manual" ||
+    automation.trigger.type === "webhook"
+  ) {
     return null;
   }
 
@@ -907,6 +929,11 @@ function RunHistoryRow({
             className="size-1.5 shrink-0 rounded-full bg-primary"
           />
         ) : null}
+        {run.source === "webhook" ? (
+          <span className="shrink-0 rounded bg-muted px-1.5 text-muted-foreground text-xs">
+            Webhook
+          </span>
+        ) : null}
         <span
           className={cn(
             "line-clamp-1 min-w-0 flex-1 text-sm",
@@ -991,7 +1018,7 @@ function RunDetailPopup({
   const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
 
   return (
-    <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none">
+    <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out has-[[data-slot=attachment-detail-panel]]:max-w-full data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none md:has-[[data-slot=attachment-detail-panel]:not([data-fullscreen])]:w-fit">
       <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
         {selectedRun ? <RunStatusIcon status={selectedRun.status} /> : null}
         <DialogTitle className="min-w-0 flex-1 truncate text-sm">
@@ -1051,23 +1078,49 @@ function RunDetailPopup({
         </p>
       ) : null}
       {selectedRun ? (
-        <ChatMessageList
-          actionsDisabled
-          className="min-h-0 flex-1"
-          emptyMessage={
-            selectedRun.status === "running"
-              ? "Waiting for output…"
-              : "No output returned."
-          }
-          key={selectedRun.id}
-          messages={automationRunMessages(selectedRun)}
-          profileId={profileId}
-          readOnly
-          streamActive={selectedRun.status === "running"}
-          turnStartedAt={selectedRun.startedAt}
-        />
+        <ChatAttachmentPanelProvider key={selectedRun.id}>
+          <RunConversation profileId={profileId} run={selectedRun} />
+        </ChatAttachmentPanelProvider>
       ) : null}
     </DialogPrimitive.Popup>
+  );
+}
+
+/**
+ * An open file panel sits beside a 24rem conversation, the room the panel
+ * column leaves for it, and the drawer grows to fit both.
+ */
+function RunConversation({
+  run,
+  profileId,
+}: {
+  run: AutomationRunRecord;
+  profileId: string;
+}) {
+  const { isFullscreen, isOpen } = useChatAttachmentPanel();
+
+  return (
+    <ChatMessageList
+      actionsDisabled
+      className={cn(
+        "min-h-0",
+        isFullscreen
+          ? "pointer-events-none w-0 flex-none overflow-hidden opacity-0"
+          : isOpen
+            ? "w-96 flex-none"
+            : "flex-1",
+        isOpen &&
+          "max-md:pointer-events-none max-md:w-0 max-md:flex-none max-md:overflow-hidden max-md:opacity-0"
+      )}
+      emptyMessage={
+        run.status === "running" ? "Waiting for output…" : "No output returned."
+      }
+      messages={automationRunMessages(run)}
+      profileId={profileId}
+      readOnly
+      streamActive={run.status === "running"}
+      turnStartedAt={run.startedAt}
+    />
   );
 }
 

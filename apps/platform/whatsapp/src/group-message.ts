@@ -17,6 +17,44 @@ export interface GroupMessageHandlingDecision {
   shouldHandle: boolean;
 }
 
+// IDs of messages Nakama sent. The linked account is often the user's own
+// number, so a quote of that number is only a reply to Nakama when the quoted
+// message is one Nakama sent. Bounded; lost on restart (fails closed).
+const MAX_BOT_MESSAGE_IDS = 2000;
+
+const botMessageIds = new Set<string>();
+
+export function rememberWhatsAppBotMessage(
+  id: string | null | undefined
+): void {
+  const trimmed = id?.trim();
+
+  if (!trimmed) {
+    return;
+  }
+
+  botMessageIds.delete(trimmed);
+  botMessageIds.add(trimmed);
+
+  if (botMessageIds.size > MAX_BOT_MESSAGE_IDS) {
+    const oldest = botMessageIds.values().next().value;
+
+    if (oldest) {
+      botMessageIds.delete(oldest);
+    }
+  }
+}
+
+function isWhatsAppBotMessage(id: string | null | undefined): boolean {
+  const trimmed = id?.trim();
+
+  return Boolean(trimmed && botMessageIds.has(trimmed));
+}
+
+export function resetWhatsAppBotMessagesForTests(): void {
+  botMessageIds.clear();
+}
+
 export function resolveChannelOrgKey(jid: string, isGroup: boolean): string {
   return isGroup ? `g:${jid}` : jid;
 }
@@ -38,6 +76,7 @@ export function isWhatsAppBotAddress(
 
 export function explainGroupMessageHandling(input: {
   mentionedJids: string[];
+  quotedMessageId?: string | null;
   quotedParticipant: string | null;
   text: string;
   me?: WhatsAppAccount | undefined;
@@ -60,7 +99,10 @@ export function explainGroupMessageHandling(input: {
     return { reason: "missing-bot-info", shouldHandle: false };
   }
 
-  if (isWhatsAppBotAddress(input.quotedParticipant, input.me)) {
+  if (
+    isWhatsAppBotAddress(input.quotedParticipant, input.me) &&
+    isWhatsAppBotMessage(input.quotedMessageId)
+  ) {
     return { reason: "reply-to-bot", shouldHandle: true };
   }
 

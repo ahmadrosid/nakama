@@ -7,7 +7,7 @@ import {
   installErrorHandlers,
   installErrorTrackingSink,
 } from "@nakama/core";
-import type { Server } from "bun";
+import type { Server, WebSocketHandler } from "bun";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 import { createPluginAgentHost } from "./services/plugin-agent-host";
 
@@ -65,6 +65,7 @@ import {
 import { createProviderForInstance } from "./providers/create";
 import { runFirstBootSeed } from "./seed";
 import { AgentService } from "./services/agent-service";
+import { resolveTranscriptionProviderSelection } from "./services/audio-transcription";
 import { AuthService } from "./services/auth-service";
 import { AutomationDeliveryService } from "./services/automation-delivery-service";
 import { AutomationRunner } from "./services/automation-runner";
@@ -73,7 +74,6 @@ import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url
 import { ComposioService } from "./services/composio-service";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
-
 import {
   cleanupDataPortabilityTempDirs,
   createNakamaDataExportFile,
@@ -81,7 +81,10 @@ import {
   retireAppUserData,
 } from "./services/data-portability";
 import { openaiProviderKey } from "./services/google-meet/actions";
-import { GoogleMeetService } from "./services/google-meet/service";
+import {
+  type CaptureSocketData,
+  GoogleMeetService,
+} from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { decodeSecretsKey, ManagedSecrets } from "./services/managed-secrets";
 import { McpClientManager } from "./services/mcp-client-manager";
@@ -264,7 +267,12 @@ const googleMeetService = new GoogleMeetService(
   getUserConfigDir(),
   (request, signal) => agent.transcribeAudio(request, signal),
   () => openaiProviderKey(agent.getUserConfig()),
-  composioService
+  composioService,
+  async () => {
+    await agent.ensureTranscriptionSettingsLoaded();
+
+    return resolveTranscriptionProviderSelection(agent.getUserConfig());
+  }
 );
 
 agent.setServerTools({
@@ -327,6 +335,7 @@ const automationService = new AutomationService(database.adapter, {
   canSendEmail: (profileId, _orgId) =>
     hasAutomationEmailDeliveryPath(database.adapter, profileId),
   getUserTimezone: () => agent.getUserTimezone(),
+  secrets: managedSecrets,
 });
 
 const automationDeliveryService = new AutomationDeliveryService(
@@ -607,10 +616,11 @@ const app = createHonoApp({
 const server = startServer({
   canFallbackToNextPort,
   // The limiter needs the peer address, and Bun only exposes it on `server`.
-  fetch: (request: Request, server: Server<unknown>) =>
+  fetch: (request: Request, server: Server<CaptureSocketData>) =>
     app.fetch(request, { server }),
   host,
   preferredPort: requestedPort,
+  websocket: googleMeetService.captureSocket,
 });
 
 const serverUrl = writeRuntimeServerUrl(
@@ -728,9 +738,11 @@ function startServer(options: {
   canFallbackToNextPort: boolean;
   fetch: (
     request: Request,
-    server: Server<unknown>
+    server: Server<CaptureSocketData>
   ) => Response | Promise<Response>;
-}): ReturnType<typeof Bun.serve> {
+  /** The only socket today is Meet capture, upgraded at `GET /v1/meet/capture`. */
+  websocket: WebSocketHandler<CaptureSocketData>;
+}): Server<CaptureSocketData> {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65_535)
     : options.preferredPort;
@@ -739,8 +751,8 @@ function startServer(options: {
 
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
     try {
-      return Bun.serve({
-        async fetch(request, server: Server<unknown>) {
+      return Bun.serve<CaptureSocketData>({
+        async fetch(request, server) {
           disableBunIdleTimeoutForLongHeldRequest(request, server);
           const response = await options.fetch(request, server);
           disableBunIdleTimeoutForSse(request, response, server);
@@ -754,6 +766,7 @@ function startServer(options: {
           getDataImportLimits().archiveBytes + 64 * 1024 * 1024
         ),
         port,
+        websocket: options.websocket,
       });
     } catch (error) {
       if (
@@ -819,7 +832,7 @@ function killLeftoverPm2Daemon(pidPath: string): void {
 }
 
 function registerRuntimeCleanup(
-  server: ReturnType<typeof Bun.serve>,
+  server: Server<CaptureSocketData>,
   serverUrl: string,
   database: Database,
   mcpClientManager: McpClientManager,

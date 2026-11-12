@@ -1,3 +1,4 @@
+import type { ProviderInstanceSummary } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -26,11 +27,10 @@ const IMAGE_GENERATION_OFF_VALUE = "off";
 
 type ImageGenerationChoice = SettingsModelOption;
 
-interface ImageGenerationProviderSummary {
-  hasApiKey: boolean;
-  id: string;
-  type: string;
-}
+type ImageGenerationProviderSummary = Pick<
+  ProviderInstanceSummary,
+  "chatgptPlanType" | "hasApiKey" | "id" | "type"
+>;
 
 /**
  * The picker's choices and labels. Every ChatGPT model makes images with the
@@ -40,7 +40,7 @@ interface ImageGenerationProviderSummary {
 function imageGenerationChoices(
   models: Parameters<typeof groupModelsByProvider>[0],
   providers: ImageGenerationProviderSummary[],
-  selection: string
+  selection: string | null
 ) {
   const groups = groupModelsByProvider(models);
 
@@ -100,7 +100,7 @@ function imageGenerationChoices(
           label: group.providerLabel,
           // A saved ChatGPT pick keeps its own value, so it shows selected.
           value:
-            chatgptGroupOf(selection) === group
+            selection && chatgptGroupOf(selection) === group
               ? selection
               : encodeModelSelection(
                   group.providerId,
@@ -149,18 +149,37 @@ function imageGenerationChoices(
     );
   };
 
-  return { choices, labelOf, providerAvailable };
+  const freeChatgptIds = new Set(
+    providers.flatMap((provider) =>
+      connectedChatgptIds.has(provider.id) &&
+      provider.chatgptPlanType === "free"
+        ? [provider.id]
+        : []
+    )
+  );
+
+  // ChatGPT Free has no image tool. The automatic pick skips Free accounts, so
+  // it only fails when every connected ChatGPT is Free. `null`: not loaded.
+  const chatgptFreeNote =
+    selection === ""
+      ? freeChatgptIds.size > 0 &&
+        freeChatgptIds.size === connectedChatgptIds.size
+      : selection !== null &&
+        freeChatgptIds.has(chatgptGroupOf(selection)?.providerId ?? "");
+
+  return { chatgptFreeNote, choices, labelOf, providerAvailable };
 }
 
 export function ImageGenerationSettingsCard() {
   const [formError, setFormError] = useState<string | null>(null);
-  const [selection, setSelection] = useState<string>("");
+  // null until the saved model loads, so it does not read as the automatic pick.
+  const [selection, setSelection] = useState<string | null>(null);
   const [savedHint, setSavedHint] = useState<string | null>(null);
   const { data: modelsResponse } = useModelsQuery();
   const { data: imageGenerationSettings } = useImageGenerationSettings();
   const saveImageGenerationMutation = useSaveImageGenerationSettings();
 
-  const { choices, labelOf, providerAvailable } = useMemo(
+  const { chatgptFreeNote, choices, labelOf, providerAvailable } = useMemo(
     () =>
       imageGenerationChoices(
         modelsResponse?.models ?? [],
@@ -170,9 +189,15 @@ export function ImageGenerationSettingsCard() {
     [modelsResponse?.models, modelsResponse?.providers, selection]
   );
 
+  const savedModel = imageGenerationSettings
+    ? (imageGenerationSettings.model ?? "")
+    : null;
+
   useEffect(() => {
-    setSelection(imageGenerationSettings?.model ?? "");
-  }, [imageGenerationSettings?.model]);
+    if (savedModel !== null) {
+      setSelection(savedModel);
+    }
+  }, [savedModel]);
 
   useEffect(() => {
     if (!savedHint) {
@@ -187,8 +212,13 @@ export function ImageGenerationSettingsCard() {
   return (
     <SettingsModelTile
       footer={
-        savedHint || formError ? (
+        savedHint || formError || chatgptFreeNote ? (
           <>
+            {chatgptFreeNote ? (
+              <p className="text-muted-foreground text-xs" role="note">
+                ChatGPT Free accounts can't generate images.
+              </p>
+            ) : null}
             {savedHint ? (
               <p
                 className="text-emerald-700 text-xs dark:text-emerald-300"

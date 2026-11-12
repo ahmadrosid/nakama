@@ -2,16 +2,19 @@ import type {
   ProviderModelOption,
   ThinkingEffort,
 } from "@nakama/core/contract";
+import { clampThinkingEffort } from "@nakama/core/thinking-effort";
 import { useMemo } from "react";
 import { useAcpChatControls } from "@/hooks/use-acp-settings";
 import {
   effectiveProfileModelSelection,
+  findSelectedModel,
   groupModelsByProvider,
   resolveModelThinkingSupport,
 } from "@/lib/models";
 import {
   DEFAULT_THINKING_EFFORT,
   shouldShowThinkingEffort,
+  thinkingEffortOptionsFor,
 } from "@/lib/thinking-settings";
 
 interface ChatComposerControlsInput {
@@ -83,10 +86,21 @@ export function useChatComposerControls({
     ? acp.currentModelSelection
     : workspaceSelection;
 
-  const activeModelSupportsThinking = useMemo(
-    () =>
-      resolveModelThinkingSupport(currentModelSelection, providerModelGroups),
+  const activeModel = useMemo(
+    () => findSelectedModel(currentModelSelection, providerModelGroups),
     [currentModelSelection, providerModelGroups]
+  );
+
+  const activeModelSupportsThinking = resolveModelThinkingSupport(activeModel);
+
+  // This chat's own effort, else the install effort. The picker shows it
+  // lowered to what the active model takes, and saves compare against it.
+  const savedThinkingEffort =
+    sessionThinkingEffort ?? thinkingSettingsEffort ?? DEFAULT_THINKING_EFFORT;
+
+  const workspaceEffortOptions = useMemo(
+    () => thinkingEffortOptionsFor(activeModel),
+    [activeModel]
   );
 
   const effort = acpEnabled
@@ -102,11 +116,15 @@ export function useChatComposerControls({
           thinkingSettingsLoading ||
           saveThinkingPending ||
           readOnlySession,
-        options: undefined,
-        value:
-          sessionThinkingEffort ??
-          thinkingSettingsEffort ??
-          DEFAULT_THINKING_EFFORT,
+        options: workspaceEffortOptions,
+        // Show what the server will send: Max saved on DeepSeek reads as High on Gemini.
+        value: activeModel
+          ? clampThinkingEffort(
+              savedThinkingEffort,
+              activeModel.id,
+              activeModel.provider
+            )
+          : savedThinkingEffort,
         visible: shouldShowThinkingEffort(activeModelSupportsThinking),
       };
 
@@ -115,6 +133,7 @@ export function useChatComposerControls({
     activeModelSupportsThinking,
     currentModelSelection,
     providerModelGroups,
+    savedThinkingEffort,
     setAcpEffort: acp.setEffort,
     setAcpModel: acp.setModel,
     thinkingEffort: effort.value,

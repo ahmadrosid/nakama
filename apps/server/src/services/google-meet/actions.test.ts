@@ -14,7 +14,6 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
   const context: MeetExecutionContext = {
     actionKey: "configure",
     actor: { id: "a", role: "admin" },
-    captureUrl: async () => "ws://localhost/capture",
     createCapture: () => ({ token: "test", url: "ws://localhost/capture" }),
     dataDir: dir,
     openaiKey: () => "secret-api-key",
@@ -422,4 +421,88 @@ test("Meet takes the OpenAI key from AI provider settings", () => {
       ],
     })
   ).toBe("second-key");
+});
+
+test("uploads and imports use the chosen provider; live calls still need OpenAI", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-transcriber-"));
+
+  const importer = spyOn(
+    recordingImport,
+    "importMeetRecording"
+  ).mockResolvedValue({ filename: "Sprint.mp4", text: "Hello team." });
+
+  const context: MeetExecutionContext = {
+    actionKey: "meetings",
+    actor: { id: "a", role: "admin" },
+    composio: {
+      downloadMeetRecording: mock(async () => {
+        throw new Error("Unexpected download");
+      }),
+      listMeetRecordings: mock(async () => {
+        throw new Error("Unexpected list");
+      }),
+    },
+    createCapture: () => ({ token: "test", url: "ws://localhost/capture" }),
+    dataDir: dir,
+    openaiKey: () => null,
+    orgId: "org",
+    transcriber: async () => ({
+      instance: { apiKey: "sk-or-key", type: "openrouter" },
+      model: "google/gemini-2.5-flash",
+    }),
+  };
+
+  try {
+    const overview = await run({}, context);
+    expect(overview).toMatchObject({
+      configured: true,
+      liveReady: false,
+      transcription: { model: "google/gemini-2.5-flash", type: "openrouter" },
+      transcriptionError: null,
+    });
+    expect(JSON.stringify(overview)).not.toContain("sk-or-key");
+
+    await run(
+      { fileId: "drive_file_123", messageId: "msg_1" },
+      { ...context, actionKey: "import-recording" }
+    );
+    expect(importer.mock.calls[0]?.[1]).toMatchObject({
+      model: "google/gemini-2.5-flash",
+      provider: { apiKey: "sk-or-key", type: "openrouter" },
+    });
+
+    await expect(
+      run(
+        { url: "https://meet.google.com/abc-defg-hij" },
+        { ...context, actionKey: "start-capture" }
+      )
+    ).rejects.toThrow();
+
+    const none = { ...context, transcriber: async () => null };
+    expect(await run({}, none)).toMatchObject({
+      configured: false,
+      transcription: null,
+    });
+    await expect(
+      run(
+        { fileId: "drive_file_123", messageId: "msg_1" },
+        { ...none, actionKey: "import-recording" }
+      )
+    ).rejects.toThrow();
+
+    const broken = {
+      ...context,
+      transcriber: async () => {
+        throw new Error("Configured audio transcription provider is missing.");
+      },
+    };
+
+    expect(await run({}, broken)).toMatchObject({
+      configured: false,
+      transcriptionError: "Configured audio transcription provider is missing.",
+    });
+  } finally {
+    importer.mockRestore();
+    rmSync(dir, { force: true, recursive: true });
+  }
 });

@@ -1828,6 +1828,13 @@ export class OrgService {
     await this.requireActiveOrganization(orgId);
     await this.assertCanChangeAdminMembership(orgId, userId);
 
+    // A webhook secret lets its maker start runs, so it ends with their access.
+    // Revoke first: a failed revoke keeps the member row, so a retry still works.
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(
+      userId,
+      orgId
+    );
+
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
 
     if (!deleted) {
@@ -1921,6 +1928,8 @@ export class OrgService {
     // The checks above are read-then-write; the statement re-checks both rules
     // so a concurrent disable, remove or demote cannot leave no usable admin.
     const now = new Date().toISOString();
+
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(userId);
 
     const disabled = await this.databaseAdapter.disableUserUnlessLastAdmin(
       userId,
@@ -2027,6 +2036,14 @@ export class OrgService {
     }
 
     if (member.role !== role) {
+      // Only admins may hold secrets for email-capable profiles, so demotion revokes all of this user's secrets in the org.
+      if (role !== "admin") {
+        await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(
+          userId,
+          orgId
+        );
+      }
+
       const updated = await this.databaseAdapter.updateOrgMemberRole(
         orgId,
         userId,
@@ -2387,6 +2404,7 @@ export class OrgService {
     }
 
     const now = new Date().toISOString();
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(user.id);
     await this.databaseAdapter.updateUserPassword(
       user.id,
       await this.authService.hashPassword(newPassword),

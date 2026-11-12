@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { UserConfig } from "@nakama/core";
+import type { ProviderInstance, UserConfig } from "@nakama/core";
 import type { MeetImportProgress } from "@nakama/core/google-meet";
 import { z } from "zod";
 import type { ComposioService } from "../composio-service";
@@ -9,6 +9,14 @@ import { type Meeting, MeetingStore } from "./store";
 
 export const OPENAI_PROVIDER_REQUIRED_MESSAGE =
   "Add an OpenAI provider in AI Providers first.";
+
+const TRANSCRIPTION_PROVIDER_REQUIRED_MESSAGE =
+  "Connect a transcription provider on the Google Meet page first.";
+
+export interface MeetTranscriber {
+  instance: Pick<ProviderInstance, "apiKey" | "baseUrl" | "type">;
+  model: string;
+}
 
 // Meet calls OpenAI directly, so it takes the key from the AI provider settings:
 // the default provider when it is OpenAI, otherwise the first OpenAI provider.
@@ -31,12 +39,16 @@ function privateJson(path: string, data: { enabled: boolean }) {
 }
 
 export const meetingActionSchemas = {
+  "approve-extension": z
+    .object({ code: z.string().trim().min(1).max(16) })
+    .strict(),
   configure: z
     .object({
       enabled: z.boolean().optional(),
     })
     .strict(),
   delete: z.object({ meetingId: z.string() }).strict(),
+  "extension-keys": z.object({}).strict(),
   "import-progress": z.object({}).strict(),
   "import-recording": z
     .object({
@@ -47,6 +59,7 @@ export const meetingActionSchemas = {
   leave: z.object({ meetingId: z.string() }).strict(),
   meetings: z.object({}).strict(),
   recordings: z.object({}).strict(),
+  "revoke-extension": z.object({ keyId: z.string().max(64) }).strict(),
   "start-capture": z
     .object({
       durationMinutes: z.number().int().min(1).max(120).optional(),
@@ -71,7 +84,6 @@ export const meetingActionSchemas = {
 export interface MeetExecutionContext {
   actionKey: string;
   actor: { id: string; role: "admin" | "member" };
-  captureUrl?(): Promise<string>;
   composio?: Pick<
     ComposioService,
     "listMeetRecordings" | "downloadMeetRecording"
@@ -90,15 +102,21 @@ export interface MeetExecutionContext {
     request: { data: string; filename: string; mediaType: string },
     signal?: AbortSignal
   ): Promise<{ text: string }>;
+  /** The workspace transcription model, used for uploads and imports. */
+  transcriber?(): Promise<MeetTranscriber | null>;
 }
 
 export interface MeetActionInput {
   after?: number;
+  code?: string;
   content?: string;
   durationMinutes?: number;
   enabled?: boolean;
+  fileId?: string;
   filename?: string;
+  keyId?: string;
   meetingId?: string;
+  messageId?: string;
   url?: string;
 }
 
@@ -108,6 +126,50 @@ export function meetEnabled(directory: string) {
   return (
     !existsSync(path) || JSON.parse(readFileSync(path, "utf8")).enabled === true
   );
+}
+
+// Uploads and imports use the workspace transcription model. Installs that
+// only have an OpenAI provider keep working through Whisper.
+async function resolveTranscriber(
+  context: MeetExecutionContext,
+  openaiKey: string | null
+): Promise<MeetTranscriber | null> {
+  const selected = await context.transcriber?.();
+
+  if (selected) {
+    return selected;
+  }
+
+  return openaiKey
+    ? { instance: { apiKey: openaiKey, type: "openai" }, model: "whisper-1" }
+    : null;
+}
+
+async function transcriptionStatus(
+  context: MeetExecutionContext,
+  openaiKey: string | null
+) {
+  try {
+    const selected = await context.transcriber?.();
+
+    return {
+      configured: Boolean(selected || openaiKey),
+      transcription: selected
+        ? { model: selected.model, type: selected.instance.type }
+        : null,
+      transcriptionError: null,
+    };
+  } catch (error) {
+    // A broken setting must not hide the meeting list; the page shows why.
+    return {
+      configured: Boolean(openaiKey),
+      transcription: null,
+      transcriptionError:
+        error instanceof Error
+          ? error.message
+          : "Transcription setting is invalid",
+    };
+  }
 }
 
 export async function run(
@@ -167,7 +229,7 @@ export async function run(
       }
 
       return {
-        configured: Boolean(openaiKey),
+        configured: (await transcriptionStatus(context, openaiKey)).configured,
         enabled: meetEnabled(context.dataDir),
       };
     }
@@ -183,9 +245,9 @@ export async function run(
     if (action === "meetings") {
       return {
         canConfigure: context.actor.role === "admin",
-        captureProtocol: 2,
-        configured: Boolean(openaiKey),
+        ...(await transcriptionStatus(context, openaiKey)),
         enabled,
+        liveReady: Boolean(openaiKey),
         meetings: enabled
           ? store.list(
               context.actor.role === "admin" ? null : context.actor.id,
@@ -201,11 +263,10 @@ export async function run(
         throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
       }
 
-      if (!(context.captureUrl && context.createCapture)) {
-        throw new Error("Capture service unavailable");
+      // Only an HTTP route knows the capture socket URL of the main server.
+      if (!context.createCapture) {
+        throw new Error("Capture socket URL is missing");
       }
-
-      await context.captureUrl();
 
       const meeting = store.create(
         String(input.url ?? "").trim(),
@@ -307,8 +368,10 @@ export async function run(
         );
       }
 
-      if (!openaiKey) {
-        throw new Error(OPENAI_PROVIDER_REQUIRED_MESSAGE);
+      const transcriber = await resolveTranscriber(context, openaiKey);
+
+      if (!transcriber) {
+        throw new Error(TRANSCRIPTION_PROVIDER_REQUIRED_MESSAGE);
       }
 
       const progress = context.importProgress;
@@ -317,12 +380,13 @@ export async function run(
         const result = await importMeetRecording(
           context.composio,
           {
-            apiKey: openaiKey,
             // SAFETY: The surrounding code checked this value before the assertion.
             fileId: input.fileId as string,
             // SAFETY: The surrounding code checked this value before the assertion.
             messageId: input.messageId as string,
+            model: transcriber.model,
             orgId: context.orgId,
+            provider: transcriber.instance,
             userId: context.actor.id,
           },
           context.signal ?? AbortSignal.timeout(20 * 60_000),

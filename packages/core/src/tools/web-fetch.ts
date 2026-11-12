@@ -4,6 +4,7 @@ import { BlockList, isIP } from "node:net";
 import { NodeHtmlMarkdown } from "node-html-markdown";
 import robotsParser from "robots-parser";
 import { z } from "zod";
+import { NakamaApiError } from "../api-error";
 import type { ImageAttachment, JsonSchema, ToolDefinition } from "../contract";
 import { type BunFetchInit, withDisabledFetchIdle } from "../fetch-idle";
 import { MAX_IMAGE_BYTES } from "../message-content";
@@ -428,7 +429,12 @@ async function fetchWithRedirects(
   throw new Error(`web_fetch: exceeded ${MAX_REDIRECTS} redirects.`);
 }
 
-async function readBoundedBody(
+/**
+ * Read a response body, stopping at `maxBytes`. `response.text()` and
+ * `response.json()` buffer whatever the upstream sends, so one oversized
+ * answer from a configured endpoint can push the server past its memory.
+ */
+export async function readBoundedBody(
   response: Response,
   maxBytes: number
 ): Promise<Buffer<ArrayBuffer>> {
@@ -440,8 +446,9 @@ async function readBoundedBody(
 
     if (Number.isFinite(declared) && declared > maxBytes) {
       await response.body?.cancel();
-      throw new Error(
-        `web_fetch: response body exceeds ${maxBytes} bytes (Content-Length: ${declared}).`
+      throw new NakamaApiError(
+        `Upstream response body exceeds ${maxBytes} bytes (Content-Length: ${declared}).`,
+        502
       );
     }
   }
@@ -466,7 +473,10 @@ async function readBoundedBody(
       received += value.byteLength;
 
       if (received > maxBytes) {
-        throw new Error(`web_fetch: response body exceeds ${maxBytes} bytes.`);
+        throw new NakamaApiError(
+          `Upstream response body exceeds ${maxBytes} bytes.`,
+          502
+        );
       }
 
       chunks.push(value);

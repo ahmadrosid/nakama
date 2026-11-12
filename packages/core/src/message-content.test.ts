@@ -6,6 +6,7 @@ import {
   getUserMessageText,
   MAX_ATTACHMENTS_PER_MESSAGE,
   messagesIncludeUserImages,
+  normalizeAttachmentBase64,
   normalizeUserContent,
   parseDataUrl,
   parseDocumentDataUrl,
@@ -139,6 +140,14 @@ describe("validateDocumentAttachments", () => {
         },
       ])
     ).toThrow(NakamaApiError);
+  });
+});
+
+describe("normalizeAttachmentBase64", () => {
+  test("accepts valid base64 above 6 MB when the cap allows it", () => {
+    const data = Buffer.alloc(8 * 1024 * 1024, 7).toString("base64");
+
+    expect(normalizeAttachmentBase64(data, 10 * 1024 * 1024)).toBe(data);
   });
 });
 

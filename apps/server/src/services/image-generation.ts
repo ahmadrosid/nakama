@@ -4,6 +4,7 @@ import {
   NakamaApiError,
   normalizeBaseUrl,
   type ProviderInstance,
+  readBoundedBody,
   type UserConfig,
 } from "@nakama/core";
 import { isCompatibleModelId } from "../providers/compatible-models";
@@ -59,6 +60,11 @@ const DEFAULT_OPENAI_IMAGES_BASE_URL = "https://api.openai.com/v1";
  * (one took 11 minutes) must fail with a clear error instead of hanging the turn.
  */
 const IMAGE_GENERATION_TIMEOUT_MS = 180_000;
+
+/** One base64 PNG at the largest size is under 10 MB; this stops a runaway endpoint. */
+const MAX_IMAGE_RESPONSE_BYTES = 32 * 1024 * 1024;
+
+const MAX_IMAGE_ERROR_BODY_BYTES = 64 * 1024;
 
 export interface ResolvedImageGenerationSelection {
   apiKey: string;
@@ -391,16 +397,21 @@ export async function generateImageWithOpenAI(
   ).catch(rethrowTimeout);
 
   if (!response.ok) {
-    const body = await response.text().catch(rethrowTimeout);
+    const detail = await readBoundedBody(response, MAX_IMAGE_ERROR_BODY_BYTES)
+      .then((bytes) => bytes.toString("utf8"))
+      .catch(rethrowTimeout);
+
     throw new NakamaApiError(
-      `Image generation failed (${response.status}): ${body}`,
+      `Image generation failed (${response.status}): ${detail}`,
       502
     );
   }
 
-  const payload = parseOpenAIImageResponse(
-    await response.json().catch(rethrowTimeout)
+  const body = await readBoundedBody(response, MAX_IMAGE_RESPONSE_BYTES).catch(
+    rethrowTimeout
   );
+
+  const payload = parseOpenAIImageResponse(JSON.parse(body.toString("utf8")));
 
   const first = payload.data?.[0];
   const b64 = first?.b64_json?.trim();

@@ -277,7 +277,7 @@ export function ChatPageContent({
 
   const content = isEmptyState ? (
     <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {cognitoSurface ? null : <NewChatTopBar toggle={cognitoToggle} />}
         <ChatPageColumn centered cognito={cognitoSurface}>
           {cognitoControl(emptyStateControlClass(cognitoSurface))}

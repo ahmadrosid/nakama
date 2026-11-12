@@ -55,6 +55,7 @@ export const DISCOVERY_MODEL_PROVIDERS: ReadonlySet<ProviderName> =
     "xai",
     "groq",
     "cheaper_inference",
+    "standardcompute",
     "zhipu",
     "zhipu_cn",
   ]);
@@ -73,6 +74,7 @@ export const DISCOVERY_PROVIDER_BASE_URLS: Readonly<
   moonshot: "https://api.moonshot.ai/v1",
   moonshot_cn: "https://api.moonshot.cn/v1",
   netra: "https://api.netraruntime.com/v1",
+  standardcompute: "https://api.stdcmpt.com/v1",
   zhipu: "https://api.z.ai/api/paas/v4",
   zhipu_cn: "https://open.bigmodel.cn/api/paas/v4",
 };

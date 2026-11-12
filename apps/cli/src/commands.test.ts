@@ -5,6 +5,7 @@ import type {
   ProfileSummary,
 } from "@nakama/core";
 import {
+  effortForActiveModel,
   parseModelCommandArg,
   resolveModelSwitchTarget,
   resolveSuggestions,
@@ -92,6 +93,23 @@ describe("resolveModelSwitchTarget", () => {
 });
 
 describe("effectiveModelState", () => {});
+
+describe("effortForActiveModel", () => {
+  test("names the level the active model gets", () => {
+    const gpt = { ...profile, model: "provider-b::gpt-4o" };
+
+    const luna: ModelsResponse = {
+      ...modelsCache,
+      models: [{ id: "gpt-6-luna", name: "Luna", provider: "openai" }],
+    };
+
+    expect(effortForActiveModel("max", gpt, modelsCache)).toBe("high");
+    expect(
+      effortForActiveModel("max", { ...profile, model: "gpt-6-luna" }, luna)
+    ).toBe("max");
+    expect(effortForActiveModel("max", gpt, null)).toBe("max");
+  });
+});
 
 describe("model command", () => {
   test("opens before enter selects a model", () => {

@@ -41,13 +41,23 @@ Download the extension from the **Google Meet** page and unzip it. This is a one
 
 Keep the extension enabled while you use Google Meet.
 
+### 4. Connect the extension to Nakama
+
+You do this once per browser.
+
+1. Click the Nakama icon in the Chrome toolbar. The extension opens in the side panel.
+2. Enter your Nakama address, for example `https://nakama.example.com`, and choose **Connect**. Allow access to that address when Chrome asks.
+3. Nakama opens in a new tab and shows a code. Check that it matches the code in the side panel, then choose **Approve**.
+
+The side panel then shows **Connected**. Your browser appears under **Connected browsers** on the **Google Meet** page, where you can remove it. **Disconnect** in the side panel also removes it from Nakama. A connection lasts 90 days and renews each time you use it.
+
 ## Start a transcription
 
-1. Open **Google Meet** in Nakama and connect the Chrome extension.
-2. Open your Google Meet call in Chrome.
-3. Open the extension panel and start capture.
+1. Join your Google Meet call in Chrome.
+2. On the Meet tab, click the Nakama icon in the Chrome toolbar. Chrome lets the extension record a tab only after this click on that tab.
+3. Choose **Start transcription** in the side panel.
 
-Keep the Nakama page open. The extension receives a one-time connection link and sends audio to Nakama.
+You do not need to keep Nakama open. The side panel shows a timer and the live transcript.
 
 The meeting moves through **Waiting**, **Transcribing**, and **Finished**. Open the meeting in Nakama to see new text while the call is running.
 
@@ -80,47 +90,21 @@ The recording must be no larger than 1 GiB or two hours. If an import fails, cho
 
 ## Stop and save
 
-Choose **Leave** in Nakama or stop capture from the Chrome extension. Nakama finishes the current transcript and keeps the saved meeting available under **Saved transcripts**.
+Choose **Stop** in Nakama or **Stop transcription** in the side panel. Nakama finishes the current transcript and keeps the saved meeting available under **Saved transcripts**.
 
 If Chrome closes or the connection breaks, Nakama keeps the text collected so far and marks the meeting as incomplete. It does not silently reconnect to the call.
 
-## Remote Nakama servers
+## Nakama behind a reverse proxy
 
-The capture service binds to `127.0.0.1` by default. If Chrome runs on another
-computer, your administrator must make the capture WebSocket reachable through
-a secure address and set these variables on the Nakama server before starting
-Nakama:
-
-- `NAKAMA_MEET_CAPTURE_HOST` sets the capture listener's bind address. Set it to
-  `0.0.0.0` when a container or reverse proxy must connect to the listener.
-- `NAKAMA_MEET_CAPTURE_ORIGIN` sets the complete WebSocket URL that Nakama gives
-  the Chrome extension. Use `wss://` and include the `/capture` path.
-- `NAKAMA_MEET_CAPTURE_PORT` sets the capture listener's port. Without it Nakama
-  picks a free port on each start, so set it when a reverse proxy needs a fixed
-  target.
-
-For example, configure a reverse proxy at `meet-capture.example.com` with these
-server environment variables:
-
-```bash
-export NAKAMA_MEET_CAPTURE_HOST=0.0.0.0
-export NAKAMA_MEET_CAPTURE_PORT=4320
-export NAKAMA_MEET_CAPTURE_ORIGIN=wss://meet-capture.example.com/capture
-```
-
-Restart Nakama after changing any of these variables. The reverse
-proxy must forward WebSocket upgrade requests to the capture listener. Do not
-share the connection links; they contain a temporary private passcode for one
-organization and one meeting.
+The extension sends audio to the same address you connected it to. If Nakama runs behind a reverse proxy, the proxy must forward WebSocket upgrade requests for `/v1/meet/capture`. Use `https://` for any address outside your own computer.
 
 ## Troubleshooting
 
 ### The capture does not start
 
-- Make sure the Meet tab is open in Chrome.
+- Click the Nakama icon in the toolbar on the Meet tab, then choose **Start transcription** again.
 - Make sure the extension is enabled.
-- Refresh both the Nakama Google Meet page and the Meet tab.
-- Connect the extension to the active Nakama organization again.
+- If the side panel shows **Not connected**, connect it again. Nakama disconnects a browser when you remove it, change your password, or leave the organization.
 
 ### The meeting is ready but no transcript appears
 
@@ -131,4 +115,4 @@ organization and one meeting.
 
 ### The extension cannot reach Nakama
 
-The Chrome extension and Nakama must be able to reach the same connection address. For remote servers, ask your administrator to check the secure connection and firewall.
+Check the address in the side panel settings. For a remote server, ask your administrator to check the secure connection, the firewall, and WebSocket forwarding for `/v1/meet/capture`.

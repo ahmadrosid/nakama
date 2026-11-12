@@ -154,6 +154,49 @@ describe("TurnRunner", () => {
     expect(hooks).toEqual(["title", "skill_review"]);
   });
 
+  test("a questionnaire event keeps the recommended choice", async () => {
+    const { fake } = chat(async (handlers) => {
+      handlers.onToolEnd?.({
+        result: {
+          questionnaire: {
+            id: "q1",
+            questions: [
+              {
+                allowCustomAnswer: false,
+                choices: [
+                  { id: "bali", label: "Bali", recommended: true },
+                  { id: "jogja", label: "Jogja" },
+                ],
+                id: "where",
+                prompt: "Mau ke mana?",
+              },
+            ],
+            title: "Liburan",
+          },
+        },
+        tool: "ask_user_question",
+        toolCallId: "call_1",
+      });
+
+      return "ok";
+    });
+
+    const { run } = setup(fake);
+    const events: StreamEvent[] = [];
+
+    await run({ onEvent: (event) => events.push(event) });
+
+    expect(
+      events.find((event) => event.type === "questionnaire_updated")
+    ).toMatchObject({
+      questionnaire: {
+        questions: [
+          { choices: [{ id: "bali", recommended: true }, { id: "jogja" }] },
+        ],
+      },
+    });
+  });
+
   test("a child chat gets a title but no skill review", async () => {
     const { fake } = chat(async () => "hello");
 

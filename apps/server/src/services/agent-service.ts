@@ -232,6 +232,7 @@ import {
   writeArtifactFile,
   writeSoulFile,
 } from "@nakama/core";
+import { findAgentQuestionnaireAnswers } from "@nakama/core/agent-questionnaire";
 import { isDocxFile, isLegacyDocFile } from "@nakama/core/artifact-mime";
 import {
   type ChannelConfigScope,
@@ -436,6 +437,8 @@ import {
 } from "./tool-resolver";
 import {
   type OneShotKind,
+  READ_ONLY_TOOL_NAMES,
+  refuseToolsOutside,
   type TurnKind,
   turnPolicy,
   withTurnInstructions,
@@ -459,6 +462,9 @@ export interface CreateSessionOptions {
 
 /** Per-session settings a chat is built with. Branches copy them. */
 type SessionRunSettings = Pick<StoredSessionRecord, "model" | "thinkingEffort">;
+
+const QUESTIONNAIRE_ANSWERS_CONTEXT =
+  "The user's message answers the questions you asked with ask_user_question. Continue the task with these answers and write a reply.";
 
 /** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
@@ -2432,6 +2438,52 @@ export class AgentService {
     }
   }
 
+  /**
+   * Sends a saved case's input once to its profile's current config and
+   * returns the reply. Tools that may change data refuse instead of running.
+   */
+  async runRegressionCase(input: {
+    input: string;
+    orgId: string;
+    profileId: string;
+    userId: string;
+  }): Promise<string> {
+    const profile = await this.requireExecutionProfile(
+      input.orgId,
+      input.profileId
+    );
+
+    // An ACP agent runs its own tools, past the read-only gate.
+    if (profile.acpAgent) {
+      throw new NakamaApiError(
+        "An ACP agent profile cannot be rerun read-only.",
+        409
+      );
+    }
+
+    if (!this._providerConfigured) {
+      throw new Error("Provider is not configured.");
+    }
+
+    const { chat, close } = await this.openOneShotChat("regression_rerun", {
+      orgId: input.orgId,
+      profileId: input.profileId,
+      userId: input.userId,
+    });
+
+    try {
+      const reply = await chat.sendStream(
+        input.input,
+        { onChunk() {} },
+        { signal: AbortSignal.timeout(REGRESSION_RERUN_TIMEOUT_MS) }
+      );
+
+      return reply.trim();
+    } finally {
+      close();
+    }
+  }
+
   runSubAgentPrompt(input: SubAgentRunInput): Promise<SubAgentRunResult> {
     return this.runOneShotTurn(input, "sub_agent", () => []);
   }
@@ -2621,6 +2673,16 @@ export class AgentService {
     }
 
     return this.automationRunner.run(automationId);
+  }
+
+  startAutomationFromWebhook(
+    ...args: Parameters<AutomationRunner["startFromWebhook"]>
+  ) {
+    if (!this.automationRunner) {
+      throw new Error("Automation runner is not configured.");
+    }
+
+    return this.automationRunner.startFromWebhook(...args);
   }
 
   get providerConfigured(): boolean {
@@ -6217,6 +6279,20 @@ export class AgentService {
 
     let resolved = [...tools];
 
+    // A skill or a custom tool picks its own name, so only a platform handler
+    // is trusted by name.
+    const readOnlyTools = new Set(
+      tools.filter((tool) =>
+        storedTools.some(
+          (record) =>
+            record.name === tool.name &&
+            (record.handlerType === "builtin" ||
+              record.handlerType === "browser") &&
+            READ_ONLY_TOOL_NAMES.has(tool.name)
+        )
+      )
+    );
+
     if (this.mcpService) {
       const mcpServers = (
         shared?.assignedMcpServers ??
@@ -6328,6 +6404,12 @@ export class AgentService {
           );
 
       resolved = [...resolved, ...mcpTools];
+
+      for (const tool of mcpTools) {
+        if (tool.readOnly) {
+          readOnlyTools.add(tool);
+        }
+      }
     }
 
     if (this.composioService && this.mcpClientManager && options.userId) {
@@ -6481,6 +6563,12 @@ export class AgentService {
 
     if (hasOwnTools && !limit) {
       resolved = [...resolved, ...this.orgMemoryTools];
+
+      for (const tool of this.orgMemoryTools) {
+        if (READ_ONLY_TOOL_NAMES.has(tool.name)) {
+          readOnlyTools.add(tool);
+        }
+      }
     }
 
     if (!policy.memoryWrite) {
@@ -6501,7 +6589,9 @@ export class AgentService {
       throw new NakamaApiError("Conflicting tool names are assigned.", 409);
     }
 
-    return resolved;
+    return policy.readOnly
+      ? refuseToolsOutside(resolved, readOnlyTools)
+      : resolved;
   }
 
   private async buildChatSession(
@@ -6826,6 +6916,12 @@ export class AgentService {
 
         if (todoContext.trim()) {
           parts.push(todoContext.trim());
+        }
+
+        // Channels send questionnaire answers as text; tell the model this
+        // turn continues the task, so it does not end without a reply.
+        if (findAgentQuestionnaireAnswers(context?.userMessage ?? "")) {
+          parts.push(QUESTIONNAIRE_ANSWERS_CONTEXT);
         }
 
         if (this.composioService && userId) {
@@ -7411,6 +7507,9 @@ function parseAutomationToolArguments(serialized: string): AgentJsonRecord {
 
   return agentJsonRecordSchema.parse(parsed);
 }
+
+// The rerun answers in its request, so it ends before Bun's 255s idle timeout.
+const REGRESSION_RERUN_TIMEOUT_MS = 240_000;
 
 // parallelSafe means concurrent calls are allowed. It does not mean a tool has no side effects.
 const REPLAYABLE_AUTOMATION_TOOLS = new Set([

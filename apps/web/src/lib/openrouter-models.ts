@@ -1,3 +1,7 @@
+import { queryOptions } from "@tanstack/react-query";
+import { client } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
+
 interface OpenRouterApiPricing {
   completion?: string;
   image?: string;
@@ -27,6 +31,8 @@ export interface OpenRouterModelsApiResponse {
 }
 
 export interface OpenRouterModelRow {
+  /** Takes audio input, so it can transcribe. */
+  audio: boolean;
   contextLength: number;
   deprecated: boolean;
   description: string;
@@ -101,6 +107,7 @@ function normalizeOpenRouterModel(
   const perMillion = openRouterPricingPerMillion(entry.pricing);
 
   return {
+    audio: inputModalities.includes("audio"),
     contextLength: entry.context_length ?? 0,
     deprecated: isOpenRouterModelDeprecated(entry.expiration_date),
     description: truncateDescription(entry.description ?? ""),
@@ -144,3 +151,19 @@ function truncateDescription(text: string, maxLength = 120): string {
 
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }
+
+async function fetchOpenRouterModels(): Promise<OpenRouterModelRow[]> {
+  // SAFETY: The enclosing parser checks the value before this conversion.
+  const data = (await client.getExternalModelCatalog(
+    "openrouter"
+  )) as OpenRouterModelsApiResponse;
+
+  return normalizeOpenRouterModels(data);
+}
+
+/** The OpenRouter catalog, cached as long as the server caches it. */
+export const openRouterModelsQueryOptions = queryOptions({
+  queryFn: fetchOpenRouterModels,
+  queryKey: queryKeys.openRouterModels,
+  staleTime: 1000 * 60 * 30,
+});

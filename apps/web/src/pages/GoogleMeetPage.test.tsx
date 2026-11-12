@@ -1,10 +1,14 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core/api-error";
 import type {
   MeetAction,
   MeetActionInput,
   MeetActionResults,
+  MeetExtensionKey,
   Meeting,
+  MeetOverview,
 } from "@nakama/core/google-meet";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -59,19 +63,45 @@ const auth = {
   user: { email: "admin@example.com", id: "admin", isPlatformAdmin: false },
 } as AuthContextValue;
 
-async function mountPage(recordings?: MeetActionResults["recordings"]) {
+type Handlers = {
+  [Action in MeetAction]?: (
+    input?: MeetActionInput
+  ) => Promise<MeetActionResults[Action]>;
+};
+
+async function mountPage(
+  recordings?: MeetActionResults["recordings"],
+  overview: () => Partial<MeetOverview> = () => ({}),
+  {
+    handlers = {},
+    path = "/google-meet",
+  }: { handlers?: Handlers; path?: string } = {}
+) {
   // SAFETY: each branch returns the result shape of the action it handles.
   const invoke = spyOn(client, "invokeGoogleMeet").mockImplementation(((
     action: MeetAction,
     input?: MeetActionInput
   ) => {
+    const handler = handlers[action];
+
+    if (handler) {
+      return handler(input);
+    }
+
+    if (action === "extension-keys") {
+      return Promise.resolve({ keys: [] });
+    }
+
     if (action === "meetings") {
       return Promise.resolve({
         canConfigure: true,
-        captureProtocol: 1,
         configured: true,
         enabled: true,
+        liveReady: true,
         meetings,
+        transcription: null,
+        transcriptionError: null,
+        ...overview(),
       });
     }
 
@@ -105,11 +135,13 @@ async function mountPage(recordings?: MeetActionResults["recordings"]) {
 
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={["/google-meet"]}>
-        <AuthContext.Provider value={auth}>
-          <GoogleMeetPage />
-        </AuthContext.Provider>
-      </MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={[path]}>
+          <AuthContext.Provider value={auth}>
+            <GoogleMeetPage />
+          </AuthContext.Provider>
+        </MemoryRouter>
+      </QueryClientProvider>
     );
     await Bun.sleep(20);
   });
@@ -238,4 +270,397 @@ test("recording picker imports the selected recording", async () => {
     "org-a",
     expect.anything()
   );
+});
+
+function button(container: HTMLElement, label: string) {
+  return [...container.querySelectorAll("button")].find(
+    (element) => element.textContent?.trim() === label
+  );
+}
+
+test("an admin connects OpenRouter from the page and sees it connected", async () => {
+  let connected = false;
+
+  const check = spyOn(client, "checkProviderKey").mockResolvedValue({
+    status: "ok",
+  });
+
+  // SAFETY: the page reads only the provider id from these responses.
+  const provider = {
+    id: "p-router",
+    label: "OpenRouter",
+    type: "openrouter",
+  } as Awaited<ReturnType<typeof client.createProvider>>["provider"];
+
+  const create = spyOn(client, "createProvider").mockResolvedValue({
+    defaultProviderId: "p-router",
+    initialModel: "",
+    provider,
+  });
+
+  // SAFETY: the page reads only the provider id from this response.
+  const secret = spyOn(client, "setProviderSecret").mockResolvedValue({
+    provider,
+  } as Awaited<ReturnType<typeof client.setProviderSecret>>);
+
+  const select = spyOn(client, "setTranscriptionSettings").mockImplementation(
+    async (model) => {
+      connected = true;
+
+      return { model };
+    }
+  );
+
+  // Only models that take audio can transcribe.
+  const catalog = spyOn(client, "getExternalModelCatalog").mockResolvedValue({
+    data: [
+      {
+        architecture: { input_modalities: ["text"] },
+        id: "acme/text-only",
+        name: "Text only",
+      },
+      {
+        architecture: { input_modalities: ["text", "audio"] },
+        id: "openrouter/auto",
+        name: "Auto Router",
+      },
+      {
+        architecture: { input_modalities: ["text", "audio"] },
+        id: "google/gemini-3.5-flash:batch",
+        name: "Gemini batch",
+      },
+      {
+        architecture: { input_modalities: ["text", "audio"] },
+        id: "openai/gpt-4o-audio-preview",
+        name: "GPT-4o Audio",
+      },
+    ],
+  });
+
+  cleanups.push(async () => {
+    for (const spy of [catalog, check, create, secret, select]) {
+      spy.mockRestore();
+    }
+  });
+
+  const { container } = await mountPage(undefined, () =>
+    connected
+      ? {
+          liveReady: false,
+          transcription: {
+            model: "openai/gpt-4o-audio-preview",
+            type: "openrouter",
+          },
+        }
+      : { configured: false, liveReady: false }
+  );
+
+  await act(async () => {
+    button(container, "OpenRouter")?.click();
+    await Bun.sleep(20);
+  });
+  await type(
+    container.querySelector<HTMLInputElement>('input[type="password"]'),
+    "sk-or-v1-key"
+  );
+  await act(async () => {
+    button(container, "Save and test")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(check).toHaveBeenCalledWith({
+    apiKey: "sk-or-v1-key",
+    baseUrl: undefined,
+    type: "openrouter",
+  });
+  expect(create.mock.calls[0]?.[0]).toMatchObject({ type: "openrouter" });
+  expect(secret).toHaveBeenCalledWith("p-router", "sk-or-v1-key");
+  expect(select).toHaveBeenCalledWith("p-router::openai/gpt-4o-audio-preview");
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+  expect(container.textContent).toContain("openai/gpt-4o-audio-preview");
+  expect(button(container, "Change")).toBeDefined();
+});
+
+test("a rejected key stays on the form and adds no provider", async () => {
+  const check = spyOn(client, "checkProviderKey").mockResolvedValue({
+    status: "rejected",
+  });
+
+  const create = spyOn(client, "createProvider");
+
+  cleanups.push(async () => {
+    check.mockRestore();
+    create.mockRestore();
+  });
+
+  const { container } = await mountPage(undefined, () => ({
+    configured: false,
+  }));
+
+  await type(
+    container.querySelector<HTMLInputElement>('input[type="password"]'),
+    "sk-bad"
+  );
+  await act(async () => {
+    button(container, "Save and test")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  expect(create).not.toHaveBeenCalled();
+  expect(container.querySelector('input[type="password"]')).not.toBeNull();
+});
+
+test("a self-hosted provider is saved with a name and its base URL", async () => {
+  const check = spyOn(client, "checkProviderKey").mockResolvedValue({
+    status: "unchecked",
+  });
+
+  // SAFETY: the page reads only the provider id from this response.
+  const provider = {
+    id: "p-local",
+    type: "openai_compatible",
+  } as Awaited<ReturnType<typeof client.createProvider>>["provider"];
+
+  const create = spyOn(client, "createProvider").mockResolvedValue({
+    defaultProviderId: "p-other",
+    initialModel: "",
+    provider,
+  });
+
+  const select = spyOn(client, "setTranscriptionSettings").mockResolvedValue({
+    model: "p-local::whisper-large-v3",
+  });
+
+  cleanups.push(async () => {
+    for (const spy of [check, create, select]) {
+      spy.mockRestore();
+    }
+  });
+
+  const { container } = await mountPage(undefined, () => ({
+    configured: false,
+  }));
+
+  await act(async () => button(container, "Self-hosted")?.click());
+  await type(
+    container.querySelector<HTMLInputElement>('input[type="url"]'),
+    "http://127.0.0.1:8000/v1"
+  );
+  await type(
+    container.querySelector<HTMLInputElement>('input[placeholder="whisper-1"]'),
+    "whisper-large-v3"
+  );
+  await act(async () => {
+    button(container, "Save and test")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(create.mock.calls[0]?.[0]).toMatchObject({
+    baseUrl: "http://127.0.0.1:8000/v1",
+    customModels: [{ id: "whisper-large-v3" }],
+    type: "openai_compatible",
+  });
+  expect(create.mock.calls[0]?.[0].label?.trim()).toBeTruthy();
+  expect(select).toHaveBeenCalledWith("p-local::whisper-large-v3");
+});
+
+function calls(invoke: { mock: { calls: unknown[][] } }, action: MeetAction) {
+  return invoke.mock.calls.filter((call) => call[0] === action);
+}
+
+const browserKey: MeetExtensionKey = {
+  createdAt: 1000,
+  expiresAt: 9_000_000_000_000,
+  id: "key-1",
+  label: "Chrome on macOS",
+  lastUsedAt: null,
+};
+
+test("a pairing code is approved only after the member clicks Approve", async () => {
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    handlers: { "approve-extension": () => Promise.resolve(browserKey) },
+    path: "/google-meet?pair=k7q-4m2",
+  });
+
+  expect(calls(invoke, "approve-extension")).toEqual([]);
+
+  await act(async () => {
+    button(container, "Approve")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(invoke).toHaveBeenCalledWith(
+    "approve-extension",
+    { code: "K7Q-4M2" },
+    "org-a",
+    expect.anything()
+  );
+  expect(button(container, "Approve")).toBeUndefined();
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  // The list reloads so the new browser shows up.
+  expect(calls(invoke, "extension-keys").length).toBe(2);
+});
+
+test("a failed approval keeps the card and shows an error", async () => {
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    handlers: {
+      "approve-extension": () =>
+        Promise.reject(
+          new NakamaApiError("This code is wrong or has expired", 400)
+        ),
+    },
+    path: "/google-meet?pair=K7Q4M2",
+  });
+
+  await act(async () => {
+    button(container, "Approve")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(calls(invoke, "approve-extension").length).toBe(1);
+  expect(button(container, "Approve")).not.toBeUndefined();
+  expect(
+    container.querySelector('[aria-label="Connect browser"] [role="alert"]')
+  ).not.toBeNull();
+});
+
+test("a malformed pairing code sends no request", async () => {
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    path: "/google-meet?pair=0OI-1LU",
+  });
+
+  await act(async () => {
+    button(container, "Approve")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(calls(invoke, "approve-extension")).toEqual([]);
+  expect(
+    container.querySelector('[aria-label="Connect browser"] [role="alert"]')
+  ).not.toBeNull();
+});
+
+test("Remove revokes the browser key and reloads the list", async () => {
+  let keys = [
+    browserKey,
+    { ...browserKey, id: "key-2", label: "Chrome on Windows" },
+  ];
+
+  const { container, invoke } = await mountPage(undefined, undefined, {
+    handlers: {
+      "extension-keys": () => Promise.resolve({ keys }),
+      "revoke-extension": (input) => {
+        keys = keys.filter((key) => key.id !== input?.keyId);
+
+        return Promise.resolve({ revoked: true });
+      },
+    },
+  });
+
+  const rows = () =>
+    [...container.querySelectorAll(".meet-key .meet-meeting-title")].map(
+      (row) => row.textContent
+    );
+
+  expect(rows()).toEqual(["Chrome on macOS", "Chrome on Windows"]);
+
+  await act(async () => {
+    container
+      .querySelectorAll<HTMLButtonElement>(".meet-key button")[1]
+      ?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(invoke).toHaveBeenCalledWith(
+    "revoke-extension",
+    { keyId: "key-2" },
+    "org-a",
+    expect.anything()
+  );
+  expect(rows()).toEqual(["Chrome on macOS"]);
+});
+
+test("connected browsers are not loaded while Meet is disabled", async () => {
+  const { invoke } = await mountPage(undefined, () => ({ enabled: false }));
+
+  expect(calls(invoke, "extension-keys")).toEqual([]);
+});
+
+test("the status follows the browser keys, not an open tab", async () => {
+  let keys = [browserKey];
+
+  const { container } = await mountPage(undefined, undefined, {
+    handlers: {
+      "extension-keys": () => Promise.resolve({ keys }),
+      "revoke-extension": () => {
+        keys = [];
+
+        return Promise.resolve({ revoked: true });
+      },
+    },
+  });
+
+  const status = () => container.querySelector(".meet-connection")?.textContent;
+
+  const setup = () =>
+    container.querySelector('[aria-label="Live capture setup"]');
+
+  expect(status()).toBe("Extension connected");
+  expect(setup()).toBeNull();
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>(".meet-key button")?.click();
+    await Bun.sleep(20);
+  });
+
+  expect(status()).toBe("Extension not connected");
+  expect(setup()).not.toBeNull();
+});
+
+test("a v0.2 extension action gets the update error and runs nothing", async () => {
+  const { invoke } = await mountPage();
+
+  const reply = spyOn(window, "postMessage").mockImplementation(
+    () => undefined
+  );
+
+  const before = invoke.mock.calls.length;
+
+  const send = (init: MessageEventInit) =>
+    act(async () => {
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: {
+            action: "start-capture",
+            id: "request",
+            input: { url: "https://meet.google.com/abc-defg-hij" },
+            type: "NAKAMA_MEET_ACTION",
+          },
+          ...init,
+        })
+      );
+      await Bun.sleep(10);
+    });
+
+  try {
+    // Another origin or another window gets no answer.
+    await send({ origin: "https://evil.example", source: window });
+    await send({ origin: window.location.origin, source: null });
+    expect(reply).not.toHaveBeenCalled();
+
+    await send({ origin: window.location.origin, source: window });
+    expect(reply).toHaveBeenCalledTimes(1);
+    expect(reply).toHaveBeenCalledWith(
+      {
+        error: "Update the Nakama Meet extension to v0.3.",
+        id: "request",
+        type: "NAKAMA_MEET_RESULT",
+      },
+      window.location.origin
+    );
+    expect(invoke.mock.calls.length).toBe(before);
+  } finally {
+    reply.mockRestore();
+  }
 });

@@ -31,6 +31,32 @@ const tinyPngBase64 =
 
 const ORG_ID = "org_test";
 
+async function seedWebhookSecret(
+  db: ReturnType<typeof createInMemoryDatabaseAdapter>,
+  orgId: string,
+  profileId: string
+) {
+  const now = new Date().toISOString();
+
+  await db.upsertAutomation({
+    createdAt: now,
+    definition: { trigger: { type: "webhook" } },
+    enabled: true,
+    id: "auto_webhook",
+    name: "Webhook",
+    orgId,
+    profileId,
+    updatedAt: now,
+    version: 1,
+  });
+  await db.putAutomationWebhookSecret({
+    automationId: "auto_webhook",
+    createdAt: now,
+    createdByUserId: "user_maker",
+    encryptedValue: "enc",
+  });
+}
+
 const PYTHON_ECHO_TOOL = `import json
 import sys
 
@@ -1825,6 +1851,7 @@ describe("profile organization transfer", () => {
     );
 
     await writeFile(path.join(sourceDir, "MEMORY.md"), "Remember me");
+    await seedWebhookSecret(db, "source", profile.id);
     await db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
@@ -1838,6 +1865,7 @@ describe("profile organization transfer", () => {
     await service.moveProfile("source", profile.id, {
       organizationId: "destination",
     });
+    expect(await db.listAutomationWebhookSecrets()).toEqual([]);
     expect(await db.getProfileForOrg(profile.id, "source")).toBeNull();
     expect((await db.getProfileForOrg(profile.id, "destination"))?.name).toBe(
       "Moving bot"
@@ -1849,6 +1877,37 @@ describe("profile organization transfer", () => {
     expect(await Bun.file(path.join(sourceDir, "MEMORY.md")).exists()).toBe(
       false
     );
+  });
+
+  test("a failed secret delete stops the move and keeps the profile in the source org", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+
+    for (const id of ["source", "destination"]) {
+      await db.upsertOrganization({
+        createdAt: now,
+        id,
+        name: id,
+        slug: id,
+        updatedAt: now,
+      });
+    }
+
+    const { profile } = await service.createProfile("source", {
+      name: "Moving bot",
+    });
+
+    await seedWebhookSecret(db, "source", profile.id);
+    db.deleteAutomationWebhookSecret = () =>
+      Promise.reject(new Error("delete failed"));
+    await expect(
+      service.moveProfile("source", profile.id, {
+        organizationId: "destination",
+      })
+    ).rejects.toThrow();
+    expect(await db.getProfileForOrg(profile.id, "source")).not.toBeNull();
+    expect(await db.getProfileForOrg(profile.id, "destination")).toBeNull();
   });
 
   test("profile transfer preserves related data and rolls back database and files on failure", async () => {

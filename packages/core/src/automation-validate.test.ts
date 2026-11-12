@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  computeAutomationNextRunAt,
   isWorkerSchedulable,
   resolveScheduleTimezone,
   validateAutomationInput,
@@ -145,5 +146,17 @@ describe("isWorkerSchedulable", () => {
         now
       )
     ).toBe(false);
+  });
+});
+
+describe("webhook trigger", () => {
+  test("is valid, never scheduled and has no next run", () => {
+    const trigger = { type: "webhook" } as const;
+
+    expect(() =>
+      validateAutomationInput({ name: "PR review", prompt: "Review", trigger })
+    ).not.toThrow();
+    expect(isWorkerSchedulable({ enabled: true, trigger })).toBe(false);
+    expect(computeAutomationNextRunAt(trigger)).toBeNull();
   });
 });

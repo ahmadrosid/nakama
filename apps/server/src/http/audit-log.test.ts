@@ -34,6 +34,11 @@ describe("audit event coverage", () => {
       ["POST", "/v1/auth/mfa/passkey/disable", "auth.passkey_disable"],
       ["POST", "/v1/auth/mfa/backup-codes", "auth.backup_codes_regenerate"],
       ["POST", "/v1/auth/local-token/rotate", "auth.token_rotate"],
+      [
+        "POST",
+        "/v1/automations/automation_1/webhook-secret",
+        "automation.webhook_secret_rotate",
+      ],
       ["POST", "/v1/auth/active-org", "auth.active_org"],
       ["POST", "/v1/auth/setup/import/restore", "data.import"],
       ["POST", "/v1/orgs/org_1/invites", "invite.create"],

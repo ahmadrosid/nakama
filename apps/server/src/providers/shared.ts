@@ -10,6 +10,10 @@ import {
   NakamaApiError,
   ProviderStreamInterruptedError,
 } from "@nakama/core";
+import {
+  clampThinkingEffort,
+  isThinkingEffort,
+} from "@nakama/core/thinking-effort";
 import { z } from "zod";
 
 export type ProviderJsonValue =
@@ -448,14 +452,15 @@ export function readRecord<Value>(value: Value): ProviderJsonRecord {
   return value as ProviderJsonRecord;
 }
 
+/** Defaults a missing effort to medium and lowers it to what the host and model accept. */
 export function normalizeThinkingEffort(
-  effort: ThinkingEffort | undefined
+  effort: ThinkingEffort | undefined,
+  model: string,
+  provider: string
 ): ThinkingEffort {
-  if (effort === "low" || effort === "medium" || effort === "high") {
-    return effort;
-  }
-
-  return "medium";
+  return isThinkingEffort(effort)
+    ? clampThinkingEffort(effort, model, provider)
+    : "medium";
 }
 
 export function formatHttpErrorBody(
@@ -497,22 +502,41 @@ export function formatHttpErrorBody(
   return `${label} request failed (${status}): ${trimmed.slice(0, 500)}`;
 }
 
-/**
- * A rejected API key is the caller's config to fix, not a Nakama bug: 400 so
- * the global error handler's `status >= 500` check never reports it. Anything
- * else from the provider (rate limits, 5xx, timeouts) stays worth seeing.
- */
 /** A provider answered but the answer is unusable. The user sees the message. */
 export function buildProviderResponseError(message: string): NakamaApiError {
   return new NakamaApiError(message, 502);
 }
 
+// Account refusals that some providers send without a 401/402/403: OpenAI
+// sends an empty quota as a 429, Anthropic an empty balance as a 400.
+const ACCOUNT_ERROR_KINDS = new Set(["billing_error", "insufficient_quota"]);
+
+const LOW_CREDIT_MESSAGE = /credit balance is too low/i;
+
+/**
+ * A rejected API key or an exhausted credit balance is the caller's account to
+ * fix, not a Nakama bug: 400 so the global error handler's `status >= 500`
+ * check never reports it and the chat loop does not retry it. Anything else
+ * from the provider (rate limits, 5xx, timeouts) stays worth seeing.
+ */
 export function buildProviderHttpError(
   label: string,
   status: number,
   body: string
 ): NakamaApiError {
-  const clientStatus = status === 401 || status === 403 ? 400 : 502;
+  const parsed = parseJsonRecord(body);
+  // Raw bodies nest the error under `error`; OpenAI SDK errors arrive flat.
+  const error = { ...parsed, ...readRecord(parsed.error) };
+
+  const accountRefused =
+    status === 401 ||
+    status === 402 ||
+    status === 403 ||
+    ACCOUNT_ERROR_KINDS.has(readProviderString(error.type) ?? "") ||
+    ACCOUNT_ERROR_KINDS.has(readProviderString(error.code) ?? "") ||
+    LOW_CREDIT_MESSAGE.test(readProviderString(error.message) ?? "");
+
+  const clientStatus = accountRefused ? 400 : 502;
 
   return new NakamaApiError(
     formatHttpErrorBody(label, status, body),

@@ -1492,6 +1492,80 @@
 .meet-page [data-tone="danger"] {
   --meet-tone: #dc2626;
 }
+.meet-provider {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in oklab, #d97706 35%, var(--border));
+  border-radius: 14px;
+}
+.meet-provider-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--border);
+}
+.meet-provider-tabs button {
+  min-height: 40px;
+  padding: 0 12px;
+  margin-bottom: -1px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+.meet-provider-tabs button[aria-selected="true"] {
+  color: var(--foreground);
+  border-bottom-color: var(--foreground);
+}
+.meet-provider-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.meet-provider-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.meet-provider-error {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 14px;
+  color: var(--destructive);
+}
+.meet-provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.meet-provider-actions a {
+  margin-right: auto;
+  font-size: 14px;
+  color: var(--muted-foreground);
+  text-decoration: underline;
+}
+.meet-provider-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.meet-provider-model {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+}
 .meet-setup {
   display: flex;
   flex-wrap: wrap;
@@ -1880,19 +1954,10 @@ li[data-state="active"] .meet-step-mark {
 .meet-live-preview strong {
   font-weight: 600;
 }
-.meet-listening,
-.meet-live-warning {
+.meet-listening {
   display: inline-flex;
   gap: 8px;
   align-items: center;
-}
-.meet-live-warning {
-  padding: 10px 20px;
-  margin: 0;
-  font-size: 13px;
-  color: color-mix(in oklab, #d97706 70%, var(--foreground));
-  background: color-mix(in oklab, #f59e0b 12%, transparent);
-  border-top: 1px solid color-mix(in oklab, #f59e0b 35%, transparent);
 }
 .meet-search {
   display: flex;
@@ -1943,6 +2008,13 @@ li[data-state="active"] .meet-step-mark {
   cursor: pointer;
   background: transparent;
   border: 0;
+}
+.meet-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 20px;
 }
 .meet-meeting:hover {
   background: color-mix(in oklab, var(--muted) 50%, transparent);

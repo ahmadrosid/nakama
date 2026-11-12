@@ -376,10 +376,11 @@ export function modelSupportsTranscription(
   modelId: string,
   provider: ProviderName
 ): boolean {
-  // openai_compatible instances are self-hosted Whisper-style endpoints whose
-  // model id is user-defined; any non-empty id is accepted. First-party
-  // openai stays restricted to the allowlist.
-  if (provider === "openai_compatible") {
+  // openai_compatible instances are self-hosted Whisper-style endpoints and
+  // OpenRouter routes to any audio-input chat model, so their model id is
+  // user-defined; any non-empty id is accepted. First-party openai stays
+  // restricted to the allowlist.
+  if (provider === "openai_compatible" || provider === "openrouter") {
     return Boolean(modelId.trim());
   }
 

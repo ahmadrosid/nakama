@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import * as recordingImport from "../meet-recording-import";
 import { GoogleMeetService } from "./service";
-import * as transcription from "./transcription";
 
 let root: string;
 
@@ -64,7 +63,10 @@ test("startup is idempotent and restart preserves settings while recovering unfi
     "a",
     "start-capture",
     { url: "https://meet.google.com/abc-defg-hij" },
-    admin
+    admin,
+    undefined,
+    undefined,
+    "ws://127.0.0.1:4310/v1/meet/capture"
   );
 
   await service.close();
@@ -218,25 +220,23 @@ test("members cannot read another user's or another organization's meeting; miss
   expect(own.meetings.map((item) => item.id)).toEqual([meeting.id]);
 });
 
-test("queued capture blocks snapshots and disabling invalidates its token", async () => {
+test("queued capture blocks snapshots and disabling invalidates its ticket", async () => {
   const capture = await service.invoke(
     "a",
     "start-capture",
     { durationMinutes: 1, url: "https://meet.google.com/abc-defg-hij" },
-    admin
+    admin,
+    undefined,
+    undefined,
+    "ws://127.0.0.1:4310/v1/meet/capture"
   );
 
-  const address = capture.capture.url.replace(/^ws:/, "http:");
-  expect((await fetch(address)).status).toBe(426);
-  expect(
-    (await fetch(address.replace(capture.capture.token, "invalid"))).status
-  ).toBe(401);
+  expect(capture.capture.url).toBe("ws://127.0.0.1:4310/v1/meet/capture");
   // A 409, so a scheduled backup keeps this reason for Settings
   await expect(service.withSnapshot(async () => true)).rejects.toEqual(
     expect.objectContaining({ status: 409 })
   );
   await service.invoke("a", "configure", { enabled: false }, admin);
-  expect((await fetch(address)).status).toBe(401);
   expect(await service.withSnapshot(async () => true)).toBe(true);
 });
 
@@ -271,82 +271,48 @@ test("bounds simultaneous uploads and shutdown cancels a provider that ignores a
   );
 });
 
-test("shared capture listener consumes tokens once and preserves protocol 2 finalization", async () => {
-  const connect = spyOn(transcription, "connectTranscription");
-  connect.mockImplementation(async ({ onSegment }) => ({
-    close() {},
-    async finish() {
-      onSegment({
-        id: "turn",
-        receivedAt: Date.now(),
-        text: "Captured speech",
-      });
-    },
-    push() {},
-  }));
-
-  try {
-    const first = await service.invoke(
+test("start-capture without the main server's socket URL fails and saves no meeting", async () => {
+  await expect(
+    service.invoke(
       "a",
       "start-capture",
       { url: "https://meet.google.com/abc-defg-hij" },
       admin
+    )
+  ).rejects.toThrow();
+
+  const overview = await service.invoke("a", "meetings", {}, admin);
+  expect(overview.meetings).toEqual([]);
+  expect(await service.withSnapshot(async () => true)).toBe(true);
+});
+
+test("a set NAKAMA_MEET_CAPTURE_* variable logs one warning and starts fine", async () => {
+  const previous = process.env.NAKAMA_MEET_CAPTURE_HOST;
+  process.env.NAKAMA_MEET_CAPTURE_HOST = "0.0.0.0";
+  const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+
+  try {
+    await service.close();
+    service = new GoogleMeetService(
+      db,
+      root,
+      async () => ({ text: "Recording" }),
+      () => "test"
     );
 
-    const second = await service.invoke(
-      "b",
-      "start-capture",
-      { url: "https://meet.google.com/xyz-abcd-efg" },
-      admin
+    expect(warn).toHaveBeenCalledTimes(1);
+    await service.initialize();
+    expect((await service.invoke("a", "meetings", {}, admin)).meetings).toEqual(
+      []
     );
-
-    expect(new URL(first.capture.url).origin).toBe(
-      new URL(second.capture.url).origin
-    );
-    const ws = new WebSocket(first.capture.url);
-
-    // No wall-clock deadline: on Windows CI each step writes SQLite with
-    // synchronous=EXTRA, so finalization can take seconds. The test timeout
-    // still catches a hang; a close before finalization fails at once.
-    const finalized = new Promise<void>((resolve, reject) => {
-      ws.addEventListener("message", (event) => {
-        const message = JSON.parse(String(event.data));
-
-        if (message.type === "ready") {
-          ws.send(new Uint8Array(4800));
-          ws.send(JSON.stringify({ protocol: 2, type: "stop" }));
-        }
-
-        if (message.type === "capture-finalized") {
-          resolve();
-        }
-      });
-      ws.addEventListener("close", () =>
-        reject(new Error("Socket closed before finalization"))
-      );
-      ws.addEventListener("error", () => reject(new Error("Socket failed")));
-    });
-
-    await finalized;
-    expect(
-      (await fetch(first.capture.url.replace(/^ws:/, "http:"))).status
-    ).toBe(401);
-    await Bun.sleep(10);
-
-    const transcript = await service.invoke(
-      "a",
-      "transcript",
-      { meetingId: first.id },
-      admin
-    );
-
-    expect(transcript.meeting.state).toBe("finished");
-    expect(transcript.segments.map((segment) => segment.text)).toEqual([
-      "Captured speech",
-    ]);
-    await service.invoke("b", "leave", { meetingId: second.id }, admin);
   } finally {
-    connect.mockRestore();
+    warn.mockRestore();
+
+    if (previous === undefined) {
+      delete process.env.NAKAMA_MEET_CAPTURE_HOST;
+    } else {
+      process.env.NAKAMA_MEET_CAPTURE_HOST = previous;
+    }
   }
 });
 
@@ -363,8 +329,9 @@ test("built-in recording imports use the current member and cancel without savin
     "importMeetRecording"
   ).mockImplementation(async (_composio, input, signal) => {
     expect(input).toMatchObject({
-      apiKey: "test",
+      model: "whisper-1",
       orgId: "a",
+      provider: { apiKey: "test", type: "openai" },
       userId: "alice",
     });
     importing();
