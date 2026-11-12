@@ -24,10 +24,15 @@ import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streami
 import { BrowserLiveViewPanelBridge } from "@/components/chat/browser-live-view-panel-bridge";
 import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
-import { ChatMessageList } from "@/components/chat/chat-message-list";
+import {
+  ChatMessageList,
+  type SaveCaseReply,
+} from "@/components/chat/chat-message-list";
 import type { AgentActivity } from "@/components/moodstone";
+import { SaveRegressionCaseDialog } from "@/components/regression-cases";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
+import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
 import {
@@ -36,6 +41,7 @@ import {
 } from "@/lib/chat-history";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { extractModelId } from "@/lib/models";
+import { canAccessIntegrationsPage } from "@/lib/navigation";
 import {
   ChatGoalPrompt,
   ChatSetupChecklist,
@@ -447,6 +453,27 @@ function ChatConversation({
     session?.id ?? "new"
   );
 
+  const { activeOrg } = useAuth();
+
+  // Tied to the chat it came from: the page does not remount between chats.
+  const [caseDraft, setCaseDraft] = useState<
+    (SaveCaseReply & { sessionId: string }) | null
+  >(null);
+
+  // Cognito chats are never stored, so there is no run to save.
+  const caseTarget =
+    canAccessIntegrationsPage(activeOrg?.role) &&
+    session &&
+    profileId &&
+    !cognito
+      ? { profileId, sessionId: session.id }
+      : null;
+
+  const openCase =
+    caseDraft && caseDraft.sessionId === caseTarget?.sessionId
+      ? caseDraft
+      : null;
+
   // Cognito chats are not kept, so neither is their open panel.
   const rememberId = session && !cognito ? session.id : undefined;
   const modelLabel = renderModelLabel(currentModelSelection);
@@ -530,6 +557,15 @@ function ChatConversation({
                 onRetryMessage={(message) =>
                   void handleTryAgainMessage(message)
                 }
+                onSaveAsCase={
+                  caseTarget
+                    ? (reply) =>
+                        setCaseDraft({
+                          ...reply,
+                          sessionId: caseTarget.sessionId,
+                        })
+                    : undefined
+                }
                 onSubmitQuestionnaire={(answers) => {
                   void sendMessage(
                     formatAgentQuestionnaireAnswersMessage(answers),
@@ -557,6 +593,23 @@ function ChatConversation({
               <div className="mx-auto w-full max-w-3xl">{composer}</div>
             </div>
           </div>
+          {caseTarget && openCase ? (
+            <SaveRegressionCaseDialog
+              expectedResult={openCase.expectedResult}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setCaseDraft(null);
+                }
+              }}
+              open
+              profileId={caseTarget.profileId}
+              source={{
+                messageIndex: openCase.messageIndex,
+                sourceId: caseTarget.sessionId,
+                sourceType: "session",
+              }}
+            />
+          ) : null}
         </ChatPageColumn>
       </ChatAttachmentPanelProvider>
     </ChatStatusProvider>

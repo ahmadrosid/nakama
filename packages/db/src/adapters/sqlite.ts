@@ -1602,19 +1602,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ORDER BY seq ASC
   `);
 
-  /** One row instead of the whole transcript, which can carry base64 payloads. */
-  const getLastUserMessageForSessionStmt = db.prepare<
-    SessionMessageRow,
-    SQLQueryBindings[]
-  >(`
-    SELECT * FROM session_messages
-    WHERE session_id = ?
-      AND json_extract(payload, '$.role') = 'user'
-      AND EXISTS (SELECT 1 FROM sessions WHERE id = session_id AND app_user_id IS NULL)
-    ORDER BY seq DESC
-    LIMIT 1
-  `);
-
   const appendMessageStmt = db.prepare(`
     INSERT INTO session_messages (id, session_id, seq, payload, created_at)
     VALUES (?, ?, ?, ?, ?)
@@ -5385,12 +5372,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return row ? toProfileRecord(row) : null;
     },
-    async getLastUserMessageForSession(sessionId) {
-      const row = getLastUserMessageForSessionStmt.get(sessionId);
-
-      return row ? toSessionMessageRecord(row) : null;
-    },
-
     async getLlmUsageStats(orgId) {
       const row = getLlmUsageStatsStmt.get(orgId, LLM_USAGE_STATS_ID);
 

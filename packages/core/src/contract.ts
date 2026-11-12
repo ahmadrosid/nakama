@@ -139,6 +139,24 @@ export interface RegressionCase {
   source: RegressionCaseSource;
 }
 
+/** The cap on a case's `expectedResult`, in UTF-16 code units. */
+export const MAX_REGRESSION_EXPECTED_RESULT_LENGTH = 20_000;
+
+export type CreateRegressionCaseRequest =
+  | {
+      expectedResult: string;
+      /** The reply's index in the session history; its input is the user message before it. */
+      messageIndex: number;
+      sourceId: string;
+      sourceType: "session";
+    }
+  | {
+      automationId: string;
+      expectedResult: string;
+      sourceId: string;
+      sourceType: "automation_run";
+    };
+
 export interface RegressionCaseResponse {
   case: RegressionCase;
 }
