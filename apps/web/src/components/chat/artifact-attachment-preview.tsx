@@ -172,7 +172,7 @@ const PREVIEW_TILE = {
     line: "bg-border",
     lineStrong: "bg-muted-foreground/40",
     page: "border-border",
-    tile: "border-border bg-muted px-3 pt-1",
+    tile: "border-border bg-muted px-2 pt-1",
   },
   media: {
     tile: "items-center justify-center border-border bg-muted text-muted-foreground",
@@ -181,7 +181,7 @@ const PREVIEW_TILE = {
     line: "bg-orange-200 dark:bg-orange-800",
     lineStrong: "bg-orange-300 dark:bg-orange-700",
     page: "border-orange-200 dark:border-orange-800",
-    tile: "border-orange-100 bg-orange-50 px-3 pt-1 dark:border-orange-900 dark:bg-orange-950",
+    tile: "border-orange-100 bg-orange-50 px-2 pt-1 dark:border-orange-900 dark:bg-orange-950",
   },
   sheet: {
     tile: "grid grid-cols-4 grid-rows-3 border-emerald-200 bg-background dark:border-emerald-900",
@@ -245,7 +245,7 @@ function FilePreviewTile({
     <span
       aria-hidden
       className={cn(
-        "flex h-9 w-14 shrink-0 overflow-hidden rounded-md border",
+        "flex h-9 w-11 shrink-0 overflow-hidden rounded-md border",
         style.tile
       )}
     >
