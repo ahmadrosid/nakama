@@ -16,12 +16,14 @@ export const WEB_SEARCH_PROVIDERS = [
   "exa",
   "firecrawl",
   "serply",
+  "keenable",
 ] as const satisfies readonly WebSearchProvider[];
 
 export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
   {
     exa: "https://api.exa.ai/search",
     firecrawl: "https://api.firecrawl.dev/v2/search",
+    keenable: "https://api.keenable.ai/v1/search",
     serply: "https://api.serply.io/v1/search",
   };
 
@@ -29,12 +31,14 @@ export const WEB_SEARCH_PROVIDER_ENV_NAMES: Record<WebSearchProvider, string> =
   {
     exa: "EXA_API_KEY",
     firecrawl: "FIRECRAWL_API_KEY",
+    keenable: "KEENABLE_API_KEY",
     serply: "SERPLY_API_KEY",
   };
 
 export const WEB_SEARCH_PROVIDER_LABELS: Record<WebSearchProvider, string> = {
   exa: "Exa",
   firecrawl: "Firecrawl",
+  keenable: "Keenable",
   serply: "Serply",
 };
 
@@ -91,7 +95,8 @@ export function isWebSearchConfigComplete(
     return false;
   }
 
-  return Boolean(config.apiKey.trim());
+  // Keenable answers without a key; a key only lifts its rate limits.
+  return config.provider === "keenable" || Boolean(config.apiKey.trim());
 }
 
 function parseWebSearchSection(
