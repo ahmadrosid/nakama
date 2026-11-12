@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DocumentAttachment, OrgRole, ProfileSummary } from "@nakama/core";
 import {
+  findDocumentTextParser,
   getProfileSoulDir,
+  NakamaApiError,
   resolveDocumentPartForProvider,
   SOUL_FILES,
   SOUL_TEMPLATE,
@@ -14,8 +16,10 @@ import type {
   GroupRoster,
 } from "@nakama/core/agent-groups";
 import {
+  MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
   normalizeAttachmentBase64,
+  normalizeDocumentMediaType,
   validateDocumentAttachments,
   validateImageAttachments,
 } from "@nakama/core/message-content";
@@ -33,6 +37,7 @@ import {
   workspaceOfGroup,
 } from "./agent-group-workspace";
 import type { AgentService } from "./agent-service";
+import { readZipUpload } from "./profile-service";
 
 const CONTEXT_MESSAGES = 40;
 
@@ -286,7 +291,8 @@ export function threadTranscript(
 /**
  * The text of attached documents, read before a message is saved so a bad file
  * fails the send instead of an agent's turn. Nothing is written here: an image
- * is saved to the group's folder only once the post is known to be valid.
+ * or a ZIP's files are saved to the group's folder only once the post is known
+ * to be valid.
  */
 export async function readGroupDocuments(
   attachments: DocumentAttachment[]
@@ -294,8 +300,13 @@ export async function readGroupDocuments(
   const isImage = (attachment: DocumentAttachment) =>
     attachment.mediaType.startsWith("image/");
 
+  const isZip = (attachment: DocumentAttachment) =>
+    attachment.filename.trim().toLowerCase().endsWith(".zip");
+
   validateImageAttachments(attachments.filter(isImage));
-  validateDocumentAttachments(attachments.filter((a) => !isImage(a)));
+  validateDocumentAttachments(
+    attachments.filter((a) => !(isImage(a) || isZip(a)))
+  );
 
   return await Promise.all(
     attachments.map(async (attachment) => {
@@ -313,23 +324,87 @@ export async function readGroupDocuments(
         return { filename, image: Buffer.from(document.data, "base64") };
       }
 
-      // A provider with no native documents always gets them as text.
-      const part = await resolveDocumentPartForProvider(
-        { ...document, type: "document" },
-        "openai_compatible"
-      );
+      if (isZip(document)) {
+        return await readGroupZip(filename, document.data);
+      }
 
-      return {
-        filename,
-        text:
-          part.type === "text"
-            ? part.text
-                .replace(/^\[File: [^\n]*\]\n/, "")
-                .slice(0, DOCUMENT_CONTEXT_CHARS)
-            : "",
-      };
+      return { filename, text: await documentText(document) };
     })
   );
+}
+
+async function documentText(document: DocumentAttachment): Promise<string> {
+  // A provider with no native documents always gets them as text.
+  const part = await resolveDocumentPartForProvider(
+    { ...document, type: "document" },
+    "openai_compatible"
+  );
+
+  return part.type === "text"
+    ? part.text
+        .replace(/^\[File: [^\n]*\]\n/, "")
+        .slice(0, DOCUMENT_CONTEXT_CHARS)
+    : "";
+}
+
+/**
+ * A ZIP's files, to save once the post is valid, and as text their list and
+ * the documents' text, up to one document's share of the context. The agents
+ * open the rest from the saved files.
+ */
+async function readGroupZip(
+  filename: string,
+  data: string
+): Promise<PostedDocument> {
+  const files = readZipUpload(data, MAX_DOCUMENT_BYTES);
+
+  if (files.length === 0) {
+    throw new NakamaApiError("ZIP file has no files.", 400);
+  }
+
+  const names = new Set(files.map(([name]) => name));
+
+  // A file and a folder of the same name cannot both be saved.
+  const clashes = files.some(([name]) =>
+    name
+      .split("/")
+      .slice(0, -1)
+      .some((_, index, folders) =>
+        names.has(folders.slice(0, index + 1).join("/"))
+      )
+  );
+
+  if (clashes) {
+    throw new NakamaApiError("ZIP file contains an invalid path.", 400);
+  }
+
+  let text = files.map(([name]) => `- ${name}`).join("\n");
+
+  for (const [name, bytes] of files) {
+    const mediaType = normalizeDocumentMediaType("", name);
+
+    if (text.length >= DOCUMENT_CONTEXT_CHARS) {
+      break;
+    }
+
+    if (
+      bytes.length > MAX_DOCUMENT_BYTES ||
+      !findDocumentTextParser(mediaType)
+    ) {
+      continue;
+    }
+
+    // One bad document must not hide the others, so the agents see it failed.
+    const content = await documentText({
+      data: Buffer.from(bytes).toString("base64"),
+      filename: name,
+      mediaType,
+    }).catch(() => "(Could not read this document.)");
+
+    text += `\n[File: ${name}]\n${content}`;
+  }
+
+  return { filename, files, text: text.slice(0, DOCUMENT_CONTEXT_CHARS) };
 }
 
 /** One member's turn: who answers, and in the main chat or a thread. */

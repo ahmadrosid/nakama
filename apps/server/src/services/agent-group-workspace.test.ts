@@ -69,7 +69,7 @@ test("memory past the cap cannot grow but may shrink, and reaches agents cut", (
 test("an image is saved under uploads, a document is kept, and the image is removed by its path", () => {
   const workspace = groupWorkspace(sharedDir);
 
-  const [image, note] = workspace.saveImages([
+  const [image, note] = workspace.saveUploads([
     { filename: "photo.jpg", image: Buffer.from("img") },
     { filename: "notes.txt", text: "hi" },
   ]);
@@ -81,7 +81,7 @@ test("an image is saved under uploads, a document is kept, and the image is remo
   expect(note).toEqual({ filename: "notes.txt", text: "hi" });
   expect(readFileSync(join(sharedDir, path), "utf8")).toBe("img");
 
-  workspace.removeImages([path, "../memory.md", "plan.md"]);
+  workspace.removeUploads([path, "../memory.md", "plan.md"]);
 
   expect(existsSync(join(sharedDir, path))).toBe(false);
 });

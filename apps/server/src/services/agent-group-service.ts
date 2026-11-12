@@ -33,8 +33,8 @@ import {
   listAgentGroupMessages,
   listAgentGroups,
   listAgentGroupThreadMessages,
-  listGroupSessionImages,
   listGroupSessions,
+  listGroupSessionUploads,
   type StoredGroupSession,
   setAgentGroupAvatar,
   updateAgentGroup,
@@ -278,7 +278,7 @@ export class AgentGroupService {
     const root = requireThreadRoot(orgId, sessionId, rootId);
     const key = threadKey(sessionId, rootId);
     const active = this.threadRuns.get(key);
-    const documents = workspaceOfGroup(orgId, groupId).saveImages(posted);
+    const documents = workspaceOfGroup(orgId, groupId).saveUploads(posted);
 
     appendAgentGroupMessage(orgId, session, null, content, rootId, documents);
 
@@ -342,7 +342,9 @@ export class AgentGroupService {
       groupId,
       groupSessionTitle(
         content ||
-          (documents.find((d) => !("image" in d || d.path))?.filename ?? "")
+          (documents.find((d) => !("image" in d || ("path" in d && d.path)))
+            ?.filename ??
+            "")
       )
     );
 
@@ -376,14 +378,14 @@ export class AgentGroupService {
     groupId: string,
     sessionId: string
   ): void {
-    const images = listGroupSessionImages(orgId, sessionId);
+    const uploads = listGroupSessionUploads(orgId, sessionId);
 
     if (!deleteGroupSession(orgId, userId, groupId, sessionId)) {
       throw new NakamaApiError("Session not found", 404);
     }
 
     this.stopRun(sessionId);
-    workspaceOfGroup(orgId, groupId).removeImages(images);
+    workspaceOfGroup(orgId, groupId).removeUploads(uploads);
   }
 
   stop(
@@ -411,7 +413,7 @@ export class AgentGroupService {
   ): Promise<void> {
     const session = requireSession(orgId, userId, groupId, sessionId);
     const active = this.runs.get(sessionId);
-    const documents = workspaceOfGroup(orgId, groupId).saveImages(posted);
+    const documents = workspaceOfGroup(orgId, groupId).saveUploads(posted);
 
     if (active) {
       appendAgentGroupMessage(

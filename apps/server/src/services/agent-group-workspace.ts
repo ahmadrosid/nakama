@@ -15,10 +15,14 @@ import {
 import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 import type { GroupDocument } from "./agent-group-store";
 
-/** A posted attachment: a document's text, or an image not saved yet. */
+/**
+ * A posted attachment: a document's text, or an image or a ZIP's files not
+ * saved yet. A ZIP's `text` lists its files and holds its documents' text.
+ */
 export type PostedDocument =
   | GroupDocument
-  | { filename: string; image: Buffer };
+  | { filename: string; image: Buffer }
+  | { files: [string, Uint8Array][]; filename: string; text: string };
 
 /** Longest memory members see, the same cap as a profile's MEMORY.md. */
 export const GROUP_MEMORY_CHARS = 4096;
@@ -162,26 +166,44 @@ export function groupWorkspace(sharedDir: string) {
       rmSync(dirname(sharedDir), { force: true, recursive: true });
     },
 
-    /** Removes saved images, given their paths in the shared folder. */
-    removeImages(paths: string[]): void {
+    /** Removes saved images and ZIP folders, given their paths in the shared folder. */
+    removeUploads(paths: string[]): void {
       const uploads = join(sharedDir, "uploads");
 
       for (const path of paths) {
         const file = resolve(sharedDir, path);
 
-        // Only what saveImages wrote; a stored path never leaves uploads/.
+        // Only what saveUploads wrote; a stored path never leaves uploads/.
         if (dirname(file) === uploads) {
-          rmSync(file, { force: true });
+          rmSync(file, { force: true, recursive: true });
         }
       }
     },
 
     /**
-     * Saves a valid post's images under shared/uploads; the agents get each
-     * one's path to open with read_file.
+     * Saves a valid post's images and ZIP files under shared/uploads; the
+     * agents get each one's path to open with read_file.
      */
-    saveImages(posted: PostedDocument[]): GroupDocument[] {
+    saveUploads(posted: PostedDocument[]): GroupDocument[] {
       return posted.map((document) => {
+        if ("files" in document) {
+          const folder = `uploads/${randomUUID().slice(0, 8)}`;
+
+          // readZipUpload let no path leave the folder.
+          for (const [name, bytes] of document.files) {
+            const file = join(sharedDir, folder, name);
+
+            mkdirSync(dirname(file), { recursive: true });
+            writeFileSync(file, bytes);
+          }
+
+          return {
+            filename: document.filename,
+            folder,
+            text: `Files saved in ${join(sharedDir, folder)}. Open them with read_file.\n${document.text}`,
+          };
+        }
+
         if (!("image" in document)) {
           return document;
         }
