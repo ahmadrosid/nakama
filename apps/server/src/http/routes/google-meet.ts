@@ -119,6 +119,19 @@ const extensionRoutes = [
     },
     responses: {},
   },
+  {
+    method: "post",
+    path: "/v1/meet/extension/disconnect",
+    operationId: "meet-extension-disconnect",
+    responses: {
+      200: {
+        description: "Revokes the key that made the call",
+        content: {
+          "application/json": { schema: z.object({ revoked: z.boolean() }) },
+        },
+      },
+    },
+  },
 ] as const;
 
 function requireMeet(options: ServerOptions): GoogleMeetService {
@@ -179,6 +192,7 @@ async function requireExtensionKey(c: Context<AppEnv>, options: ServerOptions) {
   return {
     // A Meet key acts as a plain member: it reaches only its own meetings.
     actor: { id: auth.userId, role: "member" as const },
+    keyId: auth.keyId,
     orgId: auth.orgId,
     service,
   };
@@ -341,6 +355,25 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
 
     return json(
       await invokeMeet(service, orgId, "leave", input, actor, c.req.raw.signal)
+    );
+  });
+
+  // Disconnect in the extension revokes its own key, and only that key.
+  app.post("/v1/meet/extension/disconnect", async (c) => {
+    const { actor, keyId, orgId, service } = await requireExtensionKey(
+      c,
+      options
+    );
+
+    return json(
+      await invokeMeet(
+        service,
+        orgId,
+        "revoke-extension",
+        { keyId },
+        actor,
+        c.req.raw.signal
+      )
     );
   });
 

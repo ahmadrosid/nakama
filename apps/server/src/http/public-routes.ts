@@ -40,7 +40,9 @@ export function isPublicRouteRequest(
     // The Meet extension pairs without a login, then sends its Meet key; the
     // route itself checks that key and accepts no other credential.
     (method === "POST" &&
-      /^\/v1\/meet\/extension\/(?:pair|start|leave)$/.test(pathname)) ||
+      /^\/v1\/meet\/extension\/(?:pair|start|leave|disconnect)$/.test(
+        pathname
+      )) ||
     (method === "GET" &&
       /^\/v1\/meet\/extension\/(?:pair\/[^/]+|status|transcript)$/.test(
         pathname

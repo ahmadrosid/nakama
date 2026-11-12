@@ -1954,19 +1954,10 @@ li[data-state="active"] .meet-step-mark {
 .meet-live-preview strong {
   font-weight: 600;
 }
-.meet-listening,
-.meet-live-warning {
+.meet-listening {
   display: inline-flex;
   gap: 8px;
   align-items: center;
-}
-.meet-live-warning {
-  padding: 10px 20px;
-  margin: 0;
-  font-size: 13px;
-  color: color-mix(in oklab, #d97706 70%, var(--foreground));
-  background: color-mix(in oklab, #f59e0b 12%, transparent);
-  border-top: 1px solid color-mix(in oklab, #f59e0b 35%, transparent);
 }
 .meet-search {
   display: flex;
