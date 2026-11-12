@@ -41,6 +41,7 @@ import type {
   CreateOrganizationResponse,
   CreateTeamRequest,
   ListOrgInvitesResponse,
+  ListOrgJoinRequestsResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   ListUserOrgsResponse,
@@ -1184,6 +1185,8 @@ export class OrgService {
         request.allowedInviteDomains === undefined
           ? (org.allowedInviteDomains ?? [])
           : normalizeAllowedInviteDomains(request.allowedInviteDomains),
+      memberApprovalRequired:
+        request.memberApprovalRequired ?? org.memberApprovalRequired ?? false,
       monthlyLlmTokenLimit,
       monthlyLlmTurnLimit,
       monthlyLlmWarningPercent,
@@ -2193,6 +2196,7 @@ export class OrgService {
   async acceptInvite(request: AcceptOrgInviteRequest): Promise<{
     user: StoredUserRecord;
     orgId: string;
+    pending: boolean;
     role: OrgRole;
   }> {
     const token = request.token?.trim();
@@ -2269,19 +2273,78 @@ export class OrgService {
       );
     }
 
-    await this.databaseAdapter.upsertOrgMember({
-      createdAt: now,
-      orgId: invite.orgId,
-      role: invite.role,
-      userId: user.id,
-    });
+    if (await this.databaseAdapter.getOrgJoinRequest(invite.orgId, user.id)) {
+      throw new NakamaApiError(
+        "This invite is already waiting for an admin to approve it.",
+        409
+      );
+    }
+
+    const pending = organization.memberApprovalRequired === true;
+
+    // Pending users stay out of org_members, so they count nowhere until approved
+    if (pending) {
+      await this.databaseAdapter.createOrgJoinRequest({
+        createdAt: now,
+        orgId: invite.orgId,
+        role: invite.role,
+        userId: user.id,
+      });
+    } else {
+      await this.databaseAdapter.upsertOrgMember({
+        createdAt: now,
+        orgId: invite.orgId,
+        role: invite.role,
+        userId: user.id,
+      });
+    }
+
     await this.databaseAdapter.markOrgInviteAccepted(invite.id, now);
 
     return {
       orgId: invite.orgId,
+      pending,
       role: invite.role,
       user,
     };
+  }
+
+  async listJoinRequests(orgId: string): Promise<ListOrgJoinRequestsResponse> {
+    await this.requireActiveOrganization(orgId);
+
+    const requests = await this.databaseAdapter.listOrgJoinRequests(orgId);
+
+    // The API shape, without the adapter's orgId
+    return {
+      requests: requests.map(({ createdAt, email, role, userId }) => ({
+        createdAt,
+        email,
+        role,
+        userId,
+      })),
+    };
+  }
+
+  async approveJoinRequest(orgId: string, userId: string): Promise<void> {
+    await this.requireActiveOrganization(orgId);
+
+    const member = await this.databaseAdapter.approveOrgJoinRequest(
+      orgId,
+      userId,
+      new Date().toISOString()
+    );
+
+    if (!member) {
+      throw new NakamaApiError("Not found", 404);
+    }
+  }
+
+  async rejectJoinRequest(orgId: string, userId: string): Promise<void> {
+    await this.requireActiveOrganization(orgId);
+
+    if (!(await this.databaseAdapter.deleteOrgJoinRequest(orgId, userId))) {
+      throw new NakamaApiError("Not found", 404);
+    }
   }
 
   async requestPasswordReset(
@@ -2680,6 +2743,7 @@ function toOrganizationSummary(
     archivedAt: record.archivedAt ?? null,
     createdAt: record.createdAt,
     id: record.id,
+    memberApprovalRequired: record.memberApprovalRequired ?? false,
     monthlyLlmTurnLimit: record.monthlyLlmTurnLimit ?? 0,
     name: record.name,
     parentOrgId: record.parentOrgId ?? null,

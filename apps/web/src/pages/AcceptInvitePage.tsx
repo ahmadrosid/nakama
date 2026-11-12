@@ -13,6 +13,7 @@ export function AcceptInvitePage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pending, setPending] = useState(false);
   const { refreshSession } = useAuth();
   const { resolvedTheme } = useTheme();
   const navigate = useNavigate();
@@ -27,7 +28,15 @@ export function AcceptInvitePage() {
     setIsSubmitting(true);
 
     try {
-      await client.acceptOrgInvite({ password, token });
+      const accepted = await client.acceptOrgInvite({ password, token });
+
+      // No session yet: the org admin has to approve first
+      if (accepted.pending) {
+        setPending(true);
+
+        return;
+      }
+
       await refreshSession();
       navigate("/chat", { replace: true });
     } catch (cause) {
@@ -47,43 +56,53 @@ export function AcceptInvitePage() {
             src={markLogoSrc(resolvedTheme)}
           />
           <h1 className="font-semibold text-xl tracking-tight">
-            Accept invitation
+            {pending ? "Waiting for approval" : "Accept invitation"}
           </h1>
         </div>
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label
-              className="mb-1 block font-medium text-sm"
-              htmlFor="password"
-            >
-              Password
-            </label>
-            <Input
-              autoComplete="current-password"
-              id="password"
-              minLength={8}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-            <p className="mt-1 text-muted-foreground text-xs">
-              Use your existing password, or choose one if this is your first
-              time joining.
-            </p>
-          </div>
-          {error ? (
-            <div
-              className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200"
-              role="alert"
-            >
-              {error}
+        {pending ? (
+          <p
+            className="text-center text-muted-foreground text-sm"
+            role="status"
+          >
+            An admin of this organization has to approve your access. Sign in
+            once they have.
+          </p>
+        ) : (
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div>
+              <label
+                className="mb-1 block font-medium text-sm"
+                htmlFor="password"
+              >
+                Password
+              </label>
+              <Input
+                autoComplete="current-password"
+                id="password"
+                minLength={8}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+              <p className="mt-1 text-muted-foreground text-xs">
+                Use your existing password, or choose one if this is your first
+                time joining.
+              </p>
             </div>
-          ) : null}
-          <Button className="w-full" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Joining..." : "Join organization"}
-          </Button>
-        </form>
+            {error ? (
+              <div
+                className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200"
+                role="alert"
+              >
+                {error}
+              </div>
+            ) : null}
+            <Button className="w-full" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Joining..." : "Join organization"}
+            </Button>
+          </form>
+        )}
       </div>
     </div>
   );

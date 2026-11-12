@@ -46,6 +46,7 @@ import type {
   StoredNotificationDestinationRecord,
   StoredOrganizationRecord,
   StoredOrgInviteRecord,
+  StoredOrgJoinRequestRecord,
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
   StoredOrgPluginRecord,
@@ -453,6 +454,7 @@ interface OrganizationRow {
   archived_at: string | null;
   created_at: string;
   id: string;
+  member_approval_required: number;
   monthly_llm_token_limit: number | null;
   monthly_llm_turn_limit: number | null;
   monthly_llm_warning_percent: number;
@@ -3307,12 +3309,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   };
 
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, parent_org_id, name, slug, allowed_invite_domains, member_approval_required, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
       allowed_invite_domains = excluded.allowed_invite_domains,
+      member_approval_required = excluded.member_approval_required,
       monthly_llm_token_limit = excluded.monthly_llm_token_limit,
       monthly_llm_turn_limit = excluded.monthly_llm_turn_limit,
       monthly_llm_warning_percent = excluded.monthly_llm_warning_percent,
@@ -3359,7 +3362,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, member_approval_required, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     ORDER BY name ASC
   `);
@@ -3383,7 +3386,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, member_approval_required, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE slug = ?
     LIMIT 1
@@ -3393,7 +3396,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, EXISTS (SELECT 1 FROM org_team_creation_requests WHERE team_org_id = organizations.id AND completed_at IS NULL) AS setup_pending, allowed_invite_domains, member_approval_required, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE id = ?
     LIMIT 1
@@ -3893,6 +3896,41 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
 
+  const getOrgJoinRequestStmt = db.prepare<
+    { created_at: string; org_id: string; role: string; user_id: string },
+    SQLQueryBindings[]
+  >(`
+    SELECT org_id, user_id, role, created_at
+    FROM org_join_requests
+    WHERE org_id = ? AND user_id = ?
+  `);
+
+  const listOrgJoinRequestsStmt = db.prepare<
+    {
+      created_at: string;
+      email: string;
+      org_id: string;
+      role: string;
+      user_id: string;
+    },
+    SQLQueryBindings[]
+  >(`
+    SELECT r.org_id, r.user_id, r.role, r.created_at, u.email
+    FROM org_join_requests r
+    JOIN users u ON u.id = r.user_id
+    WHERE r.org_id = ?
+    ORDER BY r.created_at ASC
+  `);
+
+  const insertOrgJoinRequestStmt = db.prepare(`
+    INSERT INTO org_join_requests (org_id, user_id, role, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  const deleteOrgJoinRequestStmt = db.prepare(
+    "DELETE FROM org_join_requests WHERE org_id = ? AND user_id = ?"
+  );
+
   const upsertOrgMemberStmt = db.prepare(`
     INSERT INTO org_members (org_id, user_id, role, user_context, created_at)
     VALUES (?, ?, ?, ?, ?)
@@ -3954,6 +3992,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.name,
         record.slug,
         JSON.stringify(record.allowedInviteDomains ?? []),
+        record.memberApprovalRequired ? 1 : 0,
         record.monthlyLlmTokenLimit ?? null,
         record.monthlyLlmTurnLimit ?? 0,
         record.monthlyLlmWarningPercent ?? 80,
@@ -4145,6 +4184,40 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     );
   };
 
+  // One transaction, so a request is never both approved and still pending.
+  const approveOrgJoinRequestTransaction = db.transaction(
+    (
+      orgId: string,
+      userId: string,
+      approvedAt: string
+    ): StoredOrgMemberRecord | null => {
+      const request = getOrgJoinRequestStmt.get(orgId, userId);
+
+      if (!request) {
+        return null;
+      }
+
+      deleteOrgJoinRequestStmt.run(orgId, userId);
+
+      // Added directly while pending: keep the role an admin already chose
+      if (getOrgMemberStmt.get(orgId, userId)) {
+        return null;
+      }
+
+      const member: StoredOrgMemberRecord = {
+        createdAt: approvedAt,
+        orgId,
+        // SAFETY: The adapter writes this row value through its typed contract.
+        role: request.role as StoredOrgMemberRecord["role"],
+        userId,
+      };
+
+      runUpsertOrgMemberStmt(member);
+
+      return member;
+    }
+  );
+
   const beginOrgTeamCreationTransaction = db.transaction(
     (input: BeginOrgTeamCreationInput) => {
       const parentOrgId = input.organization.parentOrgId;
@@ -4310,6 +4383,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       o.name,
       o.slug,
       o.allowed_invite_domains,
+      o.member_approval_required,
       o.monthly_llm_token_limit,
       o.monthly_llm_turn_limit,
       o.monthly_llm_warning_percent,
@@ -4681,6 +4755,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       appendMessagesTransaction(sessionId, messages);
     },
 
+    async approveOrgJoinRequest(orgId, userId, approvedAt) {
+      return approveOrgJoinRequestTransaction.immediate(
+        orgId,
+        userId,
+        approvedAt
+      );
+    },
+
     async assignMcpServerToProfile(profileId, serverId) {
       assignMcpServerStmt.run(profileId, serverId);
     },
@@ -4913,6 +4995,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.expiresAt,
         record.acceptedAt,
         record.revokedAt,
+        record.createdAt
+      );
+    },
+
+    async createOrgJoinRequest(record) {
+      insertOrgJoinRequestStmt.run(
+        record.orgId,
+        record.userId,
+        record.role,
         record.createdAt
       );
     },
@@ -5165,6 +5256,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteOrganization(id) {
       return deleteOrganizationWithForeignKeys(id);
+    },
+
+    async deleteOrgJoinRequest(orgId, userId) {
+      return deleteOrgJoinRequestStmt.run(orgId, userId).changes > 0;
     },
 
     async deleteOrgMember(orgId, userId) {
@@ -5456,6 +5551,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getOrgInviteByTokenHashStmt.get(tokenHash);
 
       return row ? toOrgInviteRecord(row) : null;
+    },
+
+    async getOrgJoinRequest(orgId, userId) {
+      const row = getOrgJoinRequestStmt.get(orgId, userId);
+
+      return row ? toOrgJoinRequestRecord(row) : null;
     },
 
     async getOrgMember(orgId, userId) {
@@ -6100,6 +6201,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listOrganizationsStmt
         .all()
         .map((row) => toOrganizationRecord(row));
+    },
+
+    async listOrgJoinRequests(orgId) {
+      return listOrgJoinRequestsStmt
+        .all(orgId)
+        .map((row) => ({ ...toOrgJoinRequestRecord(row), email: row.email }));
     },
 
     async listOrgMembers(orgId) {
@@ -7813,6 +7920,21 @@ function toUserRecord(row: UserRow): StoredUserRecord {
   };
 }
 
+function toOrgJoinRequestRecord(row: {
+  created_at: string;
+  org_id: string;
+  role: string;
+  user_id: string;
+}): StoredOrgJoinRequestRecord {
+  return {
+    createdAt: row.created_at,
+    orgId: row.org_id,
+    // SAFETY: The adapter writes this row value through its typed contract.
+    role: row.role as StoredOrgJoinRequestRecord["role"],
+    userId: row.user_id,
+  };
+}
+
 function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
   return {
     // SAFETY: The adapter writes this row value through its typed contract.
@@ -7820,6 +7942,7 @@ function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
     archivedAt: row.archived_at,
     createdAt: row.created_at,
     id: row.id,
+    memberApprovalRequired: row.member_approval_required !== 0,
     monthlyLlmTokenLimit: row.monthly_llm_token_limit ?? undefined,
     monthlyLlmTurnLimit: row.monthly_llm_turn_limit ?? 0,
     monthlyLlmWarningPercent: row.monthly_llm_warning_percent ?? 80,

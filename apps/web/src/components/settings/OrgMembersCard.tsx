@@ -2,6 +2,8 @@ import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
 import { Cancel01Icon } from "hugeicons-react";
 import { useReducer, useState } from "react";
@@ -22,8 +24,10 @@ import {
   useAddOrgMember,
   useInviteOrgMember,
   useOrgInvites,
+  useOrgJoinRequests,
   useOrgMembers,
   useRemoveOrgMember,
+  useReviewOrgJoinRequest,
   useRevokeOrgInvite,
   useSetOrgMemberDisabled,
   useUpdateOrgMember,
@@ -443,6 +447,7 @@ export function OrgMembersCard() {
 
           {tab === "settings" ? (
             <>
+              <MemberApprovalRow />
               <InviteDomainsForm
                 allowedDomains={activeOrg.allowedInviteDomains ?? []}
                 key={activeOrg.id}
@@ -486,6 +491,7 @@ export function OrgMembersCard() {
                   updatePending={updateMemberMutation.isPending}
                 />
 
+                <PendingJoinRequests orgId={activeOrg.id} />
                 <PendingInvites orgId={activeOrg.id} />
 
                 {statusLine ? (
@@ -515,6 +521,110 @@ export function OrgMembersCard() {
         updatePending={updateMemberMutation.isPending}
       />
     </>
+  );
+}
+
+function MemberApprovalRow() {
+  const { activeOrg, updateOrg } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  if (!activeOrg || activeOrg.role !== "admin") {
+    return null;
+  }
+
+  const orgId = activeOrg.id;
+
+  async function handleToggle(checked: boolean) {
+    setBusy(true);
+
+    try {
+      await updateOrg(orgId, { memberApprovalRequired: checked });
+    } catch (error) {
+      toast(formatError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <p className="font-medium text-foreground text-sm">
+        Approve new members before they join
+      </p>
+      <div className="flex shrink-0 items-center gap-2">
+        {busy ? <Spinner /> : null}
+        <Switch
+          aria-label="Approve new members before they join"
+          checked={activeOrg.memberApprovalRequired === true}
+          disabled={busy}
+          onCheckedChange={(checked) => void handleToggle(checked)}
+          size="sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PendingJoinRequests({ orgId }: { orgId: string }) {
+  const requests = useOrgJoinRequests(orgId).data?.requests ?? [];
+  const review = useReviewOrgJoinRequest(orgId);
+
+  const decide = (approve: boolean, userId: string) =>
+    review.mutate(
+      { approve, userId },
+      { onError: (error) => toast(formatError(error)) }
+    );
+
+  if (requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Waiting for approval"
+      className="border-border border-t"
+    >
+      <h3 className="bg-muted/40 px-4 py-2.5 text-muted-foreground text-sm">
+        Waiting for approval
+      </h3>
+      <ul className="divide-y divide-border border-border border-t text-sm">
+        {requests.map((request) => (
+          <li
+            className="flex items-center justify-between gap-3 px-4 py-2"
+            key={request.userId}
+          >
+            <p className="min-w-0 truncate">
+              {request.email}
+              <span className="ml-1.5 text-muted-foreground capitalize">
+                {request.role}
+              </span>
+            </p>
+            <div className="flex shrink-0 gap-1">
+              <Button
+                aria-label={`Approve ${request.email}`}
+                disabled={review.isPending}
+                onClick={() => decide(true, request.userId)}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Approve
+              </Button>
+              <Button
+                aria-label={`Reject ${request.email}`}
+                disabled={review.isPending}
+                onClick={() => decide(false, request.userId)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Reject
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

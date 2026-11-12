@@ -122,6 +122,25 @@ export function useOrgInvites(orgId: string | null) {
   });
 }
 
+export function useOrgJoinRequests(orgId: string) {
+  return useQuery({
+    queryFn: () => client.listOrgJoinRequests(orgId),
+    queryKey: queryKeys.orgJoinRequests(orgId),
+  });
+}
+
+export function useReviewOrgJoinRequest(orgId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ approve, userId }: { approve: boolean; userId: string }) =>
+      approve
+        ? client.approveOrgJoinRequest(orgId, userId)
+        : client.rejectOrgJoinRequest(orgId, userId),
+    onSuccess: () => invalidateOrgMembers(queryClient, orgId),
+  });
+}
+
 export function useRevokeOrgInvite(orgId: string) {
   const queryClient = useQueryClient();
 

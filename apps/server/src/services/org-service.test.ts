@@ -953,6 +953,93 @@ describe("OrgService", () => {
     expect(accepted.user.email).toBe("legacy@acme.com");
     expect(accepted.orgId).toBe(created.organization.id);
     expect(accepted.role).toBe("member");
+    expect(accepted.pending).toBe(false);
+  });
+
+  test("with approval on, an accepted invite waits outside the org until an admin decides", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const password = "approval-flow-pass";
+
+    const home = await orgService.createOrganization({
+      name: "Home",
+      slug: "home-approval",
+    });
+
+    const acme = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-approval",
+    });
+
+    await orgService.updateOrganization(acme.organization.id, {
+      memberApprovalRequired: true,
+    });
+
+    const invite = (orgId: string, email: string) =>
+      orgService.createInvite({
+        email,
+        invitedByUserId: "user_platform",
+        orgId,
+        role: "admin",
+      });
+
+    // The user already belongs to another org, which must stay untouched
+    const joined = await orgService.acceptInvite({
+      password,
+      token: (await invite(home.organization.id, "pat@acme.com")).token!,
+    });
+
+    const pending = await orgService.acceptInvite({
+      password,
+      token: (await invite(acme.organization.id, "pat@acme.com")).token!,
+    });
+
+    const userId = pending.user.id;
+    expect(pending.pending).toBe(true);
+    expect(joined.pending).toBe(false);
+
+    // Not a member anywhere in acme: middleware, seats and admin counts all read org_members
+    expect(
+      await databaseAdapter.getOrgMember(acme.organization.id, userId)
+    ).toBeNull();
+    expect(
+      (await databaseAdapter.listUserOrganizations(userId)).map(
+        ({ organization }) => organization.id
+      )
+    ).toEqual([home.organization.id]);
+    expect(
+      (await orgService.listJoinRequests(acme.organization.id)).requests
+    ).toEqual([
+      {
+        createdAt: expect.any(String),
+        email: "pat@acme.com",
+        role: "admin",
+        userId,
+      },
+    ]);
+
+    await orgService.approveJoinRequest(acme.organization.id, userId);
+    expect(
+      (await databaseAdapter.getOrgMember(acme.organization.id, userId))?.role
+    ).toBe("admin");
+    expect(
+      (await orgService.listJoinRequests(acme.organization.id)).requests
+    ).toEqual([]);
+    await expect(
+      orgService.approveJoinRequest(acme.organization.id, userId)
+    ).rejects.toMatchObject({ status: 404 });
+
+    const other = await orgService.acceptInvite({
+      password,
+      token: (await invite(acme.organization.id, "sam@acme.com")).token!,
+    });
+
+    await orgService.rejectJoinRequest(acme.organization.id, other.user.id);
+    expect(
+      await databaseAdapter.getOrgMember(acme.organization.id, other.user.id)
+    ).toBeNull();
+    await expect(
+      orgService.rejectJoinRequest(acme.organization.id, other.user.id)
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   test("lists and revokes pending invites only within their org", async () => {

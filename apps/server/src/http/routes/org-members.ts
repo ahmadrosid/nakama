@@ -3,6 +3,7 @@ import type {
   AddOrgMemberResponse,
   CreateOrganizationResponse,
   ListOrgInvitesResponse,
+  ListOrgJoinRequestsResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   OrganizationOverviewResponse,
@@ -88,6 +89,7 @@ export function registerOrgMemberRoutes(
   const updateOrganizationSchema = z
     .object({
       allowedInviteDomains: z.array(z.string()).optional(),
+      memberApprovalRequired: z.boolean().optional(),
       monthlyLlmTokenLimit: z.number().optional(),
       monthlyLlmTurnLimit: z.number().optional(),
       monthlyLlmWarningPercent: z.number().optional(),
@@ -772,6 +774,133 @@ export function registerOrgMemberRoutes(
     return new Response(null, { status: 204 });
   });
 
+  const errorResponses = {
+    403: {
+      content: { "application/json": { schema: errorSchema } },
+      description: "Error",
+    },
+    404: {
+      content: { "application/json": { schema: errorSchema } },
+      description: "Error",
+    },
+  };
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listOrgJoinRequests",
+      path: "/v1/orgs/{orgId}/join-requests",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  requests: z.array(
+                    z.object({
+                      createdAt: z.string(),
+                      email: z.string(),
+                      role: z.enum(["admin", "member"]),
+                      userId: z.string(),
+                    })
+                  ),
+                })
+                .openapi("ListOrgJoinRequestsResponse"),
+            },
+          },
+          description: "Accepted invites waiting for approval",
+        },
+        ...errorResponses,
+      },
+      summary: "List accepted invites waiting for an org admin",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.get("/v1/orgs/:orgId/join-requests", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    return json<ListOrgJoinRequestsResponse>(
+      await orgService.listJoinRequests(orgId)
+    );
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "approveOrgJoinRequest",
+      path: "/v1/orgs/{orgId}/join-requests/{userId}/approve",
+      request: { params: orgMemberParams },
+      responses: {
+        204: { description: "The user joined the organization" },
+        ...errorResponses,
+      },
+      summary: "Approve an accepted invite",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.post("/v1/orgs/:orgId/join-requests/:userId/approve", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const userId = decodeURIComponent(c.req.param("userId"));
+
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    await orgService.approveJoinRequest(orgId, userId);
+
+    return new Response(null, { status: 204 });
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "rejectOrgJoinRequest",
+      path: "/v1/orgs/{orgId}/join-requests/{userId}",
+      request: { params: orgMemberParams },
+      responses: {
+        204: { description: "The request was rejected" },
+        ...errorResponses,
+      },
+      summary: "Reject an accepted invite",
+      tags: ["Organizations"],
+    })
+  );
+
+  app.delete("/v1/orgs/:orgId/join-requests/:userId", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const userId = decodeURIComponent(c.req.param("userId"));
+
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    await orgService.rejectJoinRequest(orgId, userId);
+
+    return new Response(null, { status: 204 });
+  });
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -1074,6 +1203,7 @@ export function registerOrgMemberRoutes(
               schema: z
                 .object({
                   allowedInviteDomains: z.array(z.string()).optional(),
+                  memberApprovalRequired: z.boolean().optional(),
                   monthlyLlmTokenLimit: z.number().int().min(0).optional(),
                   monthlyLlmTurnLimit: z.number().int().min(0).optional(),
                   monthlyLlmWarningPercent: z

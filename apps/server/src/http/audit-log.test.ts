@@ -45,6 +45,8 @@ describe("audit event coverage", () => {
       ["DELETE", "/v1/orgs/org_1/invites/invite_1", "invite.revoke"],
       ["POST", "/v1/auth/accept-invite", "invite.accept"],
       ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
+      ["POST", "/v1/orgs/org_1/join-requests/user_1/approve", "member.approve"],
+      ["DELETE", "/v1/orgs/org_1/join-requests/user_1", "member.reject"],
       ["PUT", "/v1/settings/email", "settings.update"],
       ["PATCH", "/v1/providers/provider_1", "provider.update"],
       ["DELETE", "/v1/platform/orgs/org_1/permanent", "organization.delete"],
