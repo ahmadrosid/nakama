@@ -439,6 +439,7 @@ describe("createHonoApp", () => {
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();
     let sends = 0;
+
     const orgService = new OrgService(databaseAdapter, authService, {
       send: async () => {
         sends += 1;
@@ -450,8 +451,10 @@ describe("createHonoApp", () => {
     // The response hides whether a reset token was minted, so record the write
     // at the database boundary instead.
     const resetTokens: string[] = [];
+
     const createResetToken =
       databaseAdapter.createPasswordResetToken.bind(databaseAdapter);
+
     databaseAdapter.createPasswordResetToken = async (record) => {
       resetTokens.push(record.id);
 
@@ -463,6 +466,7 @@ describe("createHonoApp", () => {
       databaseAdapter,
       orgService,
     });
+
     await setupFreshInstallSession(app, databaseAdapter);
 
     const response = await app.fetch(

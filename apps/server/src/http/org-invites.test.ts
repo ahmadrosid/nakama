@@ -396,6 +396,7 @@ describe("direct org member provisioning", () => {
   test("requests and completes a single-use password reset", async () => {
     const { app, authService, databaseAdapter, orgService } =
       createMinimalHonoApp();
+
     await orgService.bootstrapInitialSetup({
       admin: {
         email: "admin@acme.com",
