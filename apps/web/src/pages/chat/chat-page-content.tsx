@@ -453,26 +453,11 @@ function ChatConversation({
     session?.id ?? "new"
   );
 
-  const { activeOrg } = useAuth();
-
-  // Tied to the chat it came from: the page does not remount between chats.
-  const [caseDraft, setCaseDraft] = useState<
-    (SaveCaseReply & { sessionId: string }) | null
-  >(null);
-
-  // Cognito chats are never stored, so there is no run to save.
-  const caseTarget =
-    canAccessIntegrationsPage(activeOrg?.role) &&
-    session &&
-    profileId &&
-    !cognito
-      ? { profileId, sessionId: session.id }
-      : null;
-
-  const openCase =
-    caseDraft && caseDraft.sessionId === caseTarget?.sessionId
-      ? caseDraft
-      : null;
+  const { caseTarget, openCase, setCaseDraft } = useChatCaseDraft(
+    session?.id,
+    profileId,
+    cognito
+  );
 
   // Cognito chats are not kept, so neither is their open panel.
   const rememberId = session && !cognito ? session.id : undefined;
@@ -614,6 +599,36 @@ function ChatConversation({
       </ChatAttachmentPanelProvider>
     </ChatStatusProvider>
   );
+}
+
+/** The reply a member is saving as a test case, and where it saves. */
+function useChatCaseDraft(
+  sessionId: string | undefined,
+  profileId: ChatPageState["profileId"],
+  cognito: boolean
+) {
+  const { activeOrg } = useAuth();
+
+  // Tied to the chat it came from: the page does not remount between chats.
+  const [caseDraft, setCaseDraft] = useState<
+    (SaveCaseReply & { sessionId: string }) | null
+  >(null);
+
+  // Cognito chats are never stored, so there is no run to save.
+  const caseTarget =
+    canAccessIntegrationsPage(activeOrg?.role) &&
+    sessionId &&
+    profileId &&
+    !cognito
+      ? { profileId, sessionId }
+      : null;
+
+  const openCase =
+    caseDraft && caseDraft.sessionId === caseTarget?.sessionId
+      ? caseDraft
+      : null;
+
+  return { caseTarget, openCase, setCaseDraft };
 }
 
 /** Off the cognito surface, the desktop top bar holds the toggle. */

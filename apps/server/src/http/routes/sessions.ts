@@ -21,7 +21,6 @@ import {
   NakamaApiError,
 } from "@nakama/core";
 import { THINKING_EFFORTS } from "@nakama/core/thinking-effort";
-import { compress } from "hono/compress";
 import {
   getUserBrowser,
   stopUserBrowser,
@@ -996,7 +995,7 @@ export function registerSessionRoutes(
     return json<CompactionResponse>(result);
   });
 
-  app.get("/v1/sessions/:sessionId/messages", compress(), async (c) => {
+  app.get("/v1/sessions/:sessionId/messages", async (c) => {
     const { orgId, sessionId } = await requireSessionAccess(c);
     const result = await agent.getSessionMessages(sessionId, orgId);
 

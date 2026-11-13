@@ -70,9 +70,10 @@ test("automation run deletion is unavailable and preserves history", async () =>
 
   expect(specResponse.status).toBe(200);
   const spec = await specResponse.json();
-  expect(
-    spec.paths["/v1/automations/{automationId}/runs/{runId}"]
-  ).toBeUndefined();
+  // The path exists to read one run, never to delete it.
+  const runPath = spec.paths["/v1/automations/{automationId}/runs/{runId}"];
+  expect(runPath?.get).toBeDefined();
+  expect(runPath?.delete).toBeUndefined();
 });
 
 function createApp() {

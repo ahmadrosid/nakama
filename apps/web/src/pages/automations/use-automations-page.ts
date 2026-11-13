@@ -205,6 +205,32 @@ export function useAutomationsPage() {
     markReadMutation.mutateAsync,
   ]);
 
+  // The automation list polls fast and carries the last run, so a run that
+  // starts, ends or records its delivery refetches the run list, which polls
+  // slowly when idle.
+  const lastRun = selected
+    ? [
+        selected.lastRunAt,
+        selected.lastRunStatus,
+        selected.lastRunDeliveryStatus,
+      ].join("|")
+    : null;
+
+  const seenLastRun = useRef({ automationId: selectedId, lastRun });
+
+  useEffect(() => {
+    const seen = seenLastRun.current;
+    seenLastRun.current = { automationId: selectedId, lastRun };
+
+    if (
+      seen.automationId === selectedId &&
+      seen.lastRun !== null &&
+      seen.lastRun !== lastRun
+    ) {
+      void refetchRuns();
+    }
+  }, [selectedId, lastRun, refetchRuns]);
+
   async function handleSaveEdit() {
     if (!editDraft || busy) {
       return;
