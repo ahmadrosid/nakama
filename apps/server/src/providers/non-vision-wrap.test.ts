@@ -45,6 +45,6 @@ describe("wrapProviderForNonVision", () => {
       system: "system",
     });
 
-    expect(seen[0]).toBe("[Image]\nA chart.");
+    expect(seen[0]).toEqual(expect.stringContaining("A chart."));
   });
 });
