@@ -64,11 +64,21 @@ export function resolveServerUrl(
 export function resolveWebPublicUrl(
   env: Record<string, string | undefined> = process.env
 ): string | undefined {
-  const configured =
-    env.NAKAMA_WEB_PUBLIC_URL?.trim() || env.NAKAMA_PUBLIC_URL?.trim();
+  return resolveWebPublicUrlConfig(env).url;
+}
 
-  if (configured) {
-    return normalizeBaseUrl(configured);
+export function resolveWebPublicUrlConfig(
+  env: Record<string, string | undefined> = process.env
+) {
+  for (const source of [
+    "NAKAMA_WEB_PUBLIC_URL",
+    "NAKAMA_PUBLIC_URL",
+  ] as const) {
+    const configured = env[source]?.trim();
+
+    if (configured) {
+      return { source, url: normalizeBaseUrl(configured) } as const;
+    }
   }
 
   const saved = readUserWebPublicUrlSync() ?? undefined;
@@ -77,10 +87,10 @@ export function resolveWebPublicUrl(
   // A public URL in its config came from another install's restored backup,
   // and honouring it would refuse the desktop UI's own origin.
   if (saved && env.NAKAMA_DESKTOP === "1" && !isLoopbackUrl(saved)) {
-    return;
+    return { source: "none", url: undefined } as const;
   }
 
-  return saved;
+  return { source: saved ? "config.ini" : "none", url: saved } as const;
 }
 
 function isLoopbackUrl(value: string): boolean {

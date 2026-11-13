@@ -119,6 +119,13 @@ describe("composio-callback-url", () => {
     expect(isLoopbackComposioCallbackBaseUrl("http://localhost:3003")).toBe(
       true
     );
+    expect(isLoopbackComposioCallbackBaseUrl("http://[::1]:3003")).toBe(true);
+    expect(isLoopbackComposioCallbackBaseUrl("http://app.localhost:3003")).toBe(
+      true
+    );
+    expect(
+      isLoopbackComposioCallbackBaseUrl("http://localhost.example.com")
+    ).toBe(false);
     expect(
       isLoopbackComposioCallbackBaseUrl("https://nakama.example.com")
     ).toBe(false);
