@@ -61,6 +61,7 @@ import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.sha
 import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dialogs";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { DocumentAttachmentPreview } from "@/components/chat/document-attachment-preview";
+import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { PluginDrafts } from "@/components/chat/PluginDraftCard";
 import { readRecord, readString } from "@/components/chat/web-search.shared";
@@ -92,6 +93,10 @@ import {
   parseGroupCreatedResult,
   parseProfileCreatedResult,
 } from "@/lib/chat-stream";
+import {
+  buildGenerateImageToolState,
+  isGenerateImageTool,
+} from "@/lib/chat-stream-image-generation";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
@@ -594,7 +599,22 @@ function AssistantTurn({
 }) {
   const turnMessages = messages.map(({ message }) => message);
   const segments = segmentAssistantTurn(turnMessages, workStreamActive);
-  const artifacts = extractTurnArtifacts(turnMessages);
+
+  // A generated image shows as the image itself, not as a file card.
+  const generatedImages = turnMessages.filter((message) =>
+    isGenerateImageTool(message.tool)
+  );
+
+  const generatedPaths = new Set(
+    generatedImages.map(
+      (message) => buildGenerateImageToolState(message).artifactPath
+    )
+  );
+
+  const artifacts = extractTurnArtifacts(turnMessages).filter(
+    (artifact) => artifact.ownerProfileId || !generatedPaths.has(artifact.path)
+  );
+
   const artifactTurnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
   const turnComplete = isAssistantTurnComplete(turnMessages);
@@ -654,6 +674,13 @@ function AssistantTurn({
           sessionId={sessionId}
         />
       )}
+      {generatedImages.map((message) => (
+        <ImageGenerationToolRow
+          key={message.id}
+          message={message}
+          profileId={profileId}
+        />
+      ))}
       {profileId && showArtifacts ? (
         <TurnArtifacts
           artifacts={liveArtifacts}
