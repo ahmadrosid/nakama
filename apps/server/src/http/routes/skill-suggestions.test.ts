@@ -37,6 +37,22 @@ function createApp() {
 
   return {
     ...createMinimalHonoApp({
+      agent: {
+        getProfileAccess: async (orgId: string, profileId: string) => {
+          const profile = await databaseAdapter.getProfileForOrg(
+            profileId,
+            orgId
+          );
+
+          return profile
+            ? {
+                isSuper: profile.isSuper,
+                ownerUserId: profile.ownerUserId ?? null,
+                sharedWithTeam: profile.sharedWithTeam,
+              }
+            : null;
+        },
+      },
       databaseAdapter,
       skillProposalService,
       skillSuggestionService,
@@ -251,5 +267,122 @@ describe("skill suggestion routes (v1)", () => {
     expect(
       proposals.some((proposal) => proposal.id === applyBody.proposalId)
     ).toBe(true);
+  });
+
+  test("a member cannot read or apply a private profile's suggestions", async () => {
+    const { app, databaseAdapter, skillSuggestionService } = createApp();
+
+    const adminSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "admin5@org.com"
+    );
+
+    const orgId = adminSession.orgId!;
+    const now = new Date().toISOString();
+
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "private_profile",
+      isSuper: false,
+      model: "openrouter/auto",
+      name: "Private",
+      orgId,
+      ownerUserId: "user_other",
+      sharedWithTeam: false,
+      systemPrompt: "You are helpful.",
+      updatedAt: now,
+    });
+
+    const created = await skillSuggestionService.createSuggestion({
+      orgId,
+      outcome: {
+        action: "create",
+        content: sampleSkillMarkdown,
+        name: "deploy-notes",
+      },
+      profileId: "private_profile",
+    });
+
+    const memberResp = await app.fetch(
+      new Request(`${BASE}/v1/orgs/${orgId}/members`, {
+        body: JSON.stringify({
+          email: "member5@org.com",
+          name: "Member",
+          role: "member",
+        }),
+        headers: adminSession.headers(
+          { "X-CSRF-Token": adminSession.csrfToken },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const provisioned = (await memberResp.json()) as {
+      temporaryPassword: string;
+    };
+
+    const memberSession = await loginUserSession(
+      app,
+      "member5@org.com",
+      provisioned.temporaryPassword,
+      orgId
+    );
+
+    const listResp = await app.fetch(
+      new Request(
+        `${BASE}/v1/orgs/${orgId}/skill-suggestions?profileId=private_profile`,
+        { headers: memberSession.headers({}, orgId) }
+      )
+    );
+
+    expect(listResp.status).toBe(403);
+
+    const memberListResp = await app.fetch(
+      new Request(`${BASE}/v1/orgs/${orgId}/skill-suggestions`, {
+        headers: memberSession.headers({}, orgId),
+      })
+    );
+
+    expect(memberListResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const memberList = (await memberListResp.json()) as {
+      suggestions: unknown[];
+    };
+
+    expect(memberList.suggestions).toHaveLength(0);
+
+    const applyResp = await app.fetch(
+      new Request(
+        `${BASE}/v1/orgs/${orgId}/skill-suggestions/${created.id}/apply`,
+        {
+          headers: memberSession.headers(
+            { "X-CSRF-Token": memberSession.csrfToken },
+            orgId
+          ),
+          method: "POST",
+        }
+      )
+    );
+
+    expect(applyResp.status).toBe(403);
+
+    const adminListResp = await app.fetch(
+      new Request(`${BASE}/v1/orgs/${orgId}/skill-suggestions`, {
+        headers: adminSession.headers({}, orgId),
+      })
+    );
+
+    expect(adminListResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const adminList = (await adminListResp.json()) as {
+      suggestions: unknown[];
+    };
+
+    expect(adminList.suggestions).toHaveLength(1);
   });
 });
