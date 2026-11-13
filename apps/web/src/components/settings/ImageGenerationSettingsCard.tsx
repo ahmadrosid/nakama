@@ -202,11 +202,13 @@ export function ImageGenerationSettingsCard() {
   const [formError, setFormError] = useState<string | null>(null);
   // null until the saved model loads, so it does not read as the automatic pick.
   const [selection, setSelection] = useState<string | null>(null);
+
   // The saved model, labelled at render: a provider added just now has no
   // label until the provider list refetches.
   const [savedHint, setSavedHint] = useState<{ model: string | null } | null>(
     null
   );
+
   const { data: modelsResponse } = useModelsQuery();
   const { data: imageGenerationSettings } = useImageGenerationSettings();
   const saveImageGenerationMutation = useSaveImageGenerationSettings();
