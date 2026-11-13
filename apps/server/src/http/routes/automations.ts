@@ -562,7 +562,12 @@ export function registerAutomationRoutes(
       return errorResponse("Automation run record not found.", 500);
     }
 
-    return json<RunAutomationResponse>({ run });
+    // The list leaves out a finished transcript. This reply keeps it.
+    const saved = await automationService.getRun(automationId, orgId, run.id);
+
+    return json<RunAutomationResponse>({
+      run: { ...run, progress: saved?.progress },
+    });
   });
 
   app.get("/v1/automations/:automationId/runs", async (c) => {

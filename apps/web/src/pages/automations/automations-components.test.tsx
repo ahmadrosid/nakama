@@ -275,6 +275,57 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
   }
 });
 
+function renderRunHistory(
+  root: ReturnType<typeof createRoot>,
+  queryClient: QueryClient,
+  runs: AutomationRunRecord[]
+) {
+  root.render(
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The transcript reads only the authentication flags. */
+            { isAuthenticated: true, isLoading: false } as AuthContextValue
+          }
+        >
+          <VirtuosoMockContext.Provider
+            value={{ itemHeight: 100, viewportHeight: 2000 }}
+          >
+            <RunHistoryList
+              busy={false}
+              onRerun={() => {}}
+              profileId="profile"
+              running={false}
+              runs={runs}
+            />
+          </VirtuosoMockContext.Provider>
+        </AuthContext.Provider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+}
+
+async function openFirstRun(container: HTMLElement) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+}
+
+const runConversation = () =>
+  document.querySelector('[role="dialog"] [role="log"]');
+
+async function waitUntil(found: () => boolean) {
+  for (let attempt = 0; attempt < 50 && !found(); attempt += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+}
+
 test("a finished run loads its transcript when opened", async () => {
   const run: AutomationRunRecord = {
     automationId: "automation",
@@ -300,46 +351,143 @@ test("a finished run loads its transcript when opened", async () => {
 
   try {
     await act(async () => {
-      root.render(
-        <QueryClientProvider client={new QueryClient()}>
-          <ThemeProvider>
-            <AuthContext.Provider
-              value={
-                /* SAFETY: The transcript reads only the authentication flags. */
-                { isAuthenticated: true, isLoading: false } as AuthContextValue
-              }
-            >
-              <VirtuosoMockContext.Provider
-                value={{ itemHeight: 100, viewportHeight: 2000 }}
-              >
-                <RunHistoryList
-                  busy={false}
-                  onRerun={() => {}}
-                  profileId="profile"
-                  running={false}
-                  runs={[run]}
-                />
-              </VirtuosoMockContext.Provider>
-            </AuthContext.Provider>
-          </ThemeProvider>
-        </QueryClientProvider>
-      );
+      renderRunHistory(root, new QueryClient(), [run]);
     });
 
     expect(getRun).not.toHaveBeenCalled();
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
-        .click();
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    });
+    await openFirstRun(container);
 
     expect(getRun).toHaveBeenCalledWith("automation", "run");
-    const conversation = document.querySelector('[role="dialog"] [role="log"]');
+    const conversation = runConversation();
     // Both transcript messages render, not only the output.
     expect(conversation?.querySelectorAll(".is-user")).toHaveLength(1);
     expect(conversation?.querySelectorAll(".is-assistant")).toHaveLength(1);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    getRun.mockRestore();
+  }
+});
+
+test("a run that finishes while open keeps its transcript until the saved one loads", async () => {
+  const running: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: null,
+    error: null,
+    id: "run",
+    output: "Two urgent",
+    progress: [
+      { content: "Check the inbox", role: "user" },
+      { content: "Two urgent", role: "assistant" },
+    ],
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "running",
+  };
+
+  // The run list leaves out a finished run's transcript.
+  const finished: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: "Two urgent emails.",
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const saved = Promise.withResolvers<AutomationRunRecord>();
+
+  const getRun = spyOn(client, "getAutomationRun").mockReturnValue(
+    saved.promise
+  );
+
+  const queryClient = new QueryClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      renderRunHistory(root, queryClient, [running]);
+    });
+    await openFirstRun(container);
+    expect(getRun).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderRunHistory(root, queryClient, [finished]);
+    });
+    await waitUntil(() => getRun.mock.calls.length > 0);
+
+    expect(getRun).toHaveBeenCalledWith("automation", "run");
+    // The saved transcript is still loading; the streamed one stays.
+    expect(runConversation()?.querySelectorAll(".is-user")).toHaveLength(1);
+    expect(runConversation()?.querySelectorAll(".is-assistant")).toHaveLength(
+      1
+    );
+
+    await act(async () => {
+      saved.resolve({
+        ...finished,
+        progress: [
+          { content: "Check the inbox", role: "user" },
+          { content: "Two urgent emails.", role: "assistant" },
+        ],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    expect(runConversation()?.querySelectorAll(".is-user")).toHaveLength(1);
+    expect(runConversation()?.querySelectorAll(".is-assistant")).toHaveLength(
+      1
+    );
+  } finally {
+    saved.resolve(finished);
+    await act(async () => root.unmount());
+    container.remove();
+    getRun.mockRestore();
+  }
+});
+
+test("a finished run keeps its output when the transcript does not load", async () => {
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: "Two urgent emails.",
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const getRun = spyOn(client, "getAutomationRun").mockRejectedValue(
+    new Error("offline")
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      renderRunHistory(
+        root,
+        new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        [run]
+      );
+    });
+    await openFirstRun(container);
+    await waitUntil(() =>
+      Boolean(document.querySelector('[role="dialog"] [role="alert"]'))
+    );
+
+    expect(getRun).toHaveBeenCalledWith("automation", "run");
+    expect(
+      document.querySelectorAll('[role="dialog"] [role="alert"]')
+    ).toHaveLength(1);
+    // The output from the run list still shows as the reply.
+    expect(runConversation()?.querySelectorAll(".is-assistant")).toHaveLength(
+      1
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();

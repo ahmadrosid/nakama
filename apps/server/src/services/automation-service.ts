@@ -690,15 +690,17 @@ export class AutomationService {
     automation: StoredAutomation
   ): Promise<StoredAutomation> {
     const userTimezone = await this.getUserTimezone();
-    const runs = await this.db.listAutomationRuns(automation.id, 1);
+    const [stored] = await this.db.listAutomationRuns(automation.id, 1);
+    const lastRun = stored ? toRunRecord(stored) : null;
 
     const publicUrl =
       automation.trigger.type === "webhook" ? resolveWebPublicUrl() : undefined;
 
     return {
       ...automation,
-      lastRunAt: runs[0]?.startedAt ?? null,
-      lastRunStatus: runs[0]?.status ?? null,
+      lastRunAt: lastRun?.startedAt ?? null,
+      lastRunDeliveryStatus: lastRun?.deliveryStatus ?? null,
+      lastRunStatus: lastRun?.status ?? null,
       nextRunAt: isWorkerSchedulable(automation)
         ? this.computeNextRunAt(automation.trigger, userTimezone)
         : null,

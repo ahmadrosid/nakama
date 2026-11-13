@@ -75,6 +75,8 @@ export interface StoredAutomation extends AutomationDefinition {
   createdAt: string;
   enabled: boolean;
   lastRunAt?: string | null;
+  /** Set a moment after the last run ends, once its delivery is tried. */
+  lastRunDeliveryStatus?: AutomationDeliveryStatus | null;
   lastRunStatus?: AutomationRunStatus | null;
   nextRunAt?: string | null;
   orgId?: string | null;

@@ -9,6 +9,7 @@ import {
   getTelegramConfigDir,
   getTelegramConfigPath,
   type ListAutomationRunsResponse,
+  type RunAutomationResponse,
 } from "@nakama/core";
 import { setupTestConfigDir } from "../../test-config-dir";
 import {
@@ -312,5 +313,54 @@ describe("automation run history over HTTP", () => {
 
     const foreignRun = await service.createRun(foreign.id);
     expect((await get(`${foreign.id}/runs/${foreignRun.id}`)).status).toBe(404);
+  });
+
+  test("running an automation now returns the finished run with its transcript", async () => {
+    const progress = [
+      { content: "Summarize the week", role: "user" as const },
+      { content: "Done", role: "assistant" as const },
+    ];
+
+    const fixture = createFixture({
+      agent: (service) => ({
+        providerConfigured: true,
+        runAutomation: async (automationId: string) => {
+          const run = await service.createRun(automationId);
+          service.setRunProgress(run.id, { output: "Done", progress });
+          await service.completeRun(run.id, automationId, { output: "Done" });
+
+          return { output: "Done" };
+        },
+      }),
+    });
+
+    const { orgId, session } = await loginMember(fixture);
+
+    const automation = await fixture.automationService.create(
+      orgId,
+      {
+        description: "Report",
+        name: "Report",
+        prompt: "Summarize the week",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const response = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}/run`, {
+        headers: { "X-CSRF-Token": session.csrfToken, ...session.headers() },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    // SAFETY: The 200 above means the route returned its run response.
+    const { run } = (await response.json()) as RunAutomationResponse;
+    expect(run).toMatchObject({
+      output: "Done",
+      progress,
+      status: "completed",
+    });
   });
 });

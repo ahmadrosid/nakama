@@ -785,9 +785,19 @@ test("automation list reflects a run starting and finishing", async () => {
   expect((await service.listForOrg("another_org")).automations).toEqual([]);
 
   await service.completeRun(run.id, automation.id, { output: "Done" });
-  expect((await service.listForOrg(ORG_ID)).automations[0]?.lastRunStatus).toBe(
-    "completed"
-  );
+  expect((await service.listForOrg(ORG_ID)).automations[0]).toMatchObject({
+    lastRunDeliveryStatus: null,
+    lastRunStatus: "completed",
+  });
+
+  // Delivery is recorded after the run ends, so the list carries it too.
+  await service.updateRunDelivery(run.id, automation.id, {
+    deliveryError: "Bot was blocked.",
+    deliveryStatus: "failed",
+  });
+  expect(
+    (await service.listForOrg(ORG_ID)).automations[0]?.lastRunDeliveryStatus
+  ).toBe("failed");
 });
 
 describe("AutomationRunner", () => {

@@ -206,9 +206,14 @@ export function useAutomationsPage() {
   ]);
 
   // The automation list polls fast and carries the last run, so a run that
-  // starts or ends refetches the run list, which polls slowly when idle.
+  // starts, ends or records its delivery refetches the run list, which polls
+  // slowly when idle.
   const lastRun = selected
-    ? `${selected.lastRunAt ?? ""}|${selected.lastRunStatus ?? ""}`
+    ? [
+        selected.lastRunAt,
+        selected.lastRunStatus,
+        selected.lastRunDeliveryStatus,
+      ].join("|")
     : null;
 
   const seenLastRun = useRef({ automationId: selectedId, lastRun });
