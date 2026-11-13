@@ -30,7 +30,7 @@ type ImageGenerationChoice = SettingsModelOption;
 
 type ImageGenerationProviderSummary = Pick<
   ProviderInstanceSummary,
-  "chatgptPlanType" | "hasApiKey" | "id" | "type"
+  "chatgptPlanType" | "hasApiKey" | "id" | "label" | "type"
 >;
 
 /**
@@ -69,25 +69,23 @@ function imageGenerationChoices(
     group.models.some((model) => model.provider === "openai_compatible")
   );
 
-  // A MiniMax provider lists chat models; its image models are fixed.
-  const minimaxGroups = groups.flatMap((group) => {
-    const provider = group.models.find(
-      (model) => model.provider === "minimax" || model.provider === "minimax_cn"
-    )?.provider;
-
-    return provider
+  // MiniMax image models are fixed, so a MiniMax provider offers them even
+  // with no chat models saved.
+  const minimaxGroups = providers.flatMap((provider) =>
+    provider.type === "minimax" || provider.type === "minimax_cn"
       ? [
           {
-            ...group,
             models: MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS.map((option) => ({
               id: option.id,
               name: option.name,
-              provider,
+              provider: provider.type,
             })),
+            providerId: provider.id,
+            providerLabel: provider.label,
           },
         ]
-      : [];
-  });
+      : []
+  );
 
   const imageModelGroups = [...compatibleGroups, ...minimaxGroups];
 

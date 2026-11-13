@@ -61,12 +61,6 @@ const models: ProviderModelOption[] = [
     providerId,
   })),
   { id: "gpt-5", name: "GPT-5", provider: "openai", providerId: "openai" },
-  {
-    id: "MiniMax-M3",
-    name: "MiniMax M3",
-    provider: "minimax",
-    providerId: "minimax",
-  },
 ];
 
 async function renderCard(options: {
@@ -210,6 +204,7 @@ test.each([
   expect(container.querySelector('[role="note"]') !== null).toBe(note);
 });
 
+// The MiniMax provider has no saved chat models here.
 test("a saved MiniMax image model shows under the MiniMax provider", async () => {
   const container = await renderCard({
     currentProviderId: "minimax",
