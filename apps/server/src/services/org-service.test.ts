@@ -1044,6 +1044,7 @@ describe("OrgService", () => {
 
   test("join requests stay in step with members, the allowlist and erasure", async () => {
     const sent: string[] = [];
+
     const { databaseAdapter, orgService } = createOrgService({
       // Undelivered, so createInvite hands back the token this test accepts with
       send: async ({ subject, to }) => {
@@ -1052,12 +1053,14 @@ describe("OrgService", () => {
         return { ok: false };
       },
     });
+
     const password = "approval-edge-pass";
 
     const acme = await orgService.createOrganization({
       name: "Acme",
       slug: "acme-edges",
     });
+
     const orgId = acme.organization.id;
 
     await orgService.updateOrganization(orgId, {
@@ -1077,6 +1080,7 @@ describe("OrgService", () => {
           })
         ).token!,
       });
+
     const waiting = async () =>
       (await orgService.listJoinRequests(orgId)).requests.map(
         ({ email }) => email
@@ -1135,10 +1139,12 @@ describe("OrgService", () => {
     const sam = await accept("sam@acme.com");
     await orgService.rejectJoinRequest(orgId, sam.user.id);
     expect(await databaseAdapter.getUserById(sam.user.id)).toBeNull();
+
     const other = await orgService.createOrganization({
       name: "Other",
       slug: "other-edges",
     });
+
     await orgService.updateOrganization(other.organization.id, {
       memberApprovalRequired: true,
     });
@@ -1167,14 +1173,17 @@ describe("OrgService", () => {
         role: "member",
       })
     ).token!;
+
     await orgService.updateOrganization(
       (await databaseAdapter.getOrganizationBySlug("race"))!.id,
       { memberApprovalRequired: true }
     );
+
     const results = await Promise.allSettled([
       orgService.acceptInvite({ password, token }),
       orgService.acceptInvite({ password, token }),
     ]);
+
     expect(
       results
         .map((result) =>
@@ -1186,10 +1195,12 @@ describe("OrgService", () => {
 
   test("a team waits for approval when its parent requires it", async () => {
     const { databaseAdapter, orgService } = createOrgService();
+
     const acme = await orgService.createOrganization({
       name: "Acme",
       slug: "acme-team-approval",
     });
+
     const now = new Date().toISOString();
 
     await orgService.updateOrganization(acme.organization.id, {
