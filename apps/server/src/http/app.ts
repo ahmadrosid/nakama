@@ -284,12 +284,14 @@ export function createHonoApp(options: ServerOptions) {
         ? " https://cdn.jsdelivr.net/sm/ https://api.scalar.com/vector/registry/"
         : "";
 
-      headers.set(
-        "Content-Security-Policy",
-        isArtifactDocument
-          ? ARTIFACT_FRAME_CSP
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; worker-src 'self' blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
-      );
+      if (isArtifactDocument) {
+        headers.set("Content-Security-Policy", ARTIFACT_FRAME_CSP);
+      } else if (!headers.has("Content-Security-Policy")) {
+        headers.set(
+          "Content-Security-Policy",
+          `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://logos.composio.dev; media-src 'self' blob:; object-src blob:; worker-src 'self' blob:; frame-src 'self' blob: https://*.kernel.sh:* https://*.onkernel.com:*; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
+        );
+      }
 
       // Also true behind a TLS terminator, which is where HSTS matters most.
       if (isSecureRequest(c.req.raw)) {
