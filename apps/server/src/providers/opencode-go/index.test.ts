@@ -30,6 +30,22 @@ describe("formatOpenCodeSessionId", () => {
     expect(formatOpenCodeSessionId("ses_abc123")).toBe("ses_abc123");
   });
 
+  test("sanitizes an id that already starts with ses_", () => {
+    expect(formatOpenCodeSessionId("ses_x:y")).toBe("ses_x_y");
+    expect(formatOpenCodeSessionId("ses_a\r\nb")).toBe("ses_a__b");
+    expect(formatOpenCodeSessionId("ses_é")).toBe("ses__");
+    expect(formatOpenCodeSessionId("ses_")).toMatch(/^ses_[a-f0-9]{32}$/);
+  });
+
+  test("bounds the id length", () => {
+    expect(formatOpenCodeSessionId("a".repeat(200))).toBe(
+      `ses_${"a".repeat(64)}`
+    );
+    expect(formatOpenCodeSessionId(`ses_${"b".repeat(200)}`)).toBe(
+      `ses_${"b".repeat(64)}`
+    );
+  });
+
   test("prefixes with ses_ and sanitizes special characters", () => {
     expect(formatOpenCodeSessionId("org_1:session_123")).toBe(
       "ses_org_1_session_123"

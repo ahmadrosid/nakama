@@ -19,7 +19,7 @@ const DEFAULT_PROVIDER_LABEL = "Anthropic";
 export interface AnthropicProviderOptions {
   apiKey: string;
   baseUrl?: string;
-  defaultHeaders?: Record<string, string>;
+  extraHeaders?: Record<string, string>;
   /** Injected in tests to mock HTTP without touching global fetch. */
   fetch?: typeof fetch;
   model?: string;
@@ -27,23 +27,25 @@ export interface AnthropicProviderOptions {
   providerName?: ProviderName;
 }
 
-function createAnthropicClient(
-  apiKey: string,
-  baseUrl?: string,
-  fetchImpl?: typeof fetch,
-  defaultHeaders?: Record<string, string>
-): Anthropic {
-  const options: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey,
-    defaultHeaders,
-    fetch: fetchImpl ?? fetchWithoutIdleTimeout,
+interface AnthropicClientOptions {
+  apiKey: string;
+  baseUrl?: string;
+  extraHeaders?: Record<string, string>;
+  fetch?: typeof fetch;
+}
+
+function createAnthropicClient(options: AnthropicClientOptions): Anthropic {
+  const clientOptions: ConstructorParameters<typeof Anthropic>[0] = {
+    apiKey: options.apiKey,
+    defaultHeaders: options.extraHeaders,
+    fetch: options.fetch ?? fetchWithoutIdleTimeout,
   };
 
-  if (baseUrl?.trim()) {
-    options.baseURL = baseUrl.trim();
+  if (options.baseUrl?.trim()) {
+    clientOptions.baseURL = options.baseUrl.trim();
   }
 
-  return new Anthropic(options);
+  return new Anthropic(clientOptions);
 }
 
 function formatAnthropicError(error: Error, label: string): Error {
@@ -79,12 +81,12 @@ export function createAnthropicProvider(
 ): ProviderClient {
   const model = options.model ?? "claude-sonnet-4-6";
 
-  const client = createAnthropicClient(
-    options.apiKey,
-    options.baseUrl,
-    options.fetch,
-    options.defaultHeaders
-  );
+  const client = createAnthropicClient({
+    apiKey: options.apiKey,
+    baseUrl: options.baseUrl,
+    extraHeaders: options.extraHeaders,
+    fetch: options.fetch,
+  });
 
   const name: ProviderName = options.providerName ?? "anthropic";
   const label = options.providerLabel ?? DEFAULT_PROVIDER_LABEL;

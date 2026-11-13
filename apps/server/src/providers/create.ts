@@ -261,7 +261,6 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
     case "opencode_go":
       return createOpenCodeGoProvider({
         apiKey: options.apiKey,
-        baseUrl: baseUrlOverride,
         model,
         sessionId: options.sessionId,
       });

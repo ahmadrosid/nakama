@@ -7221,7 +7221,7 @@ export class AgentService {
           this.persistXaiOAuth(instanceId, oauth),
         resolveInstance: (instanceId) =>
           findProviderInstance(this.userConfig, instanceId),
-        sessionId: sessionId ?? acpSessionKey,
+        sessionId,
       }
     );
 
