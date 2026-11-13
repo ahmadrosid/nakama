@@ -340,6 +340,21 @@ describe("skill suggestion routes (v1)", () => {
 
     expect(listResp.status).toBe(403);
 
+    const memberListResp = await app.fetch(
+      new Request(`${BASE}/v1/orgs/${orgId}/skill-suggestions`, {
+        headers: memberSession.headers({}, orgId),
+      })
+    );
+
+    expect(memberListResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const memberList = (await memberListResp.json()) as {
+      suggestions: unknown[];
+    };
+
+    expect(memberList.suggestions).toHaveLength(0);
+
     const applyResp = await app.fetch(
       new Request(
         `${BASE}/v1/orgs/${orgId}/skill-suggestions/${created.id}/apply`,
