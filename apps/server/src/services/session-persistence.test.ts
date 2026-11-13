@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { createAgentChatSession } from "@nakama/agent";
@@ -114,6 +115,144 @@ async function openDatabaseWithProfiles(
 
 describe("session persistence", () => {
   setupTestConfigDir("nakama-history-archive-");
+
+  test("records ordered tool outcomes without writing tool payloads to session steps", async () => {
+    const path = `${process.env.NAKAMA_CONFIG_DIR}/session-steps.sqlite`;
+    const database = await createSqliteDatabase(`file:${path}`);
+    const db = database.adapter;
+
+    try {
+      // Simulate an existing install whose bootstrap schema predates the table.
+      {
+        using raw = new Database(path);
+        raw.exec("DROP TABLE session_steps");
+      }
+
+      await database.reopen();
+
+      const now = new Date().toISOString();
+      await db.upsertOrganization({
+        createdAt: now,
+        id: "org_1",
+        name: "Test organization",
+        slug: "org-1",
+        updatedAt: now,
+      });
+      await db.upsertProfile({
+        createdAt: now,
+        id: "profile",
+        isDefault: true,
+        isSuper: false,
+        model: null,
+        name: "Test profile",
+        orgId: "org_1",
+        systemPrompt: "",
+        updatedAt: now,
+      });
+      await seedSession(db, "recorded");
+      const secret = "private test password";
+
+      const toolCalls = [
+        { arguments: { password: secret }, id: "first", name: "read_fixture" },
+        { arguments: {}, id: "second", name: "failed_fixture" },
+      ];
+
+      let first = true;
+
+      const provider: ProviderClient = {
+        ...summaryProvider,
+        generateChat(input) {
+          if (!first) {
+            return summaryProvider.generateChat(input);
+          }
+
+          first = false;
+
+          return Promise.resolve({
+            assistantMessage: { content: "", role: "assistant", toolCalls },
+            content: "",
+            toolCalls,
+          });
+        },
+      };
+
+      const scope = {
+        actor: "agent" as const,
+        orgId: "org_1",
+        profileId: "profile",
+        sessionId: "recorded",
+      };
+
+      const session = createAgentChatSession(
+        { provider },
+        {
+          enableToolLoop: true,
+          toolContext: {
+            async recordSessionToolStep(step) {
+              await db.appendSessionStep({ ...scope, ...step });
+            },
+          },
+          tools: [
+            {
+              description: "Return a fixture",
+              name: "read_fixture",
+              parameters: { type: "object" },
+              async run() {
+                return { password: secret };
+              },
+            },
+            {
+              description: "Return a tool error",
+              name: "failed_fixture",
+              parameters: { type: "object" },
+              async run() {
+                return { error: secret };
+              },
+            },
+          ],
+        }
+      );
+
+      await session.send("Read the fixtures");
+      const steps = await db.listSessionSteps("org_1", "recorded");
+
+      expect(steps.map(({ toolName, outcome }) => [toolName, outcome])).toEqual(
+        [
+          ["read_fixture", "success"],
+          ["failed_fixture", "error"],
+        ]
+      );
+      expect(steps[0]).toMatchObject(scope);
+      expect(Date.parse(steps[0].startedAt)).toBeLessThanOrEqual(
+        Date.parse(steps[0].completedAt)
+      );
+      expect(
+        await db.listSessionSteps("org_1", "recorded", steps[0].id)
+      ).toEqual(steps.slice(1));
+      expect(await db.listSessionSteps("other_org", "recorded")).toEqual([]);
+      expect(
+        await db.appendSessionStep({ ...steps[0], orgId: "other_org" })
+      ).toBe(false);
+
+      using raw = new Database(path);
+      expect(
+        JSON.stringify(raw.query("SELECT * FROM session_steps").all())
+      ).not.toContain(secret);
+      expect(() =>
+        raw.exec("UPDATE session_steps SET outcome = 'success'")
+      ).toThrow();
+      expect(() => raw.exec("DELETE FROM session_steps")).toThrow();
+      expect(() =>
+        raw.exec(
+          "INSERT OR REPLACE INTO session_steps SELECT * FROM session_steps"
+        )
+      ).toThrow();
+      expect(await db.deleteSession("recorded")).toBe(true);
+      expect(await db.listSessionSteps("org_1", "recorded")).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
 
   test("cached sessions and history tools recheck eligibility before exposing history", async () => {
     const db = createInMemoryDatabaseAdapter();

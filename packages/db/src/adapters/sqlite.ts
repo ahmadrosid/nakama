@@ -60,6 +60,7 @@ import type {
   StoredRegressionCaseRunRecord,
   StoredSessionMessageRecord,
   StoredSessionRecord,
+  StoredSessionStep,
   StoredSessionSummaryRecord,
   StoredSharedAgentInstanceRecord,
   StoredSkillProposal,
@@ -2973,6 +2974,31 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT * FROM users WHERE is_platform_admin = 1"
   );
 
+  const appendSessionStepStmt = db.prepare(`
+    INSERT INTO session_steps (
+      org_id, session_id, profile_id, actor, tool_name, started_at, completed_at, outcome
+    )
+    SELECT org_id, id, profile_id, ?, ?, ?, ?, ?
+    FROM sessions
+    WHERE org_id = ? AND id = ? AND profile_id = ? AND closed_at IS NULL
+  `);
+
+  const listSessionStepsStmt = db.prepare<
+    StoredSessionStep,
+    SQLQueryBindings[]
+  >(`
+    SELECT step.id, step.org_id AS orgId, step.session_id AS sessionId,
+      step.profile_id AS profileId, step.actor, step.tool_name AS toolName,
+      step.started_at AS startedAt, step.completed_at AS completedAt, step.outcome
+    FROM session_steps AS step
+    JOIN sessions AS session
+      ON session.id = step.session_id AND session.org_id = step.org_id
+      AND session.profile_id = step.profile_id
+    WHERE step.org_id = ? AND step.session_id = ? AND step.id > ?
+    ORDER BY step.id
+    LIMIT 100
+  `);
+
   const createAuditEventStmt = db.prepare(`
     INSERT INTO audit_events (
       id, actor_user_id, org_id, action, resource_type, resource_id,
@@ -4668,6 +4694,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       appendMessagesTransaction(sessionId, messages);
     },
 
+    async appendSessionStep(step) {
+      return (
+        appendSessionStepStmt.run(
+          step.actor,
+          step.toolName,
+          step.startedAt,
+          step.completedAt,
+          step.outcome,
+          step.orgId,
+          step.sessionId,
+          step.profileId
+        ).changes === 1
+      );
+    },
+
     async assignMcpServerToProfile(profileId, serverId) {
       assignMcpServerStmt.run(profileId, serverId);
     },
@@ -6185,6 +6226,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listRegressionCasesForProfileStmt
         .all(orgId, profileId, options.limit ?? 50, options.offset ?? 0)
         .map((row) => toRegressionCaseRecord(row));
+    },
+
+    async listSessionSteps(orgId, sessionId, afterId = 0) {
+      return listSessionStepsStmt.all(orgId, sessionId, afterId);
     },
 
     async listSessionSummaries(profileId, channels, options = {}) {

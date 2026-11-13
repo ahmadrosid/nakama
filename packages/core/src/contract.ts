@@ -3441,6 +3441,12 @@ export interface ToolContext {
     filePath: string,
     maxBytes: number
   ) => Promise<Uint8Array>;
+  recordSessionToolStep?: (step: {
+    completedAt: string;
+    outcome: "success" | "error" | "cancelled";
+    startedAt: string;
+    toolName: string;
+  }) => Promise<void>;
   /** Records what the provider actually charged for one request. */
   recordTurnUsage?: (turn: {
     estimated: boolean;

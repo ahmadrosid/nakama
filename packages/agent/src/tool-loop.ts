@@ -36,23 +36,47 @@ export async function executeToolCall(
   context: ToolContext = {}
 ): Promise<ToolResult> {
   const tool = tools.find((item) => item.name === call.name);
-
-  if (!tool) {
-    return { error: `Unknown tool: ${call.name}` };
-  }
+  const startedAt = new Date().toISOString();
+  let outcome: "success" | "error" | "cancelled" = "error";
 
   try {
+    if (!tool) {
+      return { error: `Unknown tool: ${call.name}` };
+    }
+
     // Check what the model and the transcript receive: the JSON-serialized
     // value, so optional fields left undefined are dropped, not rejected.
-    return ToolResultSchema.parse(
+    const result = ToolResultSchema.parse(
       JSON.parse(JSON.stringify(await tool.run(call.arguments, context)))
     );
+
+    if (
+      !(
+        result instanceof Object &&
+        !Array.isArray(result) &&
+        ("error" in result || ("isError" in result && result.isError === true))
+      )
+    ) {
+      outcome = "success";
+    }
+
+    return result;
   } catch (error) {
-    context.signal?.throwIfAborted();
+    if (context.signal?.aborted) {
+      outcome = "cancelled";
+      context.signal.throwIfAborted();
+    }
 
     return {
       error: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    await context.recordSessionToolStep?.({
+      completedAt: new Date().toISOString(),
+      outcome,
+      startedAt,
+      toolName: tool?.name ?? "unknown_tool",
+    });
   }
 }
 

@@ -54,6 +54,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillOrgIds);
   atomic(migrateProfileOrgColumns);
   atomic(migrateSessionOrgIds);
+  atomic(migrateSessionStepsTable);
   atomic(migrateBrowserSessionsTable);
   atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
@@ -313,6 +314,44 @@ function migrateAuditEventsTable(db: Database): void {
     BEFORE DELETE ON audit_events
     BEGIN
       SELECT RAISE(ABORT, 'audit_events are append-only');
+    END;
+  `);
+}
+
+function migrateSessionStepsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_steps (
+      id INTEGER PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL,
+      actor TEXT NOT NULL CHECK (actor IN ('agent', 'user')),
+      tool_name TEXT NOT NULL CHECK (length(tool_name) BETWEEN 1 AND 128),
+      started_at TEXT NOT NULL,
+      completed_at TEXT NOT NULL,
+      outcome TEXT NOT NULL CHECK (outcome IN ('success', 'error', 'cancelled'))
+    );
+
+    CREATE INDEX IF NOT EXISTS session_steps_scope_order
+      ON session_steps (org_id, session_id, id);
+
+    CREATE TRIGGER IF NOT EXISTS session_steps_no_replace
+    BEFORE INSERT ON session_steps
+    WHEN EXISTS (SELECT 1 FROM session_steps WHERE id = NEW.id)
+    BEGIN
+      SELECT RAISE(ABORT, 'session_steps are append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS session_steps_no_update
+    BEFORE UPDATE ON session_steps
+    BEGIN
+      SELECT RAISE(ABORT, 'session_steps are append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS session_steps_no_delete
+    BEFORE DELETE ON session_steps
+    BEGIN
+      SELECT RAISE(ABORT, 'session_steps are append-only');
     END;
   `);
 }
