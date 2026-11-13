@@ -1504,8 +1504,13 @@ export interface CreateAutomationWebhookSecretResponse {
   secret: string;
 }
 
+/** A finished run leaves out `progress`; `GetAutomationRunResponse` has it. */
 export interface ListAutomationRunsResponse {
   runs: AutomationRunRecord[];
+}
+
+export interface GetAutomationRunResponse {
+  run: AutomationRunRecord;
 }
 
 export interface MarkAutomationRunsReadResponse {

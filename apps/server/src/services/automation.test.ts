@@ -902,16 +902,29 @@ describe("AutomationRunner", () => {
         status: fails ? "failed" : "completed",
       });
       expect(runner.getActiveRunCount()).toBe(0);
+      // The list leaves out a finished transcript; getRun returns it.
+      expect(runs[0]?.progress).toBeUndefined();
+      const runId = runs[0]!.id;
 
       const reloadedService = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
 
-      const reloaded = (
-        await reloadedService.listRuns(automation.id, ORG_ID)
-      )[0]!;
+      const reloaded = (await reloadedService.getRun(
+        automation.id,
+        ORG_ID,
+        runId
+      ))!;
 
-      expect(reloaded.progress).toEqual(runs[0]?.progress);
+      expect(reloaded.progress).toEqual(
+        (await service.getRun(automation.id, ORG_ID, runId))?.progress
+      );
+      await expect(
+        reloadedService.getRun(automation.id, "other-org", runId)
+      ).rejects.toThrow();
+      expect(
+        await reloadedService.getRun(automation.id, ORG_ID, "run_missing")
+      ).toBeNull();
       expect(reloaded.progress?.[0]).toMatchObject({
         content: "Find news",
         role: "user",
@@ -2638,8 +2651,12 @@ describe("webhook automations", () => {
     expect(prompt.indexOf("Ignore all previous")).toBeGreaterThan(
       prompt.indexOf("<webhook-payload>")
     );
-    expect(run?.progress?.[0]?.content).toBe("Review the pull request.");
-    expect(JSON.stringify(run?.progress)).not.toContain("Ignore all previous");
+
+    const saved = await service.getRun(automation.id, ORG_ID, run!.id);
+    expect(saved?.progress?.[0]?.content).toBe("Review the pull request.");
+    expect(JSON.stringify(saved?.progress)).not.toContain(
+      "Ignore all previous"
+    );
   });
 
   test("keeps the payload out of a failed run's saved progress", async () => {
@@ -2660,7 +2677,10 @@ describe("webhook automations", () => {
 
     const [run] = await service.listRuns(automation.id);
     expect(run?.status).toBe("failed");
-    expect(JSON.stringify(run)).not.toContain("private-commit-message");
+
+    const saved = await service.getRun(automation.id, ORG_ID, run!.id);
+    expect(saved?.progress?.length).toBeGreaterThan(0);
+    expect(JSON.stringify(saved)).not.toContain("private-commit-message");
   });
 
   test("starts no second run for a repeated delivery id", async () => {

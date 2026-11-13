@@ -36,6 +36,9 @@ export const queryKeys = {
   },
   automations: {
     all: ["automations"] as const,
+    // Not under `runs`, so refreshing the list does not refetch a transcript.
+    run: (automationId: string, runId: string) =>
+      ["automations", automationId, "run", runId] as const,
     runs: (automationId: string) =>
       ["automations", automationId, "runs"] as const,
   },

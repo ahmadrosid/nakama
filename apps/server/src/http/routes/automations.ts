@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type {
   AutomationResponse,
   DraftAutomationResponse,
+  GetAutomationRunResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
   MarkAutomationRunsReadResponse,
@@ -147,6 +148,11 @@ export function registerAutomationRoutes(
     .object({})
     .passthrough()
     .openapi("ListAutomationRunsResponse");
+
+  const getAutomationRunSchema = z
+    .object({})
+    .passthrough()
+    .openapi("GetAutomationRunResponse");
 
   const markAutomationRunsReadSchema = z
     .object({})
@@ -348,6 +354,34 @@ export function registerAutomationRoutes(
         },
       },
       summary: "List automation run history",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getAutomationRun",
+      path: "/v1/automations/{automationId}/runs/{runId}",
+      request: {
+        params: automationIdParam.extend({
+          runId: z.string().openapi({ param: { in: "path", name: "runId" } }),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: getAutomationRunSchema } },
+          description: "Automation run with its transcript",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get one automation run",
       tags: ["Automations"],
     })
   );
@@ -562,6 +596,31 @@ export function registerAutomationRoutes(
 
       throw error;
     }
+  });
+
+  app.get("/v1/automations/:automationId/runs/:runId", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const auth = getRequestAuth(c);
+    const automationId = decodeURIComponent(c.req.param("automationId"));
+    const runId = decodeURIComponent(c.req.param("runId"));
+    const automation = await automationService.get(automationId, orgId);
+
+    if (!automation) {
+      return errorResponse("Automation not found.", 404);
+    }
+
+    await automationService.assertCanAutomateMailbox(automation.profileId, {
+      isPlatformAdmin: auth.isPlatformAdmin,
+      orgRole: auth.orgRole,
+    });
+
+    const run = await automationService.getRun(automationId, orgId, runId);
+
+    if (!run) {
+      return errorResponse("Automation run not found.", 404);
+    }
+
+    return json<GetAutomationRunResponse>({ run });
   });
 
   app.post("/v1/automations/:automationId/runs/mark-read", async (c) => {

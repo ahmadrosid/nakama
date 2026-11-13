@@ -206,16 +206,20 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
     value: () => (animating ? [{ finished: closing.promise }] : []),
   });
 
+  const getRun = spyOn(client, "getAutomationRun").mockResolvedValue(run);
+
   try {
     await act(async () => {
       root.render(
-        <RunHistoryList
-          busy={false}
-          onRerun={() => {}}
-          profileId="profile"
-          running={false}
-          runs={[run]}
-        />
+        <QueryClientProvider client={new QueryClient()}>
+          <RunHistoryList
+            busy={false}
+            onRerun={() => {}}
+            profileId="profile"
+            running={false}
+            runs={[run]}
+          />
+        </QueryClientProvider>
       );
     });
 
@@ -261,12 +265,85 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
     closing.resolve();
     await act(async () => root.unmount());
     container.remove();
+    getRun.mockRestore();
 
     if (original) {
       Object.defineProperty(Element.prototype, "getAnimations", original);
     } else {
       Reflect.deleteProperty(Element.prototype, "getAnimations");
     }
+  }
+});
+
+test("a finished run loads its transcript when opened", async () => {
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: "Done.",
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const getRun = spyOn(client, "getAutomationRun").mockResolvedValue({
+    ...run,
+    progress: [
+      { content: "Check the inbox", role: "user" },
+      { content: "Two urgent emails.", role: "assistant" },
+    ],
+  });
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ThemeProvider>
+            <AuthContext.Provider
+              value={
+                /* SAFETY: The transcript reads only the authentication flags. */
+                { isAuthenticated: true, isLoading: false } as AuthContextValue
+              }
+            >
+              <VirtuosoMockContext.Provider
+                value={{ itemHeight: 100, viewportHeight: 2000 }}
+              >
+                <RunHistoryList
+                  busy={false}
+                  onRerun={() => {}}
+                  profileId="profile"
+                  running={false}
+                  runs={[run]}
+                />
+              </VirtuosoMockContext.Provider>
+            </AuthContext.Provider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      );
+    });
+
+    expect(getRun).not.toHaveBeenCalled();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!
+        .click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    expect(getRun).toHaveBeenCalledWith("automation", "run");
+    const conversation = document.querySelector('[role="dialog"] [role="log"]');
+    // Both transcript messages render, not only the output.
+    expect(conversation?.querySelectorAll(".is-user")).toHaveLength(1);
+    expect(conversation?.querySelectorAll(".is-assistant")).toHaveLength(1);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    getRun.mockRestore();
   }
 });
 
@@ -368,6 +445,8 @@ test("a completed run saves as a test case for org members only", async () => {
     {} as Awaited<ReturnType<typeof client.createRegressionCase>>
   );
 
+  const getRun = spyOn(client, "getAutomationRun").mockResolvedValue(run);
+
   const until = async <T,>(find: () => T | null): Promise<T> => {
     for (let attempt = 0; attempt < 50 && !find(); attempt += 1) {
       await act(async () => {
@@ -452,6 +531,7 @@ test("a completed run saves as a test case for org members only", async () => {
     expect(create).toHaveBeenCalledTimes(1);
   } finally {
     create.mockRestore();
+    getRun.mockRestore();
   }
 });
 

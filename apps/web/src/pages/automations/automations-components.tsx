@@ -50,12 +50,14 @@ import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { AuthContext } from "@/context/auth-context-shared";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { useAutomationRunTranscriptQuery } from "@/hooks/use-automations";
 import { useUserTimezone } from "@/hooks/use-timezones";
 import {
   formatFutureRelativeTime,
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
+import { formatError } from "@/lib/client";
 import { canAccessIntegrationsPage } from "@/lib/navigation";
 import {
   automationRunMessages,
@@ -1137,6 +1139,24 @@ function RunConversation({
   profileId: string;
 }) {
   const { isFullscreen, isOpen } = useChatAttachmentPanel();
+  // The run list leaves out a finished run's transcript.
+  const needsTranscript = run.status !== "running" && !run.progress?.length;
+
+  const transcript = useAutomationRunTranscriptQuery(
+    run.automationId,
+    run.id,
+    needsTranscript
+  );
+
+  const shownRun = needsTranscript ? transcript.data : run;
+
+  if (transcript.error) {
+    return (
+      <p className="px-4 py-2 text-destructive text-sm" role="alert">
+        {formatError(transcript.error)}
+      </p>
+    );
+  }
 
   return (
     <ChatMessageList
@@ -1152,9 +1172,13 @@ function RunConversation({
           "max-md:pointer-events-none max-md:w-0 max-md:flex-none max-md:overflow-hidden max-md:opacity-0"
       )}
       emptyMessage={
-        run.status === "running" ? "Waiting for output…" : "No output returned."
+        shownRun
+          ? run.status === "running"
+            ? "Waiting for output…"
+            : "No output returned."
+          : "Loading…"
       }
-      messages={automationRunMessages(run)}
+      messages={shownRun ? automationRunMessages(shownRun) : []}
       profileId={profileId}
       readOnly
       streamActive={run.status === "running"}

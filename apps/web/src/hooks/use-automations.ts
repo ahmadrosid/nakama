@@ -31,7 +31,25 @@ export function useAutomationRunsQuery(automationId: string | null) {
     enabled: Boolean(automationId),
     queryFn: () => client.listAutomationRuns(automationId!),
     queryKey: queryKeys.automations.runs(automationId ?? ""),
-    refetchInterval: 5000,
+    // Fast only while a run streams its transcript. When idle, the page
+    // refetches as soon as the automation's last run changes.
+    refetchInterval: (query) =>
+      query.state.data?.some((run) => run.status === "running") ? 5000 : 60_000,
+  });
+}
+
+/** A finished run's transcript, which the run list leaves out. */
+export function useAutomationRunTranscriptQuery(
+  automationId: string,
+  runId: string,
+  enabled: boolean
+) {
+  return useQuery({
+    enabled,
+    queryFn: () => client.getAutomationRun(automationId, runId),
+    queryKey: queryKeys.automations.run(automationId, runId),
+    // A finished transcript does not change.
+    staleTime: Number.POSITIVE_INFINITY,
   });
 }
 

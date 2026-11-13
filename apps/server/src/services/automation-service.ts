@@ -490,18 +490,41 @@ export class AutomationService {
         ? await this.db.getAutomationRunReadThrough(userId, orgId, automationId)
         : null;
 
-    return runs.map((run) => {
-      const record = toRunRecord(run, readThroughAt);
+    // The list shows one line per run, so a finished run leaves out its
+    // transcript. getRun returns it.
+    return runs.map((run) =>
+      run.status === "running"
+        ? this.withLiveProgress(toRunRecord(run, readThroughAt))
+        : toRunRecord({ ...run, progress: undefined }, readThroughAt)
+    );
+  }
 
-      const progress =
-        run.status === "running" ? this.runProgress.get(run.id) : undefined;
+  async getRun(
+    automationId: string,
+    orgId: string,
+    runId: string
+  ): Promise<AutomationRunRecord | null> {
+    const automation = await this.get(automationId, orgId);
 
-      if (progress) {
-        Object.assign(record, progress);
-      }
+    if (!automation) {
+      throw new Error("Automation not found.");
+    }
 
-      return record;
-    });
+    const run = await this.db.getAutomationRun(automationId, runId);
+
+    if (!run) {
+      return null;
+    }
+
+    return run.status === "running"
+      ? this.withLiveProgress(toRunRecord(run))
+      : toRunRecord(run);
+  }
+
+  private withLiveProgress(record: AutomationRunRecord): AutomationRunRecord {
+    const progress = this.runProgress.get(record.id);
+
+    return progress ? Object.assign(record, progress) : record;
   }
 
   setRunProgress(
