@@ -57,7 +57,6 @@ nakama/
 │   ├── db/                     # SQLite schema, adapters, migrations
 │   ├── client/                 # Shared HTTP/SSE client
 │   ├── plugins/                # Bundled plugins, including workflows, Supermemory, and Google Meet
-│   ├── telegram-manager/      # Telegram manager client and store
 │   └── ui/                    # Shared UI components
 └── docs/website/
 ```
