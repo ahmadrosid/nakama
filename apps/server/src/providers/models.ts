@@ -399,10 +399,24 @@ export const IMAGE_GENERATION_SELECTION = `openai::${IMAGE_GENERATION_MODEL_ID}`
 
 const IMAGE_GENERATION_MODEL_IDS = new Set([IMAGE_GENERATION_MODEL_ID]);
 
+/** MiniMax image models, served at `<baseUrl>/images/generations`. */
+const MINIMAX_IMAGE_GENERATION_MODEL_IDS = new Set([
+  "MiniMax-H3-Image",
+  "MiniMax-H3-Image-Highspeed",
+]);
+
+export function isMinimaxImageGenerationModel(modelId: string): boolean {
+  return MINIMAX_IMAGE_GENERATION_MODEL_IDS.has(modelId.trim());
+}
+
 export function modelSupportsImageGeneration(
   modelId: string,
   provider: ProviderName
 ): boolean {
+  if (provider === "minimax" || provider === "minimax_cn") {
+    return isMinimaxImageGenerationModel(modelId);
+  }
+
   // openai_compatible instances route through the OpenAI Images API against
   // the configured baseUrl; both flavors use the same model allowlist.
   if (provider !== "openai" && provider !== "openai_compatible") {

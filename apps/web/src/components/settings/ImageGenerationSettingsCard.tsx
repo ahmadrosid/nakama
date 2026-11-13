@@ -17,6 +17,7 @@ import {
   groupModelsByProvider,
   IMAGE_GENERATION_MODEL_OPTIONS,
   IMAGE_GENERATION_SELECTION,
+  MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS,
   profileModelLabel,
 } from "@/lib/models";
 
@@ -68,6 +69,28 @@ function imageGenerationChoices(
     group.models.some((model) => model.provider === "openai_compatible")
   );
 
+  // A MiniMax provider lists chat models; its image models are fixed.
+  const minimaxGroups = groups.flatMap((group) => {
+    const provider = group.models.find(
+      (model) => model.provider === "minimax" || model.provider === "minimax_cn"
+    )?.provider;
+
+    return provider
+      ? [
+          {
+            ...group,
+            models: MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS.map((option) => ({
+              id: option.id,
+              name: option.name,
+              provider,
+            })),
+          },
+        ]
+      : [];
+  });
+
+  const imageModelGroups = [...compatibleGroups, ...minimaxGroups];
+
   const labelGroups = [
     ...(openaiAvailable
       ? [
@@ -82,7 +105,7 @@ function imageGenerationChoices(
           },
         ]
       : []),
-    ...compatibleGroups,
+    ...imageModelGroups,
   ];
 
   // With nothing saved, the server makes images with a connected ChatGPT.
@@ -121,7 +144,7 @@ function imageGenerationChoices(
           },
         ]
       : []),
-    ...compatibleGroups.flatMap((group) =>
+    ...imageModelGroups.flatMap((group) =>
       group.models.map((model) => ({
         label: `${group.providerLabel}: ${model.name}`,
         name: model.name,

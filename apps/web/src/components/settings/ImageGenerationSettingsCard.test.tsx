@@ -42,6 +42,14 @@ const providers: ProviderInstanceSummary[] = [
     modelCount: 1,
     type: "openai",
   },
+  {
+    createdAt: "2026-01-01T00:00:00Z",
+    hasApiKey: true,
+    id: "minimax",
+    label: "MiniMax",
+    modelCount: 1,
+    type: "minimax",
+  },
 ];
 
 const models: ProviderModelOption[] = [
@@ -53,6 +61,12 @@ const models: ProviderModelOption[] = [
     providerId,
   })),
   { id: "gpt-5", name: "GPT-5", provider: "openai", providerId: "openai" },
+  {
+    id: "MiniMax-M3",
+    name: "MiniMax M3",
+    provider: "minimax",
+    providerId: "minimax",
+  },
 ];
 
 async function renderCard(options: {
@@ -114,7 +128,7 @@ async function renderCard(options: {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-  return container.querySelector('[role="note"]') !== null;
+  return container;
 }
 
 test.each([
@@ -191,5 +205,27 @@ test.each([
     request: "failed" as const,
   },
 ])("Free plan note: $name", async ({ note, ...options }) => {
-  expect(await renderCard(options)).toBe(note);
+  const container = await renderCard(options);
+
+  expect(container.querySelector('[role="note"]') !== null).toBe(note);
+});
+
+test("a saved MiniMax image model shows under the MiniMax provider", async () => {
+  const container = await renderCard({
+    currentProviderId: "minimax",
+    model: "minimax::MiniMax-H3-Image",
+    providerIds: ["minimax"],
+  });
+
+  const provider = container.querySelector(
+    '[aria-label="Image generation model provider"]'
+  );
+
+  const model = container.querySelector(
+    '[aria-label="Image generation model model"]'
+  );
+
+  expect(provider?.textContent).toBe("MiniMax");
+  expect(model?.textContent).toBe("MiniMax H3 Image");
+  expect(model?.hasAttribute("disabled")).toBe(false);
 });
