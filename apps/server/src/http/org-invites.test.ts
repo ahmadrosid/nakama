@@ -394,7 +394,9 @@ describe("direct org member provisioning", () => {
   });
 
   test("requests and completes a single-use password reset", async () => {
-    const { app, authService, orgService } = createMinimalHonoApp();
+    const { app, authService, databaseAdapter, orgService } =
+      createMinimalHonoApp();
+
     await orgService.bootstrapInitialSetup({
       admin: {
         email: "admin@acme.com",
@@ -435,17 +437,34 @@ describe("direct org member provisioning", () => {
     const missingCsrfResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/password-reset/request", {
         body: JSON.stringify({ email: "admin@acme.com" }),
-        headers: session.headers(),
+        headers: session.headers({ "Content-Type": "application/json" }),
         method: "POST",
       })
     );
 
     expect(missingCsrfResponse.status).toBe(403);
 
+    // The signed-in caller is named on the refused row, not only on the
+    // successful one.
+    const admin = await databaseAdapter.getUserByEmail("admin@acme.com");
+    expect(
+      await databaseAdapter.listAuditEvents({
+        action: "auth.password_reset_request",
+      })
+    ).toContainEqual(
+      expect.objectContaining({
+        actorUserId: admin?.id,
+        metadata: { outcome: "failure", status: 403 },
+      })
+    );
+
     const requestResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/password-reset/request", {
         body: JSON.stringify({ email: "admin@acme.com" }),
-        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
         method: "POST",
       })
     );
