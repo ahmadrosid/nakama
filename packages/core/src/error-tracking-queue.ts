@@ -18,6 +18,7 @@ export const MAX_PENDING_ERROR_REPORTS = 5;
 
 const ErrorReportSchema = z.object({
   at: z.string(),
+  cause: z.string().optional(),
   fingerprint: z.string(),
   id: z.string(),
   kind: z.enum(["crash", "http", "test", "tool", "turn"]),
