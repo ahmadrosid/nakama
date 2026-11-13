@@ -43,6 +43,8 @@ import {
 } from "@/lib/models";
 
 interface UseProviderSetupFormOptions {
+  /** The provider the form opens on. */
+  initialProvider?: SelectedProvider;
   onSuccess?: (result: CreateProviderResponse) => void;
 }
 
@@ -75,14 +77,15 @@ export function useProviderSetupForm(
     return types;
   }, [providersResponse?.providers]);
 
-  const [selectedProvider, setSelectedProvider] =
-    useState<SelectedProvider>("openai");
+  const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>(
+    options.initialProvider ?? "openai"
+  );
 
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("");
+  const [pickedModel, setSelectedModel] = useState("");
   const [openRouterModels, setOpenRouterModels] = useState<ModelListRow[]>([]);
 
   const [openRouterRouting, setOpenRouterRouting] =
@@ -187,21 +190,13 @@ export function useProviderSetupForm(
     usesCatalogList,
   } = useCatalogModelRows(selectedProvider, filteredModels, setModelsError);
 
-  useEffect(() => {
-    if (filteredModels.length === 0) {
-      setSelectedModel("");
-
-      return;
-    }
-
-    setSelectedModel((current) => {
-      if (current && filteredModels.some((model) => model.id === current)) {
-        return current;
-      }
-
-      return defaultModelForProvider(filteredModels, selectedProvider);
-    });
-  }, [selectedProvider, filteredModels]);
+  // The picked model while the list has it, else the provider's default.
+  const selectedModel =
+    filteredModels.length === 0
+      ? ""
+      : pickedModel && filteredModels.some((model) => model.id === pickedModel)
+        ? pickedModel
+        : defaultModelForProvider(filteredModels, selectedProvider);
 
   const { keyCheck, runKeyCheck } = useApiKeyCheck(setApiKeyError);
 

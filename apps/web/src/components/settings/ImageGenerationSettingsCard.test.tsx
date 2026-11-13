@@ -1,11 +1,18 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import type {
+  CreateProviderRequest,
+  CreateProviderResponse,
   ProviderInstanceSummary,
   ProviderModelOption,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { AppContext } from "@/context/app-context-shared";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { IMAGE_GENERATION_SELECTION } from "@/lib/models";
 import { ImageGenerationSettingsCard } from "./ImageGenerationSettingsCard";
@@ -42,6 +49,14 @@ const providers: ProviderInstanceSummary[] = [
     modelCount: 1,
     type: "openai",
   },
+  {
+    createdAt: "2026-01-01T00:00:00Z",
+    hasApiKey: true,
+    id: "minimax",
+    label: "MiniMax",
+    modelCount: 1,
+    type: "minimax",
+  },
 ];
 
 const models: ProviderModelOption[] = [
@@ -56,6 +71,9 @@ const models: ProviderModelOption[] = [
 ];
 
 async function renderCard(options: {
+  createProvider?: (
+    request: CreateProviderRequest
+  ) => Promise<CreateProviderResponse>;
   currentProviderId: string | null;
   model: string | null;
   /** A saved-model request that never ends or fails. */
@@ -106,7 +124,25 @@ async function renderCard(options: {
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
       >
-        <ImageGenerationSettingsCard />
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The add form reads only isAuthenticated from auth. */
+            { isAuthenticated: false } as AuthContextValue
+          }
+        >
+          <AppContext.Provider
+            value={
+              /* SAFETY: The add form reads only createProvider from the app context. */
+              {
+                createProvider:
+                  options.createProvider ??
+                  (() => Promise.reject(new Error("unused"))),
+              } as never
+            }
+          >
+            <ImageGenerationSettingsCard />
+          </AppContext.Provider>
+        </AuthContext.Provider>
       </QueryClientProvider>
     );
   });
@@ -114,7 +150,7 @@ async function renderCard(options: {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-  return container.querySelector('[role="note"]') !== null;
+  return container;
 }
 
 test.each([
@@ -191,5 +227,97 @@ test.each([
     request: "failed" as const,
   },
 ])("Free plan note: $name", async ({ note, ...options }) => {
-  expect(await renderCard(options)).toBe(note);
+  const container = await renderCard(options);
+
+  expect(container.querySelector('[role="note"]') !== null).toBe(note);
+});
+
+// The MiniMax provider has no saved chat models here.
+test("a saved MiniMax image model shows under the MiniMax provider", async () => {
+  const container = await renderCard({
+    currentProviderId: "minimax",
+    model: "minimax::MiniMax-H3-Image",
+    providerIds: ["minimax"],
+  });
+
+  const provider = container.querySelector(
+    '[aria-label="Image generation model provider"]'
+  );
+
+  const model = container.querySelector(
+    '[aria-label="Image generation model model"]'
+  );
+
+  expect(provider?.textContent).toBe("MiniMax");
+  expect(model?.textContent).toBe("MiniMax H3 Image");
+  expect(model?.hasAttribute("disabled")).toBe(false);
+});
+
+test("picking MiniMax with no MiniMax provider adds one and saves its image model", async () => {
+  const created: CreateProviderRequest[] = [];
+
+  const container = await renderCard({
+    createProvider: (request) => {
+      created.push(request);
+
+      return Promise.resolve({
+        defaultProviderId: "chatgpt-plus",
+        initialModel: "MiniMax-M3",
+        provider: {
+          createdAt: "2026-01-01T00:00:00Z",
+          hasApiKey: true,
+          id: "minimax-1",
+          label: "MiniMax",
+          modelCount: 0,
+          type: "minimax",
+        },
+      });
+    },
+    currentProviderId: "chatgpt-plus",
+    model: null,
+    providerIds: ["chatgpt-plus"],
+  });
+
+  const save = spyOn(client, "setImageGenerationSettings").mockImplementation(
+    (model) => Promise.resolve({ model })
+  );
+
+  cleanups.push(() => save.mockRestore());
+
+  const trigger = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Image generation model provider"]'
+  );
+
+  await act(async () => trigger?.click());
+
+  const minimax = [
+    ...document.body.querySelectorAll<HTMLElement>("[cmdk-item]"),
+  ].find((item) => item.textContent === "MiniMax");
+
+  await act(async () => minimax?.click());
+
+  const apiKey = document.body.querySelector<HTMLInputElement>("#api-key");
+  expect(apiKey).not.toBeNull();
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(apiKey),
+      "value"
+    )?.set?.call(apiKey, "test-key");
+    const view = apiKey?.ownerDocument.defaultView;
+
+    if (view) {
+      apiKey?.dispatchEvent(new view.Event("input", { bubbles: true }));
+    }
+  });
+
+  await act(async () => apiKey?.form?.requestSubmit());
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(created).toEqual([
+    expect.objectContaining({ apiKey: "test-key", type: "minimax" }),
+  ]);
+  expect(save).toHaveBeenCalledWith("minimax-1::MiniMax-H3-Image");
 });

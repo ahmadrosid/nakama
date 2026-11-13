@@ -1,6 +1,6 @@
 ---
 title: "Image generation"
-description: "Let an agent generate images with a ChatGPT subscription or OpenAI gpt-image-2, where the files land, and what it costs."
+description: "Let an agent generate images with a ChatGPT subscription, OpenAI gpt-image-2, or MiniMax, where the files land, and what it costs."
 ---
 
 An agent with the `generate_image` tool can produce an image from a text prompt. The result is saved as a PNG artifact and shows up in chat like any other attachment.
@@ -12,6 +12,7 @@ An agent with the `generate_image` tool can produce an image from a text prompt.
 To use a different image backend, pick it in **Settings → AI Providers → Image generation**:
 
 - `gpt-image-2` on an OpenAI provider. The key comes from that provider, or from `OPENAI_API_KEY`.
+- `MiniMax H3 Image` or `MiniMax H3 Image Highspeed` on a MiniMax or MiniMax (CN) provider. The key comes from that provider, or from `MINIMAX_API_KEY` (`MINIMAX_CN_API_KEY` for CN). With no MiniMax provider yet, pick **MiniMax** to add one. After the key saves, the image model is set to `MiniMax H3 Image`.
 - A model of an **OpenAI-compatible** provider with a base URL, for example a self-hosted backend. See [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription).
 - A specific ChatGPT account, when more than one is signed in. Each ChatGPT account is one choice: every ChatGPT model makes images with the same tool.
 
@@ -55,8 +56,9 @@ Every generation records usage through the same token pricing bridge as chat, so
 
 ## Limits
 
-- A ChatGPT subscription, `gpt-image-2` on an OpenAI provider, or a model of an OpenAI-compatible provider with a base URL that speaks the OpenAI Images API (see [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription)). There is no Stability or Replicate path.
+- A ChatGPT subscription, `gpt-image-2` on an OpenAI provider, a MiniMax H3 image model on a MiniMax provider, or a model of an OpenAI-compatible provider with a base URL that speaks the OpenAI Images API (see [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription)). There is no Stability or Replicate path.
 - On a ChatGPT subscription, the size is a request. ChatGPT picks the final size, and the tool result tells the agent the size that came back.
+- On MiniMax, `auto` makes an image of about 1024x1024 pixels. MiniMax picks the aspect ratio.
 - No image editing or variations. Generation from a prompt only.
 - No streaming or progress. A generation is one tool call that returns when the image is ready. A provider that has not answered completely within 180 seconds fails with a timeout error, and stopping the chat aborts the request.
 - One PNG per call, up to 5 MB, with `1024x1024`, `1024x1536`, `1536x1024`, or `auto` output size.

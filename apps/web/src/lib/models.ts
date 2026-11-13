@@ -967,6 +967,12 @@ export const IMAGE_GENERATION_MODEL_OPTIONS = [
   { id: "gpt-image-2", name: "GPT Image 2" },
 ] as const;
 
+/** MiniMax image models (match server allowlist). */
+export const MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS = [
+  { id: "MiniMax-H3-Image", name: "MiniMax H3 Image" },
+  { id: "MiniMax-H3-Image-Highspeed", name: "MiniMax H3 Image Highspeed" },
+] as const;
+
 /** Workspace selection string accepted by `/v1/settings/image-generation`. */
 export const IMAGE_GENERATION_SELECTION =
   `openai::${IMAGE_GENERATION_MODEL_OPTIONS[0].id}` as const;
