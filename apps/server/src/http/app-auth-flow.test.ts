@@ -6,6 +6,7 @@ import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createHonoApp } from "./app";
+import { createMinimalHonoApp } from "./test-app-helpers";
 import { buildSetupAuthBody, seedLocalClientUser } from "./test-org-helpers";
 import {
   cookieHeaderFromSetCookies,
@@ -432,6 +433,49 @@ describe("createHonoApp", () => {
 
     expect(accepted.status).toBe(200);
     expect(extractSetCookies(accepted).length).toBeGreaterThan(0);
+  });
+
+  test("password reset request refuses a non-JSON body before it sends mail", async () => {
+    const databaseAdapter = createInMemoryDatabaseAdapter();
+    const authService = new AuthService();
+    let sends = 0;
+    const orgService = new OrgService(databaseAdapter, authService, {
+      send: async () => {
+        sends += 1;
+
+        return { ok: true };
+      },
+    });
+
+    // The response hides whether a reset token was minted, so record the write
+    // at the database boundary instead.
+    const resetTokens: string[] = [];
+    const createResetToken =
+      databaseAdapter.createPasswordResetToken.bind(databaseAdapter);
+    databaseAdapter.createPasswordResetToken = async (record) => {
+      resetTokens.push(record.id);
+
+      await createResetToken(record);
+    };
+
+    const { app } = createMinimalHonoApp({
+      authService,
+      databaseAdapter,
+      orgService,
+    });
+    await setupFreshInstallSession(app, databaseAdapter);
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/password-reset/request", {
+        body: JSON.stringify({ email: "admin@example.com" }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+    expect(sends).toBe(0);
+    expect(resetTokens).toEqual([]);
   });
 
   test("logout clears both Secure and non-Secure session cookies", async () => {

@@ -1651,11 +1651,22 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
+    // Like every other guarded auth route, refuse a non-JSON body before any
+    // lookup, so a cross-site text/plain form cannot make this route read a
+    // session or a local token.
+    assertJsonRequest(c.req.raw);
+
     const auth = await authenticateRequest(
       c.req.raw,
       authService,
       databaseAdapter
     );
+
+    // Public routes skip the auth middleware. Keep a signed-in caller before
+    // the remaining guards so a refused request still names who made it.
+    if (auth) {
+      c.set("auth", auth);
+    }
 
     const allowManualToken = auth?.isPlatformAdmin === true;
 
@@ -1663,18 +1674,10 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       assertBrowserCsrf(c.req.raw, auth, authService);
     }
 
-    assertJsonRequest(c.req.raw);
-
     const body = await readJson<RequestPasswordResetRequest>(
       c.req.raw,
       requestPasswordResetSchema
     );
-
-    // Public routes skip the auth middleware. Keep a signed-in caller so the
-    // audit row names who asked for the reset.
-    if (auth) {
-      c.set("auth", auth);
-    }
 
     return json<RequestPasswordResetResponse>(
       await orgService.requestPasswordReset(body.email, allowManualToken)
