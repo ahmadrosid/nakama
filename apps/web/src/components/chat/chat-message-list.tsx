@@ -1301,33 +1301,8 @@ function isBranchableAssistantMessage(message: ChatListItem): boolean {
   );
 }
 
-function AssistantMessageActions({
-  message,
-  copyContent,
-  busy,
-  actionsDisabled = false,
-  onBranchMessage,
-  onRetryMessage,
-  onSaveAsCase,
-  usage,
-}: {
-  message: ChatListItem;
-  copyContent: string;
-  busy: boolean;
-  actionsDisabled?: boolean;
-  onBranchMessage?: (message: ChatListItem) => void;
-  onRetryMessage?: (message: ChatListItem) => void;
-  onSaveAsCase?: (reply: SaveCaseReply) => void;
-  usage?: ChatUsage;
-}) {
+function CopyResponseButton({ copyContent }: { copyContent: string }) {
   const [copied, setCopied] = useState(false);
-
-  // The final reply, not every step of the turn: that is what an automation run keeps too.
-  const saveCaseReply =
-    onSaveAsCase && message.historyIndex != null
-      ? { expectedResult: message.content, messageIndex: message.historyIndex }
-      : null;
-
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -1363,30 +1338,50 @@ function AssistantMessageActions({
     }
   }
 
-  const branchCreatedAt = isBranchableAssistantMessage(message)
-    ? message.createdAt
-    : null;
+  return (
+    <button
+      aria-label={copied ? "Copied" : "Copy response"}
+      className={cn(
+        "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
+        copied && "text-emerald-600 dark:text-emerald-400"
+      )}
+      disabled={!copyContent.trim()}
+      onClick={() => void copyMessage()}
+      title={copied ? "Copied" : "Copy response"}
+      type="button"
+    >
+      {copied ? (
+        <CheckmarkCircle01Icon aria-hidden className="size-4" />
+      ) : (
+        <Copy01Icon aria-hidden className="size-4" />
+      )}
+    </button>
+  );
+}
 
+function AssistantMessageActions({
+  message,
+  copyContent,
+  busy,
+  actionsDisabled = false,
+  onBranchMessage,
+  onRetryMessage,
+  onSaveAsCase,
+  usage,
+}: {
+  message: ChatListItem;
+  copyContent: string;
+  busy: boolean;
+  actionsDisabled?: boolean;
+  onBranchMessage?: (message: ChatListItem) => void;
+  onRetryMessage?: (message: ChatListItem) => void;
+  onSaveAsCase?: (reply: SaveCaseReply) => void;
+  usage?: ChatUsage;
+}) {
   return (
     <div className="flex items-center gap-1 pt-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 group-active:opacity-100">
       {usage ? <ChatUsageBadge usage={usage} /> : null}
-      <button
-        aria-label={copied ? "Copied" : "Copy response"}
-        className={cn(
-          "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
-          copied && "text-emerald-600 dark:text-emerald-400"
-        )}
-        disabled={!copyContent.trim()}
-        onClick={() => void copyMessage()}
-        title={copied ? "Copied" : "Copy response"}
-        type="button"
-      >
-        {copied ? (
-          <CheckmarkCircle01Icon aria-hidden className="size-4" />
-        ) : (
-          <Copy01Icon aria-hidden className="size-4" />
-        )}
-      </button>
+      <CopyResponseButton copyContent={copyContent} />
       {onRetryMessage ? (
         <button
           aria-label="Try again"
@@ -1399,52 +1394,88 @@ function AssistantMessageActions({
           <RefreshIcon aria-hidden className="size-4" />
         </button>
       ) : null}
-      {(onBranchMessage && branchCreatedAt) || saveCaseReply ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                aria-label="Message actions"
-                className={cn(
-                  "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  busy && "pointer-events-none opacity-60"
-                )}
-                type="button"
-              />
-            }
-          >
-            <MoreHorizontalIcon aria-hidden className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56 min-w-56 p-1.5">
-            {onBranchMessage && branchCreatedAt ? (
-              <>
-                <div className="px-2 py-1 text-muted-foreground text-xs">
-                  {formatSessionTimestamp(branchCreatedAt)}
-                </div>
-                <DropdownMenuItem
-                  className="gap-2"
-                  disabled={busy}
-                  onClick={() => onBranchMessage(message)}
-                >
-                  <GitBranchIcon aria-hidden className="size-4" />
-                  <span>Branch in new chat</span>
-                </DropdownMenuItem>
-              </>
-            ) : null}
-            {saveCaseReply ? (
-              <DropdownMenuItem
-                className="gap-2"
-                disabled={busy || actionsDisabled}
-                onClick={() => onSaveAsCase?.(saveCaseReply)}
-              >
-                <TestTube01Icon aria-hidden className="size-4" />
-                <span>Save as test case</span>
-              </DropdownMenuItem>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
+      <AssistantMessageMenu
+        actionsDisabled={actionsDisabled}
+        busy={busy}
+        message={message}
+        onBranchMessage={onBranchMessage}
+        onSaveAsCase={onSaveAsCase}
+      />
     </div>
+  );
+}
+
+function AssistantMessageMenu({
+  message,
+  busy,
+  actionsDisabled,
+  onBranchMessage,
+  onSaveAsCase,
+}: {
+  message: ChatListItem;
+  busy: boolean;
+  actionsDisabled: boolean;
+  onBranchMessage?: (message: ChatListItem) => void;
+  onSaveAsCase?: (reply: SaveCaseReply) => void;
+}) {
+  // The final reply, not every step of the turn: that is what an automation run keeps too.
+  const saveCaseReply =
+    onSaveAsCase && message.historyIndex != null
+      ? { expectedResult: message.content, messageIndex: message.historyIndex }
+      : null;
+
+  const branchCreatedAt = isBranchableAssistantMessage(message)
+    ? message.createdAt
+    : null;
+
+  if (!((onBranchMessage && branchCreatedAt) || saveCaseReply)) {
+    return null;
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            aria-label="Message actions"
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              busy && "pointer-events-none opacity-60"
+            )}
+            type="button"
+          />
+        }
+      >
+        <MoreHorizontalIcon aria-hidden className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56 min-w-56 p-1.5">
+        {onBranchMessage && branchCreatedAt ? (
+          <>
+            <div className="px-2 py-1 text-muted-foreground text-xs">
+              {formatSessionTimestamp(branchCreatedAt)}
+            </div>
+            <DropdownMenuItem
+              className="gap-2"
+              disabled={busy}
+              onClick={() => onBranchMessage(message)}
+            >
+              <GitBranchIcon aria-hidden className="size-4" />
+              <span>Branch in new chat</span>
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {saveCaseReply ? (
+          <DropdownMenuItem
+            className="gap-2"
+            disabled={busy || actionsDisabled}
+            onClick={() => onSaveAsCase?.(saveCaseReply)}
+          >
+            <TestTube01Icon aria-hidden className="size-4" />
+            <span>Save as test case</span>
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
