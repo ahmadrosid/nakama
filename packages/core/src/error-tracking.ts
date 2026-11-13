@@ -21,6 +21,8 @@ export type ErrorReportKind = "crash" | "http" | "test" | "tool" | "turn";
 
 export interface ErrorReport {
   at: string;
+  /** The errors on `cause`, outermost first. A wrapper's message hides the real failure. */
+  cause?: string;
   fingerprint: string;
   /** Doubles as the Sentry event id, so a report delivered twice collapses into one. */
   id: string;
@@ -155,6 +157,53 @@ function errorToParts(error: unknown): ErrorParts {
   }
 }
 
+/** Enough hops for a wrapper around a wrapper; the cap also stops a cause cycle. */
+const MAX_CAUSE_DEPTH = 5;
+
+/** Bun's socket errors carry the system code (ECONNRESET and similar) here. */
+const ErrorCodeSchema = z.object({ code: z.string() });
+
+/**
+ * Wrappers such as ProviderStreamInterruptedError replace the message with plain words
+ * for members, so the provider's own text and the socket code live only on `cause`.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Thrown values are untrusted and normalized by errorToParts.
+function describeCauseChain(error: unknown): string | undefined {
+  if (!(error instanceof Error)) {
+    return;
+  }
+
+  const entries: string[] = [];
+  const seen = new Set<unknown>([error]);
+  let cause = error.cause;
+
+  while (
+    cause !== undefined &&
+    !seen.has(cause) &&
+    entries.length < MAX_CAUSE_DEPTH
+  ) {
+    seen.add(cause);
+
+    const parts = errorToParts(cause);
+    const code = ErrorCodeSchema.safeParse(cause);
+
+    const frames = (parts.stack ?? "")
+      .split("\n")
+      .filter((line) => line.trim().startsWith("at "));
+
+    entries.push(
+      [
+        `${parts.name}: ${parts.message}${code.success ? ` (code ${code.data.code})` : ""}`,
+        ...frames,
+      ].join("\n")
+    );
+
+    cause = cause instanceof Error ? cause.cause : undefined;
+  }
+
+  return entries.length > 0 ? entries.join("\n") : undefined;
+}
+
 export interface ReportErrorOptions {
   kind?: ErrorReportKind;
   source?: string;
@@ -167,6 +216,7 @@ export function buildErrorReport(
 ): ErrorReport {
   const parts = errorToParts(error);
   const stack = parts.stack ? scrubText(parts.stack) : undefined;
+  const cause = describeCauseChain(error);
 
   const report: ErrorReport = {
     at: new Date().toISOString(),
@@ -186,6 +236,11 @@ export function buildErrorReport(
 
   if (stack) {
     report.stack = stack;
+  }
+
+  // Not part of the fingerprint: issues that exist already keep their grouping.
+  if (cause) {
+    report.cause = scrubText(cause);
   }
 
   return report;
