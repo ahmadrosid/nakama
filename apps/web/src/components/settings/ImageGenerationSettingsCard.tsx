@@ -202,7 +202,11 @@ export function ImageGenerationSettingsCard() {
   const [formError, setFormError] = useState<string | null>(null);
   // null until the saved model loads, so it does not read as the automatic pick.
   const [selection, setSelection] = useState<string | null>(null);
-  const [savedHint, setSavedHint] = useState<string | null>(null);
+  // The saved model, labelled at render: a provider added just now has no
+  // label until the provider list refetches.
+  const [savedHint, setSavedHint] = useState<{ model: string | null } | null>(
+    null
+  );
   const { data: modelsResponse } = useModelsQuery();
   const { data: imageGenerationSettings } = useImageGenerationSettings();
   const saveImageGenerationMutation = useSaveImageGenerationSettings();
@@ -266,7 +270,7 @@ export function ImageGenerationSettingsCard() {
           });
         }
 
-        setSavedHint(`Saved · ${labelOf(saved.model)}`);
+        setSavedHint({ model: saved.model ?? null });
       },
     });
   };
@@ -286,7 +290,7 @@ export function ImageGenerationSettingsCard() {
                 className="text-emerald-700 text-xs dark:text-emerald-300"
                 role="status"
               >
-                {savedHint}
+                Saved · {labelOf(savedHint.model)}
               </p>
             ) : null}
             {formError ? (
