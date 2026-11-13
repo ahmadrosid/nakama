@@ -19,6 +19,8 @@ import {
   OrgMembersSecretBanner,
 } from "@/components/settings/org-members-card-header";
 import { OrgMembersTable } from "@/components/settings/org-members-table";
+import { updateOrgFlag } from "@/components/settings/SkillsCuratorOrgCard";
+import type { AuthContextValue } from "@/context/auth-context-shared";
 import { useAuth } from "@/context/use-auth";
 import {
   useAddOrgMember,
@@ -447,7 +449,7 @@ export function OrgMembersCard() {
 
           {tab === "settings" ? (
             <>
-              <MemberApprovalRow />
+              <MemberApprovalRow activeOrg={activeOrg} updateOrg={updateOrg} />
               <InviteDomainsForm
                 allowedDomains={activeOrg.allowedInviteDomains ?? []}
                 key={activeOrg.id}
@@ -524,27 +526,15 @@ export function OrgMembersCard() {
   );
 }
 
-function MemberApprovalRow() {
-  const { activeOrg, updateOrg } = useAuth();
-  const [busy, setBusy] = useState(false);
-
-  if (!activeOrg || activeOrg.role !== "admin") {
-    return null;
-  }
-
-  const orgId = activeOrg.id;
-
-  async function handleToggle(checked: boolean) {
-    setBusy(true);
-
-    try {
-      await updateOrg(orgId, { memberApprovalRequired: checked });
-    } catch (error) {
-      toast(formatError(error));
-    } finally {
-      setBusy(false);
-    }
-  }
+function MemberApprovalRow({
+  activeOrg,
+  updateOrg,
+}: {
+  activeOrg: NonNullable<AuthContextValue["activeOrg"]>;
+  updateOrg: AuthContextValue["updateOrg"];
+}) {
+  const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
+  const busy = busyOrgId === activeOrg.id;
 
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
@@ -557,7 +547,14 @@ function MemberApprovalRow() {
           aria-label="Approve new members before they join"
           checked={activeOrg.memberApprovalRequired === true}
           disabled={busy}
-          onCheckedChange={(checked) => void handleToggle(checked)}
+          onCheckedChange={(checked) =>
+            void updateOrgFlag(
+              updateOrg,
+              activeOrg.id,
+              { memberApprovalRequired: checked },
+              setBusyOrgId
+            )
+          }
           size="sm"
         />
       </div>

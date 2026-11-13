@@ -2273,23 +2273,30 @@ export class OrgService {
       );
     }
 
-    if (await this.databaseAdapter.getOrgJoinRequest(invite.orgId, user.id)) {
-      throw new NakamaApiError(
-        "This invite is already waiting for an admin to approve it.",
-        409
-      );
-    }
+    // A team follows its parent's setting, as it does the domain allowlist
+    const parent = organization.parentOrgId
+      ? await this.databaseAdapter.getOrganizationById(organization.parentOrgId)
+      : null;
 
-    const pending = organization.memberApprovalRequired === true;
+    const pending =
+      organization.memberApprovalRequired === true ||
+      parent?.memberApprovalRequired === true;
 
     // Pending users stay out of org_members, so they count nowhere until approved
     if (pending) {
-      await this.databaseAdapter.createOrgJoinRequest({
+      const created = await this.databaseAdapter.createOrgJoinRequest({
         createdAt: now,
         orgId: invite.orgId,
         role: invite.role,
         userId: user.id,
       });
+
+      if (!created) {
+        throw new NakamaApiError(
+          "This invite is already waiting for an admin to approve it.",
+          409
+        );
+      }
     } else {
       await this.databaseAdapter.upsertOrgMember({
         createdAt: now,
@@ -2325,8 +2332,25 @@ export class OrgService {
     };
   }
 
-  async approveJoinRequest(orgId: string, userId: string): Promise<void> {
-    await this.requireActiveOrganization(orgId);
+  async approveJoinRequest(
+    orgId: string,
+    userId: string,
+    /** Platform admins may approve an address outside the allowlist (#2075). */
+    bypassDomainAllowlist = false
+  ): Promise<void> {
+    const organization = await this.requireActiveOrganization(orgId);
+    const user = await this.databaseAdapter.getUserById(userId);
+
+    if (
+      !(user && (await this.databaseAdapter.getOrgJoinRequest(orgId, userId)))
+    ) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    // The allowlist may have changed since the invite was accepted
+    if (!bypassDomainAllowlist) {
+      await this.assertMemberDomainAllowed(user.email, organization, userId);
+    }
 
     const member = await this.databaseAdapter.approveOrgJoinRequest(
       orgId,
@@ -2337,12 +2361,32 @@ export class OrgService {
     if (!member) {
       throw new NakamaApiError("Not found", 404);
     }
+
+    const webPublicUrl = this.getWebPublicUrl();
+
+    // Delivery errors stay in the adapter; the approval already happened
+    void Promise.resolve()
+      .then(() =>
+        this.email.send({
+          orgId,
+          subject: `You can now sign in to ${organization.name}`,
+          text: [
+            `An admin approved your access to ${organization.name}.`,
+            "",
+            webPublicUrl
+              ? `Sign in: ${webPublicUrl}/login`
+              : "You can sign in now.",
+          ].join("\n"),
+          to: user.email,
+        })
+      )
+      .catch(() => undefined);
   }
 
   async rejectJoinRequest(orgId: string, userId: string): Promise<void> {
     await this.requireActiveOrganization(orgId);
 
-    if (!(await this.databaseAdapter.deleteOrgJoinRequest(orgId, userId))) {
+    if (!(await this.databaseAdapter.rejectOrgJoinRequest(orgId, userId))) {
       throw new NakamaApiError("Not found", 404);
     }
   }

@@ -2682,6 +2682,7 @@ CREATE TABLE IF NOT EXISTS org_join_requests (
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS org_join_requests_user ON org_join_requests (user_id);
   `);
 
   const columns = db

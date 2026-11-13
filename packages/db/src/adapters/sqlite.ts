@@ -2877,6 +2877,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "DELETE FROM org_members WHERE user_id = ?"
   );
 
+  const deleteErasedUserJoinRequestsStmt = db.prepare(
+    "DELETE FROM org_join_requests WHERE user_id = ?"
+  );
+
   const deleteErasedUserChannelMappingsStmt = db.prepare(
     "DELETE FROM channel_org_mappings WHERE user_id = ?"
   );
@@ -2937,6 +2941,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       clearErasedUserSkillVersionsStmt.run(input.id);
       deleteErasedUserAutomationReadsStmt.run(input.id);
       deleteErasedUserMembershipsStmt.run(input.id);
+      deleteErasedUserJoinRequestsStmt.run(input.id);
       deleteErasedUserChannelMappingsStmt.run(input.id);
       deleteErasedUserBrowserSessionsStmt.run(input.id);
       deleteErasedUserPasswordResetsStmt.run(input.id);
@@ -3920,11 +3925,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     JOIN users u ON u.id = r.user_id
     WHERE r.org_id = ?
     ORDER BY r.created_at ASC
+    LIMIT 200
   `);
 
   const insertOrgJoinRequestStmt = db.prepare(`
     INSERT INTO org_join_requests (org_id, user_id, role, created_at)
     VALUES (?, ?, ?, ?)
+    ON CONFLICT(org_id, user_id) DO NOTHING
+  `);
+
+  // Only the account this request's accept created: same timestamp, nowhere else
+  const deleteUserCreatedByJoinRequestStmt = db.prepare(`
+    DELETE FROM users
+    WHERE id = ?1 AND created_at = ?2
+      AND NOT EXISTS (SELECT 1 FROM org_members WHERE user_id = ?1)
+      AND NOT EXISTS (SELECT 1 FROM org_join_requests WHERE user_id = ?1)
   `);
 
   const deleteOrgJoinRequestStmt = db.prepare(
@@ -4174,6 +4189,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }
   );
 
+  // A member is never also waiting for approval in the same org
   const runUpsertOrgMemberStmt = (record: StoredOrgMemberRecord) => {
     upsertOrgMemberStmt.run(
       record.orgId,
@@ -4182,7 +4198,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       record.userContext ?? null,
       record.createdAt
     );
+    deleteOrgJoinRequestStmt.run(record.orgId, record.userId);
   };
+
+  const upsertOrgMemberTransaction = db.transaction(
+    (record: StoredOrgMemberRecord) => runUpsertOrgMemberStmt(record)
+  );
 
   // One transaction, so a request is never both approved and still pending.
   const approveOrgJoinRequestTransaction = db.transaction(
@@ -4197,11 +4218,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         return null;
       }
 
-      deleteOrgJoinRequestStmt.run(orgId, userId);
+      const existing = getOrgMemberStmt.get(orgId, userId);
 
       // Added directly while pending: keep the role an admin already chose
-      if (getOrgMemberStmt.get(orgId, userId)) {
-        return null;
+      if (existing) {
+        deleteOrgJoinRequestStmt.run(orgId, userId);
+
+        return {
+          createdAt: existing.created_at,
+          orgId,
+          // SAFETY: The adapter writes this row value through its typed contract.
+          role: existing.role as StoredOrgMemberRecord["role"],
+          userContext: existing.user_context ?? null,
+          userId,
+        };
       }
 
       const member: StoredOrgMemberRecord = {
@@ -4215,6 +4245,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       runUpsertOrgMemberStmt(member);
 
       return member;
+    }
+  );
+
+  const rejectOrgJoinRequestTransaction = db.transaction(
+    (orgId: string, userId: string): boolean => {
+      const request = getOrgJoinRequestStmt.get(orgId, userId);
+
+      if (!request) {
+        return false;
+      }
+
+      deleteOrgJoinRequestStmt.run(orgId, userId);
+      deleteUserCreatedByJoinRequestStmt.run(userId, request.created_at);
+
+      return true;
     }
   );
 
@@ -5000,11 +5045,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async createOrgJoinRequest(record) {
-      insertOrgJoinRequestStmt.run(
-        record.orgId,
-        record.userId,
-        record.role,
-        record.createdAt
+      return (
+        insertOrgJoinRequestStmt.run(
+          record.orgId,
+          record.userId,
+          record.role,
+          record.createdAt
+        ).changes > 0
       );
     },
 
@@ -5256,10 +5303,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteOrganization(id) {
       return deleteOrganizationWithForeignKeys(id);
-    },
-
-    async deleteOrgJoinRequest(orgId, userId) {
-      return deleteOrgJoinRequestStmt.run(orgId, userId).changes > 0;
     },
 
     async deleteOrgMember(orgId, userId) {
@@ -6509,6 +6552,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async rejectOrgJoinRequest(orgId, userId) {
+      return rejectOrgJoinRequestTransaction.immediate(orgId, userId);
+    },
+
     async releaseAutomationWebhookDelivery(automationId, deliveryId) {
       releaseAutomationWebhookDeliveryStmt.run(automationId, deliveryId);
     },
@@ -6956,7 +7003,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async upsertOrgMember(record) {
-      runUpsertOrgMemberStmt(record);
+      upsertOrgMemberTransaction(record);
     },
 
     async upsertPluginRelease(record) {

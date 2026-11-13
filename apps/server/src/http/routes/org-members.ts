@@ -863,7 +863,7 @@ export function registerOrgMemberRoutes(
       return errorResponse("Organization service not configured", 500);
     }
 
-    await orgService.approveJoinRequest(orgId, userId);
+    await orgService.approveJoinRequest(orgId, userId, auth.isPlatformAdmin);
 
     return new Response(null, { status: 204 });
   });

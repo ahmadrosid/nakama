@@ -885,7 +885,7 @@ export interface DatabaseAdapter {
     sessionId: string,
     messages: StoredSessionMessageRecord[]
   ): Promise<void>;
-  /** Moves a join request into org_members in one transaction; null when there was none. */
+  /** Moves a join request into org_members in one transaction; null when there was none. An existing member is returned as is. */
   approveOrgJoinRequest(
     orgId: string,
     userId: string,
@@ -996,7 +996,8 @@ export interface DatabaseAdapter {
   createMfaBackupCode(record: StoredMfaBackupCode): Promise<void>;
 
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
-  createOrgJoinRequest(record: StoredOrgJoinRequestRecord): Promise<void>;
+  /** False when the user already has a request for this org. */
+  createOrgJoinRequest(record: StoredOrgJoinRequestRecord): Promise<boolean>;
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
   createPasskey(record: StoredPasskeyRecord): Promise<void>;
@@ -1057,7 +1058,6 @@ export interface DatabaseAdapter {
   deleteMfaBackupCodes(userId: string): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
   deleteOrganization(id: string): Promise<boolean>;
-  deleteOrgJoinRequest(orgId: string, userId: string): Promise<boolean>;
   deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
   deleteOrgPlugin(
     orgId: string,
@@ -1574,6 +1574,8 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
   /** Frees a claimed automation webhook delivery ID so a redelivery can run. */
+  /** Deletes the request, and the account its accept created when it has no other org. */
+  rejectOrgJoinRequest(orgId: string, userId: string): Promise<boolean>;
   releaseAutomationWebhookDelivery(
     automationId: string,
     deliveryId: string

@@ -49,7 +49,7 @@ type PollIntervalState = {
   value: number | null;
 };
 
-async function updateOrgFlag(
+export async function updateOrgFlag(
   updateOrg: AuthContextValue["updateOrg"],
   orgId: string,
   patch: UpdateOrganizationRequest,

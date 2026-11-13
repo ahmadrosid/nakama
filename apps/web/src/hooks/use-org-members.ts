@@ -137,7 +137,8 @@ export function useReviewOrgJoinRequest(orgId: string) {
       approve
         ? client.approveOrgJoinRequest(orgId, userId)
         : client.rejectOrgJoinRequest(orgId, userId),
-    onSuccess: () => invalidateOrgMembers(queryClient, orgId),
+    // Also after a 404: another admin may have decided first
+    onSettled: () => invalidateOrgMembers(queryClient, orgId),
   });
 }
 

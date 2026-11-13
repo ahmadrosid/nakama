@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type {
+  AddOrgMemberRequest,
+  UpdateOrganizationRequest,
+} from "@nakama/core/contract";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -7,6 +11,8 @@ import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
 setupTestConfigDir("nakama-org-invites-test-");
 
 const BASE = "http://localhost:4310";
+
+const GUEST_PASSWORD = "guest-pass-1";
 
 describe("org invite routes", () => {
   test("org admins list and revoke pending invites, members cannot", async () => {
@@ -120,7 +126,7 @@ describe("org invite routes", () => {
       session: Awaited<ReturnType<typeof loginUserSession>>,
       method: string,
       path: string,
-      body?: { memberApprovalRequired: boolean }
+      body?: AddOrgMemberRequest | UpdateOrganizationRequest
     ) =>
       app.fetch(
         new Request(`${BASE}/v1/orgs/org_acme${path}`, {
@@ -138,26 +144,33 @@ describe("org invite routes", () => {
         .status
     ).toBe(200);
 
-    await databaseAdapter.createOrgInvite({
-      acceptedAt: null,
-      createdAt: new Date().toISOString(),
-      email: "guest@acme.com",
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      id: "invite_guest",
-      invitedByUserId: "user_admin",
-      orgId: "org_acme",
-      revokedAt: null,
-      role: "member",
-      tokenHash: authService.hashToken("tok_guest"),
-    });
+    const acceptAs = async (name: string) => {
+      await databaseAdapter.createOrgInvite({
+        acceptedAt: null,
+        createdAt: new Date().toISOString(),
+        email: `${name}@acme.com`,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        id: `invite_${name}`,
+        invitedByUserId: "user_admin",
+        orgId: "org_acme",
+        revokedAt: null,
+        role: "member",
+        tokenHash: authService.hashToken(`tok_${name}`),
+      });
 
-    const accepted = await app.fetch(
-      new Request(`${BASE}/v1/auth/accept-invite`, {
-        body: JSON.stringify({ password: "guest-pass-1", token: "tok_guest" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      })
-    );
+      return app.fetch(
+        new Request(`${BASE}/v1/auth/accept-invite`, {
+          body: JSON.stringify({
+            password: GUEST_PASSWORD,
+            token: `tok_${name}`,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+    };
+
+    const accepted = await acceptAs("guest");
 
     // No session: the pending user cannot reach any org route
     expect(accepted.status).toBe(202);
@@ -178,5 +191,36 @@ describe("org invite routes", () => {
     expect(
       (await databaseAdapter.getOrgMember("org_acme", request.userId))?.role
     ).toBe("member");
+
+    const waiting = async () =>
+      (await (await call(adminSession, "GET", "/join-requests")).json())
+        .requests;
+
+    await acceptAs("sam");
+    const [sam] = await waiting();
+    expect(
+      (await call(adminSession, "DELETE", `/join-requests/${sam.userId}`))
+        .status
+    ).toBe(204);
+    expect(await waiting()).toEqual([]);
+
+    // Add member while the request waits: the request goes, approve has nothing left
+    await acceptAs("kim");
+    const [kim] = await waiting();
+    expect(
+      (
+        await call(adminSession, "POST", "/members", {
+          email: "kim@acme.com",
+          name: "Kim",
+          phone: "",
+          role: "admin",
+        })
+      ).status
+    ).toBe(201);
+    expect(await waiting()).toEqual([]);
+    expect(
+      (await call(adminSession, "POST", `/join-requests/${kim.userId}/approve`))
+        .status
+    ).toBe(404);
   });
 });
