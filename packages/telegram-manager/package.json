@@ -29,7 +29,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "postgres": "^3.4.5",
+    "postgres": "^4.1.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
