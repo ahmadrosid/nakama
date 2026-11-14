@@ -176,6 +176,22 @@ export class OidcService {
       );
     }
 
+    // An https issuer must not send the code, the client secret or the key
+    // lookup over plain http. An http issuer (internal Docker host) is the
+    // operator's explicit choice and is left alone.
+    if (
+      this.config.issuerUrl.startsWith("https:") &&
+      [
+        document.authorization_endpoint,
+        document.jwks_uri,
+        document.token_endpoint,
+      ].some((endpoint) => !endpoint.startsWith("https://"))
+    ) {
+      throw new Error(
+        "OIDC discovery lists a non-https endpoint for an https issuer."
+      );
+    }
+
     this.discovery = {
       expiresAt: Date.now() + DISCOVERY_TTL_MS,
       value: document,
@@ -302,6 +318,14 @@ export class OidcService {
       throw new Error("OIDC id_token audience mismatch.");
     }
 
+    // OIDC Core 3.1.3.7: a token for several audiences must name us as azp.
+    if (
+      (audiences.length > 1 || payload.azp !== undefined) &&
+      payload.azp !== this.config.clientId
+    ) {
+      throw new Error("OIDC id_token authorized party mismatch.");
+    }
+
     if (payload.exp === undefined || payload.exp * 1000 <= Date.now()) {
       throw new Error("OIDC id_token is expired.");
     }
@@ -378,7 +402,10 @@ export class OidcService {
     const { databaseAdapter, orgService } = this.deps;
 
     if (this.config.allowedDomains.length > 0) {
-      const domain = claims.email?.split("@")[1]?.toLowerCase() ?? "";
+      // The domain is after the last "@": "a@allowed.com@evil.com" is evil.com.
+      const domain =
+        claims.email?.slice(claims.email.lastIndexOf("@") + 1).toLowerCase() ??
+        "";
 
       if (
         !(
@@ -453,6 +480,16 @@ export class OidcService {
           409
         );
       }
+
+      // Linking hands over an existing account (maybe an admin), so it trusts
+      // the email only when the provider verified it, even with
+      // NAKAMA_OIDC_REQUIRE_EMAIL_VERIFIED=false.
+      if (!claims.emailVerified) {
+        throw new NakamaApiError(
+          "The provider has not verified this email address.",
+          403
+        );
+      }
     } else {
       if (!this.config.autoProvision) {
         throw new NakamaApiError(
@@ -465,6 +502,7 @@ export class OidcService {
         await orgService.provisionOidcUser({
           defaultOrgSlug: this.config.defaultOrgSlug,
           email: claims.email,
+          emailVerified: claims.emailVerified,
           isPlatformAdmin: this.isAdminGroupMember(claims.groups),
           name: claims.name,
           passwordHash: await this.deps.authService.hashPassword(
@@ -513,12 +551,15 @@ export class OidcService {
 
     const shouldBeAdmin = this.isAdminGroupMember(groups);
 
-    if (Boolean(user.isPlatformAdmin) !== shouldBeAdmin) {
-      await this.deps.databaseAdapter.updateUserPlatformAdmin(
+    // The adapter refuses to demote the last active platform admin.
+    if (
+      Boolean(user.isPlatformAdmin) !== shouldBeAdmin &&
+      (await this.deps.databaseAdapter.updateUserPlatformAdmin(
         user.id,
         shouldBeAdmin,
         nowIso
-      );
+      ))
+    ) {
       user.isPlatformAdmin = shouldBeAdmin;
     }
   }

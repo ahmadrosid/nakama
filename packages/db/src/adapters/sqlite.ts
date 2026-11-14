@@ -2908,6 +2908,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "DELETE FROM password_reset_tokens WHERE user_id = ?"
   );
 
+  // Holds the provider subject and email; a returning person must start fresh.
+  const deleteErasedUserOidcIdentitiesStmt = db.prepare(
+    "DELETE FROM user_oidc_identities WHERE user_id = ?"
+  );
+
   const deleteErasedUserComposioConnectionsStmt = db.prepare(
     "DELETE FROM composio_user_connections WHERE user_id = ?"
   );
@@ -2959,6 +2964,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       deleteErasedUserChannelMappingsStmt.run(input.id);
       deleteErasedUserBrowserSessionsStmt.run(input.id);
       deleteErasedUserPasswordResetsStmt.run(input.id);
+      deleteErasedUserOidcIdentitiesStmt.run(input.id);
       deleteErasedUserComposioConnectionsStmt.run(input.id);
       deleteUserAutomationWebhookSecretsStmt.run(input.id);
 
@@ -3475,10 +3481,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
 
+  // Same last-admin rule as disable: a demotion needs another active admin.
   const updateUserPlatformAdminStmt = db.prepare(`
     UPDATE users
-    SET is_platform_admin = ?, updated_at = ?
-    WHERE id = ?
+    SET is_platform_admin = ?1, updated_at = ?2
+    WHERE id = ?3
+      AND (?1 = 1
+        OR EXISTS (
+          SELECT 1 FROM users u
+          WHERE u.is_platform_admin = 1 AND u.id != ?3
+            AND u.disabled_at IS NULL))
   `);
 
   const createOrgInviteStmt = db.prepare(`
@@ -6833,7 +6845,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async updateUserPlatformAdmin(id, isPlatformAdmin, updatedAt) {
-      updateUserPlatformAdminStmt.run(isPlatformAdmin ? 1 : 0, updatedAt, id);
+      return (
+        updateUserPlatformAdminStmt.run(isPlatformAdmin ? 1 : 0, updatedAt, id)
+          .changes > 0
+      );
     },
 
     async updateUserProfile(id, profile, updatedAt) {

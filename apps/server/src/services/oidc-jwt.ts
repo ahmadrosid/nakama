@@ -45,6 +45,7 @@ export const JwtHeaderSchema = z.object({
 export const IdTokenClaimsSchema = z
   .object({
     aud: z.union([z.string(), z.array(z.string())]).optional(),
+    azp: z.string().optional(),
     email: z.string().optional(),
     email_verified: z.union([z.boolean(), z.string()]).optional(),
     exp: z.number().optional(),

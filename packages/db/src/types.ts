@@ -1783,11 +1783,12 @@ export interface DatabaseAdapter {
     passwordHash: string,
     updatedAt: string
   ): Promise<void>;
+  /** False when the change would demote the last active platform admin. */
   updateUserPlatformAdmin(
     id: string,
     isPlatformAdmin: boolean,
     updatedAt: string
-  ): Promise<void>;
+  ): Promise<boolean>;
   updateUserProfile(
     id: string,
     profile: { name: string | null; phone: string | null; email?: string },

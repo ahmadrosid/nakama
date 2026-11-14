@@ -51,7 +51,7 @@ function parseCookies(header: string | null) {
   return Object.fromEntries(cookies);
 }
 
-function buildCookie(
+export function buildCookie(
   name: string,
   value: string,
   options: {
@@ -89,7 +89,7 @@ function appendSetCookie(headers: Headers, cookie: string): void {
   headers.append("Set-Cookie", cookie);
 }
 
-function getRequestTokenFromCookies(
+export function getRequestTokenFromCookies(
   request: Request,
   name: string
 ): string | null {
