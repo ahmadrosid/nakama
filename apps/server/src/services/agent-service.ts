@@ -6844,6 +6844,26 @@ export class AgentService {
       orgId,
       orgRole: orgRole ?? undefined,
       profileId,
+      recordSessionToolStep:
+        !cognito && (channel === "web" || channel === "cli")
+          ? async (step) => {
+              // executeToolCall logs a thrown error with its cause.
+              const saved = await this.db.appendSessionStep({
+                ...step,
+                actor: "agent",
+                orgId,
+                profileId,
+                sessionId,
+                toolName: step.toolName.slice(0, 128),
+              });
+
+              if (!saved) {
+                console.warn(
+                  "Session tool step skipped because the session is no longer active."
+                );
+              }
+            }
+          : undefined,
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       sessionId,
       trackEphemeralAttachment,

@@ -831,6 +831,18 @@ export interface StoredBrowserSessionRecord {
   userId: string;
 }
 
+export interface StoredSessionStep {
+  actor: "agent" | "user";
+  completedAt: string;
+  id: number;
+  orgId: string;
+  outcome: "success" | "error" | "cancelled";
+  profileId: string;
+  sessionId: string;
+  startedAt: string;
+  toolName: string;
+}
+
 export interface StoredAuditEvent {
   action: string;
   actorUserId: string | null;
@@ -875,6 +887,7 @@ export interface DatabaseAdapter {
     sessionId: string,
     messages: StoredSessionMessageRecord[]
   ): Promise<void>;
+  appendSessionStep(step: Omit<StoredSessionStep, "id">): Promise<boolean>;
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
@@ -1452,6 +1465,11 @@ export interface DatabaseAdapter {
     profileId: string,
     options?: { limit?: number; offset?: number }
   ): Promise<StoredRegressionCaseRecord[]>;
+  listSessionSteps(
+    orgId: string,
+    sessionId: string,
+    afterId?: number
+  ): Promise<StoredSessionStep[]>;
   /**
    * Newest first, pinned ahead. `after` is the last row of the previous page;
    * `sessionId` narrows the list to that one session. `userId` keeps the

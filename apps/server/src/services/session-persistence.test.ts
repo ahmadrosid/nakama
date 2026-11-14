@@ -1,7 +1,8 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { createAgentChatSession } from "@nakama/agent";
-import type { ChatMessage, ProviderClient } from "@nakama/core";
+import type { ChatMessage, ProviderClient, ToolCall } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
@@ -114,6 +115,143 @@ async function openDatabaseWithProfiles(
 
 describe("session persistence", () => {
   setupTestConfigDir("nakama-history-archive-");
+
+  test("records ordered chat tool outcomes without writing tool payloads to session steps", async () => {
+    const path = `${process.env.NAKAMA_CONFIG_DIR}/session-steps.sqlite`;
+    const database = await createSqliteDatabase(`file:${path}`);
+    const db = database.adapter;
+
+    try {
+      // Simulate an existing install whose bootstrap schema predates the table.
+      {
+        using raw = new Database(path);
+        raw.exec("DROP TABLE session_steps");
+      }
+
+      await database.reopen();
+
+      const now = new Date().toISOString();
+      await db.upsertOrganization({
+        createdAt: now,
+        id: "org_1",
+        name: "Test organization",
+        slug: "org-1",
+        updatedAt: now,
+      });
+      await db.upsertProfile({
+        createdAt: now,
+        id: "profile",
+        isDefault: true,
+        isSuper: false,
+        model: null,
+        name: "Test profile",
+        orgId: "org_1",
+        systemPrompt: "",
+        updatedAt: now,
+      });
+      // Platform tools such as todo_write attach only when the profile owns a tool.
+      await db.upsertTool({
+        createdAt: now,
+        description: "Test tool",
+        handlerConfig: { modulePath: "test.js" },
+        handlerType: "javascript",
+        id: "tool_seed",
+        name: "test_tool",
+        updatedAt: now,
+      });
+      await db.assignToolToProfile("profile", "tool_seed");
+      const secret = "private test password";
+
+      const toolCalls: ToolCall[] = [
+        {
+          arguments: {
+            merge: false,
+            todos: [{ content: secret, id: "one", status: "completed" }],
+          },
+          id: "first",
+          name: "todo_write",
+        },
+        { arguments: { password: secret }, id: "second", name: "missing_tool" },
+      ];
+
+      let first = true;
+
+      const provider: ProviderClient = {
+        ...summaryProvider,
+        generateChat(input) {
+          if (!first) {
+            return summaryProvider.generateChat(input);
+          }
+
+          first = false;
+
+          return Promise.resolve({
+            assistantMessage: { content: "", role: "assistant", toolCalls },
+            content: "",
+            toolCalls,
+          });
+        },
+      };
+
+      const service = new AgentService(null, null, db);
+      Object.assign(service, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({ provider }),
+      });
+      const sessionId = await service.createSession("org_1", "web", "profile");
+      const session = await service.sessions.get(sessionId, "org_1");
+      await session?.send({ message: "Plan the work" });
+      const steps = await db.listSessionSteps("org_1", sessionId);
+
+      expect(steps.map(({ toolName, outcome }) => [toolName, outcome])).toEqual(
+        [
+          ["todo_write", "success"],
+          ["unknown_tool", "error"],
+        ]
+      );
+      expect(steps[0]).toMatchObject({
+        actor: "agent",
+        orgId: "org_1",
+        profileId: "profile",
+        sessionId,
+      });
+      expect(Date.parse(steps[0].startedAt)).toBeLessThanOrEqual(
+        Date.parse(steps[0].completedAt)
+      );
+      expect(
+        await db.listSessionSteps("org_1", sessionId, steps[0].id)
+      ).toEqual(steps.slice(1));
+      expect(await db.listSessionSteps("other_org", sessionId)).toEqual([]);
+      expect(
+        await db.appendSessionStep({ ...steps[0], orgId: "other_org" })
+      ).toBe(false);
+
+      using raw = new Database(path);
+      expect(
+        JSON.stringify(raw.query("SELECT * FROM session_steps").all())
+      ).not.toContain(secret);
+      expect(() =>
+        raw.exec("UPDATE session_steps SET outcome = 'success'")
+      ).toThrow();
+      expect(() => raw.exec("DELETE FROM session_steps")).toThrow();
+      expect(() =>
+        raw.exec(
+          "INSERT OR REPLACE INTO session_steps SELECT * FROM session_steps"
+        )
+      ).toThrow();
+
+      // A legacy profile id rename and a move to another org keep the steps.
+      raw.exec("UPDATE session_steps SET profile_id = 'renamed'");
+      raw.exec("UPDATE sessions SET org_id = 'org_2'");
+      expect(await db.listSessionSteps("org_2", sessionId)).toHaveLength(2);
+      expect(await db.listSessionSteps("org_1", sessionId)).toEqual([]);
+
+      expect(await db.deleteSession(sessionId)).toBe(true);
+      expect(raw.query("SELECT * FROM session_steps").all()).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
 
   test("cached sessions and history tools recheck eligibility before exposing history", async () => {
     const db = createInMemoryDatabaseAdapter();
