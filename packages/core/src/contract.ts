@@ -674,6 +674,8 @@ export interface OrganizationSummary {
   archivedAt?: string | null;
   createdAt: string;
   id: string;
+  /** Accepted invites wait for an org admin before the user joins. */
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -763,6 +765,7 @@ export interface OrganizationOverviewResponse {
 
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -916,6 +919,18 @@ export interface ListOrgMembersResponse {
 
 export interface ListOrgInvitesResponse {
   invites: OrgInviteSummary[];
+}
+
+/** An accepted invite waiting for an org admin to approve or reject it. */
+export interface OrgJoinRequest {
+  createdAt: string;
+  email: string;
+  role: OrgRole;
+  userId: string;
+}
+
+export interface ListOrgJoinRequestsResponse {
+  requests: OrgJoinRequest[];
 }
 
 export interface AddOrgMemberRequest {
@@ -1175,6 +1190,8 @@ export interface AcceptOrgInviteRequest {
 export interface AcceptOrgInviteResponse {
   email: string;
   orgId: string;
+  /** True when the org requires approval: no session is created until an admin approves. */
+  pending: boolean;
   role: OrgRole;
 }
 

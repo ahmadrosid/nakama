@@ -424,6 +424,7 @@ CREATE TABLE IF NOT EXISTS user_passkey_challenges (
 
 CREATE TABLE IF NOT EXISTS organizations (
   allowed_invite_domains TEXT NOT NULL DEFAULT '[]',
+  member_approval_required INTEGER NOT NULL DEFAULT 0,
   id TEXT PRIMARY KEY NOT NULL,
   parent_org_id TEXT REFERENCES organizations (id) ON DELETE RESTRICT CHECK (parent_org_id <> id),
   name TEXT NOT NULL,
@@ -452,6 +453,20 @@ CREATE TABLE IF NOT EXISTS org_members (
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
+
+-- An accepted invite waiting for an org admin. Kept out of org_members so a
+-- pending user counts nowhere: not in seats, admin counts or the org middleware.
+CREATE TABLE IF NOT EXISTS org_join_requests (
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, user_id),
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS org_join_requests_user ON org_join_requests (user_id);
 
 CREATE TABLE IF NOT EXISTS org_invites (
   id TEXT PRIMARY KEY NOT NULL,

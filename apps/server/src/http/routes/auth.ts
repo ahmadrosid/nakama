@@ -411,6 +411,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     .object({
       email: z.string(),
       orgId: z.string(),
+      pending: z.boolean(),
       role: z.enum(["admin", "member"]),
     })
     .openapi("AcceptOrgInviteResponse");
@@ -554,6 +555,10 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       200: {
         content: { "application/json": { schema: acceptInviteResponseSchema } },
         description: "Invite accepted",
+      },
+      202: {
+        content: { "application/json": { schema: acceptInviteResponseSchema } },
+        description: "Invite accepted, waiting for an org admin to approve",
       },
       400: {
         content: { "application/json": { schema: errorSchema } },
@@ -1721,6 +1726,19 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const accepted = await orgService.acceptInvite(body);
 
+    // No session until an admin approves: the org would answer 403 anyway
+    if (accepted.pending) {
+      return json<AcceptOrgInviteResponse>(
+        {
+          email: accepted.user.email,
+          orgId: accepted.orgId,
+          pending: true,
+          role: accepted.role,
+        },
+        202
+      );
+    }
+
     const response = await createBrowserSessionResponse(
       authService,
       databaseAdapter,
@@ -1732,6 +1750,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       {
         email: accepted.user.email,
         orgId: accepted.orgId,
+        pending: false,
         role: accepted.role,
       },
       200,

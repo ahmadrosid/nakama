@@ -85,6 +85,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAutomationWebhookSecretsTable);
   atomic(migrateRegressionCasesTable);
   atomic(migrateRegressionCaseRunsTable);
+  atomic(migrateOrgJoinRequests);
   atomic(migrateManagedSecretsTable);
   atomic(migrateArtifactsTable);
   atomic((database) =>
@@ -2668,6 +2669,33 @@ CREATE INDEX IF NOT EXISTS regression_cases_profile_created
 
   // The table first shipped without this column.
   addNullableTextColumnIfMissing(db, "regression_cases", "private_to_user_id");
+}
+
+function migrateOrgJoinRequests(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_join_requests (
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, user_id),
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS org_join_requests_user ON org_join_requests (user_id);
+  `);
+
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "member_approval_required")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN member_approval_required INTEGER NOT NULL DEFAULT 0;"
+    );
+  }
 }
 
 function migrateRegressionCaseRunsTable(db: Database): void {
