@@ -115,10 +115,22 @@ export function registerSystemRoutes(
       composioConfigured: z.boolean().openapi({
         description: "Whether a Composio project API key is saved locally.",
       }),
+      oidcConfigured: z.boolean().openapi({
+        description:
+          "Whether SSO sign-in via OIDC is configured (NAKAMA_OIDC_ISSUER_URL).",
+      }),
+      oidcProviderName: z.string().nullable().openapi({
+        description:
+          "Display name for the SSO button. Null when OIDC is not configured.",
+      }),
       ok: z.literal(true),
       onboardingEnabled: z.boolean().openapi({
         description:
           "Whether NAKAMA_ENABLE_ONBOARDING is on. The web app then asks a new user for a goal.",
+      }),
+      passwordLoginEnabled: z.boolean().openapi({
+        description:
+          "Whether email+password sign-in is accepted. False when NAKAMA_OIDC_DISABLE_PASSWORD_LOGIN is on.",
       }),
       providerConfigured: z.boolean(),
       updateCheckEnabled: z.boolean().openapi({
@@ -390,8 +402,11 @@ export function registerSystemRoutes(
         builtinTools: BUILTIN_TOOL_NAMES,
         composioAvailable: false,
         composioConfigured,
+        oidcConfigured: Boolean(options.oidcService),
+        oidcProviderName: options.oidcService?.config.providerName ?? null,
         ok: true,
         onboardingEnabled: isOnboardingEnabled(),
+        passwordLoginEnabled: !options.oidcService?.config.disablePasswordLogin,
         providerConfigured: agent.providerConfigured,
         updateCheckEnabled: isUpdateCheckEnabled(),
         userConfigured: humanUserCount > 0,

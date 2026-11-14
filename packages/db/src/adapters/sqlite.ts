@@ -44,6 +44,7 @@ import type {
   StoredManagedSecret,
   StoredMcpServerRecord,
   StoredNotificationDestinationRecord,
+  StoredOidcAuthState,
   StoredOrganizationRecord,
   StoredOrgInviteRecord,
   StoredOrgMemberRecord,
@@ -68,6 +69,7 @@ import type {
   StoredSkillUsageRecord,
   StoredSkillVersion,
   StoredToolRecord,
+  StoredUserOidcIdentity,
   StoredUserOrganizationRecord,
   StoredUserRecord,
   StoredWorkflowRecord,
@@ -445,6 +447,25 @@ interface BrowserSessionRow {
   revoked_at: string | null;
   session_token_hash: string;
   user_agent?: string | null;
+  user_id: string;
+}
+
+interface OidcAuthStateRow {
+  code_verifier: string;
+  created_at: string;
+  expires_at: string;
+  nonce: string;
+  state: string;
+  web_origin: string;
+}
+
+interface UserOidcIdentityRow {
+  created_at: string;
+  email: string | null;
+  id: string;
+  issuer: string;
+  subject: string;
+  updated_at: string;
   user_id: string;
 }
 
@@ -2874,6 +2895,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "DELETE FROM password_reset_tokens WHERE user_id = ?"
   );
 
+  // Holds the provider subject and email; a returning person must start fresh.
+  const deleteErasedUserOidcIdentitiesStmt = db.prepare(
+    "DELETE FROM user_oidc_identities WHERE user_id = ?"
+  );
+
   const deleteErasedUserComposioConnectionsStmt = db.prepare(
     "DELETE FROM composio_user_connections WHERE user_id = ?"
   );
@@ -2925,6 +2951,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       deleteErasedUserChannelMappingsStmt.run(input.id);
       deleteErasedUserBrowserSessionsStmt.run(input.id);
       deleteErasedUserPasswordResetsStmt.run(input.id);
+      deleteErasedUserOidcIdentitiesStmt.run(input.id);
       deleteErasedUserComposioConnectionsStmt.run(input.id);
       deleteUserAutomationWebhookSecretsStmt.run(input.id);
 
@@ -3060,6 +3087,61 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
+
+  const createOidcAuthStateStmt = db.prepare(`
+    INSERT INTO oidc_auth_states (
+      state, nonce, code_verifier, web_origin, expires_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const getOidcAuthStateStmt = db.prepare<
+    OidcAuthStateRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT * FROM oidc_auth_states WHERE state = ?
+  `);
+
+  const deleteOidcAuthStateStmt = db.prepare(`
+    DELETE FROM oidc_auth_states WHERE state = ?
+  `);
+
+  const deleteExpiredOidcAuthStatesStmt = db.prepare(`
+    DELETE FROM oidc_auth_states WHERE expires_at <= ?
+  `);
+
+  const getUserOidcIdentityStmt = db.prepare<
+    UserOidcIdentityRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT * FROM user_oidc_identities
+    WHERE issuer = ? AND subject = ?
+    LIMIT 1
+  `);
+
+  const upsertUserOidcIdentityStmt = db.prepare(`
+    INSERT INTO user_oidc_identities (
+      id, user_id, issuer, subject, email, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (issuer, subject) DO UPDATE SET
+      email = excluded.email,
+      updated_at = excluded.updated_at
+  `);
+
+  const consumeOidcAuthStateTransaction = db.transaction(
+    (state: string, now: string) => {
+      const row = getOidcAuthStateStmt.get(state);
+
+      if (!row) {
+        return null;
+      }
+
+      // Consume whatever the callback named, usable or not, so it cannot be
+      // replayed or parked until its expiry passes.
+      deleteOidcAuthStateStmt.run(state);
+
+      return row.expires_at > now ? toOidcAuthStateRecord(row) : null;
+    }
+  );
 
   const createPasswordResetTokenStmt = db.prepare(`
     INSERT INTO password_reset_tokens (
@@ -3386,6 +3468,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
 
+  // Same last-admin rule as disable: a demotion needs another active admin.
+  const updateUserPlatformAdminStmt = db.prepare(`
+    UPDATE users
+    SET is_platform_admin = ?1, updated_at = ?2
+    WHERE id = ?3
+      AND (?1 = 1
+        OR EXISTS (
+          SELECT 1 FROM users u
+          WHERE u.is_platform_admin = 1 AND u.id != ?3
+            AND u.disabled_at IS NULL))
+  `);
+
   const createOrgInviteStmt = db.prepare(`
     INSERT INTO org_invites (
       id, org_id, email, role, token_hash, invited_by_user_id,
@@ -3423,6 +3517,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       expires_at, accepted_at, revoked_at, created_at
     FROM org_invites
     WHERE org_id = ? AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?
+    ORDER BY created_at DESC
+  `);
+
+  const listPendingOrgInvitesForEmailStmt = db.prepare<
+    OrgInviteRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      id, org_id, email, role, token_hash, invited_by_user_id,
+      expires_at, accepted_at, revoked_at, created_at
+    FROM org_invites
+    WHERE email = ? AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?
     ORDER BY created_at DESC
   `);
 
@@ -4772,6 +4878,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async consumeMfaTotpStep(userId, step) {
       return consumeMfaTotpStepStmt.run(step, userId, step).changes > 0;
     },
+    async consumeOidcAuthState(state, now) {
+      return consumeOidcAuthStateTransaction.immediate(state, now);
+    },
     async consumePasskeyChallenge(challenge, userId, type, consumedAt) {
       return (
         consumePasskeyChallengeStmt.run(challenge, type, consumedAt, userId)
@@ -4885,6 +4994,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.userId,
         record.codeHash,
         record.usedAt,
+        record.createdAt
+      );
+    },
+
+    async createOidcAuthState(record) {
+      createOidcAuthStateStmt.run(
+        record.state,
+        record.nonce,
+        record.codeVerifier,
+        record.webOrigin,
+        record.expiresAt,
         record.createdAt
       );
     },
@@ -5127,6 +5247,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return result.changes > 0;
     },
+
+    async deleteExpiredOidcAuthStates(now) {
+      deleteExpiredOidcAuthStatesStmt.run(now);
+    },
     async deleteManagedSecret(scope, name) {
       deleteManagedSecretStmt.run(scope, name);
     },
@@ -5143,7 +5267,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async deleteMfaBackupCodes(userId) {
       deleteMfaBackupCodesStmt.run(userId);
     },
-
     async deleteNotificationDestination(id) {
       const result = deleteNotificationDestinationStmt.run(id);
 
@@ -5661,11 +5784,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       return row ? toUserRecord(row) : null;
     },
-
     async getUserContext(orgId, userId) {
       const row = getUserContextStmt.get(orgId, userId);
 
       return row?.user_context ?? null;
+    },
+
+    async getUserOidcIdentity(issuer, subject) {
+      const row = getUserOidcIdentityStmt.get(issuer, subject);
+
+      return row ? toUserOidcIdentityRecord(row) : null;
     },
 
     async getWorkflow(id) {
@@ -6128,6 +6256,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listPendingOrgInvites(orgId, now) {
       return listPendingOrgInvitesStmt.all(orgId, now).map(toOrgInviteRecord);
+    },
+
+    async listPendingOrgInvitesForEmail(email, now) {
+      return listPendingOrgInvitesForEmailStmt
+        .all(email, now)
+        .map(toOrgInviteRecord);
     },
 
     async listPlatformAdminUsers() {
@@ -6691,6 +6825,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updateUserPasswordStmt.run(passwordHash, updatedAt, id);
     },
 
+    async updateUserPlatformAdmin(id, isPlatformAdmin, updatedAt) {
+      return (
+        updateUserPlatformAdminStmt.run(isPlatformAdmin ? 1 : 0, updatedAt, id)
+          .changes > 0
+      );
+    },
+
     async updateUserProfile(id, profile, updatedAt) {
       updateUserProfileStmt.run(
         profile.name,
@@ -6898,6 +7039,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.orgId ?? null,
         record.pluginId ?? null,
         record.pluginKey ?? null,
+        record.createdAt,
+        record.updatedAt
+      );
+    },
+
+    async upsertUserOidcIdentity(record) {
+      upsertUserOidcIdentityStmt.run(
+        record.id,
+        record.userId,
+        record.issuer,
+        record.subject,
+        record.email,
         record.createdAt,
         record.updatedAt
       );
@@ -8092,6 +8245,31 @@ function toBrowserSessionRecord(
     revokedAt: row.revoked_at,
     sessionTokenHash: row.session_token_hash,
     userAgent: row.user_agent ?? null,
+    userId: row.user_id,
+  };
+}
+
+function toOidcAuthStateRecord(row: OidcAuthStateRow): StoredOidcAuthState {
+  return {
+    codeVerifier: row.code_verifier,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    nonce: row.nonce,
+    state: row.state,
+    webOrigin: row.web_origin,
+  };
+}
+
+function toUserOidcIdentityRecord(
+  row: UserOidcIdentityRow
+): StoredUserOidcIdentity {
+  return {
+    createdAt: row.created_at,
+    email: row.email,
+    id: row.id,
+    issuer: row.issuer,
+    subject: row.subject,
+    updatedAt: row.updated_at,
     userId: row.user_id,
   };
 }

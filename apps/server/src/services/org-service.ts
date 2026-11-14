@@ -1771,6 +1771,112 @@ export class OrgService {
     return { organization: toOrganizationSummary(organization), user };
   }
 
+  /**
+   * Account creation for an OIDC login. An empty install bootstraps like the
+   * setup wizard (first account owns its org); after that a pending invite for
+   * the email wins over the configured default org; neither means the account
+   * is refused because it would land with no org to work in.
+   */
+  async provisionOidcUser(input: {
+    defaultOrgSlug?: string;
+    email: string;
+    emailVerified: boolean;
+    isPlatformAdmin?: boolean;
+    name?: string | null;
+    passwordHash: string;
+  }): Promise<{ orgId: string; user: StoredUserRecord }> {
+    const email = normalizeEmail(input.email);
+    const name = input.name?.trim() || email.split("@")[0] || email;
+
+    if (!EMAIL_PATTERN.test(email)) {
+      throw new NakamaApiError("A valid email address is required.", 400);
+    }
+
+    const now = new Date().toISOString();
+
+    if ((await this.databaseAdapter.countHumanUsers()) === 0) {
+      const { user, organization } = await this.bootstrapInitialSetup({
+        admin: {
+          email,
+          name,
+          passwordHash: input.passwordHash,
+          phone: "",
+        },
+        organization: { name: "Personal", slug: "personal" },
+      });
+
+      return { orgId: organization.id, user };
+    }
+
+    // An invite is addressed to a mailbox, so only a provider-verified email
+    // may claim it.
+    const invite = input.emailVerified
+      ? (
+          await this.databaseAdapter.listPendingOrgInvitesForEmail(email, now)
+        )[0]
+      : undefined;
+
+    let target: { inviteId?: string; orgId: string; role: OrgRole } | null =
+      null;
+
+    if (invite) {
+      const organization = await this.requireActiveOrganization(invite.orgId);
+
+      // Same domain rule as accepting the invite manually (#2075): a platform
+      // admin's invite may name an address outside the allowlist.
+      if (!(await this.isPlatformAdmin(invite.invitedByUserId))) {
+        await this.assertMemberDomainAllowed(email, organization);
+      }
+
+      target = { inviteId: invite.id, orgId: invite.orgId, role: invite.role };
+    } else if (input.defaultOrgSlug) {
+      const organization = await this.databaseAdapter.getOrganizationBySlug(
+        input.defaultOrgSlug
+      );
+
+      if (!(organization && !organization.archivedAt)) {
+        throw new NakamaApiError(
+          `OIDC default org "${input.defaultOrgSlug}" does not exist.`,
+          500
+        );
+      }
+
+      await this.assertMemberDomainAllowed(email, organization);
+      target = { orgId: organization.id, role: "member" };
+    }
+
+    if (!target) {
+      throw new NakamaApiError(
+        "No organization can take this account. Set NAKAMA_OIDC_DEFAULT_ORG or send an invite.",
+        403
+      );
+    }
+
+    const user: StoredUserRecord = {
+      createdAt: now,
+      email,
+      id: `user_${crypto.randomUUID().replace(/-/g, "")}`,
+      isPlatformAdmin: input.isPlatformAdmin,
+      name,
+      passwordHash: input.passwordHash,
+      updatedAt: now,
+    };
+
+    await this.databaseAdapter.createUser(user);
+    await this.databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: target.orgId,
+      role: target.role,
+      userId: user.id,
+    });
+
+    if (target.inviteId) {
+      await this.databaseAdapter.markOrgInviteAccepted(target.inviteId, now);
+    }
+
+    return { orgId: target.orgId, user };
+  }
+
   async listParentMembers(teamId: string): Promise<ListOrgMembersResponse> {
     const team = await this.requireActiveOrganization(teamId);
 

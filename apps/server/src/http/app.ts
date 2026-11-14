@@ -42,6 +42,7 @@ import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
 import { registerModelRoutes } from "./routes/models";
 import { registerNotificationDestinationRoutes } from "./routes/notification-destinations";
 import { registerNotificationWebhookRoutes } from "./routes/notification-webhooks";
+import { registerOidcAuthRoutes } from "./routes/oidc";
 import { registerOrgCuratorRoutes } from "./routes/org-curator";
 import { registerOrgMemberRoutes } from "./routes/org-members";
 import { registerOrgMemoryRoutes } from "./routes/org-memory";
@@ -447,6 +448,7 @@ export function createHonoApp(options: ServerOptions) {
   registerSystemRoutes(app, options);
   registerAuditEventRoutes(app, options);
   registerAuthRoutes(app, options);
+  registerOidcAuthRoutes(app, options);
   registerSetupImportRoutes(app, options);
   registerWorkerRoutes(app, options);
   registerModelRoutes(app, options);

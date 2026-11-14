@@ -831,6 +831,26 @@ export interface StoredBrowserSessionRecord {
   userId: string;
 }
 
+export interface StoredOidcAuthState {
+  codeVerifier: string;
+  createdAt: string;
+  expiresAt: string;
+  nonce: string;
+  state: string;
+  /** Vouched web origin the SSO flow started from; the callback redirects here. */
+  webOrigin: string;
+}
+
+export interface StoredUserOidcIdentity {
+  createdAt: string;
+  email: string | null;
+  id: string;
+  issuer: string;
+  subject: string;
+  updatedAt: string;
+  userId: string;
+}
+
 export interface StoredAuditEvent {
   action: string;
   actorUserId: string | null;
@@ -942,6 +962,11 @@ export interface DatabaseAdapter {
     usedAt: string
   ): Promise<boolean>;
   consumeMfaTotpStep(userId: string, step: number): Promise<boolean>;
+  /** Read-and-delete in one step so a state cannot be replayed. */
+  consumeOidcAuthState(
+    state: string,
+    now: string
+  ): Promise<StoredOidcAuthState | null>;
   consumePasskeyChallenge(
     challenge: string,
     userId: string | null,
@@ -978,6 +1003,8 @@ export interface DatabaseAdapter {
 
   createBrowserSession(record: StoredBrowserSessionRecord): Promise<void>;
   createMfaBackupCode(record: StoredMfaBackupCode): Promise<void>;
+
+  createOidcAuthState(record: StoredOidcAuthState): Promise<void>;
 
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
 
@@ -1034,6 +1061,7 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   deleteComposioToolkit(id: string): Promise<boolean>;
   deleteComposioUserConnection(id: string): Promise<boolean>;
+  deleteExpiredOidcAuthStates(now: string): Promise<void>;
   deleteManagedSecret(scope: string, name: string): Promise<void>;
   deleteMcpServer(id: string): Promise<boolean>;
   deleteMessagesForSession(sessionId: string): Promise<void>;
@@ -1276,6 +1304,10 @@ export interface DatabaseAdapter {
   getUserByEmail(email: string): Promise<StoredUserRecord | null>;
   getUserById(id: string): Promise<StoredUserRecord | null>;
   getUserContext(orgId: string, userId: string): Promise<string | null>;
+  getUserOidcIdentity(
+    issuer: string,
+    subject: string
+  ): Promise<StoredUserOidcIdentity | null>;
   getWorkflow(id: string): Promise<StoredWorkflowRecord | null>;
   getWorkflowRun(
     workflowId: string,
@@ -1427,6 +1459,11 @@ export interface DatabaseAdapter {
   /** Not accepted, not revoked and not expired at `now`, newest first. */
   listPendingOrgInvites(
     orgId: string,
+    now: string
+  ): Promise<StoredOrgInviteRecord[]>;
+  /** Pending invites for an email across every org, newest first. */
+  listPendingOrgInvitesForEmail(
+    email: string,
     now: string
   ): Promise<StoredOrgInviteRecord[]>;
 
@@ -1743,6 +1780,12 @@ export interface DatabaseAdapter {
     passwordHash: string,
     updatedAt: string
   ): Promise<void>;
+  /** False when the change would demote the last active platform admin. */
+  updateUserPlatformAdmin(
+    id: string,
+    isPlatformAdmin: boolean,
+    updatedAt: string
+  ): Promise<boolean>;
   updateUserProfile(
     id: string,
     profile: { name: string | null; phone: string | null; email?: string },
@@ -1776,6 +1819,8 @@ export interface DatabaseAdapter {
   upsertSession(record: StoredSessionRecord): Promise<void>;
   upsertSkill(record: StoredSkillRecord): Promise<void>;
   upsertTool(record: StoredToolRecord): Promise<void>;
+  /** Insert or refresh by (issuer, subject); a re-login updates email/name seen. */
+  upsertUserOidcIdentity(record: StoredUserOidcIdentity): Promise<void>;
   upsertWorkflow(record: StoredWorkflowRecord): Promise<void>;
   upsertWorkspaceSettings(record: StoredWorkspaceSettingsRecord): Promise<void>;
 }

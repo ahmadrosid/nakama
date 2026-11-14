@@ -100,6 +100,7 @@ import {
 import { installMcpSecretStore } from "./services/mcp-secret-store";
 import { McpService } from "./services/mcp-service";
 import { cleanupInterruptedMeetImports } from "./services/meet-recording-import";
+import { loadOidcConfig, OidcService } from "./services/oidc-service";
 import { OrgMemoryService } from "./services/org-memory-service";
 import { OrgService } from "./services/org-service";
 import {
@@ -462,6 +463,21 @@ orgService.beforeArchiveChannels = async (orgId) => {
   return release;
 };
 
+// Throws on a partial NAKAMA_OIDC_* config: a broken SSO button is worse than
+// a hard start failure.
+const oidcConfig = loadOidcConfig();
+
+const oidcService = oidcConfig
+  ? new OidcService(
+      {
+        authService,
+        databaseAdapter: database.adapter,
+        orgService,
+      },
+      oidcConfig
+    )
+  : null;
+
 const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   officialPackagesDir: join(projectRoot, "packages/plugins"),
   onHostRequest: createPluginAgentHost(
@@ -578,7 +594,8 @@ const systemStatus = new SystemStatusService(
   workerManager,
   mcpService,
   composioService,
-  database.adapter
+  database.adapter,
+  oidcService
 );
 
 const webDistDir = resolveWebDistDir(projectRoot);
@@ -591,6 +608,7 @@ const app = createHonoApp({
   databaseAdapter: database.adapter,
   googleMeetService,
   mcpService,
+  oidcService,
   // Windows cannot move an open SQLite file; POSIX restores keep the handle open as before.
   onBeforeDataRestore: async () => {
     await workerManager.pauseDataWorkers();

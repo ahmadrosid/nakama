@@ -56,6 +56,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSessionOrgIds);
   atomic(migrateBrowserSessionsTable);
   atomic(migratePasswordResetTokensTable);
+  atomic(migrateOidcTables);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateArtifactDesignSkillName);
@@ -1661,6 +1662,33 @@ function migratePasswordResetTokensTable(db: Database): void {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_token_hash_unique
       ON password_reset_tokens (token_hash);
+  `);
+}
+
+function migrateOidcTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oidc_auth_states (
+      state TEXT PRIMARY KEY NOT NULL,
+      nonce TEXT NOT NULL,
+      code_verifier TEXT NOT NULL,
+      web_origin TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS user_oidc_identities (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      issuer TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      email TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS user_oidc_identities_issuer_subject_unique
+      ON user_oidc_identities (issuer, subject);
+    CREATE INDEX IF NOT EXISTS user_oidc_identities_user_idx
+      ON user_oidc_identities (user_id);
   `);
 }
 

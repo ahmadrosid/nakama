@@ -8,6 +8,8 @@ const PUBLIC_ROUTES = new Set([
   "/v1/auth/setup/import/preview",
   "/v1/auth/setup/import/restore",
   "/v1/auth/login",
+  "/v1/auth/oidc/callback",
+  "/v1/auth/oidc/start",
   "/v1/auth/passkey/login/options",
   "/v1/auth/me",
   "/v1/auth/accept-invite",

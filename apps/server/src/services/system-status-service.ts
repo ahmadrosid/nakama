@@ -32,6 +32,7 @@ import type { AgentService } from "./agent-service";
 import type { AutomationRunner } from "./automation-runner";
 import type { ComposioService } from "./composio-service";
 import type { McpService } from "./mcp-service";
+import type { OidcService } from "./oidc-service";
 import type { WorkerManagerService } from "./worker-manager-service";
 
 export class SystemStatusService {
@@ -50,7 +51,8 @@ export class SystemStatusService {
     private readonly workerManager: WorkerManagerService,
     private readonly mcpService: McpService | null = null,
     private readonly composioService: ComposioService | null = null,
-    private readonly databaseAdapter: DatabaseAdapter | null = null
+    private readonly databaseAdapter: DatabaseAdapter | null = null,
+    private readonly oidcService: Pick<OidcService, "config"> | null = null
   ) {}
 
   /**
@@ -304,8 +306,11 @@ export class SystemStatusService {
         ? await (this.composioService?.isReachable() ?? false)
         : false,
       composioConfigured,
+      oidcConfigured: Boolean(this.oidcService),
+      oidcProviderName: this.oidcService?.config.providerName ?? null,
       ok: true,
       onboardingEnabled: isOnboardingEnabled(),
+      passwordLoginEnabled: !this.oidcService?.config.disablePasswordLogin,
       providerConfigured: this.agent.providerConfigured,
       updateCheckEnabled: isUpdateCheckEnabled(),
       userConfigured: humanUserCount > 0,

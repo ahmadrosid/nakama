@@ -13,6 +13,7 @@
     "tailscale",
     "deployment-hardening",
     "secret-managers",
+    "sso",
     "outbound-connections",
     "backup-restore",
     "error-tracking",

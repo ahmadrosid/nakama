@@ -93,7 +93,7 @@ function resolveWebAuthnContext(request: Request) {
 }
 
 export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
-  const { authService, databaseAdapter, orgService } = options;
+  const { authService, databaseAdapter, oidcService, orgService } = options;
 
   const issueBackupCodes = async (
     userId: string,
@@ -730,6 +730,23 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       if (stored) {
         user = await databaseAdapter.getUserById(stored.userId);
       }
+    }
+
+    // SSO-only install: the first account stays the break-glass. This runs
+    // before the password check and answers unknown emails the same way, so
+    // the reply never confirms an email or a guessed password.
+    if (oidcService?.config.disablePasswordLogin && user?.id !== "user_admin") {
+      if (!passkeyLogin) {
+        await authService.verifyPassword(
+          body.password?.trim() ?? "",
+          ABSENT_ACCOUNT_PASSWORD_HASH
+        );
+      }
+
+      return errorResponse(
+        `Password sign-in is disabled. Continue with ${oidcService.config.providerName}.`,
+        403
+      );
     }
 
     if (!user) {
