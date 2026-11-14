@@ -13,6 +13,8 @@ import { useMemo, useState } from "react";
 import {
   isProviderTypeAlreadyConfigured,
   PROVIDER_OPTIONS,
+  type ProviderOption,
+  providerOptionKey,
   type SelectedProvider,
 } from "@/lib/models";
 
@@ -21,8 +23,12 @@ interface ProviderSelectProps {
   configuredTypes?: ReadonlySet<string>;
   disabled?: boolean;
   id?: string;
-  onValueChange: (value: SelectedProvider) => void;
-  value: SelectedProvider;
+  onValueChange: (
+    value: SelectedProvider,
+    preset?: ProviderOption["preset"]
+  ) => void;
+  /** The chosen entry's key: its preset, or else its provider type. */
+  value: string;
 }
 
 export function ProviderSelect({
@@ -38,7 +44,8 @@ export function ProviderSelect({
 
   const selectedLabel = useMemo(
     () =>
-      PROVIDER_OPTIONS.find((option) => option.id === value)?.label ?? value,
+      PROVIDER_OPTIONS.find((option) => providerOptionKey(option) === value)
+        ?.label ?? value,
     [value]
   );
 
@@ -120,18 +127,20 @@ export function ProviderSelect({
 
                   return (
                     <CommandItem
-                      data-checked={value === option.id ? true : undefined}
+                      data-checked={
+                        value === providerOptionKey(option) ? true : undefined
+                      }
                       disabled={alreadyConfigured}
-                      key={option.id}
+                      key={providerOptionKey(option)}
                       onSelect={() => {
                         if (alreadyConfigured) {
                           return;
                         }
 
-                        onValueChange(option.id);
+                        onValueChange(option.id, option.preset);
                         setOpen(false);
                       }}
-                      value={`${option.label} ${option.id}`}
+                      value={`${option.label} ${providerOptionKey(option)}`}
                     >
                       {option.label}
                     </CommandItem>

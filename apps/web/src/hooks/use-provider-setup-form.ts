@@ -35,6 +35,8 @@ import {
   modelsFromCustomRows,
   modelsFromOpenRouterRows,
   modelsFromShortlistRows,
+  PROVIDER_OPTIONS,
+  type ProviderOption,
   resolveOpenRouterSetupModel,
   type SelectedProvider,
   validateApiKeyForProvider,
@@ -83,6 +85,10 @@ export function useProviderSetupForm(
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>(
     options.initialProvider ?? "openai"
   );
+
+  // Set when the chosen picker entry is a preset of the provider type (AI Club).
+  const [selectedPreset, setSelectedPreset] =
+    useState<ProviderOption["preset"]>();
 
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -253,12 +259,13 @@ export function useProviderSetupForm(
   );
 
   const handleProviderSelect = useCallback(
-    (provider: SelectedProvider) => {
+    (provider: SelectedProvider, preset?: ProviderOption["preset"]) => {
       if (isProviderTypeAlreadyConfigured(provider, configuredTypes)) {
         return;
       }
 
       setSelectedProvider(provider);
+      setSelectedPreset(preset);
       // The last provider's model never fits the new one.
       setSelectedModel("");
       setFormError(null);
@@ -280,7 +287,11 @@ export function useProviderSetupForm(
 
       if (provider === "netra") {
         setBaseUrl(defaultDiscoveryBaseUrl("netra") ?? "");
-        setDisplayName("Netra Runtime");
+        // A preset saves under its own name: AI Club is Netra under AI Club's label.
+        setDisplayName(
+          PROVIDER_OPTIONS.find((option) => preset && option.preset === preset)
+            ?.label ?? "Netra Runtime"
+        );
       }
 
       if (isDiscoveryModelProvider(provider)) {
@@ -669,6 +680,7 @@ export function useProviderSetupForm(
     openRouterModelsError,
     openRouterRouting,
     selectedModel,
+    selectedOptionKey: selectedPreset ?? selectedProvider,
     selectedProvider,
     setChatgptOAuth,
     setOpenRouterRouting,
