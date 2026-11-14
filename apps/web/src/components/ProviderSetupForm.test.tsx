@@ -380,3 +380,18 @@ test("a Custom endpoint with no name takes its host as the name", async () => {
   await act(async () => form().handleBaseUrlBlur());
   expect(form().displayName).toBe("api.example.test");
 });
+
+test("AI Club is its own picker entry that sets up Netra under AI Club's name", async () => {
+  const aiclub = PROVIDER_OPTIONS.find((option) => option.preset === "aiclub");
+  expect(aiclub).toEqual({ id: "netra", label: "AI Club", preset: "aiclub" });
+
+  const form = await renderSetupHook();
+  await act(async () => form().handleProviderSelect("netra", "aiclub"));
+  expect(form().selectedProvider).toBe("netra");
+  expect(form().selectedOptionKey).toBe("aiclub");
+  expect(form().displayName).toBe("AI Club");
+
+  await act(async () => form().handleProviderSelect("netra"));
+  expect(form().selectedOptionKey).toBe("netra");
+  expect(form().displayName).toBe("Netra Runtime");
+});
