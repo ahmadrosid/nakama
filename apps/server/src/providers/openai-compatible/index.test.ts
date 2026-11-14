@@ -479,3 +479,64 @@ describe("OpenAI-compatible provider", () => {
     );
   });
 });
+
+describe("OpenAI-compatible tool schemas", () => {
+  test("drops empty enum members before sending", async () => {
+    let sentBody = "{}";
+
+    const fetchMock = mock(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sentBody = String(init?.body ?? "{}");
+
+        return Response.json({
+          choices: [{ message: { content: "Answer" } }],
+        });
+      }
+    );
+
+    globalThis.fetch = asTestFetch(fetchMock);
+
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://api.example.com/v1",
+      displayName: "Gateway",
+      model: "test-model",
+    });
+
+    const result = await provider.generateChat({
+      messages: [{ content: "Plan", role: "user" }],
+      system: "You are helpful.",
+      tools: [
+        {
+          description: "Plan a trial",
+          name: "plan_trial",
+          parameters: {
+            properties: {
+              graduationStrategy: { enum: ["", "auto"], type: "string" },
+            },
+            type: "object",
+          },
+        },
+      ],
+    });
+
+    const body = parseJsonRecord(sentBody);
+
+    expect(body.tools).toEqual([
+      {
+        function: {
+          description: "Plan a trial",
+          name: "plan_trial",
+          parameters: {
+            properties: {
+              graduationStrategy: { enum: ["auto"], type: "string" },
+            },
+            type: "object",
+          },
+        },
+        type: "function",
+      },
+    ]);
+    expect(result.content).toBe("Answer");
+  });
+});

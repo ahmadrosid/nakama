@@ -3,6 +3,7 @@ import type { ChatMessage, ToolCall } from "@nakama/core";
 import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
 import {
   buildProviderHttpError,
+  dropEmptyEnumMembers,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   formatHttpErrorBody,
@@ -287,5 +288,72 @@ describe("buildProviderHttpError", () => {
         JSON.stringify({ error: rateLimit })
       ).status
     ).toBe(502);
+  });
+});
+
+describe("dropEmptyEnumMembers", () => {
+  test("keeps usable members and drops empty or non-scalar ones", () => {
+    expect(
+      dropEmptyEnumMembers({
+        enum: ["", "fast", null, { nested: true }, "slow"],
+        type: "string",
+      })
+    ).toEqual({ enum: ["fast", "slow"], type: "string" });
+  });
+
+  test("drops an enum that has no usable member", () => {
+    expect(dropEmptyEnumMembers({ enum: ["", null], type: "string" })).toEqual({
+      type: "string",
+    });
+  });
+
+  test("walks nested properties, arrays and items", () => {
+    expect(
+      dropEmptyEnumMembers({
+        properties: {
+          config: {
+            properties: {
+              trial: {
+                properties: {
+                  graduationStrategy: { enum: [""], type: "string" },
+                },
+                type: "object",
+              },
+            },
+            type: "object",
+          },
+          modes: {
+            items: { enum: ["", "fast"], type: "string" },
+            type: "array",
+          },
+        },
+        type: "object",
+      })
+    ).toEqual({
+      properties: {
+        config: {
+          properties: {
+            trial: {
+              properties: { graduationStrategy: { type: "string" } },
+              type: "object",
+            },
+          },
+          type: "object",
+        },
+        modes: {
+          items: { enum: ["fast"], type: "string" },
+          type: "array",
+        },
+      },
+      type: "object",
+    });
+  });
+
+  test("does not mutate the input schema", () => {
+    const input = { enum: ["", "fast"], type: "string" };
+
+    dropEmptyEnumMembers(input);
+
+    expect(input).toEqual({ enum: ["", "fast"], type: "string" });
   });
 });
