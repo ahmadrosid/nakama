@@ -77,6 +77,7 @@ interface SearchRequestHeaders {
   "content-type"?: string;
   "user-agent"?: string;
   "x-api-key"?: string;
+  "x-keenable-title"?: string;
 }
 
 interface SearchRequest {
@@ -114,6 +115,23 @@ function buildRequest(
     accept: "application/json",
     "content-type": "application/json",
   };
+
+  // Keenable answers without a key on the `/public` twin of its endpoint,
+  // which needs an app title; a key moves the call to the keyed endpoint.
+  if (config.provider === "keenable") {
+    headers["x-keenable-title"] = "Nakama";
+
+    if (config.apiKey) {
+      headers["x-api-key"] = config.apiKey;
+    }
+
+    return {
+      body: JSON.stringify({ max_results: MAX_RESULTS, query }),
+      headers,
+      method: "POST",
+      url: config.apiKey ? config.endpoint : `${config.endpoint}/public`,
+    };
+  }
 
   if (config.provider === "exa") {
     headers["x-api-key"] = config.apiKey;

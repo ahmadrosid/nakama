@@ -1765,7 +1765,7 @@ export interface UpdateImageGenerationRequest {
 }
 
 /** Search back-end that replaces the provider-hosted `web_search` tool. */
-export type WebSearchProvider = "exa" | "firecrawl" | "serply";
+export type WebSearchProvider = "exa" | "firecrawl" | "serply" | "keenable";
 
 export interface WebSearchSettingsResponse {
   apiKeyMasked: string | null;
