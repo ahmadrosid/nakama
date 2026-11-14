@@ -334,6 +334,7 @@ function LoginFormActions({
   error,
   isSubmitting,
   mfaRequired,
+  onAdminSignIn,
   onPasskeyLogin,
   passkeyRequired,
   passwordEnabled,
@@ -343,6 +344,7 @@ function LoginFormActions({
   error: string | null;
   isSubmitting: boolean;
   mfaRequired: boolean;
+  onAdminSignIn: (() => void) | null;
   onPasskeyLogin: () => void;
   passkeyRequired: boolean;
   passwordEnabled: boolean;
@@ -377,6 +379,15 @@ function LoginFormActions({
           Forgot password?
         </Link>
       ) : null}
+      {showAlternates && onAdminSignIn ? (
+        <button
+          className="block w-full text-center text-muted-foreground text-sm hover:underline"
+          onClick={onAdminSignIn}
+          type="button"
+        >
+          Admin sign in
+        </button>
+      ) : null}
     </>
   );
 }
@@ -401,6 +412,9 @@ export function LoginPage() {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // SSO-only installs keep the first account on passwords as the break-glass
+  // for a provider outage; the server allows it, so the form must too.
+  const [adminSignIn, setAdminSignIn] = useState(false);
   const { login, isAuthenticated } = useAuth();
   const { health } = useAppContext();
   const { resolvedTheme } = useTheme();
@@ -459,7 +473,7 @@ export function LoginPage() {
 
   // Missing fields on an older server keep the password form; the server
   // refuses to start with SSO enabled but password login impossible.
-  const passwordEnabled = health?.passwordLoginEnabled !== false;
+  const passwordEnabled = adminSignIn || health?.passwordLoginEnabled !== false;
 
   const ssoProviderName =
     health?.oidcConfigured === true ? (health.oidcProviderName ?? "SSO") : null;
@@ -569,6 +583,7 @@ export function LoginPage() {
             error={error}
             isSubmitting={isSubmitting}
             mfaRequired={mfaRequired}
+            onAdminSignIn={passwordEnabled ? null : () => setAdminSignIn(true)}
             onPasskeyLogin={() => void handlePasskeyLogin()}
             passkeyRequired={passkeyRequired}
             passwordEnabled={passwordEnabled}

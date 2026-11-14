@@ -131,8 +131,14 @@ describe("OIDC routes", () => {
     );
 
     expect(start.status).toBe(302);
+    expect(start.headers.get("cache-control")).toBe("no-store");
     const authorizeUrl = new URL(start.headers.get("location")!);
     expect(authorizeUrl.origin).toBe(ISSUER);
+
+    const stateCookie = start.headers
+      .getAll("set-cookie")
+      .find((cookie) => cookie.startsWith("nakama_oidc_state="))!
+      .split(";")[0];
 
     provider.signIdToken({
       aud: CLIENT_ID,
@@ -147,16 +153,71 @@ describe("OIDC routes", () => {
     const callback = await app.fetch(
       new Request(
         `http://localhost:4310/v1/auth/oidc/callback?code=abc&state=${authorizeUrl.searchParams.get("state")}`,
-        { redirect: "manual" }
+        { headers: { Cookie: stateCookie }, redirect: "manual" }
       )
     );
 
     expect(callback.status).toBe(302);
+    expect(callback.headers.get("cache-control")).toBe("no-store");
     expect(callback.headers.get("location")).toBe("http://localhost:4310/");
 
     const cookies = callback.headers.getAll("set-cookie").join(";");
     expect(cookies).toContain("nakama_session=");
     expect(cookies).toContain("nakama_csrf=");
+  });
+
+  test("a callback URL replayed in another browser does not sign it in", async () => {
+    const { app, databaseAdapter, provider } = await createApp();
+
+    // The attacker starts the flow and signs in at the provider as themselves.
+    const start = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/oidc/start", {
+        headers: { Origin: "http://localhost:4310" },
+        redirect: "manual",
+      })
+    );
+
+    const authorizeUrl = new URL(start.headers.get("location")!);
+    const state = authorizeUrl.searchParams.get("state");
+
+    provider.signIdToken({
+      aud: CLIENT_ID,
+      email: "attacker@example.com",
+      email_verified: true,
+      exp: Math.floor(Date.now() / 1000) + 300,
+      iss: ISSUER,
+      nonce: authorizeUrl.searchParams.get("nonce"),
+      sub: "attacker",
+    });
+
+    // The victim's browser opens the callback without the state cookie.
+    const forged = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/auth/oidc/callback?code=abc&state=${state}`,
+        { headers: { Cookie: "nakama_oidc_state=other" }, redirect: "manual" }
+      )
+    );
+
+    expect(forged.status).toBe(400);
+    expect(forged.headers.getAll("set-cookie").join(";")).not.toContain(
+      "nakama_session="
+    );
+    expect(await databaseAdapter.countHumanUsers()).toBe(0);
+  });
+
+  test("an unexpected failure hides the internal detail", async () => {
+    const { app } = await createApp({
+      issuerUrl: "https://unreachable.example.com",
+    });
+
+    const start = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/oidc/start", {
+        headers: { Origin: "http://localhost:4310" },
+      })
+    );
+
+    expect(start.status).toBe(502);
+    expect(await start.text()).not.toContain("unreachable.example.com");
   });
 
   test("callback with a bogus state shows the error page", async () => {
@@ -210,6 +271,23 @@ describe("OIDC routes", () => {
 
     expect(memberLogin.status).toBe(403);
     expect((await memberLogin.json()).error).toContain("Pocket ID");
+
+    // A wrong password and an unknown email answer the same, so the gate is
+    // not an oracle for guessed credentials or account existence.
+    for (const credentials of [
+      { email: "member@example.com", password: "wrong-password" },
+      { email: "nobody@example.com", password: "password123" },
+    ]) {
+      const guess = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/login", {
+          body: JSON.stringify(credentials),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(guess.status).toBe(403);
+    }
 
     const breakGlass = await app.fetch(
       new Request("http://localhost:4310/v1/auth/login", {

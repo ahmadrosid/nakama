@@ -737,6 +737,23 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       }
     }
 
+    // SSO-only install: the first account stays the break-glass. This runs
+    // before the password check and answers unknown emails the same way, so
+    // the reply never confirms an email or a guessed password.
+    if (oidcService?.config.disablePasswordLogin && user?.id !== "user_admin") {
+      if (!passkeyLogin) {
+        await authService.verifyPassword(
+          body.password?.trim() ?? "",
+          ABSENT_ACCOUNT_PASSWORD_HASH
+        );
+      }
+
+      return errorResponse(
+        `Password sign-in is disabled. Continue with ${oidcService.config.providerName}.`,
+        403
+      );
+    }
+
     if (!user) {
       if (!passkeyLogin) {
         // Spend the same bcrypt work an existing account would, so the response
@@ -768,14 +785,6 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     if (user.disabledAt) {
       return errorResponse("Account disabled", 403);
-    }
-
-    // SSO-only install: the first account stays the break-glass.
-    if (oidcService?.config.disablePasswordLogin && user.id !== "user_admin") {
-      return errorResponse(
-        `Password sign-in is disabled. Continue with ${oidcService.config.providerName}.`,
-        403
-      );
     }
 
     const passkeys = await databaseAdapter.listPasskeys(user.id);

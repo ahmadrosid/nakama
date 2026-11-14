@@ -1786,6 +1786,7 @@ export class OrgService {
   async provisionOidcUser(input: {
     defaultOrgSlug?: string;
     email: string;
+    emailVerified: boolean;
     isPlatformAdmin?: boolean;
     name?: string | null;
     passwordHash: string;
@@ -1813,9 +1814,13 @@ export class OrgService {
       return { orgId: organization.id, user };
     }
 
-    const invite = (
-      await this.databaseAdapter.listPendingOrgInvitesForEmail(email, now)
-    )[0];
+    // An invite is addressed to a mailbox, so only a provider-verified email
+    // may claim it.
+    const invite = input.emailVerified
+      ? (
+          await this.databaseAdapter.listPendingOrgInvitesForEmail(email, now)
+        )[0]
+      : undefined;
 
     let target: { inviteId?: string; orgId: string; role: OrgRole } | null =
       null;

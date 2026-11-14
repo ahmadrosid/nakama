@@ -243,6 +243,26 @@ describe("erase last usable admin", () => {
     expect((await db.getUserById(admin!))?.email).toBe(`${admin}@example.com`);
   });
 
+  test("erasing drops the linked SSO identity", async () => {
+    const db = createSqliteMemoryAdapter();
+    const [first] = await seedOrgWithAdmins(db, ["admin", "admin"]);
+
+    await db.upsertUserOidcIdentity({
+      createdAt: NOW,
+      email: `${first}@example.com`,
+      id: "identity_1",
+      issuer: "https://idp.example.com",
+      subject: "sub-1",
+      updatedAt: NOW,
+      userId: first!,
+    });
+
+    expect(await erase(db, first!)).toBe(true);
+    expect(
+      await db.getUserOidcIdentity("https://idp.example.com", "sub-1")
+    ).toBeNull();
+  });
+
   test("erases an admin while another usable admin remains", async () => {
     const db = createSqliteMemoryAdapter();
     const [first] = await seedOrgWithAdmins(db, ["admin", "admin"]);

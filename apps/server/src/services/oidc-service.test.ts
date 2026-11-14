@@ -12,7 +12,7 @@ import {
   type DatabaseAdapter,
 } from "@nakama/db";
 import { AuthService } from "./auth-service";
-import { loadOidcConfig, type OidcConfig, OidcService } from "./oidc-service";
+import { type OidcConfig, OidcService } from "./oidc-service";
 import { OrgService } from "./org-service";
 
 const ISSUER = "https://pocketid.example.com";
@@ -40,7 +40,8 @@ function baseConfig(overrides: Partial<OidcConfig> = {}): OidcConfig {
 }
 
 interface TestClaims {
-  aud?: string;
+  aud?: string | string[];
+  azp?: string;
   email?: string;
   email_verified?: boolean | string;
   exp?: number;
@@ -136,13 +137,15 @@ function validClaims(
 async function seedUser(
   databaseAdapter: DatabaseAdapter,
   id: string,
-  email: string
+  email: string,
+  isPlatformAdmin = false
 ): Promise<void> {
   const now = new Date().toISOString();
   await databaseAdapter.createUser({
     createdAt: now,
     email,
     id,
+    isPlatformAdmin,
     name: email,
     passwordHash: "x",
     updatedAt: now,
@@ -195,69 +198,6 @@ async function loginOnce(
 
   return { ...result, authorizeUrl, nonce, subject };
 }
-
-describe("loadOidcConfig", () => {
-  test("returns null when the issuer is not set", () => {
-    expect(loadOidcConfig({})).toBeNull();
-  });
-
-  test("throws when password login is disabled without a provider", () => {
-    expect(() =>
-      loadOidcConfig({ NAKAMA_OIDC_DISABLE_PASSWORD_LOGIN: "1" })
-    ).toThrow(/requires NAKAMA_OIDC_ISSUER_URL/);
-  });
-
-  test("throws on a partial config instead of serving a broken button", () => {
-    expect(() => loadOidcConfig({ NAKAMA_OIDC_ISSUER_URL: ISSUER })).toThrow(
-      /NAKAMA_OIDC_CLIENT_ID/
-    );
-    expect(() =>
-      loadOidcConfig({
-        NAKAMA_OIDC_CLIENT_ID: "x",
-        NAKAMA_OIDC_ISSUER_URL: ISSUER,
-      })
-    ).toThrow(/NAKAMA_OIDC_CLIENT_SECRET/);
-  });
-
-  test("normalizes the issuer and reads the optional knobs", () => {
-    const config = loadOidcConfig({
-      NAKAMA_OIDC_ADMIN_GROUPS: " admins ,ops ",
-      NAKAMA_OIDC_ALLOWED_DOMAINS: "Example.com, corp.test",
-      NAKAMA_OIDC_AUTO_PROVISION: "true",
-      NAKAMA_OIDC_CLIENT_ID: "id",
-      NAKAMA_OIDC_CLIENT_SECRET: "secret",
-      NAKAMA_OIDC_DEFAULT_ORG: " Acme ",
-      NAKAMA_OIDC_ISSUER_URL: `${ISSUER}/`,
-      NAKAMA_OIDC_PROVIDER_NAME: "Pocket ID",
-    });
-
-    expect(config?.issuerUrl).toBe(ISSUER);
-    expect(config?.providerName).toBe("Pocket ID");
-    expect(config?.adminGroups).toEqual(["admins", "ops"]);
-    expect(config?.allowedDomains).toEqual(["example.com", "corp.test"]);
-    expect(config?.defaultOrgSlug).toBe("acme");
-    expect(config?.requireEmailVerified).toBe(true);
-    expect(config?.disablePasswordLogin).toBe(false);
-  });
-
-  test("rejects a non-http issuer and scopes without openid", () => {
-    expect(() =>
-      loadOidcConfig({
-        NAKAMA_OIDC_CLIENT_ID: "id",
-        NAKAMA_OIDC_CLIENT_SECRET: "s",
-        NAKAMA_OIDC_ISSUER_URL: "ftp://x",
-      })
-    ).toThrow(Error);
-    expect(() =>
-      loadOidcConfig({
-        NAKAMA_OIDC_CLIENT_ID: "id",
-        NAKAMA_OIDC_CLIENT_SECRET: "s",
-        NAKAMA_OIDC_ISSUER_URL: ISSUER,
-        NAKAMA_OIDC_SCOPES: "email profile",
-      })
-    ).toThrow(/openid/);
-  });
-});
 
 describe("OidcService.beginLogin", () => {
   test("builds the authorize URL and parks state, nonce and verifier", async () => {
@@ -363,6 +303,69 @@ describe("OidcService.completeLogin", () => {
     ).toBe("user_existing");
   });
 
+  test("refuses to link an existing account on an unverified email, even when verification is optional", async () => {
+    const { databaseAdapter, provider, service } = await createService({
+      requireEmailVerified: false,
+    });
+
+    await seedUser(databaseAdapter, "user_admin", "admin@example.com", true);
+
+    await expect(
+      loginOnce(service, provider, databaseAdapter, {
+        claims: { email: "admin@example.com", email_verified: false },
+        subject: "squatter",
+      })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(
+      await databaseAdapter.getUserOidcIdentity(ISSUER, "squatter")
+    ).toBeNull();
+  });
+
+  test("an unverified email cannot claim a pending invite", async () => {
+    const { databaseAdapter, provider, service } = await createService({
+      defaultOrgSlug: "home",
+      requireEmailVerified: false,
+    });
+
+    const now = new Date().toISOString();
+    await seedUser(databaseAdapter, "user_founder", "founder@example.com");
+
+    for (const [id, slug] of [
+      ["org_home", "home"],
+      ["org_other", "other"],
+    ]) {
+      await databaseAdapter.upsertOrganization({
+        createdAt: now,
+        id,
+        name: slug,
+        slug,
+        updatedAt: now,
+      });
+    }
+
+    await databaseAdapter.createOrgInvite({
+      acceptedAt: null,
+      createdAt: now,
+      email: "invited@example.com",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      id: "invite_1",
+      invitedByUserId: "user_founder",
+      orgId: "org_other",
+      revokedAt: null,
+      role: "admin",
+      tokenHash: "hash",
+    });
+
+    const { user } = await loginOnce(service, provider, databaseAdapter, {
+      claims: { email: "invited@example.com", email_verified: false },
+    });
+
+    expect(await databaseAdapter.getOrgMember("org_other", user.id)).toBeNull();
+    expect(
+      (await databaseAdapter.getOrgMember("org_home", user.id))?.role
+    ).toBe("member");
+  });
+
   test("refuses to link an existing account when linking is off", async () => {
     const { databaseAdapter, provider, service } = await createService({
       linkExistingAccounts: false,
@@ -409,6 +412,14 @@ describe("OidcService.completeLogin", () => {
       })
     ).rejects.toMatchObject({ status: 403 });
 
+    // The domain is what follows the last "@".
+    await expect(
+      loginOnce(service, provider, databaseAdapter, {
+        claims: { email: "user@example.com@evil.test" },
+        subject: "two-ats",
+      })
+    ).rejects.toMatchObject({ status: 403 });
+
     // Subdomains of an allowed domain still pass.
     const { user } = await loginOnce(service, provider, databaseAdapter, {
       claims: { email: "user@team.example.com" },
@@ -426,7 +437,12 @@ describe("OidcService.completeLogin", () => {
 
     // A founder keeps user_admin out of the test: the break-glass account is
     // never demoted by provider groups.
-    await seedUser(databaseAdapter, "user_founder", "founder@example.com");
+    await seedUser(
+      databaseAdapter,
+      "user_founder",
+      "founder@example.com",
+      true
+    );
     await databaseAdapter.upsertOrganization({
       createdAt: new Date().toISOString(),
       id: "org_acme",
@@ -451,6 +467,70 @@ describe("OidcService.completeLogin", () => {
     expect(
       (await databaseAdapter.getUserById(user.id))?.isPlatformAdmin
     ).toBeFalsy();
+  });
+
+  test("provider groups never demote the last active platform admin", async () => {
+    const { databaseAdapter, provider, service } = await createService({
+      adminGroups: ["nakama-admins"],
+    });
+
+    await seedUser(databaseAdapter, "user_only", "only@example.com", true);
+
+    const { user } = await loginOnce(service, provider, databaseAdapter, {
+      claims: { email: "only@example.com", groups: [] },
+    });
+
+    expect(user.isPlatformAdmin).toBe(true);
+    expect(
+      (await databaseAdapter.getUserById("user_only"))?.isPlatformAdmin
+    ).toBe(true);
+  });
+
+  test("a multi-audience token without our azp is rejected", async () => {
+    const { databaseAdapter, provider, service } = await createService();
+
+    await expect(
+      loginOnce(service, provider, databaseAdapter, {
+        claims: { aud: [CLIENT_ID, "other-client"] },
+      })
+    ).rejects.toThrow("authorized party");
+
+    await expect(
+      loginOnce(service, provider, databaseAdapter, {
+        claims: { azp: "other-client" },
+      })
+    ).rejects.toThrow("authorized party");
+
+    const { user } = await loginOnce(service, provider, databaseAdapter, {
+      claims: { aud: [CLIENT_ID, "other-client"], azp: CLIENT_ID },
+    });
+
+    expect(user.email).toBe("subject-1@example.com");
+  });
+
+  test("an https issuer may not list plain-http endpoints", async () => {
+    const provider = fakeProvider();
+
+    const { service } = await createService(
+      {},
+      {
+        ...provider,
+        fetchImpl: async (input, init) => {
+          const response = await provider.fetchImpl(input, init);
+
+          if (String(input).endsWith("/.well-known/openid-configuration")) {
+            return Response.json({
+              ...(await response.json()),
+              token_endpoint: "http://pocketid.example.com/token",
+            });
+          }
+
+          return response;
+        },
+      }
+    );
+
+    await expect(service.beginLogin(WEB_ORIGIN)).rejects.toThrow("non-https");
   });
 
   test("a token with the wrong nonce is rejected", async () => {

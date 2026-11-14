@@ -37,7 +37,7 @@ NAKAMA_OIDC_ALLOWED_DOMAINS=acme.com,acme.dev
 ```
 
 - `NAKAMA_OIDC_AUTO_PROVISION` creates a Nakama account on first SSO sign-in. Off (the default) means only accounts that already exist can sign in — create them first through the normal invite flow, and the first SSO login links the provider identity to that account.
-- `NAKAMA_OIDC_DEFAULT_ORG` is the organization slug new accounts join. An invite for the same email wins over the default org. With neither an invite nor a default org, provisioning is refused.
+- `NAKAMA_OIDC_DEFAULT_ORG` is the organization slug new accounts join. An invite for the same email wins over the default org, but only when the provider verified that email. With neither an invite nor a default org, provisioning is refused.
 - `NAKAMA_OIDC_ALLOWED_DOMAINS` is a comma-separated list of accepted email domains (subdomains count). Leave it empty only when the provider itself restricts who may sign in — Nakama warns at startup if you auto-provision with no allowlist.
 
 ## Optional settings
@@ -52,10 +52,10 @@ NAKAMA_OIDC_LINK_EXISTING_ACCOUNTS=true
 NAKAMA_OIDC_REDIRECT_URL=https://your-nakama-host/v1/auth/oidc/callback
 ```
 
-- `NAKAMA_OIDC_ADMIN_GROUPS` promotes a signing-in user to platform admin when their provider groups match, and demotes them when the group is removed. The very first account on an install is never demoted — it stays your break-glass. Groups come from `NAKAMA_OIDC_GROUPS_CLAIM` (default `groups`); make sure your scopes request it.
-- `NAKAMA_OIDC_REQUIRE_EMAIL_VERIFIED` (default on) rejects accounts whose email the provider has not verified. Leave it on unless your provider does not send that claim.
-- `NAKAMA_OIDC_DISABLE_PASSWORD_LOGIN` hides and refuses email+password and passkey sign-in for everyone except the first account, which remains the emergency way in.
-- `NAKAMA_OIDC_LINK_EXISTING_ACCOUNTS` (default on) links a provider login to an existing Nakama account when the verified email matches. Turn it off if you want admins to provision identities explicitly.
+- `NAKAMA_OIDC_ADMIN_GROUPS` promotes a signing-in user to platform admin when their provider groups match, and demotes them when the group is removed. The very first account on an install is never demoted — it stays your break-glass — and the last active platform admin is never demoted either. Groups come from `NAKAMA_OIDC_GROUPS_CLAIM` (default `groups`); make sure your scopes request it.
+- `NAKAMA_OIDC_REQUIRE_EMAIL_VERIFIED` (default on) rejects accounts whose email the provider has not verified. Leave it on unless your provider does not send that claim. With it off, an unverified email can still get a new account, but it never links to an existing account or claims an invite.
+- `NAKAMA_OIDC_DISABLE_PASSWORD_LOGIN` hides and refuses email+password and passkey sign-in for everyone except the first account, which remains the emergency way in. On the sign-in page, choose **Admin sign in** to show the password form for that account.
+- `NAKAMA_OIDC_LINK_EXISTING_ACCOUNTS` (default on) links a provider login to an existing Nakama account when the verified email matches. The email must be verified, whatever `NAKAMA_OIDC_REQUIRE_EMAIL_VERIFIED` says. Turn it off if you want admins to provision identities explicitly.
 - `NAKAMA_OIDC_REDIRECT_URL` overrides the callback URL Nakama tells the provider. You almost never need this — it is derived from the origin the browser actually used — unless the dashboard sits behind a split host that cannot carry the callback.
 
 ## Pocket ID example
@@ -66,6 +66,8 @@ In Pocket ID, create an OIDC client with the callback URL above and note the cli
 
 1. Nakama first looks for a stored link between the provider's issuer+subject pair and a user. Found means that user signs in — an email change at the provider does not create a second account.
 2. Otherwise it matches the verified email to an existing account and links it (when linking is enabled).
-3. Otherwise it provisions a new account — into a pending invite's org, the default org, or the first organization on an empty install.
+3. Otherwise it provisions a new account — into a pending invite's org (verified email only), the default org, or the first organization on an empty install.
 
-Each provider identity links to exactly one account; each account can hold links to several identities. The sign-in handshake itself is single-use and expires after ten minutes, so a pasted callback URL cannot be replayed.
+Each provider identity links to exactly one account; each account can hold links to several identities. The sign-in handshake itself is single-use, expires after ten minutes and is bound to the browser that started it, so a pasted callback URL cannot be replayed or used to sign someone else in. Erasing a user also removes their provider links.
+
+SSO sign-in uses the provider's multi-factor authentication, not Nakama's. A user who turned on Nakama TOTP or a passkey skips that check when they sign in through the provider, so enforce MFA in the provider. Pocket ID is passkey-only, so it already does.
