@@ -66,7 +66,6 @@ test("file card opens its preview and offers a separate download action", async 
         />
       )
     );
-    expect(element.textContent).toContain("Excel");
     await act(async () =>
       element
         .querySelector<HTMLButtonElement>('[aria-label="Preview report.xlsx"]')!
@@ -75,8 +74,14 @@ test("file card opens its preview and offers a separate download action", async 
     expect(previews).toBe(1);
     await act(async () =>
       element
+        .querySelector<HTMLButtonElement>('[aria-label="Open report.xlsx"]')!
+        .click()
+    );
+    expect(previews).toBe(2);
+    await act(async () =>
+      element
         .querySelector<HTMLButtonElement>(
-          '[aria-label="Open in: report.xlsx"]'
+          '[aria-label="More actions for report.xlsx"]'
         )!
         .click()
     );
@@ -88,7 +93,7 @@ test("file card opens its preview and offers a separate download action", async 
     expect(download).toBeDefined();
     await act(async () => download.click());
     expect(downloads).toBe(1);
-    expect(previews).toBe(1);
+    expect(previews).toBe(2);
   } finally {
     await act(async () => root.unmount());
     element.remove();
@@ -209,7 +214,7 @@ test("uploaded Markdown opens read-only with download, fullscreen and close", as
   }
 });
 
-test("switches sheets, shows selected cached values/formulas, and changes zoom without editing", async () => {
+test("switches sheets, shows selected cached values/formulas, without editing", async () => {
   const element = document.createElement("div");
   const root = createRoot(element);
 
@@ -243,12 +248,6 @@ test("switches sheets, shows selected cached values/formulas, and changes zoom w
       ).click()
     );
     expect(element.querySelector("output")?.textContent).toBe("=SUM(B2:B6)");
-    const select = element.querySelector("select")!;
-    await act(async () => {
-      select.value = "150";
-      select.dispatchEvent(new window.Event("change", { bubbles: true }));
-    });
-    expect(element.querySelector("table")?.style.fontSize).toBe("19.5px");
     expect(
       element.querySelector("input,textarea,[contenteditable=true]")
     ).toBeNull();

@@ -19,6 +19,7 @@ import {
   ViewIcon,
   Xls02Icon,
 } from "hugeicons-react";
+import type { ReactNode } from "react";
 import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { isXlsxFile } from "@/lib/artifact-spreadsheet";
 import {
@@ -109,6 +110,9 @@ export function ArtifactAttachmentPreview({
   );
 }
 
+/** Cells of the small sheet sketch in a spreadsheet file card. */
+const SHEET_CELLS = Array.from({ length: 12 }, (_, cell) => cell);
+
 /** The label, icon and icon color a file card shows for one file. */
 function fileCardKind(
   artifact: ChatArtifactRef,
@@ -162,6 +166,94 @@ function fileCardKind(
   return { excel, extension, Icon, iconColor, label };
 }
 
+/** Colors of the small preview tile, by kind of file. */
+const PREVIEW_TILE = {
+  doc: {
+    line: "bg-border",
+    lineStrong: "bg-muted-foreground/40",
+    page: "border-border",
+    tile: "border-border bg-muted px-2 pt-1",
+  },
+  media: {
+    tile: "items-center justify-center border-border bg-muted text-muted-foreground",
+  },
+  pdf: {
+    line: "bg-orange-200 dark:bg-orange-800",
+    lineStrong: "bg-orange-300 dark:bg-orange-700",
+    page: "border-orange-200 dark:border-orange-800",
+    tile: "border-orange-100 bg-orange-50 px-2 pt-1 dark:border-orange-900 dark:bg-orange-950",
+  },
+  sheet: {
+    tile: "grid grid-cols-4 grid-rows-3 border-emerald-200 bg-background dark:border-emerald-900",
+  },
+  web: {
+    tile: "items-end gap-0.5 border-sky-100 bg-sky-50 p-1 dark:border-sky-900 dark:bg-sky-950",
+  },
+} as const;
+
+type PreviewTileKind = keyof typeof PREVIEW_TILE;
+
+/** A small sketch of the file's content. */
+function FilePreviewTile({
+  Icon,
+  kind,
+}: {
+  Icon: ReturnType<typeof fileCardKind>["Icon"];
+  kind: PreviewTileKind;
+}) {
+  const style = PREVIEW_TILE[kind];
+
+  let sketch: ReactNode = <Icon className="size-4" />;
+
+  if (kind === "web") {
+    sketch = (
+      <>
+        <span className="h-2/5 flex-1 rounded-[1px] bg-sky-300 dark:bg-sky-700" />
+        <span className="h-[70%] flex-1 rounded-[1px] bg-sky-300 dark:bg-sky-700" />
+        <span className="h-[55%] flex-1 rounded-[1px] bg-sky-300 dark:bg-sky-700" />
+        <span className="h-[95%] flex-1 rounded-[1px] bg-sky-600 dark:bg-sky-500" />
+      </>
+    );
+  } else if (kind === "sheet") {
+    sketch = SHEET_CELLS.map((cell) => (
+      <span
+        className={
+          cell < 4
+            ? "bg-emerald-100 dark:bg-emerald-900"
+            : "border-emerald-100 border-t border-r dark:border-emerald-900"
+        }
+        key={cell}
+      />
+    ));
+  } else if (kind === "pdf" || kind === "doc") {
+    const page = PREVIEW_TILE[kind];
+    sketch = (
+      <span
+        className={cn(
+          "flex size-full flex-col gap-0.5 rounded-t-[2px] border border-b-0 bg-background p-[3px]",
+          page.page
+        )}
+      >
+        <span className={cn("h-0.5 w-[70%]", page.lineStrong)} />
+        <span className={cn("h-0.5 w-full", page.line)} />
+        <span className={cn("h-0.5 w-[90%]", page.line)} />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex h-9 w-11 shrink-0 overflow-hidden rounded-md border",
+        style.tile
+      )}
+    >
+      {sketch}
+    </span>
+  );
+}
+
 export function FilePreviewCard({
   artifact,
   className,
@@ -177,68 +269,86 @@ export function FilePreviewCard({
   onOpen: () => void;
   onDownload: () => void;
 }) {
-  const { Icon, iconColor, label } = fileCardKind(artifact, isImage, isVideo);
+  const { excel, extension, Icon, label } = fileCardKind(
+    artifact,
+    isImage,
+    isVideo
+  );
+
+  const { filename } = artifact;
+
+  const kinds: [boolean, PreviewTileKind][] = [
+    [excel || label === "CSV" || label === "TSV", "sheet"],
+    [isImage || isVideo, "media"],
+    [label === "Website", "web"],
+    [label === "PDF", "pdf"],
+  ];
+
+  const kind = kinds.find(([match]) => match)?.[1] ?? "doc";
+
+  const type =
+    extension && extension !== filename.toLowerCase()
+      ? extension.toUpperCase().slice(0, 4)
+      : label.toUpperCase();
 
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 max-w-full items-center gap-3 rounded-xl border border-border bg-muted/50 p-3 transition-colors hover:bg-muted/70 sm:gap-4 sm:p-4",
+        "flex w-full min-w-0 max-w-full items-center gap-2.5 rounded-xl border border-border bg-background p-1.5 dark:bg-secondary",
         className
       )}
     >
       <button
-        aria-label={`Preview ${artifact.filename}`}
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-4"
+        aria-label={`Preview ${filename}`}
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onOpen}
         type="button"
       >
-        <span
-          className={cn(
-            "flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-background",
-            iconColor
-          )}
-        >
-          <Icon aria-hidden className="size-6" />
-        </span>
-        <span className="min-w-0 flex-1">
+        <FilePreviewTile Icon={Icon} kind={kind} />
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span
-            className="block truncate font-medium text-foreground text-sm"
-            title={artifact.filename}
+            className="min-w-0 truncate font-medium text-foreground text-sm"
+            title={filename}
           >
-            {artifact.filename}
+            {filename}
           </span>
-          <span className="mt-1 block text-muted-foreground text-xs">
-            {label}
+          <span className="shrink-0 text-muted-foreground text-xs">
             {artifact.sizeBytes > 0
-              ? ` · ${formatBytes(artifact.sizeBytes)}`
-              : ""}
+              ? `${type} · ${formatBytes(artifact.sizeBytes)}`
+              : type}
           </span>
         </span>
       </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label={`Open in: ${artifact.filename}`}
-              className="min-h-11 shrink-0 gap-1.5 sm:gap-2"
-              size="sm"
-              variant="outline"
-            />
-          }
+      <div className="flex shrink-0">
+        <Button
+          aria-label={`Open ${filename}`}
+          className="h-10 rounded-r-none px-3 text-xs sm:h-8"
+          onClick={onOpen}
+          variant="outline"
         >
-          Open in <ArrowDown01Icon aria-hidden className="size-3.5" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onOpen}>
-            <ViewIcon aria-hidden className="size-4" />
-            Preview
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onDownload}>
-            <Download04Icon aria-hidden className="size-4" />
-            Download
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          Open
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                aria-label={`More actions for ${filename}`}
+                className="h-10 w-8 rounded-l-none border-l-0 sm:h-8"
+                size="icon"
+                variant="outline"
+              />
+            }
+          >
+            <ArrowDown01Icon aria-hidden className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onDownload}>
+              <Download04Icon aria-hidden className="size-4" />
+              Download
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
