@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import { createProviderForInstance } from "./create";
 import { type ProviderJsonRecord, parseJsonRecord } from "./shared";
+import { asTestFetch } from "./test-helpers";
 
 describe("createProviderForInstance routing", () => {
   test("routes meta instances to the configured base URL with reasoning effort", async () => {
@@ -494,6 +495,54 @@ describe("createProviderForInstance routing", () => {
       expect(seenBodies[1]?.response_format).toBeUndefined();
     } finally {
       mock.stop(true);
+    }
+  });
+
+  test("routes opencode_go instances to its fixed endpoints with the session header", async () => {
+    let seenSession = "";
+    let seenUrl = "";
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = asTestFetch((input, init?) => {
+      const request = new Request(input, init);
+      seenUrl = request.url;
+      seenSession = request.headers.get("x-opencode-session") ?? "";
+
+      return Promise.resolve(
+        Response.json({ choices: [{ message: { content: "OK" } }] })
+      );
+    });
+
+    try {
+      const instance: ProviderInstance = {
+        apiKey: "test-key",
+        // A stored URL used to be passed through, which broke the messages
+        // endpoints (the Anthropic SDK appends its own /v1/messages). It must
+        // not reach either OpenCode Go endpoint.
+        baseUrl: "https://example.test/zen/go/v1",
+        createdAt: new Date().toISOString(),
+        id: "inst_opencode_go",
+        label: "OpenCode Go",
+        type: "opencode_go",
+      };
+
+      const client = createProviderForInstance(
+        instance,
+        "opencode-go/kimi-k2.7-code",
+        process.env,
+        { sessionId: "org_1:session_456" }
+      );
+
+      await client!.generateChat({
+        messages: [{ content: "Hello", role: "user" }],
+        system: "Be concise.",
+      });
+
+      expect(client?.name).toBe("opencode_go");
+      expect(seenUrl).toBe("https://opencode.ai/zen/go/v1/chat/completions");
+      expect(seenSession).toBe("ses_org_1_session_456");
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

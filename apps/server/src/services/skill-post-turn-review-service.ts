@@ -214,7 +214,10 @@ export class SkillPostTurnReviewService {
   async reviewTurnWithLlm(
     context: PostTurnReviewRunnerContext
   ): Promise<SkillPostTurnReviewOutcome> {
-    const provider = await this.resolveProviderForProfile(context.profileId);
+    const provider = await this.resolveProviderForProfile(
+      context.profileId,
+      context.sessionId
+    );
 
     if (!provider) {
       return { action: "noop", reason: "provider_unavailable" };
@@ -422,7 +425,14 @@ export class SkillPostTurnReviewService {
     }
   }
 
-  resolveProviderForProfile(profileId: string) {
-    return createProviderForProfile(this.db, profileId, this.getUserConfig());
+  /**
+   * The review reads the chat's own history, so it must carry the chat's
+   * session ID: OpenCode Go routes by it, and a fresh client otherwise gets a
+   * random ID that loses the conversation.
+   */
+  resolveProviderForProfile(profileId: string, sessionId: string) {
+    return createProviderForProfile(this.db, profileId, this.getUserConfig(), {
+      sessionId,
+    });
   }
 }

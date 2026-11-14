@@ -74,6 +74,7 @@ interface CreateProviderOptions {
   instance?: ProviderInstance | null;
   model?: string;
   provider: Exclude<ProviderName, "chatgpt" | "xai_oauth">;
+  sessionId?: string;
 }
 
 function createProvider(options: CreateProviderOptions): ProviderClient {
@@ -261,6 +262,7 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
       return createOpenCodeGoProvider({
         apiKey: options.apiKey,
         model,
+        sessionId: options.sessionId,
       });
     case "command_code":
       return createCommandCodeProvider({
@@ -406,6 +408,7 @@ export interface CreateProviderForInstanceOptions {
     oauth: XaiOAuthCredentials
   ) => Promise<void>;
   resolveInstance?: (instanceId: string) => ProviderInstance | null;
+  sessionId?: string;
 }
 
 export function createProviderForInstance(
@@ -483,6 +486,7 @@ export function createProviderForInstance(
     instance,
     model,
     provider: instance.type,
+    sessionId: options?.sessionId,
   });
 }
 

@@ -7,6 +7,7 @@ import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
 } from "@nakama/db";
+import { asTestFetch } from "../providers/test-helpers";
 import {
   evaluatePostTurnReviewTurnEligibility,
   SkillPostTurnReviewService,
@@ -486,8 +487,72 @@ describe("SkillPostTurnReviewService", () => {
     };
 
     const service = new SkillPostTurnReviewService(db, () => userConfig);
-    const provider = await service.resolveProviderForProfile("profile_1");
+
+    const provider = await service.resolveProviderForProfile(
+      "profile_1",
+      "ses_test_1"
+    );
+
     expect(provider).not.toBeNull();
     expect(provider?.name).toBe("openai");
+  });
+
+  test("resolveProviderForProfile sends the chat session id to OpenCode Go", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_1",
+      isSuper: false,
+      model: "oc::opencode-go/kimi-k2.7-code",
+      name: "Bot",
+      orgId: "org_1",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const userConfig: UserConfig = {
+      defaultProviderId: "oc",
+      providers: [
+        {
+          apiKey: "test-key",
+          createdAt: now,
+          id: "oc",
+          label: "OpenCode Go",
+          type: "opencode_go",
+        },
+      ],
+    };
+
+    let seenSession: string | null = null;
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = asTestFetch((input, init?) => {
+      const request = new Request(input, init);
+      seenSession = request.headers.get("x-opencode-session");
+
+      return Promise.resolve(
+        Response.json({ choices: [{ message: { content: "ok" } }] })
+      );
+    });
+
+    try {
+      const service = new SkillPostTurnReviewService(db, () => userConfig);
+
+      const provider = await service.resolveProviderForProfile(
+        "profile_1",
+        "chat_sess_1"
+      );
+
+      await provider!.generateChat({
+        messages: [{ content: "hi", role: "user" }],
+        system: "",
+      });
+
+      expect(seenSession).toBe("ses_chat_sess_1");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

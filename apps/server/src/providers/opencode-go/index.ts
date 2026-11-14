@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   GenerateChatInput,
   GenerateTextInput,
@@ -10,6 +11,11 @@ import { createOpenAIProvider } from "../openai";
 const OPENCODE_GO_CHAT_BASE_URL = "https://opencode.ai/zen/go/v1";
 
 const OPENCODE_GO_MESSAGES_BASE_URL = "https://opencode.ai/zen/go";
+
+/** The provider routes by this value, so it must stay a safe header size. */
+const MAX_SESSION_ID_LENGTH = 64;
+
+const UNSAFE_SESSION_CHARS = /[^a-zA-Z0-9_-]/g;
 
 const MESSAGES_MODELS = new Set([
   "opencode-go/minimax-m3",
@@ -24,6 +30,23 @@ const MESSAGES_MODELS = new Set([
 export interface OpenCodeGoProviderOptions {
   apiKey: string;
   model?: string;
+  sessionId?: string;
+}
+
+/**
+ * OpenCode Go routes each conversation by `x-opencode-session`, so every
+ * branch goes through the sanitizer: an unsanitized value with a CR/LF or a
+ * non-ASCII character makes `fetch` throw before the request is sent, and an
+ * unbounded value has no size cap.
+ */
+export function formatOpenCodeSessionId(sessionId?: string): string {
+  const sanitized = (sessionId ?? "")
+    .trim()
+    .replace(/^ses_/, "")
+    .replace(UNSAFE_SESSION_CHARS, "_")
+    .slice(0, MAX_SESSION_ID_LENGTH);
+
+  return `ses_${sanitized || randomUUID().replace(/-/g, "")}`;
 }
 
 export function createOpenCodeGoProvider(
@@ -32,10 +55,15 @@ export function createOpenCodeGoProvider(
   const model = options.model ?? "opencode-go/kimi-k2.7-code";
   const useMessages = MESSAGES_MODELS.has(model);
 
+  const extraHeaders = {
+    "x-opencode-session": formatOpenCodeSessionId(options.sessionId),
+  };
+
   if (useMessages) {
     const anthropic = createAnthropicProvider({
       apiKey: options.apiKey,
       baseUrl: OPENCODE_GO_MESSAGES_BASE_URL,
+      extraHeaders,
       model,
       providerLabel: "OpenCode Go",
       providerName: "opencode_go",
@@ -57,6 +85,7 @@ export function createOpenCodeGoProvider(
   return createOpenAIProvider({
     apiKey: options.apiKey,
     baseUrl: OPENCODE_GO_CHAT_BASE_URL,
+    extraHeaders,
     model,
     providerName: "opencode_go",
   });
