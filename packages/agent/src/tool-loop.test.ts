@@ -127,6 +127,52 @@ describe("tool-loop", () => {
 
     await expect(pending).rejects.toBe(cancellation);
   });
+
+  test("executeToolCall records outcomes and keeps the result when the record fails", async () => {
+    const outcomes: string[] = [];
+    const controller = new AbortController();
+
+    const context = {
+      async recordSessionToolStep(step: { outcome: string }) {
+        outcomes.push(step.outcome);
+        throw new Error("database is locked");
+      },
+      signal: controller.signal,
+    };
+
+    const nullErrorTool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        return { error: null, message: "done" };
+      },
+    };
+
+    expect(
+      await executeToolCall(
+        [nullErrorTool],
+        { arguments: {}, id: "null_error", name: "sample" },
+        context
+      )
+    ).toEqual({ error: null, message: "done" });
+
+    const abortedTool: ToolDefinition = {
+      ...sampleTool,
+      async run() {
+        controller.abort();
+
+        return { error: "aborted" };
+      },
+    };
+
+    expect(
+      await executeToolCall(
+        [abortedTool],
+        { arguments: {}, id: "aborted", name: "sample" },
+        context
+      )
+    ).toEqual({ error: "aborted" });
+    expect(outcomes).toEqual(["success", "cancelled"]);
+  });
 });
 
 describe("createTurnTools", () => {

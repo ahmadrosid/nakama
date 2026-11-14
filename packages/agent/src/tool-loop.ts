@@ -50,13 +50,15 @@ export async function executeToolCall(
       JSON.parse(JSON.stringify(await tool.run(call.arguments, context)))
     );
 
-    if (
-      !(
-        result instanceof Object &&
-        !Array.isArray(result) &&
-        ("error" in result || ("isError" in result && result.isError === true))
-      )
-    ) {
+    const failed =
+      result instanceof Object &&
+      !Array.isArray(result) &&
+      (("error" in result && result.error != null) ||
+        ("isError" in result && result.isError === true));
+
+    if (context.signal?.aborted) {
+      outcome = "cancelled";
+    } else if (!failed) {
       outcome = "success";
     }
 
@@ -71,12 +73,17 @@ export async function executeToolCall(
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {
-    await context.recordSessionToolStep?.({
-      completedAt: new Date().toISOString(),
-      outcome,
-      startedAt,
-      toolName: tool?.name ?? "unknown_tool",
-    });
+    // A failed record must not replace the tool result or the abort.
+    try {
+      await context.recordSessionToolStep?.({
+        completedAt: new Date().toISOString(),
+        outcome,
+        startedAt,
+        toolName: tool?.name ?? "unknown_tool",
+      });
+    } catch (error) {
+      console.warn("Could not save a session tool step:", error);
+    }
   }
 }
 

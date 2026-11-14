@@ -2991,10 +2991,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       step.profile_id AS profileId, step.actor, step.tool_name AS toolName,
       step.started_at AS startedAt, step.completed_at AS completedAt, step.outcome
     FROM session_steps AS step
-    JOIN sessions AS session
-      ON session.id = step.session_id AND session.org_id = step.org_id
-      AND session.profile_id = step.profile_id
-    WHERE step.org_id = ? AND step.session_id = ? AND step.id > ?
+    JOIN sessions AS session ON session.id = step.session_id
+    WHERE session.org_id = ? AND step.session_id = ? AND step.id > ?
     ORDER BY step.id
     LIMIT 100
   `);
