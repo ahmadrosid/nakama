@@ -299,17 +299,31 @@ test("picking MiniMax with no MiniMax provider adds one and saves its image mode
   const apiKey = document.body.querySelector<HTMLInputElement>("#api-key");
   expect(apiKey).not.toBeNull();
 
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(
-      Object.getPrototypeOf(apiKey),
-      "value"
-    )?.set?.call(apiKey, "test-key");
-    const view = apiKey?.ownerDocument.defaultView;
+  const type = (input: HTMLInputElement | null, value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(input),
+        "value"
+      )?.set?.call(input, value);
+      const view = input?.ownerDocument.defaultView;
 
-    if (view) {
-      apiKey?.dispatchEvent(new view.Event("input", { bubbles: true }));
-    }
-  });
+      if (view) {
+        input?.dispatchEvent(new view.Event("input", { bubbles: true }));
+      }
+    });
+
+  await type(apiKey, "test-key");
+
+  // MiniMax has no catalog, so Add needs one model ID before it submits.
+  const addModel = [
+    ...document.body.querySelectorAll<HTMLButtonElement>("button"),
+  ].find((button) => button.textContent === "Add model by ID");
+
+  await act(async () => addModel?.click());
+  await type(
+    document.body.querySelector<HTMLInputElement>('[aria-label="Model ID 1"]'),
+    "MiniMax-M3"
+  );
 
   await act(async () => apiKey?.form?.requestSubmit());
   await act(async () => {
