@@ -673,6 +673,8 @@ export interface OrganizationSummary {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
+  /** Nakama Desktop may use this org's models. */
+  desktopModelsEnabled?: boolean;
   id: string;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
@@ -763,6 +765,7 @@ export interface OrganizationOverviewResponse {
 
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
+  desktopModelsEnabled?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -949,6 +952,61 @@ export interface BrowserSessionSummary {
   lastUsedAt: string | null;
   /** Raw User-Agent the session signed in with; null for sessions not seen since it was recorded. */
   userAgent: string | null;
+}
+
+/** A computer that runs Nakama Desktop with this account's models. */
+export interface ComputerSummary {
+  createdAt: string;
+  id: string;
+  lastSeenAt: string | null;
+  name: string;
+}
+
+export interface ListComputersResponse {
+  computers: ComputerSummary[];
+}
+
+export interface EnrollComputerRequest {
+  installId: string;
+  name: string;
+  /** Ed25519 public key, base64 of the raw 32 bytes. */
+  publicKey: string;
+}
+
+export interface EnrollComputerResponse {
+  computerId: string;
+  /** One-time code for the computer only; the Connect page sends it to 127.0.0.1. */
+  confirmCode: string;
+}
+
+/** This computer's sign-in to Nakama Cloud (local server). */
+export interface NakamaCloudStatus {
+  account: string | null;
+  cloudUrl: string | null;
+  /** Signed in, but the cloud refused this computer since. */
+  needsSignIn: boolean;
+  orgName: string | null;
+  /** Providers this computer has besides Nakama Cloud (its own keys). */
+  otherProviders: number;
+  signedIn: boolean;
+}
+
+/**
+ * The code Nakama Desktop and the Connect page both show for one sign-in,
+ * made from its state. A Connect link that this computer did not start
+ * shows a code that the app does not.
+ */
+export async function desktopConnectCode(state: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(state))
+  );
+
+  const value =
+    (digest[0] ?? 0) * 65_536 + (digest[1] ?? 0) * 256 + (digest[2] ?? 0);
+
+  const digits = String(value % 1_000_000).padStart(6, "0");
+
+  return `${digits.slice(0, 3)} ${digits.slice(3)}`;
 }
 
 export interface ListBrowserSessionsResponse {
@@ -3155,7 +3213,8 @@ export type ProviderName =
   | "meta"
   | "qwen"
   | "qwen_cn"
-  | "vercel_ai_gateway";
+  | "vercel_ai_gateway"
+  | "nakama_cloud";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;

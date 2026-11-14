@@ -1184,6 +1184,8 @@ export class OrgService {
         request.allowedInviteDomains === undefined
           ? (org.allowedInviteDomains ?? [])
           : normalizeAllowedInviteDomains(request.allowedInviteDomains),
+      desktopModelsEnabled:
+        request.desktopModelsEnabled ?? org.desktopModelsEnabled !== false,
       monthlyLlmTokenLimit,
       monthlyLlmTurnLimit,
       monthlyLlmWarningPercent,
@@ -2679,6 +2681,7 @@ function toOrganizationSummary(
     allowedInviteDomains: record.allowedInviteDomains ?? [],
     archivedAt: record.archivedAt ?? null,
     createdAt: record.createdAt,
+    desktopModelsEnabled: record.desktopModelsEnabled !== false,
     id: record.id,
     monthlyLlmTurnLimit: record.monthlyLlmTurnLimit ?? 0,
     name: record.name,

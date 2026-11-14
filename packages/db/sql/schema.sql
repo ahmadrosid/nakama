@@ -430,6 +430,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   slug TEXT NOT NULL,
   skills_write_approval INTEGER NOT NULL DEFAULT 0,
   skills_post_turn_review INTEGER NOT NULL DEFAULT 0,
+  -- Nakama Desktop may use this org's models (on by default).
+  desktop_models_enabled INTEGER NOT NULL DEFAULT 1,
   skills_curator_enabled INTEGER NOT NULL DEFAULT 0,
   skills_curator_stale_after_days INTEGER NOT NULL DEFAULT 30,
   skills_curator_archive_after_days INTEGER NOT NULL DEFAULT 90,
@@ -682,6 +684,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_token_hash_unique ON artifact_
 CREATE UNIQUE INDEX IF NOT EXISTS artifact_shares_active_path_unique
   ON artifact_shares (org_id, profile_id, source_path)
   WHERE revoked_at IS NULL;
+
+-- A computer that runs Nakama Desktop for one user in one org. It signs in
+-- with a device key; only the public key is stored here.
+CREATE TABLE IF NOT EXISTS computers (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  install_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT,
+  revoked_at TEXT,
+  -- Set until the computer proves it got the Connect result on 127.0.0.1.
+  pending_code_hash TEXT,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS computers_active_install_unique
+  ON computers (org_id, user_id, install_id)
+  WHERE revoked_at IS NULL;
+
+-- Nonces of signed computer requests, kept until they are too old to replay.
+CREATE TABLE IF NOT EXISTS computer_nonces (
+  nonce TEXT PRIMARY KEY NOT NULL,
+  expires_at TEXT NOT NULL
+);
 
 -- A finished chat session or automation run saved with the result a member
 -- expected, so a later profile change can be checked against it.

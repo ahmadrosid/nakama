@@ -46,6 +46,15 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
     event("plugin.release_install", "plugin"),
   ],
   ["POST /v1/profiles/pack/import", event("profile.import", "profile")],
+  // This server's own Nakama Cloud sign-in: it changes the default provider.
+  [
+    "POST /v1/nakama-cloud/sign-in",
+    event("provider.nakama_cloud_sign_in", "provider", "nakama-cloud"),
+  ],
+  [
+    "DELETE /v1/nakama-cloud",
+    event("provider.nakama_cloud_sign_out", "provider", "nakama-cloud"),
+  ],
 ]);
 
 /**

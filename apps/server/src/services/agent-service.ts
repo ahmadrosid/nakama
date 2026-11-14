@@ -71,6 +71,7 @@ import type {
   LoadedAttachmentBytes,
   ModelsResponse,
   MoveProfileRequest,
+  NakamaCloudStatus,
   PatchSkillRequest,
   ProfileResponse,
   ProviderChatOptions,
@@ -296,6 +297,12 @@ import {
   fetchChatgptCodexModels,
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
+import {
+  NAKAMA_CLOUD_PROVIDER_ID,
+  type NakamaCloudConnection,
+  NakamaCloudSignIn,
+  useNakamaCloudSignIn,
+} from "../providers/nakama-cloud";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import {
@@ -401,6 +408,7 @@ import {
   applyProviderInstanceUpdate,
   buildProviderInstanceFromCreateRequest,
   countModelsForInstance,
+  decodeStoredModelSelection,
   mergeModelsForConfig,
   modelExistsOnInstance,
   providerPublicationLock,
@@ -471,6 +479,9 @@ const QUESTIONNAIRE_ANSWERS_CONTEXT =
 
 /** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
+
+/** How often the desktop reloads the team's model list from Nakama Cloud. */
+const NAKAMA_CLOUD_MODELS_TTL_MS = 5 * 60 * 1000;
 
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
@@ -605,6 +616,8 @@ export class AgentService {
       this.scheduleSessionTitleGeneration(sessionId),
     sessions: this.sessions,
   });
+  private readonly nakamaCloud: NakamaCloudSignIn | null;
+  private nakamaCloudModelsCheckedAt = 0;
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
@@ -628,6 +641,12 @@ export class AgentService {
     this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
+    this.nakamaCloud = managedSecrets
+      ? new NakamaCloudSignIn(managedSecrets, (connection) =>
+          this.saveNakamaCloudAccount(connection)
+        )
+      : null;
+    useNakamaCloudSignIn(this.nakamaCloud);
     this.sessionTitleService = new SessionTitleService(
       db,
       () => this.userConfig
@@ -711,6 +730,7 @@ export class AgentService {
       estimated: boolean;
       inputTokens: number;
       outputTokens: number;
+      turns?: number;
     }): void => {
       void this.db
         .incrementLlmTurnUsage(scopedOrgId, turn)
@@ -4336,6 +4356,201 @@ export class AgentService {
     };
   }
 
+  /** Starts sign-in to Nakama Cloud in the browser; returns the Connect address. */
+  async startNakamaCloudSignIn(input: {
+    cloudUrl: string;
+    computerName?: string;
+  }): Promise<{ code: string; connectUrl: string }> {
+    if (!this.nakamaCloud) {
+      throw new NakamaApiError("Secrets are not set up on this computer.", 503);
+    }
+
+    return this.nakamaCloud.start(input);
+  }
+
+  nakamaCloudStatus(): NakamaCloudStatus {
+    const instance = this.userConfig?.providers.find(
+      (entry) => entry.type === "nakama_cloud" && entry.nakamaCloud
+    );
+
+    const cloudUrl = instance?.baseUrl;
+    const computerId = instance?.nakamaCloud?.computerId;
+
+    return {
+      account: instance?.nakamaCloud?.account ?? null,
+      cloudUrl: cloudUrl ?? null,
+      // The cloud refused this computer: the account is saved, but only a
+      // new sign-in makes it work again.
+      needsSignIn: Boolean(
+        cloudUrl &&
+          computerId &&
+          this.nakamaCloud?.passesFor(cloudUrl, computerId).refused
+      ),
+      orgName: instance?.nakamaCloud?.orgName ?? null,
+      otherProviders:
+        this.userConfig?.providers.filter(
+          (entry) => entry.type !== "nakama_cloud"
+        ).length ?? 0,
+      signedIn: Boolean(instance),
+    };
+  }
+
+  /**
+   * The team's models change in the cloud. Reload them in the background,
+   * at most once in NAKAMA_CLOUD_MODELS_TTL_MS, so the picker shows new
+   * models and drops removed ones. A failed load keeps the saved list.
+   */
+  private refreshNakamaCloudModelsSoon(): void {
+    const instance = this.userConfig?.providers.find(
+      (entry) => entry.type === "nakama_cloud" && entry.nakamaCloud
+    );
+
+    const cloudUrl = instance?.baseUrl;
+    const computerId = instance?.nakamaCloud?.computerId;
+
+    if (
+      !(this.nakamaCloud && cloudUrl && computerId) ||
+      Date.now() - this.nakamaCloudModelsCheckedAt < NAKAMA_CLOUD_MODELS_TTL_MS
+    ) {
+      return;
+    }
+
+    this.nakamaCloudModelsCheckedAt = Date.now();
+
+    void this.nakamaCloud
+      .cloudModels(cloudUrl, computerId)
+      .then(async (models) => {
+        const current = this.userConfig?.providers.find(
+          (entry) => entry.id === instance.id
+        );
+
+        // Signed out meanwhile, or nothing changed.
+        if (
+          !(this.userConfig && current) ||
+          JSON.stringify(current.customModels ?? []) === JSON.stringify(models)
+        ) {
+          return;
+        }
+
+        const next = {
+          ...this.userConfig,
+          providers: this.userConfig.providers.map((entry) =>
+            entry.id === instance.id
+              ? { ...entry, customModels: models }
+              : entry
+          ),
+        };
+
+        // Saved first: a failed save leaves the config as it was.
+        await saveUserConfig(next);
+        this.userConfig = next;
+        this.refreshProviderConfig();
+      })
+      .catch(() => undefined);
+  }
+
+  /** Removes the Nakama Cloud provider. The device key stays for a new sign-in. */
+  async signOutNakamaCloud(): Promise<void> {
+    // Also ends an unfinished sign-in, so a late Connect cannot sign in.
+    this.nakamaCloud?.stop();
+
+    if (!this.userConfig) {
+      return;
+    }
+
+    for (const entry of this.userConfig.providers) {
+      if (entry.type === "nakama_cloud" && entry.baseUrl && entry.nakamaCloud) {
+        await this.nakamaCloud?.revoke(
+          entry.baseUrl,
+          entry.nakamaCloud.computerId
+        );
+      }
+    }
+
+    const providers = this.userConfig.providers.filter(
+      (entry) => entry.type !== "nakama_cloud"
+    );
+
+    const config = {
+      ...this.userConfig,
+      defaultProviderId:
+        this.userConfig.defaultProviderId === NAKAMA_CLOUD_PROVIDER_ID
+          ? (providers[0]?.id ?? null)
+          : this.userConfig.defaultProviderId,
+      providers,
+    };
+
+    await saveUserConfig(config);
+    this.userConfig = config;
+    this.refreshProviderConfig();
+  }
+
+  /** The browser sign-in finished: Nakama Cloud becomes the default provider. */
+  private async saveNakamaCloudAccount(
+    connection: NakamaCloudConnection
+  ): Promise<void> {
+    const thinking = await this.resolveThinkingSettings();
+
+    const base = this.userConfig ?? {
+      defaultProviderId: null,
+      providers: [],
+      thinkingEffort: thinking.effort,
+      thinkingEnabled: thinking.enabled,
+    };
+
+    const isFirst = base.providers.length === 0;
+
+    const instance: ProviderInstance = {
+      apiKey: "",
+      baseUrl: connection.cloudUrl,
+      createdAt: new Date().toISOString(),
+      customModels: connection.models,
+      id: NAKAMA_CLOUD_PROVIDER_ID,
+      label: "Nakama Cloud",
+      nakamaCloud: connection.account,
+      type: "nakama_cloud",
+    };
+
+    const next = {
+      ...base,
+      defaultProviderId: NAKAMA_CLOUD_PROVIDER_ID,
+      providers: [
+        ...base.providers.filter((entry) => entry.id !== instance.id),
+        instance,
+      ],
+    };
+
+    // Saved first: if the save fails, this computer is not signed in at all,
+    // rather than signed in until the next restart.
+    await saveUserConfig(next);
+    this.userConfig = next;
+    this.refreshProviderConfig();
+    this.nakamaCloudModelsCheckedAt = Date.now();
+
+    // The provider changed now, in the browser callback, not in a request
+    // the audit log sees, so it is recorded here.
+    await this.db
+      .createAuditEvent({
+        action: "provider.nakama_cloud_connect",
+        actorUserId: null,
+        createdAt: new Date().toISOString(),
+        id: `audit_${randomUUID()}`,
+        metadata: {
+          cloudOrgName: connection.account.orgName,
+          cloudUrl: connection.cloudUrl,
+        },
+        orgId: null,
+        requestId: null,
+        resourceId: NAKAMA_CLOUD_PROVIDER_ID,
+        resourceType: "provider",
+      })
+      .catch(() => undefined);
+
+    if (isFirst) {
+      await this.ensureSoulScaffolded();
+    }
+  }
+
   async createProvider(
     request: CreateProviderRequest
   ): Promise<CreateProviderResponse> {
@@ -4564,6 +4779,7 @@ export class AgentService {
     options: { source?: "catalog" | "remote" } = {}
   ): Promise<ModelsResponse> {
     await this.refreshManagedProviderKeys();
+    this.refreshNakamaCloudModelsSoon();
     const active = getActiveProviderInstance(this.userConfig);
     const currentProviderId = this.userConfig?.defaultProviderId ?? null;
     const configuredProviders = this.userConfig?.providers ?? [];
@@ -5913,6 +6129,94 @@ export class AgentService {
     return normalizeUserContextContent(
       await this.db.getUserContext(orgId, userId)
     );
+  }
+
+  /**
+   * The provider for one Nakama Desktop model call: this install's provider
+   * for the model, billed to the org and member, with the org's quota hold
+   * and a recorder that counts each call against the org's monthly limits.
+   * Null when no provider is set up; a 404 when the model is not here.
+   */
+  async desktopModelHarness(input: {
+    model: string;
+    orgId: string;
+    userId: string;
+  }): Promise<{
+    assertCanStart?: (reservedTokens: number) => Promise<() => Promise<void>>;
+    chatOptions?: ProviderChatOptions;
+    provider: ProviderClient;
+    recordUsage?: (usage: {
+      estimated: boolean;
+      inputTokens: number;
+      outputTokens: number;
+      turns?: number;
+    }) => void;
+  } | null> {
+    await this.refreshManagedProviderKeys();
+
+    const resolved = resolveProfileProviderSelection({
+      defaultProviderId: this.userConfig?.defaultProviderId,
+      profileModel: input.model,
+      providers: this.userConfig?.providers ?? [],
+    });
+
+    // The desktop asks for one model by name. A model this server no longer
+    // has is an error, not the default model shown under the old name.
+    const requested = decodeStoredModelSelection(input.model);
+
+    if (
+      resolved &&
+      !(
+        (!requested || requested.providerId === resolved.instance.id) &&
+        modelExistsOnInstance(
+          resolved.instance,
+          requested?.modelId ?? input.model
+        )
+      )
+    ) {
+      throw new NakamaApiError(
+        "This model is no longer available. Pick another model.",
+        404
+      );
+    }
+
+    const provider = resolved
+      ? createProviderForInstance(
+          resolved.instance,
+          resolved.model,
+          process.env,
+          {
+            onChatgptTokenRefresh: (instanceId, oauth) =>
+              this.persistChatgptOAuth(instanceId, oauth),
+            onXaiTokenRefresh: (instanceId, oauth) =>
+              this.persistXaiOAuth(instanceId, oauth),
+            resolveInstance: (instanceId) =>
+              findProviderInstance(this.userConfig, instanceId),
+          }
+        )
+      : null;
+
+    if (!(resolved && provider)) {
+      return null;
+    }
+
+    const harness = this.createHarness({
+      modelId: resolved.model,
+      orgId: input.orgId,
+      provider,
+      providerInstance: resolved.instance,
+      thinking: this.resolveWorkspaceThinkingDefaults(),
+      userId: input.userId,
+    });
+
+    return harness.provider
+      ? {
+          assertCanStart: this.llmTurnQuotaCheckerFor(input.orgId),
+          chatOptions: harness.chatOptions,
+          provider: harness.provider,
+          recordUsage: this.turnUsageRecorderFor(input.orgId),
+        }
+      : null;
   }
 
   /**
