@@ -284,6 +284,27 @@ test("picking MiniMax with no MiniMax provider adds one and saves its image mode
 
   cleanups.push(() => save.mockRestore());
 
+  const discover = spyOn(client, "discoverModels").mockResolvedValue(
+    /* SAFETY: The browse list reads only customModels from the response. */
+    { customModels: [] } as never
+  );
+
+  cleanups.push(() => discover.mockRestore());
+
+  const type = async (input: HTMLInputElement | null, value: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(input),
+        "value"
+      )?.set?.call(input, value);
+      const view = input?.ownerDocument.defaultView;
+
+      if (view) {
+        input?.dispatchEvent(new view.Event("input", { bubbles: true }));
+      }
+    });
+  };
+
   const trigger = container.querySelector<HTMLButtonElement>(
     '[aria-label="Image generation model provider"]'
   );
@@ -299,17 +320,16 @@ test("picking MiniMax with no MiniMax provider adds one and saves its image mode
   const apiKey = document.body.querySelector<HTMLInputElement>("#api-key");
   expect(apiKey).not.toBeNull();
 
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(
-      Object.getPrototypeOf(apiKey),
-      "value"
-    )?.set?.call(apiKey, "test-key");
-    const view = apiKey?.ownerDocument.defaultView;
+  await type(apiKey, "test-key");
 
-    if (view) {
-      apiKey?.dispatchEvent(new view.Event("input", { bubbles: true }));
-    }
-  });
+  // Add needs one model for a discovery provider such as MiniMax.
+  await act(async () =>
+    document.body.querySelector<HTMLButtonElement>("[data-models-add]")?.click()
+  );
+  await type(
+    document.body.querySelector<HTMLInputElement>('[aria-label="Model ID 1"]'),
+    "MiniMax-M3"
+  );
 
   await act(async () => apiKey?.form?.requestSubmit());
   await act(async () => {
@@ -317,7 +337,11 @@ test("picking MiniMax with no MiniMax provider adds one and saves its image mode
   });
 
   expect(created).toEqual([
-    expect.objectContaining({ apiKey: "test-key", type: "minimax" }),
+    expect.objectContaining({
+      apiKey: "test-key",
+      model: "MiniMax-M3",
+      type: "minimax",
+    }),
   ]);
   expect(save).toHaveBeenCalledWith("minimax-1::MiniMax-H3-Image");
 });
