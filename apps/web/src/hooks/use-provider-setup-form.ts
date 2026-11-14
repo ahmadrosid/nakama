@@ -9,7 +9,10 @@ import type {
   WireApi,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
-import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
+import {
+  defaultDiscoveryBaseUrl,
+  isDiscoveryModelProvider,
+} from "@nakama/core/discovery-providers";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { useAppContext } from "@/context/use-app-context";
@@ -138,18 +141,15 @@ export function useProviderSetupForm(
   }, [configuredTypes]);
 
   const filteredModels = useMemo(() => {
+    // These providers have no catalog: the user browses or types the list.
     if (
-      selectedProvider === "openai_compatible" ||
-      selectedProvider === "netra" ||
+      isDiscoveryModelProvider(selectedProvider) ||
       selectedProvider === "ollama"
     ) {
-      return modelsFromCustomRows(customModels).map((model) =>
-        selectedProvider === "ollama"
-          ? { ...model, provider: "ollama" as const }
-          : selectedProvider === "netra"
-            ? { ...model, provider: "netra" as const }
-            : model
-      );
+      return modelsFromCustomRows(customModels).map((model) => ({
+        ...model,
+        provider: selectedProvider,
+      }));
     }
 
     if (selectedProvider === "openrouter") {
@@ -281,6 +281,9 @@ export function useProviderSetupForm(
       if (provider === "netra") {
         setBaseUrl(defaultDiscoveryBaseUrl("netra") ?? "");
         setDisplayName("Netra Runtime");
+      }
+
+      if (isDiscoveryModelProvider(provider)) {
         setCustomModels([]);
       }
 
@@ -304,7 +307,6 @@ export function useProviderSetupForm(
 
       if (provider === "openai_compatible") {
         setBaseUrl("");
-        setCustomModels([]);
       }
 
       setXaiOAuth(null);
@@ -438,8 +440,7 @@ export function useProviderSetupForm(
             : null;
 
       const nextModelsError =
-        selectedProvider === "openai_compatible" ||
-        selectedProvider === "netra" ||
+        isDiscoveryModelProvider(selectedProvider) ||
         selectedProvider === "ollama"
           ? validateCustomModelsInput(customModels)
           : usesCatalogList && catalogRows
@@ -521,7 +522,8 @@ export function useProviderSetupForm(
           ? resolveOpenRouterSetupModel(openRouterModels, selectedModel)
           : isShortlistCapabilityProvider(selectedProvider)
             ? resolveOpenRouterSetupModel(shortlistModels, selectedModel)
-            : selectedProvider === "ollama"
+            : selectedProvider === "ollama" ||
+                isDiscoveryModelProvider(selectedProvider)
               ? resolveOpenRouterSetupModel(customModels, selectedModel)
               : usesCatalogList && catalogRows
                 ? resolveOpenRouterSetupModel(catalogRows, selectedModel)

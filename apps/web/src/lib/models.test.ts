@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderName } from "@nakama/core";
+import { isDiscoveryModelProvider } from "@nakama/core/discovery-providers";
 import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   buildCreateProviderRequest,
@@ -19,9 +20,8 @@ import {
 
 describe("buildCreateProviderRequest", () => {
   test("keeps custom models only for providers that accept a shortlist", () => {
+    // Discovery providers (Netra, Groq, …) always send their model list.
     const shortlistProviders: readonly ProviderName[] = [
-      "openai_compatible",
-      "netra",
       "openrouter",
       "xai_oauth",
       "chatgpt",
@@ -63,13 +63,16 @@ describe("buildCreateProviderRequest", () => {
         provider,
       });
 
-      if (provider === "openai_compatible" || provider === "netra") {
+      if (isDiscoveryModelProvider(provider)) {
         expect(empty.customModels).toEqual([]);
       } else {
         expect(empty).not.toHaveProperty("customModels");
       }
 
-      if (shortlistProviders.includes(provider)) {
+      if (
+        isDiscoveryModelProvider(provider) ||
+        shortlistProviders.includes(provider)
+      ) {
         expect(populated.customModels).toEqual([{ id: "private-model" }]);
       } else {
         expect(populated).not.toHaveProperty("customModels");

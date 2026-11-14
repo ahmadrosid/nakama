@@ -565,8 +565,7 @@ export function buildCreateProviderRequest(options: {
   xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
   const customModels =
-    options.provider === "openai_compatible" ||
-    options.provider === "netra" ||
+    isDiscoveryModelProvider(options.provider) ||
     ([
       "openrouter",
       "xai_oauth",

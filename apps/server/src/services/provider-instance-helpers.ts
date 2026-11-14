@@ -506,6 +506,10 @@ function buildProviderFieldsFromRequest(
       ? validateCustomModels([{ default: true, id: pickedModel }])
       : undefined;
 
+  if (isDiscoveryModelProvider(type) && !customModels?.length) {
+    throw new Error("At least one model is required.");
+  }
+
   const rawBaseUrl = request.baseUrl?.trim();
 
   if (!rawBaseUrl) {
