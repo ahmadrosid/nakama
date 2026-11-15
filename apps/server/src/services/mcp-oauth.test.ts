@@ -1,10 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
+import { createMinimalHonoApp } from "../http/test-app-helpers";
+import { setupTestConfigDir } from "../test-config-dir";
 import { McpClientManager } from "./mcp-client-manager";
 import { readMcpOAuthGrant } from "./mcp-oauth";
+import { startOAuthProtectedMcpServer } from "./mcp-oauth-test-fixture";
 import { McpService } from "./mcp-service";
 
 const ACCESS_TOKEN = "fake-access-token";
@@ -35,127 +36,6 @@ test("stored OAuth grants reject malformed values and preserve valid tokens", ()
   ).toEqual(grant);
 });
 
-/**
- * A remote MCP server that answers 401 until it sees a Bearer token, fronted by
- * the OAuth endpoints the MCP authorization spec discovers: protected resource
- * metadata, authorization server metadata, dynamic registration, token.
- */
-function startOAuthProtectedMcpServer() {
-  // Stateless mode refuses a reused transport, so every MCP request gets its own.
-  async function handleMcpRequest(request: Request): Promise<Response> {
-    const mcp = new McpServer({ name: "fake-remote", version: "1.0.0" });
-    mcp.registerTool("echo", { description: "Echo a value" }, () => ({
-      content: [{ text: "ok", type: "text" as const }],
-    }));
-
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      enableJsonResponse: true,
-      sessionIdGenerator: undefined,
-    });
-
-    await mcp.connect(transport);
-
-    return await transport.handleRequest(request);
-  }
-
-  const tokenRequests: URLSearchParams[] = [];
-
-  const server = Bun.serve({
-    async fetch(request) {
-      const url = new URL(request.url);
-
-      if (url.pathname === "/.well-known/oauth-protected-resource") {
-        return Response.json({
-          authorization_servers: [url.origin],
-          resource: `${url.origin}/mcp`,
-        });
-      }
-
-      if (url.pathname === "/.well-known/oauth-authorization-server") {
-        return Response.json({
-          authorization_endpoint: `${url.origin}/authorize`,
-          code_challenge_methods_supported: ["S256"],
-          grant_types_supported: ["authorization_code", "refresh_token"],
-          issuer: url.origin,
-          registration_endpoint: `${url.origin}/register`,
-          response_types_supported: ["code"],
-          token_endpoint: `${url.origin}/token`,
-        });
-      }
-
-      if (url.pathname === "/register" && request.method === "POST") {
-        const registration = z
-          .record(z.string(), z.json())
-          .parse(await request.json());
-
-        return Response.json(
-          {
-            ...registration,
-            client_id: "fake-client-id",
-          },
-          { status: 201 }
-        );
-      }
-
-      if (url.pathname === "/token" && request.method === "POST") {
-        tokenRequests.push(new URLSearchParams(await request.text()));
-
-        return Response.json({
-          access_token: ACCESS_TOKEN,
-          expires_in: 3600,
-          refresh_token: "fake-refresh-token",
-          token_type: "Bearer",
-        });
-      }
-
-      const signedIn =
-        request.headers.get("authorization") === `Bearer ${ACCESS_TOKEN}`;
-
-      const unauthorized = () =>
-        Response.json(
-          { error: "unauthorized" },
-          {
-            headers: {
-              "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
-            },
-            status: 401,
-          }
-        );
-
-      if (url.pathname === "/mcp") {
-        return signedIn ? await handleMcpRequest(request) : unauthorized();
-      }
-
-      // Lists its tools to anyone and asks for a token only on a tool call, so
-      // connecting alone never meets the 401 that starts a sign-in.
-      if (url.pathname === "/mcp/open") {
-        const body = await request
-          .clone()
-          .json()
-          .catch(() => null);
-
-        const isToolCall =
-          z.object({ method: z.string() }).safeParse(body).data?.method ===
-          "tools/call";
-
-        return isToolCall && !signedIn
-          ? unauthorized()
-          : await handleMcpRequest(request);
-      }
-
-      return new Response("not found", { status: 404 });
-    },
-    port: 0,
-  });
-
-  return {
-    openUrl: `http://127.0.0.1:${server.port}/mcp/open`,
-    stop: () => server.stop(true),
-    tokenRequests,
-    url: `http://127.0.0.1:${server.port}/mcp`,
-  };
-}
-
 const remote = startOAuthProtectedMcpServer();
 
 afterAll(async () => {
@@ -163,6 +43,7 @@ afterAll(async () => {
 });
 
 describe("MCP browser authorization", () => {
+  setupTestConfigDir("nakama-mcp-oauth-");
   test("hands back an authorization URL, then connects from the callback", async () => {
     const db = createInMemoryDatabaseAdapter();
     const manager = new McpClientManager();
@@ -346,21 +227,40 @@ describe("MCP browser authorization", () => {
 
     expect(retried.server.status).toBe("needs_auth");
 
-    const state = new URL(
-      z.string().parse(retried.authorizationUrl)
-    ).searchParams.get("state");
+    const firstUrl = z.string().parse(created.authorizationUrl);
+    const state = z.string().parse(new URL(firstUrl).searchParams.get("state"));
+    const code = remote.issueCode(firstUrl);
 
-    const completed = await service.completeOAuth(created.server.id, {
-      callbackBaseUrl: CALLBACK_BASE_URL,
-      code: "fake-auth-code",
-      state: z.string().parse(state),
+    const { app } = createMinimalHonoApp({
+      databaseAdapter: db,
+      mcpService: service,
     });
 
-    expect(completed.server.status).toBe("connected");
-    expect(
-      readMcpOAuthGrant((await db.getMcpServer(created.server.id))?.config)
-        ?.tokens?.access_token
-    ).toBe(ACCESS_TOKEN);
+    const callback = () =>
+      app.fetch(
+        new Request(
+          `${CALLBACK_BASE_URL}/v1/mcp/oauth/callback/${created.server.id}?${new URLSearchParams({ code, state })}`
+        )
+      );
+
+    const before = remote.tokenRequests.length;
+    expect((await callback()).status).toBe(200);
+    expect(retried.authorizationUrl).toBe(firstUrl);
+    expect((await service.getServer(created.server.id)).server.status).toBe(
+      "connected"
+    );
+
+    const grant = readMcpOAuthGrant(
+      (await db.getMcpServer(created.server.id))?.config
+    );
+
+    expect(grant?.tokens?.access_token).toBe(ACCESS_TOKEN);
+    expect(grant?.state).toBeUndefined();
+    expect(grant?.codeVerifier).toBeUndefined();
+    expect(grant?.authorizationUrl).toBeUndefined();
+    expect(grant?.authorizationStartedAt).toBeUndefined();
+    expect((await callback()).status).toBe(400);
+    expect(remote.tokenRequests.length - before).toBe(1);
 
     await manager.disconnectAll();
   });

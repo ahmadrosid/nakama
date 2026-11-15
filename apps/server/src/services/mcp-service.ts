@@ -17,6 +17,7 @@ import type {
   UpdateMcpServerRequest,
 } from "@nakama/core";
 import { createId, NakamaApiError } from "@nakama/core";
+import { createChatLock } from "@nakama/core/channel-chat-lock";
 import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import type {
   DatabaseAdapter,
@@ -39,6 +40,8 @@ import {
   serverAdvertisesOAuth,
 } from "./mcp-oauth";
 import { withClaimedOAuthState } from "./oauth-callback-claim";
+
+const oauthFlowLock = createChatLock();
 
 const INVALID_OAUTH_CALLBACK_MESSAGE =
   "This sign-in link is no longer valid. Start it again from the MCP page.";
@@ -102,12 +105,24 @@ async function signInBeforeConnect(
 
   if (
     (await auth(provider, {
-      fetchFn: fetchMcpRemote,
+      fetchFn: fetchOAuthRemote,
       serverUrl,
     })) === "REDIRECT"
   ) {
     throw new UnauthorizedError();
   }
+}
+
+function fetchOAuthRemote(
+  input: string | URL | Request,
+  init?: RequestInit
+): Promise<Response> {
+  const timeout = AbortSignal.timeout(30_000);
+
+  return fetchMcpRemote(input, {
+    ...init,
+    signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
+  });
 }
 
 function withOAuthGrant(
@@ -256,101 +271,115 @@ export class McpService {
     serverId: string,
     request: UpdateMcpServerRequest
   ): Promise<McpServerResponse> {
-    const server = await this.requireServer(serverId);
-    const nextName = request.name?.trim() ?? server.name;
+    return oauthFlowLock.withLock(serverId, async () => {
+      const server = await this.requireServer(serverId);
+      const nextName = request.name?.trim() ?? server.name;
 
-    if (!nextName) {
-      throw new Error("MCP server name is required.");
-    }
-
-    if (nextName !== server.name) {
-      const existing = await this.db.getMcpServerByName(nextName);
-
-      if (existing && existing.id !== serverId) {
-        throw new Error(`MCP server already exists: ${nextName}`);
+      if (!nextName) {
+        throw new Error("MCP server name is required.");
       }
-    }
 
-    const transportChanged =
-      request.transport !== undefined && request.transport !== server.transport;
+      if (nextName !== server.name) {
+        const existing = await this.db.getMcpServerByName(nextName);
 
-    const transport = request.transport ?? server.transport;
+        if (existing && existing.id !== serverId) {
+          throw new Error(`MCP server already exists: ${nextName}`);
+        }
+      }
 
-    const config = request.config
-      ? transportChanged
-        ? request.config
-        : mergeMcpConfig(
-            transport,
-            resolveMcpConfig(server.transport, server.config),
-            request.config
-          )
-      : resolveMcpConfig(server.transport, server.config);
+      const transportChanged =
+        request.transport !== undefined &&
+        request.transport !== server.transport;
 
-    if (request.transport !== undefined) {
-      validateTransport(transport);
-    }
+      const transport = request.transport ?? server.transport;
 
-    validateConfig(transport, config);
+      const config = request.config
+        ? transportChanged
+          ? request.config
+          : mergeMcpConfig(
+              transport,
+              resolveMcpConfig(server.transport, server.config),
+              request.config
+            )
+        : resolveMcpConfig(server.transport, server.config);
 
-    const updated: StoredMcpServerRecord = {
-      ...server,
-      config,
-      enabled: request.enabled ?? server.enabled,
-      name: nextName,
-      transport,
-      updatedAt: new Date().toISOString(),
-    };
+      if (request.transport !== undefined) {
+        validateTransport(transport);
+      }
 
-    const configChanged =
-      JSON.stringify(server.config) !== JSON.stringify(config) ||
-      server.transport !== transport;
+      validateConfig(transport, config);
 
-    const enabledChanged = updated.enabled !== server.enabled;
+      const updated: StoredMcpServerRecord = {
+        ...server,
+        config,
+        enabled: request.enabled ?? server.enabled,
+        name: nextName,
+        transport,
+        updatedAt: new Date().toISOString(),
+      };
 
-    if (configChanged || enabledChanged) {
-      await this.manager.disconnect(serverId);
-      updated.status = "disconnected";
-      updated.lastError = null;
-    }
+      const configChanged =
+        JSON.stringify(server.config) !== JSON.stringify(config) ||
+        server.transport !== transport;
 
-    await this.db.upsertMcpServer(updated);
+      const enabledChanged = updated.enabled !== server.enabled;
 
-    return this.getServer(serverId);
+      if (configChanged || enabledChanged) {
+        await this.manager.disconnect(serverId);
+        updated.status = "disconnected";
+        updated.lastError = null;
+      }
+
+      await this.db.upsertMcpServer(updated);
+
+      return this.getServer(serverId);
+    });
   }
 
   async deleteServer(serverId: string, force = false): Promise<void> {
-    const server = await this.requireServer(serverId);
+    return oauthFlowLock.withLock(serverId, async () => {
+      const server = await this.requireServer(serverId);
 
-    if (isPreinstalledMcpServerId(server.id)) {
-      throw new Error(
-        `Preinstalled MCP server "${server.name}" cannot be deleted.`
-      );
-    }
+      if (isPreinstalledMcpServerId(server.id)) {
+        throw new Error(
+          `Preinstalled MCP server "${server.name}" cannot be deleted.`
+        );
+      }
 
-    const profiles = await this.db.listProfilesForMcpServer(serverId);
+      const profiles = await this.db.listProfilesForMcpServer(serverId);
 
-    if (profiles.length > 0 && !force) {
-      const profileRefs = toProfileRefs(profiles);
-      throw new NakamaApiError(
-        formatMcpServerInUseMessage(profileRefs),
-        409,
-        undefined,
-        profileRefs
-      );
-    }
+      if (profiles.length > 0 && !force) {
+        const profileRefs = toProfileRefs(profiles);
+        throw new NakamaApiError(
+          formatMcpServerInUseMessage(profileRefs),
+          409,
+          undefined,
+          profileRefs
+        );
+      }
 
-    await this.manager.disconnect(serverId);
+      await this.manager.disconnect(serverId);
 
-    const deleted = await this.db.deleteMcpServer(serverId);
+      const deleted = await this.db.deleteMcpServer(serverId);
 
-    if (!deleted) {
-      throw new Error("MCP server not found.");
-    }
+      if (!deleted) {
+        throw new Error("MCP server not found.");
+      }
+    });
   }
 
   async connectServer(
     serverId: string,
     options: McpConnectOptions = {}
+  ): Promise<McpServerResponse> {
+    return oauthFlowLock.withLock(serverId, () =>
+      this.connectLockedServer(serverId, options)
+    );
+  }
+
+  private async connectLockedServer(
+    serverId: string,
+    options: McpConnectOptions
   ): Promise<McpServerResponse> {
     const server = await this.requireServer(serverId);
 
@@ -370,6 +399,21 @@ export class McpService {
     // that the sign-in is still owed.
     if (signInPending && !provider) {
       return { server: toMcpServerDetail(server) };
+    }
+
+    const authorizationUrl = provider?.pendingAuthorizationUrl();
+
+    if (signInPending && authorizationUrl) {
+      const updated: StoredMcpServerRecord = {
+        ...server,
+        lastError: null,
+        status: "needs_auth",
+        updatedAt: new Date().toISOString(),
+      };
+
+      await this.db.upsertMcpServer(updated);
+
+      return { authorizationUrl, server: toMcpServerDetail(updated) };
     }
 
     try {
@@ -431,7 +475,10 @@ export class McpService {
     return withClaimedOAuthState(
       `mcp:${serverId}:${options.state}`,
       () => new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400),
-      () => this.completeClaimedOAuth(serverId, options)
+      () =>
+        oauthFlowLock.withLock(serverId, () =>
+          this.completeClaimedOAuth(serverId, options)
+        )
     );
   }
 
@@ -465,7 +512,7 @@ export class McpService {
 
     const result = await auth(provider, {
       authorizationCode: options.code,
-      fetchFn: fetchMcpRemote,
+      fetchFn: fetchOAuthRemote,
       serverUrl: config.url,
     });
 
@@ -473,7 +520,7 @@ export class McpService {
       throw new NakamaApiError("MCP authorization did not complete.", 400);
     }
 
-    return this.connectServer(serverId, { callbackBaseUrl });
+    return this.connectLockedServer(serverId, { callbackBaseUrl });
   }
 
   private async saveOAuthGrant(
