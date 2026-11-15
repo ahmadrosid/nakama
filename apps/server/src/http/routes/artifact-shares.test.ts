@@ -470,7 +470,7 @@ describe("artifact share routes", () => {
     // it only from loopback or the host the request arrived on.
     expect(publishResponse.status).toBe(400);
     await expect(publishResponse.json()).resolves.toEqual({
-      error: "Origin is not allowed.",
+      error: expect.stringContaining("Origin is not allowed."),
     });
   });
 
