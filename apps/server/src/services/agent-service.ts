@@ -4346,45 +4346,52 @@ export class AgentService {
       );
     }
 
-    const existing = this.userConfig?.providers ?? [];
-    const instance = buildProviderInstanceFromCreateRequest(request, existing);
-    const model = resolveInitialModel(instance, request.model);
+    return providerPublicationLock.withLock("providers", async () => {
+      const existing = this.userConfig?.providers ?? [];
 
-    const providers = [...existing, instance];
-    const isFirst = providers.length === 1;
-    const thinking = await this.resolveThinkingSettings();
+      const instance = buildProviderInstanceFromCreateRequest(
+        request,
+        existing
+      );
 
-    const baseConfig = this.userConfig ?? {
-      defaultProviderId: null,
-      providers: [],
-      thinkingEffort: thinking.effort,
-      thinkingEnabled: thinking.enabled,
-    };
+      const model = resolveInitialModel(instance, request.model);
 
-    this.userConfig = {
-      ...baseConfig,
-      defaultProviderId:
-        isFirst || !baseConfig.defaultProviderId
-          ? instance.id
-          : baseConfig.defaultProviderId,
-      providers,
-    };
+      const providers = [...existing, instance];
+      const isFirst = providers.length === 1;
+      const thinking = await this.resolveThinkingSettings();
 
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+      const baseConfig = this.userConfig ?? {
+        defaultProviderId: null,
+        providers: [],
+        thinkingEffort: thinking.effort,
+        thinkingEnabled: thinking.enabled,
+      };
 
-    if (isFirst) {
-      await this.ensureSoulScaffolded();
-    }
+      this.userConfig = {
+        ...baseConfig,
+        defaultProviderId:
+          isFirst || !baseConfig.defaultProviderId
+            ? instance.id
+            : baseConfig.defaultProviderId,
+        providers,
+      };
 
-    return {
-      defaultProviderId: this.userConfig.defaultProviderId!,
-      initialModel: model,
-      provider: toProviderInstanceSummary(
-        instance,
-        countModelsForInstance(instance)
-      ),
-    };
+      await saveUserConfig(this.userConfig);
+      this.refreshProviderConfig();
+
+      if (isFirst) {
+        await this.ensureSoulScaffolded();
+      }
+
+      return {
+        defaultProviderId: this.userConfig.defaultProviderId!,
+        initialModel: model,
+        provider: toProviderInstanceSummary(
+          instance,
+          countModelsForInstance(instance)
+        ),
+      };
+    });
   }
 
   async updateProvider(
