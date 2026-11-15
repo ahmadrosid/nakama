@@ -135,6 +135,29 @@ test("automations follow the selected agent and Super Nakama shows all", async (
     );
     expect(page.automations.map((item) => item.id)).toEqual(["agent-a"]);
     expect(page.selected?.id).toBe("agent-a");
+    const staleAutomation = automations[0]!;
+    let savedAutomation = {
+      ...staleAutomation,
+      prompt: "Updated in another tab",
+    };
+
+    using update = spyOn(client, "updateAutomation").mockImplementation(
+      async (_id, input) => {
+        savedAutomation = {
+          ...savedAutomation,
+          enabled: input.enabled ?? savedAutomation.enabled,
+          prompt: input.prompt ?? savedAutomation.prompt,
+        };
+
+        return savedAutomation;
+      }
+    );
+
+    await act(async () => page.handleToggleEnabled(staleAutomation, false));
+    expect(savedAutomation.enabled).toBe(false);
+    expect(savedAutomation.prompt).toBe("Updated in another tab");
+    expect(update).toHaveBeenCalledWith(staleAutomation.id, { enabled: false });
+
     await act(async () =>
       useActiveChatProfileStore.setState({ profileId: "super" })
     );

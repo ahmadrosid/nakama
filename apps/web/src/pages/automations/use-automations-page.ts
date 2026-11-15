@@ -271,15 +271,7 @@ export function useAutomationsPage() {
     try {
       await updateMutation.mutateAsync({
         automationId: automation.id,
-        input: {
-          delivery: automation.delivery ?? null,
-          description: automation.description,
-          enabled,
-          name: automation.name,
-          profileId: automation.profileId,
-          prompt: automation.prompt,
-          trigger: automation.trigger,
-        },
+        input: { enabled },
       });
     } catch (err) {
       setError(formatError(err));
