@@ -136,6 +136,7 @@ test("automations follow the selected agent and Super Nakama shows all", async (
     expect(page.automations.map((item) => item.id)).toEqual(["agent-a"]);
     expect(page.selected?.id).toBe("agent-a");
     const staleAutomation = automations[0]!;
+
     let savedAutomation = {
       ...staleAutomation,
       prompt: "Updated in another tab",
