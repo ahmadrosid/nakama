@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { loadUserConfig, saveUserConfig } from "@nakama/core";
 import type {
   CreateProviderRequest,
@@ -7,6 +7,7 @@ import type {
   ListProvidersResponse,
   ModelsResponse,
   ProviderName,
+  ThinkingSettings,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
@@ -37,8 +38,14 @@ describe("saving models for discovery providers", () => {
   async function setup() {
     const databaseAdapter = createInMemoryDatabaseAdapter();
 
+    const agent = new AgentService(
+      await loadUserConfig(),
+      null,
+      databaseAdapter
+    );
+
     const { app } = createMinimalHonoApp({
-      agent: new AgentService(await loadUserConfig(), null, databaseAdapter),
+      agent,
       databaseAdapter,
     });
 
@@ -91,8 +98,198 @@ describe("saving models for discovery providers", () => {
       (await loadUserConfig())?.providers.find((provider) => provider.id === id)
         ?.customModels;
 
-    return { create, listed, modelIds, savedModels, send };
+    return {
+      agent,
+      create,
+      databaseAdapter,
+      listed,
+      modelIds,
+      savedModels,
+      send,
+    };
   }
+
+  function pauseCreate(agent: AgentService) {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+
+    // SAFETY: The test gates this private await without replacing its result.
+    const access = Object.create(agent) as {
+      resolveThinkingSettings(): Promise<ThinkingSettings>;
+    };
+
+    const read = access.resolveThinkingSettings.bind(agent);
+    let first = true;
+
+    Object.assign(agent, {
+      resolveThinkingSettings: async () => {
+        const settings = await read();
+
+        if (first) {
+          first = false;
+          entered.resolve();
+          await release.promise;
+        }
+
+        return settings;
+      },
+    });
+
+    return { entered: entered.promise, release: release.resolve };
+  }
+
+  test("keeps all providers after sequential creates", async () => {
+    const { agent, create } = await setup();
+    const first = await create({ customModels: picked, type: "groq" });
+    const second = await create({ customModels: picked, type: "groq" });
+    const ids = [first.provider.id, second.provider.id].sort();
+
+    expect((await loadUserConfig())?.providers.map((p) => p.id).sort()).toEqual(
+      ids
+    );
+    expect((await agent.listProviders()).defaultProviderId).toBe(
+      first.provider.id
+    );
+  });
+
+  test.each([false, true])(
+    "keeps both concurrent creates with an existing provider: %s",
+    async (hasProvider) => {
+      const { agent, create, databaseAdapter } = await setup();
+
+      const initial = hasProvider
+        ? await create({ customModels: picked, type: "groq" })
+        : null;
+
+      const pause = pauseCreate(agent);
+      const dispatched = Promise.withResolvers<void>();
+      const originalCreate = agent.createProvider.bind(agent);
+
+      using createSpy = spyOn(agent, "createProvider").mockImplementation(
+        (request) => {
+          if (request.label === "Second") {
+            dispatched.resolve();
+          }
+
+          return originalCreate(request);
+        }
+      );
+
+      try {
+        const first = create({
+          customModels: picked,
+          label: "First",
+          type: "groq",
+        });
+
+        await pause.entered;
+
+        const second = create({
+          customModels: picked,
+          label: "Second",
+          type: "groq",
+        });
+
+        await dispatched.promise;
+        pause.release();
+        const responses = await Promise.all([first, second]);
+        const ids = responses.map((response) => response.provider.id);
+
+        if (initial) {
+          ids.push(initial.provider.id);
+        }
+
+        expect(new Set(ids).size).toBe(ids.length);
+        const saved = await loadUserConfig();
+        expect(saved?.providers.map((provider) => provider.id).sort()).toEqual(
+          ids.sort()
+        );
+        const defaultId = initial?.provider.id ?? responses[0].provider.id;
+        expect(responses.map((response) => response.defaultProviderId)).toEqual(
+          [defaultId, defaultId]
+        );
+        expect(saved?.defaultProviderId).toBe(defaultId);
+        const reloaded = new AgentService(saved, null, databaseAdapter);
+        const listed = await reloaded.listProviders();
+        expect(listed.providers.map((provider) => provider.id).sort()).toEqual(
+          ids.sort()
+        );
+        expect(listed.defaultProviderId).toBe(defaultId);
+        expect(createSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        pause.release();
+      }
+    }
+  );
+
+  test("keeps an update made during provider creation", async () => {
+    const { agent, create, databaseAdapter, send } = await setup();
+    const initial = await create({ customModels: picked, type: "groq" });
+    const pause = pauseCreate(agent);
+    const dispatched = Promise.withResolvers<void>();
+    const originalUpdate = agent.updateProvider.bind(agent);
+
+    using updateSpy = spyOn(agent, "updateProvider").mockImplementation(
+      (id, request) => {
+        dispatched.resolve();
+
+        return originalUpdate(id, request);
+      }
+    );
+
+    try {
+      const created = create({ customModels: picked, type: "groq" });
+      await pause.entered;
+
+      const updated = send("PATCH", `/v1/providers/${initial.provider.id}`, {
+        label: "Renamed",
+      });
+
+      await dispatched.promise;
+      pause.release();
+
+      const [createdBody, updatedResponse] = await Promise.all([
+        created,
+        updated,
+      ]);
+
+      expect(updatedResponse.status).toBe(200);
+      const saved = await loadUserConfig();
+      const ids = [initial.provider.id, createdBody.provider.id].sort();
+      expect(saved?.providers.map((provider) => provider.id).sort()).toEqual(
+        ids
+      );
+      expect(
+        saved?.providers.find((provider) => provider.id === initial.provider.id)
+          ?.label
+      ).toBe("Renamed");
+      const reloaded = new AgentService(saved, null, databaseAdapter);
+      const listed = await reloaded.listProviders();
+      expect(listed.providers.map((provider) => provider.id).sort()).toEqual(
+        ids
+      );
+      expect(
+        listed.providers.find((provider) => provider.id === initial.provider.id)
+          ?.label
+      ).toBe("Renamed");
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      pause.release();
+    }
+  });
+
+  test("allows a valid create after a rejected create without changing saved providers", async () => {
+    const { create, send } = await setup();
+    const initial = await create({ customModels: picked, type: "groq" });
+    const before = await loadUserConfig();
+    const rejected = await send("POST", "/v1/providers", { type: "groq" });
+    expect(rejected.status).toBe(400);
+    expect(await loadUserConfig()).toEqual(before);
+    const next = await create({ customModels: picked, type: "groq" });
+    expect((await loadUserConfig())?.providers.map((p) => p.id).sort()).toEqual(
+      [initial.provider.id, next.provider.id].sort()
+    );
+  });
 
   test.each<ProviderName>(["command_code", "groq"])(
     "keeps the models picked on update for %s",
