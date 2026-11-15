@@ -381,17 +381,93 @@ test("a Custom endpoint with no name takes its host as the name", async () => {
   expect(form().displayName).toBe("api.example.test");
 });
 
-test("AI Club is its own picker entry that sets up Netra under AI Club's name", async () => {
-  const aiclub = PROVIDER_OPTIONS.find((option) => option.preset === "aiclub");
-  expect(aiclub).toEqual({ id: "netra", label: "AI Club", preset: "aiclub" });
+test("a preset picked in the picker sets up its provider type under the preset's name", async () => {
+  const preset = PROVIDER_OPTIONS.find((option) => option.preset);
 
-  const form = await renderSetupHook();
-  await act(async () => form().handleProviderSelect("netra", "aiclub"));
-  expect(form().selectedProvider).toBe("netra");
-  expect(form().selectedOptionKey).toBe("aiclub");
-  expect(form().displayName).toBe("AI Club");
+  const base = PROVIDER_OPTIONS.find(
+    (option) => option.id === preset?.id && !option.preset
+  );
 
-  await act(async () => form().handleProviderSelect("netra"));
-  expect(form().selectedOptionKey).toBe("netra");
-  expect(form().displayName).toBe("Netra Runtime");
+  if (!(preset && base)) {
+    throw new Error("expected a preset and its base provider entry");
+  }
+
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  queryClient.setQueryData(queryKeys.providers, { providers: [] });
+
+  let form!: ReturnType<typeof useProviderSetupForm>;
+
+  function Harness() {
+    form = useProviderSetupForm();
+
+    return <ProviderSetupFormBody form={form} showModelPicker={false} />;
+  }
+
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The form reads only isAuthenticated before anything is submitted. */
+            { isAuthenticated: true } as AuthContextValue
+          }
+        >
+          <AppContext.Provider
+            value={
+              /* SAFETY: createProvider is only called on submit, which this test never does. */
+              {
+                createProvider: () => Promise.reject(new Error("unused")),
+              } as never
+            }
+          >
+            <Harness />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    )
+  );
+
+  const trigger = () => container.querySelector<HTMLButtonElement>("#provider");
+
+  async function pick(option: (typeof PROVIDER_OPTIONS)[number]) {
+    await act(async () => trigger()?.click());
+
+    const item = [
+      ...document.body.querySelectorAll<HTMLElement>("[cmdk-item]"),
+    ].find((element) => element.textContent === option.label);
+
+    await act(async () => item?.click());
+  }
+
+  await pick(preset);
+  expect(form.selectedProvider).toBe(preset.id);
+  expect(form.displayName).toBe(preset.label);
+  expect(trigger()?.textContent).toBe(preset.label);
+  // The name the form fills in is not typed work.
+  expect(form.dirty).toBe(false);
+
+  await pick(base);
+  expect(form.selectedProvider).toBe(base.id);
+  expect(form.displayName).not.toBe(preset.label);
+  expect(trigger()?.textContent).toBe(base.label);
+
+  await pick(preset);
+  // The type is added elsewhere: the form moves off it and drops the preset.
+  await act(async () => {
+    queryClient.setQueryData(queryKeys.providers, {
+      providers: [{ type: preset.id }],
+    });
+    // The query cache tells its observers on the next tick.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(form.selectedProvider).not.toBe(preset.id);
+  expect(form.displayName).toBe("");
+  expect(trigger()?.textContent).not.toBe(preset.label);
+
+  queryClient.clear();
 });

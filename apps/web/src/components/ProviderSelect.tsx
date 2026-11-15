@@ -23,10 +23,7 @@ interface ProviderSelectProps {
   configuredTypes?: ReadonlySet<string>;
   disabled?: boolean;
   id?: string;
-  onValueChange: (
-    value: SelectedProvider,
-    preset?: ProviderOption["preset"]
-  ) => void;
+  onValueChange: (value: SelectedProvider, option?: ProviderOption) => void;
   /** The chosen entry's key: its preset, or else its provider type. */
   value: string;
 }
@@ -137,10 +134,13 @@ export function ProviderSelect({
                           return;
                         }
 
-                        onValueChange(option.id, option.preset);
+                        onValueChange(option.id, option);
                         setOpen(false);
                       }}
-                      value={`${option.label} ${providerOptionKey(option)}`}
+                      // A preset stays findable by its provider type (AI Club by "netra").
+                      value={[option.label, option.preset, option.id]
+                        .filter(Boolean)
+                        .join(" ")}
                     >
                       {option.label}
                     </CommandItem>

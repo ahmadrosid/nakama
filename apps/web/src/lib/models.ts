@@ -104,6 +104,18 @@ export function providerOptionKey(option: ProviderOption): string {
   return option.preset ?? option.id;
 }
 
+/** The name setup fills in: Netra uses the picked entry's label (AI Club). */
+export function defaultProviderDisplayName(
+  provider: SelectedProvider,
+  option?: ProviderOption
+): string {
+  if (provider !== "netra") {
+    return "";
+  }
+
+  return option?.label ?? "Netra Runtime";
+}
+
 export const PROVIDER_OPTIONS: ProviderOption[] = [
   { id: "openai", label: "OpenAI" },
   { id: "chatgpt", label: "ChatGPT (Plus/Pro)" },
