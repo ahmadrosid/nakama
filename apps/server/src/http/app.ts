@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import { isHtmlArtifactMimeType } from "@nakama/core/artifact-mime";
 import { bodyLimit } from "hono/body-limit";
+import { compress } from "hono/compress";
 import { requestId } from "hono/request-id";
 import { closeAgentGroupDatabases } from "../services/agent-group-store";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
@@ -320,6 +321,13 @@ export function createHonoApp(options: ServerOptions) {
     const finalResponse = c.res;
     c.res = applySecurityHeaders(finalResponse);
   });
+
+  // JSON only. A stream (SSE, file, plain text) must reach the client as it is
+  // written, and compression buffers it.
+  app.use(
+    "/v1/*",
+    compress({ contentTypeFilter: /^application\/json(?:[;\s]|$)/i })
+  );
 
   const rejectOversizedBody = () =>
     errorResponse("Request body is too large.", 413);

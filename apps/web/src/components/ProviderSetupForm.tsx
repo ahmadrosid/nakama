@@ -1,6 +1,6 @@
 import { resolveCloudflareAccountInput } from "@nakama/core/cloudflare-provider-config";
 import type { CreateProviderResponse } from "@nakama/core/contract";
-import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
+import { isDiscoveryModelProvider } from "@nakama/core/discovery-providers";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { Button } from "@nakama/ui/button";
 import { DialogFooter } from "@nakama/ui/dialog";
@@ -32,6 +32,7 @@ import {
   type CatalogShortlistProvider,
   isCatalogShortlistProvider,
 } from "@/components/catalog-provider-model-fields.shared";
+import { DiscoveryProviderModelFields } from "@/components/DiscoveryProviderModelFields";
 import { OllamaProviderModelFields } from "@/components/OllamaProviderModelFields";
 import { OllamaProviderSetupFields } from "@/components/OllamaProviderSetupFields";
 import { OpenRouterProviderModelFields } from "@/components/OpenRouterProviderModelFields";
@@ -470,22 +471,15 @@ function ProviderSetupExtraFields({
   keyField: ReactNode;
   showModelPicker: boolean;
 }) {
-  if (form.selectedProvider === "netra") {
+  if (
+    form.selectedProvider !== "openai_compatible" &&
+    isDiscoveryModelProvider(form.selectedProvider)
+  ) {
     return (
-      <CustomProviderFields
-        apiKey={form.apiKey}
-        baseUrl={defaultDiscoveryBaseUrl("netra") ?? ""}
-        customModels={form.customModels}
+      <DiscoveryProviderModelFields
+        canConnect={canConnect}
         density={density}
-        disabled={form.busy}
-        displayName="Netra Runtime"
-        hideIdentity
-        modelsError={form.modelsError}
-        onBaseUrlChange={form.handleBaseUrlChange}
-        onCustomModelsChange={form.handleCustomModelsChange}
-        onDisplayNameChange={form.handleDisplayNameChange}
-        remoteProvider="netra"
-        showModelsEditor={canConnect}
+        form={form}
       />
     );
   }

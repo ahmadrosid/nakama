@@ -2316,9 +2316,17 @@ function observeDocumentDownloads() {
     "blob:published-document"
   );
 
-  const revokeUrl = spyOn(URL, "revokeObjectURL").mockImplementation(
-    () => undefined
-  );
+  const revokeUrl = mock<typeof URL.revokeObjectURL>(() => undefined);
+  const originalRevoke = URL.revokeObjectURL;
+
+  const revokeSpy = spyOn(URL, "revokeObjectURL").mockImplementation((url) => {
+    // Worker finalizers can revoke URLs created by earlier tests.
+    if (url === "blob:published-document") {
+      revokeUrl(url);
+    } else {
+      originalRevoke(url);
+    }
+  });
 
   const click = spyOn(
     window.HTMLAnchorElement.prototype,
@@ -2329,7 +2337,7 @@ function observeDocumentDownloads() {
 
   cleanups.push(() => {
     createUrl.mockRestore();
-    revokeUrl.mockRestore();
+    revokeSpy.mockRestore();
     click.mockRestore();
   });
 

@@ -170,7 +170,8 @@ export class AuthClient extends ChannelsClient {
       }
     );
 
-    if (scopeRevision === this.orgScopeRevision) {
+    // A pending invite grants no access yet; keep any org this tab already uses
+    if (!response.pending && scopeRevision === this.orgScopeRevision) {
       this.setOrgId(response.orgId);
     }
 

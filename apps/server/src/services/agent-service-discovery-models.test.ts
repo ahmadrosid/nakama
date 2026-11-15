@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { loadUserConfig } from "@nakama/core";
+import { loadUserConfig, saveUserConfig } from "@nakama/core";
 import type {
   CreateProviderRequest,
   CreateProviderResponse,
@@ -20,11 +20,25 @@ describe("saving models for discovery providers", () => {
 
   const picked = [{ default: true, id: "z-ai/glm-5.3-flash" }];
 
+  const discoveryTypes: ProviderName[] = [
+    "command_code",
+    "minimax",
+    "minimax_cn",
+    "moonshot",
+    "moonshot_cn",
+    "xai",
+    "groq",
+    "cheaper_inference",
+    "standardcompute",
+    "zhipu",
+    "zhipu_cn",
+  ];
+
   async function setup() {
     const databaseAdapter = createInMemoryDatabaseAdapter();
 
     const { app } = createMinimalHonoApp({
-      agent: new AgentService(null, null, databaseAdapter),
+      agent: new AgentService(await loadUserConfig(), null, databaseAdapter),
       databaseAdapter,
     });
 
@@ -84,7 +98,11 @@ describe("saving models for discovery providers", () => {
     "keeps the models picked on update for %s",
     async (type) => {
       const { create, listed, modelIds, savedModels, send } = await setup();
-      const { provider } = await create({ type });
+
+      const { provider } = await create({
+        customModels: [{ id: "previous-model" }],
+        type,
+      });
 
       const response = await send("PATCH", `/v1/providers/${provider.id}`, {
         customModels: picked,
@@ -119,17 +137,89 @@ describe("saving models for discovery providers", () => {
     });
   });
 
-  test("lists no models for a discovery provider saved without any", async () => {
-    const { create, listed } = await setup();
-    const { provider } = await create({ type: "command_code" });
+  test.each(discoveryTypes)(
+    "rejects creating %s without models",
+    async (type) => {
+      const { create, send } = await setup();
 
-    expect(await listed(provider.id)).toMatchObject({ modelCount: 0 });
+      const emptyRequests = [
+        {},
+        { customModels: [] },
+        { model: "  " },
+        { customModels: [{ id: "  " }] },
+      ];
+
+      for (const hasProvider of [false, true]) {
+        if (hasProvider) {
+          await create({ customModels: picked, type });
+        }
+
+        const before = await loadUserConfig();
+        const listedBefore = await (await send("GET", "/v1/providers")).json();
+
+        for (const fields of emptyRequests) {
+          const response = await send("POST", "/v1/providers", {
+            ...fields,
+            type,
+          });
+
+          expect(response.status).toBe(400);
+          expect(await loadUserConfig()).toEqual(before);
+          expect(await (await send("GET", "/v1/providers")).json()).toEqual(
+            listedBefore
+          );
+        }
+      }
+    }
+  );
+
+  test("loads an older discovery provider with no models", async () => {
+    await saveUserConfig({
+      defaultProviderId: "legacy",
+      providers: [
+        {
+          apiKey: "",
+          createdAt: "2026-11-01T00:00:00.000Z",
+          id: "legacy",
+          label: "Legacy",
+          type: "command_code",
+        },
+      ],
+    });
+    const { listed, modelIds, send } = await setup();
+
+    expect(await listed("legacy")).toMatchObject({ modelCount: 0 });
+    expect(await modelIds()).toEqual([]);
+
+    const response = await send("PATCH", "/v1/providers/legacy", {
+      label: "Renamed",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await listed("legacy")).toMatchObject({
+      label: "Renamed",
+      modelCount: 0,
+    });
   });
 
-  test.each<ProviderName>(["command_code", "groq"])(
+  test("uses the selected model when customModels is empty", async () => {
+    const { create, modelIds, savedModels } = await setup();
+
+    const created = await create({
+      customModels: [],
+      model: picked[0].id,
+      type: "groq",
+    });
+
+    expect(created.initialModel).toBe(picked[0].id);
+    expect(await savedModels(created.provider.id)).toEqual(picked);
+    expect(await modelIds()).toEqual([picked[0].id]);
+  });
+
+  test.each(discoveryTypes)(
     "keeps the models picked on create for %s",
     async (type) => {
-      const { create, listed, savedModels } = await setup();
+      const { create, listed, modelIds, savedModels } = await setup();
       const created = await create({ customModels: picked, type });
 
       expect(created.initialModel).toBe(picked[0].id);
@@ -137,10 +227,11 @@ describe("saving models for discovery providers", () => {
         modelCount: 1,
       });
       expect(await savedModels(created.provider.id)).toEqual(picked);
+      expect(await modelIds()).toEqual([picked[0].id]);
     }
   );
 
-  test.each<ProviderName>(["command_code", "groq"])(
+  test.each(discoveryTypes)(
     "keeps the model picked in the Add form for %s",
     async (type) => {
       const { create, listed, modelIds, savedModels } = await setup();

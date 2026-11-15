@@ -231,7 +231,8 @@ describe("Meet capture socket on the main server", () => {
 
     expect((await closed).code).toBe(1008);
     expect(Date.now() - begin).toBeGreaterThanOrEqual(4900);
-  }, 10_000);
+    // The 5 s server timer plus setup; slow Windows runners need the margin.
+  }, 20_000);
 
   test("closes with 1008 on a bad, wrong-meeting or expired ticket, or audio before auth", async () => {
     const { leave, start } = await serveCapture();

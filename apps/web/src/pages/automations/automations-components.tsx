@@ -50,12 +50,14 @@ import { TimezoneSelect } from "@/components/TimezoneSelect";
 import { AuthContext } from "@/context/auth-context-shared";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { useAutomationRunTranscriptQuery } from "@/hooks/use-automations";
 import { useUserTimezone } from "@/hooks/use-timezones";
 import {
   formatFutureRelativeTime,
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
+import { formatError } from "@/lib/client";
 import { canAccessIntegrationsPage } from "@/lib/navigation";
 import {
   automationRunMessages,
@@ -1019,7 +1021,6 @@ function RunDetailPopup({
   profileId: string;
   onRerun: () => void;
 }) {
-  const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
   // Tied to the run it came from, so switching runs closes it
   const [caseRunId, setCaseRunId] = useState<string | null>(null);
 
@@ -1041,28 +1042,7 @@ function RunDetailPopup({
             : "Run conversation"}
         </DialogTitle>
         {selectedRun ? (
-          <Button
-            aria-label={
-              copiedRunId === selectedRun.id ? "Copied run ID" : "Copy run ID"
-            }
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(selectedRun.id);
-                setCopiedRunId(selectedRun.id);
-              } catch {
-                // Clipboard may be unavailable outside a secure context.
-              }
-            }}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            {copiedRunId === selectedRun.id ? (
-              <CheckmarkCircle01Icon aria-hidden className="size-4" />
-            ) : (
-              <Copy01Icon aria-hidden className="size-4" />
-            )}
-          </Button>
+          <CopyRunIdButton key={selectedRun.id} runId={selectedRun.id} />
         ) : null}
         {canSaveCase ? (
           <Button
@@ -1098,15 +1078,8 @@ function RunDetailPopup({
           <Cancel01Icon aria-hidden className="size-4" />
         </DialogPrimitive.Close>
       </div>
-      {selectedRun?.deliveryError ? (
-        <p className="px-4 py-2 text-destructive text-sm" role="alert">
-          {selectedRun.deliveryError}
-        </p>
-      ) : null}
       {selectedRun ? (
-        <ChatAttachmentPanelProvider key={selectedRun.id}>
-          <RunConversation profileId={profileId} run={selectedRun} />
-        </ChatAttachmentPanelProvider>
+        <RunDetailBody profileId={profileId} run={selectedRun} />
       ) : null}
       {canSaveCase && selectedRun ? (
         <SaveRegressionCaseDialog
@@ -1125,18 +1098,100 @@ function RunDetailPopup({
   );
 }
 
-/**
- * An open file panel sits beside a 24rem conversation, the room the panel
- * column leaves for it, and the drawer grows to fit both.
- */
-function RunConversation({
+function CopyRunIdButton({ runId }: { runId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <Button
+      aria-label={copied ? "Copied run ID" : "Copy run ID"}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(runId);
+          setCopied(true);
+        } catch {
+          // Clipboard may be unavailable outside a secure context.
+        }
+      }}
+      size="icon-sm"
+      type="button"
+      variant="ghost"
+    >
+      {copied ? (
+        <CheckmarkCircle01Icon aria-hidden className="size-4" />
+      ) : (
+        <Copy01Icon aria-hidden className="size-4" />
+      )}
+    </Button>
+  );
+}
+
+function RunDetailBody({
   run,
   profileId,
 }: {
   run: AutomationRunRecord;
   profileId: string;
 }) {
+  // The run list leaves out a finished run's transcript.
+  const needsTranscript = run.status !== "running" && !run.progress?.length;
+
+  const transcript = useAutomationRunTranscriptQuery(
+    run.automationId,
+    run.id,
+    needsTranscript
+  );
+
+  return (
+    <>
+      {run.deliveryError ? (
+        <p className="px-4 py-2 text-destructive text-sm" role="alert">
+          {run.deliveryError}
+        </p>
+      ) : null}
+      {needsTranscript && transcript.error ? (
+        <p className="px-4 py-2 text-destructive text-sm" role="alert">
+          {formatError(transcript.error)}
+        </p>
+      ) : null}
+      <ChatAttachmentPanelProvider key={run.id}>
+        <RunConversation
+          loading={needsTranscript && transcript.isPending}
+          profileId={profileId}
+          run={run}
+          saved={needsTranscript ? transcript.data : undefined}
+        />
+      </ChatAttachmentPanelProvider>
+    </>
+  );
+}
+
+/**
+ * An open file panel sits beside a 24rem conversation, the room the panel
+ * column leaves for it, and the drawer grows to fit both.
+ */
+function RunConversation({
+  run,
+  saved,
+  loading,
+  profileId,
+}: {
+  run: AutomationRunRecord;
+  /** The saved run with its transcript, once loaded. */
+  saved: AutomationRunRecord | undefined;
+  loading: boolean;
+  profileId: string;
+}) {
   const { isFullscreen, isOpen } = useChatAttachmentPanel();
+  // A run that finishes while open keeps its streamed transcript on screen.
+  const [streamed, setStreamed] = useState(run.progress);
+
+  if (run.progress?.length && run.progress !== streamed) {
+    setStreamed(run.progress);
+  }
+
+  // Until the saved transcript loads, or if it fails, show what is in hand.
+  const shownRun =
+    saved ?? (run.progress?.length ? run : { ...run, progress: streamed });
 
   return (
     <ChatMessageList
@@ -1152,9 +1207,13 @@ function RunConversation({
           "max-md:pointer-events-none max-md:w-0 max-md:flex-none max-md:overflow-hidden max-md:opacity-0"
       )}
       emptyMessage={
-        run.status === "running" ? "Waiting for output…" : "No output returned."
+        run.status === "running"
+          ? "Waiting for output…"
+          : loading
+            ? "Loading…"
+            : "No output returned."
       }
-      messages={automationRunMessages(run)}
+      messages={automationRunMessages(shownRun)}
       profileId={profileId}
       readOnly
       streamActive={run.status === "running"}

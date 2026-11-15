@@ -161,6 +161,20 @@ export function describeAuditEvent(
     };
   }
 
+  match = pathname.match(
+    /^\/v1\/orgs\/([^/]+)\/join-requests\/([^/]+)(\/approve)?$/
+  );
+
+  if (
+    match &&
+    ((method === "POST" && match[3]) || (method === "DELETE" && !match[3]))
+  ) {
+    return {
+      ...event(match[3] ? "member.approve" : "member.reject", "user", match[2]),
+      orgId: decodePathPart(match[1]),
+    };
+  }
+
   match = pathname.match(/^\/v1\/orgs\/([^/]+)\/members$/);
 
   if (match && method === "POST") {

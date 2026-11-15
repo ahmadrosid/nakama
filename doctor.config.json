@@ -1,5 +1,9 @@
 {
   "ignore": {
+    "files": [
+      "src/components/moodstone/core/**",
+      "src/components/moodstone/svg.ts"
+    ],
     "overrides": [
       {
         "files": ["**/*.test.ts", "**/*.test.tsx"],

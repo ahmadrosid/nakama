@@ -36,6 +36,9 @@ export const queryKeys = {
   },
   automations: {
     all: ["automations"] as const,
+    // Not under `runs`, so refreshing the list does not refetch a transcript.
+    run: (automationId: string, runId: string) =>
+      ["automations", automationId, "run", runId] as const,
     runs: (automationId: string) =>
       ["automations", automationId, "runs"] as const,
   },
@@ -83,6 +86,8 @@ export const queryKeys = {
     ["organizationPublicationCatalog", orgId, kind] as const,
   // Under orgMembers, so a new invite refreshes this list too.
   orgInvites: (orgId: string) => ["orgMembers", orgId, "invites"] as const,
+  orgJoinRequests: (orgId: string) =>
+    ["orgMembers", orgId, "joinRequests"] as const,
   orgMembers: (orgId: string) => ["orgMembers", orgId] as const,
   orgMemory: (orgId: string) => ["orgMemory", orgId] as const,
   orgMemoryHistory: (orgId: string) => ["orgMemoryHistory", orgId] as const,

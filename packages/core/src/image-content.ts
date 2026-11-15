@@ -77,11 +77,24 @@ export function replaceImagePartsWithDescriptions(
   return parts;
 }
 
+// A bare "[Image]" label reads like a caption the user typed, so text-only
+// models reply that no image came through. Say what the description is.
+function formatImageDescriptionForProvider(description: string): string {
+  return `[Image from the user. You cannot see images, so a vision model described it below. Use this description as what the image shows. If a detail is not in it, say so.]\n${description.trim()}`;
+}
+
+// Older history stored the description as "[Image]\n..." text.
+function reframeLegacyImageDescription(text: string): string {
+  const description = parseImageDescriptionText(text);
+
+  return description ? formatImageDescriptionForProvider(description) : text;
+}
+
 export function resolveUserContentForNonVisionProvider(
   content: string | MessageContentPart[]
 ): string | MessageContentPart[] {
   if (!Array.isArray(content)) {
-    return content;
+    return reframeLegacyImageDescription(content);
   }
 
   const parts: MessageContentPart[] = [];
@@ -89,9 +102,14 @@ export function resolveUserContentForNonVisionProvider(
   for (const part of content) {
     if (part.type === "image" && part.description?.trim()) {
       parts.push({
-        text: formatImageDescriptionText(part.description),
+        text: formatImageDescriptionForProvider(part.description),
         type: "text",
       });
+      continue;
+    }
+
+    if (part.type === "text") {
+      parts.push({ ...part, text: reframeLegacyImageDescription(part.text) });
       continue;
     }
 

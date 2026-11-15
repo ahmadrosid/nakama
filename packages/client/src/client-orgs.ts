@@ -8,6 +8,7 @@ import type {
   InviteOrgMemberRequest,
   ListOrganizationsResponse,
   ListOrgInvitesResponse,
+  ListOrgJoinRequestsResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   ListSkillCuratorOrgsResponse,
@@ -341,6 +342,28 @@ export class OrgsClient extends AuthClient {
   async listOrgInvites(orgId: string): Promise<ListOrgInvitesResponse> {
     return this.request<ListOrgInvitesResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/invites`
+    );
+  }
+
+  async listOrgJoinRequests(
+    orgId: string
+  ): Promise<ListOrgJoinRequestsResponse> {
+    return this.request<ListOrgJoinRequestsResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/join-requests`
+    );
+  }
+
+  async approveOrgJoinRequest(orgId: string, userId: string): Promise<void> {
+    await this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/join-requests/${encodeURIComponent(userId)}/approve`,
+      { method: "POST" }
+    );
+  }
+
+  async rejectOrgJoinRequest(orgId: string, userId: string): Promise<void> {
+    await this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/join-requests/${encodeURIComponent(userId)}`,
+      { method: "DELETE" }
     );
   }
 

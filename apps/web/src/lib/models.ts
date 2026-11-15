@@ -565,8 +565,7 @@ export function buildCreateProviderRequest(options: {
   xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
   const customModels =
-    options.provider === "openai_compatible" ||
-    options.provider === "netra" ||
+    isDiscoveryModelProvider(options.provider) ||
     ([
       "openrouter",
       "xai_oauth",
@@ -965,6 +964,12 @@ export const TRANSCRIPTION_MODEL_OPTIONS = [
 /** Sole v1 image-generation model option (matches server allowlist). */
 export const IMAGE_GENERATION_MODEL_OPTIONS = [
   { id: "gpt-image-2", name: "GPT Image 2" },
+] as const;
+
+/** MiniMax image models (match server allowlist). */
+export const MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS = [
+  { id: "MiniMax-H3-Image", name: "MiniMax H3 Image" },
+  { id: "MiniMax-H3-Image-Highspeed", name: "MiniMax H3 Image Highspeed" },
 ] as const;
 
 /** Workspace selection string accepted by `/v1/settings/image-generation`. */

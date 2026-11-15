@@ -125,6 +125,13 @@ function initialProfileSection(
   return hash === "#profile-connections" ? "channels" : "prompt";
 }
 
+/** The chosen section, or the first one this member can see. */
+function visibleSection(sections: { value: string }[], section: string) {
+  return sections.some((item) => item.value === section)
+    ? section
+    : (sections[0]?.value ?? "tools");
+}
+
 function ProfileSectionTab({
   hint,
   label,
@@ -260,11 +267,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         className="min-w-0 space-y-6"
         key={detail.id}
         onValueChange={(value) => setSection(String(value))}
-        value={
-          sections.some((item) => item.value === section)
-            ? section
-            : (sections[0]?.value ?? "tools")
-        }
+        value={visibleSection(sections, section)}
       >
         <Tabs.List
           aria-label="Agent sections"
