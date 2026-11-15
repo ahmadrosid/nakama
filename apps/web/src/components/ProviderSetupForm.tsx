@@ -120,7 +120,7 @@ export function ProviderSetupFormBody({
           disabled={form.busy}
           id="provider"
           onValueChange={form.handleProviderSelect}
-          value={form.selectedProvider}
+          value={form.selectedOptionKey}
         />
       </FormField>
 

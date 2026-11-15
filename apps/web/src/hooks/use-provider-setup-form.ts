@@ -13,7 +13,13 @@ import {
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "@nakama/core/discovery-providers";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
@@ -27,6 +33,7 @@ import {
   buildCreateProviderRequest,
   defaultModelForProvider,
   defaultOllamaSetupBaseUrl,
+  defaultProviderDisplayName,
   filterModelsByProvider,
   firstAvailableProviderOption,
   getModelDisplayName,
@@ -35,6 +42,7 @@ import {
   modelsFromCustomRows,
   modelsFromOpenRouterRows,
   modelsFromShortlistRows,
+  type ProviderOption,
   resolveOpenRouterSetupModel,
   type SelectedProvider,
   validateApiKeyForProvider,
@@ -84,6 +92,9 @@ export function useProviderSetupForm(
     options.initialProvider ?? "openai"
   );
 
+  // The picker entry: tells a preset (AI Club) from its provider type.
+  const [selectedOption, setSelectedOption] = useState<ProviderOption>();
+
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
@@ -130,15 +141,18 @@ export function useProviderSetupForm(
     }
   }, [catalogQueryError]);
 
-  useEffect(() => {
-    setSelectedProvider((current) => {
-      if (!isProviderTypeAlreadyConfigured(current, configuredTypes)) {
-        return current;
-      }
+  // A taken type drops its preset and the name that came with it.
+  const leaveTakenType = useEffectEvent((taken: ReadonlySet<string>) => {
+    if (isProviderTypeAlreadyConfigured(selectedProvider, taken)) {
+      setSelectedProvider(
+        firstAvailableProviderOption(taken, selectedProvider)
+      );
+      setSelectedOption(undefined);
+      setDisplayName("");
+    }
+  });
 
-      return firstAvailableProviderOption(configuredTypes, current);
-    });
-  }, [configuredTypes]);
+  useEffect(() => leaveTakenType(configuredTypes), [configuredTypes]);
 
   const filteredModels = useMemo(() => {
     // These providers have no catalog: the user browses or types the list.
@@ -253,12 +267,13 @@ export function useProviderSetupForm(
   );
 
   const handleProviderSelect = useCallback(
-    (provider: SelectedProvider) => {
+    (provider: SelectedProvider, option?: ProviderOption) => {
       if (isProviderTypeAlreadyConfigured(provider, configuredTypes)) {
         return;
       }
 
       setSelectedProvider(provider);
+      setSelectedOption(option);
       // The last provider's model never fits the new one.
       setSelectedModel("");
       setFormError(null);
@@ -280,7 +295,8 @@ export function useProviderSetupForm(
 
       if (provider === "netra") {
         setBaseUrl(defaultDiscoveryBaseUrl("netra") ?? "");
-        setDisplayName("Netra Runtime");
+        // A preset saves under its own name: AI Club is Netra under AI Club's label.
+        setDisplayName(defaultProviderDisplayName(provider, option));
       }
 
       if (isDiscoveryModelProvider(provider)) {
@@ -621,10 +637,13 @@ export function useProviderSetupForm(
     ]
   );
 
-  // A typed key, name or picked model is work the user would lose.
+  // A typed key, name (not the default) or picked model is work to lose.
   const dirty =
     apiKey.trim() !== "" ||
-    displayName.trim() !== "" ||
+    ![
+      "",
+      defaultProviderDisplayName(selectedProvider, selectedOption),
+    ].includes(displayName.trim()) ||
     customModels.length > 0 ||
     catalogRows !== null ||
     openRouterModels.length > 0 ||
@@ -669,6 +688,7 @@ export function useProviderSetupForm(
     openRouterModelsError,
     openRouterRouting,
     selectedModel,
+    selectedOptionKey: selectedOption?.preset ?? selectedProvider,
     selectedProvider,
     setChatgptOAuth,
     setOpenRouterRouting,
