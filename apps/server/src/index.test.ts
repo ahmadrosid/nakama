@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { removeTestDir } from "./test-config-dir";
 
 const startupCases = [
   {
@@ -65,6 +66,29 @@ const configLogSchema = z.object({
   trustProxy: z.boolean(),
 });
 
+/** PM2 and its workers stay alive after the server. Without this they pile up. */
+async function stopPm2(pm2Home: string): Promise<void> {
+  // The daemon goes first, or it starts its workers again.
+  for (const pattern of ["pm2.pid", "pids/*.pid"]) {
+    for await (const file of new Bun.Glob(pattern).scan({ cwd: pm2Home })) {
+      const pid = Number(await readFile(join(pm2Home, file), "utf8"));
+
+      if (!(Number.isInteger(pid) && pid > 0)) {
+        continue;
+      }
+
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch (error) {
+        // SAFETY: process.kill throws Node's errno error.
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+          throw error;
+        }
+      }
+    }
+  }
+}
+
 test.each(startupCases)(
   "startup $name",
   async ({ env, saved, source, url, trustProxy, warning }) => {
@@ -72,6 +96,11 @@ test.each(startupCases)(
       join(tmpdir(), "nakama-startup-public-url-")
     );
 
+    // The server starts a PM2 daemon and workers that stay alive after it. A
+    // private home keeps them away from other tests and a developer's own PM2.
+    const pm2Home = join(configDir, "pm2");
+
+    await mkdir(pm2Home);
     await writeFile(
       join(configDir, "config.ini"),
       saved ? `web_public_url=${saved}\n` : ""
@@ -88,6 +117,7 @@ test.each(startupCases)(
           NAKAMA_PORT: "0",
           NAKAMA_SECRETS_KEY: Buffer.alloc(32, 1).toString("base64"),
           PATH: process.env.PATH,
+          PM2_HOME: pm2Home,
           ...env,
         },
         ipc() {},
@@ -96,7 +126,9 @@ test.each(startupCases)(
       }
     );
 
-    const deadline = setTimeout(() => child.kill("SIGKILL"), 20_000);
+    // Longer than the PM2 connect deadline: a daemon that does not answer
+    // delays startup, but the server must listen after it.
+    const deadline = setTimeout(() => child.kill("SIGKILL"), 45_000);
     const errors = new Response(child.stderr).text();
     let output = "";
 
@@ -151,12 +183,14 @@ test.each(startupCases)(
       await child.exited;
       clearTimeout(deadline);
       const stderr = await errors;
-      await rm(configDir, { force: true, recursive: true });
+
+      await stopPm2(pm2Home);
+      await removeTestDir(configDir);
 
       if (!output.includes("Nakama database ready at")) {
-        console.error(stderr);
+        console.error(`Server stdout:\n${output}\nServer stderr:\n${stderr}`);
       }
     }
   },
-  25_000
+  50_000
 );
