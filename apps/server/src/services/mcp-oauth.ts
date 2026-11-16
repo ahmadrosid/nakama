@@ -225,6 +225,8 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
     const patch: Partial<McpOAuthGrant> = {
       authorizationStartedAt: undefined,
       authorizationUrl: undefined,
+      codeVerifier: undefined,
+      state: undefined,
     };
 
     if (all || scope === "client") {
@@ -233,11 +235,6 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
 
     if (all || scope === "tokens") {
       patch.tokens = undefined;
-    }
-
-    if (all || scope === "verifier") {
-      patch.codeVerifier = undefined;
-      patch.state = undefined;
     }
 
     await this.update(patch);
@@ -253,8 +250,14 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
     const pending = Buffer.from(this.grant.state ?? "");
     const given = Buffer.from(state);
 
+    // Pre-upgrade tabs have no URL or start time, but their paired grant is still single use.
+    const legacyPending =
+      this.grant.authorizationStartedAt === undefined &&
+      this.grant.authorizationUrl === undefined &&
+      Boolean(this.grant.codeVerifier && this.grant.clientInformation);
+
     return (
-      Boolean(this.pendingAuthorizationUrl()) &&
+      (Boolean(this.pendingAuthorizationUrl()) || legacyPending) &&
       pending.length > 0 &&
       pending.length === given.length &&
       timingSafeEqual(pending, given)

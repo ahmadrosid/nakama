@@ -1,11 +1,23 @@
 import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import type { LookupAddress, LookupAllOptions } from "node:dns";
+import * as dnsModule from "node:dns/promises";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
+import { createMinimalHonoApp } from "../http/test-app-helpers";
+import { asTestFetch } from "../providers/test-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { McpClientManager } from "./mcp-client-manager";
-import { McpServerOAuthProvider, readMcpOAuthGrant } from "./mcp-oauth";
+import {
+  type McpOAuthGrant,
+  McpServerOAuthProvider,
+  readMcpOAuthGrant,
+} from "./mcp-oauth";
 import { startOAuthProtectedMcpServer } from "./mcp-oauth-test-fixture";
 import { McpService } from "./mcp-service";
+
+const dns: {
+  lookup(hostname: string, options: LookupAllOptions): Promise<LookupAddress[]>;
+} = dnsModule;
 
 const ACCESS_TOKEN = "fake-access-token";
 
@@ -19,6 +31,194 @@ afterAll(async () => {
 
 describe("MCP pending browser flow", () => {
   setupTestConfigDir("nakama-mcp-pending-");
+  test.each(["initial", "reauthorization", "without-origin"])(
+    "a pre-upgrade %s tab completes once",
+    async (flow) => {
+      const db = createInMemoryDatabaseAdapter();
+      const manager = new McpClientManager();
+      const service = new McpService(db, manager);
+
+      const created = await service.createServer(
+        {
+          config: { url: remote.url },
+          name: "pre-upgrade",
+          transport: "http",
+        },
+        { callbackBaseUrl: CALLBACK_BASE_URL }
+      );
+
+      const stored = await db.getMcpServer(created.server.id);
+      const grant = readMcpOAuthGrant(stored?.config);
+
+      if (!(stored && grant)) {
+        throw new Error("Expected a pending grant");
+      }
+
+      if (flow === "reauthorization") {
+        grant.tokens = {
+          access_token: "expired-before-upgrade",
+          token_type: "Bearer",
+        };
+      }
+
+      if (flow === "without-origin") {
+        delete grant.callbackBaseUrl;
+      }
+
+      delete grant.authorizationUrl;
+      delete grant.authorizationStartedAt;
+      await db.upsertMcpServer({
+        ...stored,
+        config: { oauth: grant, url: remote.url },
+      });
+      const url = z.string().parse(created.authorizationUrl);
+      const state = z.string().parse(new URL(url).searchParams.get("state"));
+      const code = remote.issueCode(url);
+
+      const { app } = createMinimalHonoApp({
+        databaseAdapter: db,
+        mcpService: new McpService(db, manager),
+      });
+
+      const callback = (value: string) =>
+        app.fetch(
+          new Request(
+            `${CALLBACK_BASE_URL}/v1/mcp/oauth/callback/${created.server.id}?${new URLSearchParams({ code, state: value })}`
+          )
+        );
+
+      const before = remote.tokenRequests.length;
+
+      try {
+        expect((await callback("wrong-state")).status).toBe(400);
+        expect(remote.tokenRequests.length).toBe(before);
+        expect((await callback(state)).status).toBe(200);
+        expect((await callback(state)).status).toBe(400);
+        expect(remote.tokenRequests.length - before).toBe(1);
+
+        const completed = readMcpOAuthGrant(
+          (await db.getMcpServer(created.server.id))?.config
+        );
+
+        expect(completed?.tokens?.access_token).toBe(ACCESS_TOKEN);
+        expect(completed?.state).toBeUndefined();
+        expect(completed?.codeVerifier).toBeUndefined();
+      } finally {
+        await manager.disconnectAll();
+      }
+    }
+  );
+
+  test.each(["authorizationUrl", "authorizationStartedAt"] as const)(
+    "a grant missing only %s cannot bypass expiry as a legacy grant",
+    (field) => {
+      const grant: McpOAuthGrant = {
+        authorizationStartedAt: Date.now(),
+        authorizationUrl: "https://auth.example.com/authorize",
+        callbackBaseUrl: CALLBACK_BASE_URL,
+        clientInformation: {
+          client_id: "client",
+          redirect_uris: [`${CALLBACK_BASE_URL}/v1/mcp/oauth/callback/partial`],
+        },
+        codeVerifier: "verifier",
+        state: "state",
+      };
+
+      delete grant[field];
+
+      const provider = new McpServerOAuthProvider(
+        "partial",
+        CALLBACK_BASE_URL,
+        grant,
+        async () => {}
+      );
+
+      expect(provider.matchesPendingState("state")).toBe(false);
+    }
+  );
+
+  test("DNS expiry releases the OAuth lock for queued update and delete", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    const created = await service.createServer({
+      config: { url: "https://stalled.invalid/mcp" },
+      connect: false,
+      name: "dns-deadline",
+      transport: "http",
+    });
+
+    const stored = await db.getMcpServer(created.server.id);
+
+    if (!stored) {
+      throw new Error("Expected a stored server");
+    }
+
+    await db.upsertMcpServer({
+      ...stored,
+      config: { oauth: {}, url: "https://stalled.invalid/mcp" },
+    });
+    const entered = Promise.withResolvers<void>();
+    const lookup = Promise.withResolvers<LookupAddress[]>();
+    const deadline = new AbortController();
+    const realTimeout = AbortSignal.timeout;
+
+    using dnsSpy = spyOn(dns, "lookup").mockImplementation(() => {
+      entered.resolve();
+
+      return lookup.promise;
+    });
+
+    using timeoutSpy = spyOn(AbortSignal, "timeout").mockImplementation((ms) =>
+      ms === 5000 ? deadline.signal : realTimeout(ms)
+    );
+
+    using fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch(async () => {
+        throw new Error("HTTP must not start after DNS abort");
+      })
+    );
+
+    const connect = service.connectServer(created.server.id, {
+      callbackBaseUrl: CALLBACK_BASE_URL,
+    });
+
+    await entered.promise;
+    const update = service.updateServer(created.server.id, { name: "updated" });
+    const remove = service.deleteServer(created.server.id);
+    const settled = Promise.allSettled([connect, update, remove]);
+    let dnsReleased = false;
+
+    const releaseLookup = () => {
+      dnsReleased = true;
+      lookup.resolve([{ address: "127.0.0.1", family: 4 }]);
+    };
+
+    // Release stalled DNS only if the regression would otherwise hang cleanup.
+    const guard = setTimeout(releaseLookup, 5000);
+
+    try {
+      deadline.abort(new DOMException("DNS timed out", "TimeoutError"));
+      const results = await settled;
+      expect(dnsReleased).toBe(false);
+      expect(results.map((result) => result.status)).toEqual([
+        "rejected",
+        "fulfilled",
+        "fulfilled",
+      ]);
+      expect(await db.getMcpServer(created.server.id)).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(dnsSpy).toHaveBeenCalled();
+      expect(timeoutSpy).toHaveBeenCalled();
+    } finally {
+      clearTimeout(guard);
+      releaseLookup();
+      await settled;
+      await manager.disconnectAll();
+    }
+  }, 10_000);
+
   test("reuses a persisted pending flow after the service is recreated", async () => {
     const db = createInMemoryDatabaseAdapter();
     const manager = new McpClientManager();
