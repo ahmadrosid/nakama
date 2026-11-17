@@ -25,11 +25,9 @@ import { fetchMcpRemote } from "./mcp-fetch";
  * reach an API response.
  */
 export interface McpOAuthGrant {
-  /**
-   * Origin the pending flow was started from. The token exchange has to send
-   * back the exact `redirect_uri` the authorization request used, and the
-   * callback request itself cannot be asked: it arrives from the provider.
-   */
+  authorizationStartedAt?: number;
+  authorizationUrl?: string;
+  /** The token exchange repeats the redirect URI used to start this flow. */
   callbackBaseUrl?: string;
   clientInformation?: OAuthClientInformationFull;
   codeVerifier?: string;
@@ -42,6 +40,8 @@ export type StoredMcpHttpConfig = McpHttpConfig & { oauth?: McpOAuthGrant };
 const StoredOAuthConfigSchema = z.object({
   oauth: z
     .object({
+      authorizationStartedAt: z.number().int().nonnegative().optional(),
+      authorizationUrl: z.url().optional(),
       callbackBaseUrl: z.string().optional(),
       clientInformation: OAuthClientInformationFullSchema.optional(),
       codeVerifier: z.string().optional(),
@@ -61,6 +61,12 @@ export function readMcpOAuthGrant(
 
 /** A stalled well-known endpoint must not hold a Test connection open (#326). */
 const OAUTH_PROBE_TIMEOUT_MS = 5000;
+
+/** How long a repeated Sign in hands back the same link. */
+const OAUTH_FLOW_TTL_MS = 10 * 60_000;
+
+/** Consent can outlast the link reuse window, so the callback gets longer. */
+const OAUTH_CALLBACK_TTL_MS = 30 * 60_000;
 
 /**
  * Whether a server that refused us speaks OAuth, decided by the RFC 9728
@@ -140,12 +146,24 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
     // The grant is live now, so the one-shot authorization leftovers go.
-    await this.update({ codeVerifier: undefined, state: undefined, tokens });
+    await this.update({
+      authorizationStartedAt: undefined,
+      authorizationUrl: undefined,
+      codeVerifier: undefined,
+      state: undefined,
+      tokens,
+    });
   }
 
   async state(): Promise<string> {
     const state = nanoid(32);
-    await this.update({ callbackBaseUrl: this.callbackBaseUrl, state });
+    await this.update({
+      authorizationStartedAt: Date.now(),
+      authorizationUrl: undefined,
+      callbackBaseUrl: this.callbackBaseUrl,
+      codeVerifier: undefined,
+      state,
+    });
 
     return state;
   }
@@ -164,8 +182,40 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
     return verifier;
   }
 
-  redirectToAuthorization(authorizationUrl: URL): void {
+  async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
+    await this.update({ authorizationUrl: authorizationUrl.toString() });
     this.authorizationUrl = authorizationUrl.toString();
+  }
+
+  /** Age of a complete browser flow started for this origin, if one is stored. */
+  private pendingFlowAge(): number | undefined {
+    const startedAt = this.grant.authorizationStartedAt;
+
+    if (
+      startedAt === undefined ||
+      !this.grant.authorizationUrl ||
+      !this.grant.state ||
+      !this.grant.codeVerifier ||
+      !this.grant.clientInformation ||
+      this.grant.callbackBaseUrl?.replace(/\/$/, "") !==
+        this.callbackBaseUrl.replace(/\/$/, "")
+    ) {
+      return;
+    }
+
+    const age = Date.now() - startedAt;
+
+    return age < 0 ? undefined : age;
+  }
+
+  pendingAuthorizationUrl(): string | undefined {
+    const age = this.pendingFlowAge();
+
+    if (age === undefined || age >= OAUTH_FLOW_TTL_MS) {
+      return;
+    }
+
+    return this.grant.authorizationUrl;
   }
 
   /**
@@ -181,7 +231,12 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
 
     const all = scope === "all";
 
-    const patch: Partial<McpOAuthGrant> = {};
+    const patch: Partial<McpOAuthGrant> = {
+      authorizationStartedAt: undefined,
+      authorizationUrl: undefined,
+      codeVerifier: undefined,
+      state: undefined,
+    };
 
     if (all || scope === "client") {
       patch.clientInformation = undefined;
@@ -189,11 +244,6 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
 
     if (all || scope === "tokens") {
       patch.tokens = undefined;
-    }
-
-    if (all || scope === "verifier") {
-      patch.codeVerifier = undefined;
-      patch.state = undefined;
     }
 
     await this.update(patch);
@@ -209,7 +259,16 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
     const pending = Buffer.from(this.grant.state ?? "");
     const given = Buffer.from(state);
 
+    // Pre-upgrade tabs have no URL or start time, but their paired grant is still single use.
+    const legacyPending =
+      this.grant.authorizationStartedAt === undefined &&
+      this.grant.authorizationUrl === undefined &&
+      Boolean(this.grant.codeVerifier && this.grant.clientInformation);
+
+    const age = this.pendingFlowAge();
+
     return (
+      ((age !== undefined && age < OAUTH_CALLBACK_TTL_MS) || legacyPending) &&
       pending.length > 0 &&
       pending.length === given.length &&
       timingSafeEqual(pending, given)

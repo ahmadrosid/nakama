@@ -37,6 +37,15 @@ export function registerMcpOAuthRoutes(
       c.req.query("error_description") || c.req.query("error");
 
     if (providerError) {
+      const failedState = c.req.query("state");
+
+      if (failedState) {
+        await mcpService.abandonOAuth(
+          decodeURIComponent(c.req.param("serverId")),
+          failedState
+        );
+      }
+
       return mcpOAuthPage("Authorization failed", providerError, 400);
     }
 
