@@ -1,10 +1,22 @@
 import type { NakamaClient } from "@nakama/client";
-import { type AgentChannel, pickProfileForOrg } from "@nakama/core";
+import {
+  type AgentChannel,
+  type ListUserOrgsResponse,
+  pickProfileForOrg,
+} from "@nakama/core";
 import {
   loadSavedCliOrgId,
   saveCliOrgId,
   saveCliProfileId,
 } from "./cli-config";
+
+/** One entry per organization, flagged when it is the one this CLI talks to. */
+export function orgListEntries(
+  orgs: ListUserOrgsResponse["orgs"],
+  activeOrgId: string | null
+): { current: boolean; org: ListUserOrgsResponse["orgs"][number] }[] {
+  return orgs.map((org) => ({ current: org.id === activeOrgId, org }));
+}
 
 export async function switchChatOrg(
   client: NakamaClient,
@@ -15,9 +27,10 @@ export async function switchChatOrg(
 ) {
   if (!orgRef) {
     const { orgs } = await client.listUserOrgs();
+    const activeOrgId = await loadSavedCliOrgId();
 
-    for (const org of orgs) {
-      write(`${org.slug}  ${org.name}`);
+    for (const { current, org } of orgListEntries(orgs, activeOrgId)) {
+      write(`${org.slug}  ${org.name}${current ? " (current)" : ""}`);
     }
 
     write("Use /org <slug> to switch.");

@@ -3,11 +3,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { NakamaClient } from "@nakama/client";
+import type { HealthResponse } from "@nakama/core";
 import {
   createChatExitController,
   createDebouncedEscAbortHandler,
   disableRawModeIfActive,
   formatSoulStatusLines,
+  formatStatusLines,
   formatToolCall,
   previewToolValue,
   runChat,
@@ -331,5 +333,29 @@ describe("non-TTY slash commands and EOF", () => {
 
     const result = await runBlockingInput(null);
     expect(result.sendCalls).toBe(0);
+  });
+});
+
+describe("formatStatusLines", () => {
+  // SAFETY: formatStatusLines reads only ok and providerConfigured from health.
+  const offline = { ok: true, providerConfigured: false } as HealthResponse;
+
+  test("names the active organization", () => {
+    expect(
+      formatStatusLines(offline, null, null, { name: "Team", slug: "team" })
+    ).toEqual([
+      "Server: ok",
+      "Provider configured: no",
+      "Organization: Team (team)",
+      "Chat runs in offline mode without an API key.",
+    ]);
+  });
+
+  test("leaves the organization line out when it is unknown", () => {
+    expect(formatStatusLines(offline, null, null)).toEqual([
+      "Server: ok",
+      "Provider configured: no",
+      "Chat runs in offline mode without an API key.",
+    ]);
   });
 });

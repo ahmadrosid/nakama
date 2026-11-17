@@ -322,6 +322,10 @@ async function runStickyChat(
     // Keep chat available if the organization list cannot be loaded.
   }
 
+  function currentOrgSummary() {
+    return orgsCache.find((entry) => entry.id === currentOrgId) ?? null;
+  }
+
   let abortController: AbortController | null = null;
   let lastUserMessage: string | null = null;
   let modelsCache: ModelsResponse | null = null;
@@ -712,7 +716,8 @@ async function runStickyChat(
           options.client,
           writeOutput,
           currentProfile,
-          modelsCache
+          modelsCache,
+          currentOrgSummary()
         );
       } catch (error) {
         writeError(error);
@@ -1261,6 +1266,22 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
   let busyDrops = 0;
   let modelsCache: ModelsResponse | null = null;
   let profilesCache: ProfileSummary[] = [];
+  let currentOrgId = await loadSavedCliOrgId();
+  let orgsCache: ListUserOrgsResponse["orgs"] | null = null;
+
+  // Loaded on first /status rather than at startup, so a user who never asks
+  // pays no request for it.
+  async function currentOrgSummary() {
+    if (!orgsCache) {
+      try {
+        orgsCache = (await options.client.listUserOrgs()).orgs;
+      } catch {
+        return null;
+      }
+    }
+
+    return orgsCache.find((entry) => entry.id === currentOrgId) ?? null;
+  }
 
   async function refreshModelsCache() {
     try {
@@ -1420,7 +1441,8 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
             options.client,
             printLine,
             currentProfile,
-            modelsCache
+            modelsCache,
+            await currentOrgSummary()
           );
         } catch (error) {
           printError(error);
@@ -1442,6 +1464,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
           if (next) {
             options.client = next.client;
             options.offline = next.offline;
+            currentOrgId = next.orgId;
             currentProfileId = next.profile.id;
             session = next.session;
             context.onSessionChange(session);
@@ -1523,15 +1546,20 @@ async function printCurrentModel(
   write(`Model: ${active.modelId}`);
 }
 
-function formatStatusLines(
+export function formatStatusLines(
   health: HealthResponse,
   models: ModelsResponse | null,
-  profile: ProfileSummary | null
+  profile: ProfileSummary | null,
+  org?: { name: string; slug: string } | null
 ): string[] {
   const lines = [
     `Server: ${health.ok ? "ok" : "degraded"}`,
     `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
   ];
+
+  if (org) {
+    lines.push(`Organization: ${org.name} (${org.slug})`);
+  }
 
   if (!health.providerConfigured) {
     lines.push("Chat runs in offline mode without an API key.");
@@ -1557,7 +1585,8 @@ async function printStatus(
   client: NakamaClient,
   write: (text: string) => void,
   profile: ProfileSummary | null,
-  cachedModels: ModelsResponse | null
+  cachedModels: ModelsResponse | null,
+  org?: { name: string; slug: string } | null
 ): Promise<void> {
   const health = await client.health();
 
@@ -1565,7 +1594,7 @@ async function printStatus(
     ? (cachedModels ?? (await client.getModels()))
     : null;
 
-  for (const line of formatStatusLines(health, models, profile)) {
+  for (const line of formatStatusLines(health, models, profile, org)) {
     write(line);
   }
 }

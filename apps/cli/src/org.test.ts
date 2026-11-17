@@ -3,8 +3,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NakamaClient } from "@nakama/client";
-import { loadSavedCliOrgId, loadSavedCliProfileId } from "./cli-config";
-import { InvalidOrgArgError, parseCliOrgArgs, switchChatOrg } from "./org";
+import {
+  loadSavedCliOrgId,
+  loadSavedCliProfileId,
+  saveCliOrgId,
+} from "./cli-config";
+import {
+  InvalidOrgArgError,
+  orgListEntries,
+  parseCliOrgArgs,
+  switchChatOrg,
+} from "./org";
 
 test("org switching scopes the new session and preserves the current client on failure", async () => {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-org-switch-"));
@@ -114,4 +123,46 @@ describe("parseCliOrgArgs", () => {
       InvalidOrgArgError
     );
   });
+});
+
+test("the org list marks the active organization", async () => {
+  const configDir = await mkdtemp(join(tmpdir(), "nakama-org-list-"));
+  const previous = process.env.NAKAMA_CONFIG_DIR;
+  process.env.NAKAMA_CONFIG_DIR = configDir;
+
+  const client = new NakamaClient({
+    baseUrl: "https://example.com",
+    // SAFETY: This fetch stub answers the organization list only.
+    fetch: (async () =>
+      Response.json({
+        orgs: [
+          { id: "org_team", name: "Team", slug: "team" },
+          { id: "org_other", name: "Other", slug: "other" },
+        ],
+      })) as typeof fetch,
+    orgId: "org_team",
+  });
+
+  try {
+    await saveCliOrgId("org_team");
+    const { orgs } = await client.listUserOrgs();
+    const entries = orgListEntries(orgs, "org_team");
+
+    expect(entries.map(({ current, org }) => [org.id, current])).toEqual([
+      ["org_team", true],
+      ["org_other", false],
+    ]);
+
+    const lines: string[] = [];
+    await switchChatOrg(client, "", "cli", (line) => lines.push(line));
+    expect(lines).toHaveLength(orgs.length + 1);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previous;
+    }
+
+    await rm(configDir, { force: true, recursive: true });
+  }
 });
