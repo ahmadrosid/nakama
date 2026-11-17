@@ -75,10 +75,10 @@ async function renderAutomationsPage(
 ) {
   const previousState = useActiveChatProfileStore.getState();
   useActiveChatProfileStore.setState({ profileId: "agent-a" });
-  const view = {} as { page: AutomationsPageState };
+  let page!: AutomationsPageState;
 
   function Probe() {
-    view.page = useAutomationsPage();
+    page = useAutomationsPage();
 
     return null;
   }
@@ -101,13 +101,16 @@ async function renderAutomationsPage(
     )
   );
 
-  return Object.assign(view, {
+  return {
+    get page() {
+      return page;
+    },
     async unmount() {
       await act(async () => root.unmount());
       useActiveChatProfileStore.setState(previousState);
       queryClient.clear();
     },
-  });
+  };
 }
 
 test("automations follow the selected agent and Super Nakama shows all", async () => {
