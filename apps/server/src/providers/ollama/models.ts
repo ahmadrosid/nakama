@@ -15,7 +15,9 @@ function ollamaTagsUrl(baseUrl: string): string {
   try {
     const url = new URL(normalized);
 
-    return `${url.origin}/api/tags`;
+    const prefix = url.pathname.replace(/\/v1\/?$/, "").replace(/\/$/, "");
+
+    return `${url.origin}${prefix}/api/tags`;
   } catch {
     return `${normalized.replace(/\/v1\/?$/, "")}/api/tags`;
   }

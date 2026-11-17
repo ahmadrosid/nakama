@@ -158,6 +158,61 @@ test("Fireworks default changes survive provider update and config reload", asyn
   ).toEqual([FIREWORKS_GLM]);
 });
 
+test.each(["", "/ollama"])(
+  "discovers native Ollama models behind prefix %s",
+  async (prefix) => {
+    const paths: string[] = [];
+
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        const path = new URL(request.url).pathname;
+        paths.push(path);
+
+        return path === `${prefix}/api/tags`
+          ? Response.json({ models: [{ name: "local-model" }] })
+          : new Response("Not found", { status: 404 });
+      },
+    });
+
+    try {
+      const databaseAdapter = createInMemoryDatabaseAdapter();
+      const agent = new AgentService(null, null, databaseAdapter);
+
+      const { app } = createMinimalHonoApp({
+        agent,
+        databaseAdapter,
+      });
+
+      const session = await setupFreshInstallSession(app, databaseAdapter);
+
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/models/discover", {
+          body: JSON.stringify({
+            baseUrl: `${server.url.origin}${prefix}/v1`,
+            hostMode: "local",
+            provider: "ollama",
+          }),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        customModels: [{ id: "local-model", name: "local-model" }],
+      });
+      expect(paths).toContain(`${prefix}/api/tags`);
+    } finally {
+      server.stop(true);
+    }
+  }
+);
+
 test("discover hands provider and hostMode to the service", async () => {
   const received: DiscoverModelsRequest[] = [];
   const databaseAdapter = createInMemoryDatabaseAdapter();
