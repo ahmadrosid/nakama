@@ -15,7 +15,14 @@ export function AuthGuard() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate replace to="/login" />;
+    // Back to this page after sign-in, for example the desktop Connect link.
+    return (
+      <Navigate
+        replace
+        state={{ from: `${location.pathname}${location.search}` }}
+        to="/login"
+      />
+    );
   }
 
   if (

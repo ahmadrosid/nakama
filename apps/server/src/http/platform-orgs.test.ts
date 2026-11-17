@@ -52,6 +52,7 @@ describe("platform org routes", () => {
         allowedInviteDomains: [],
         archivedAt: null,
         createdAt: expect.any(String),
+        desktopModelsEnabled: true,
         id: expect.stringMatching(/^org_/),
         memberApprovalRequired: false,
         monthlyLlmTurnLimit: 0,
