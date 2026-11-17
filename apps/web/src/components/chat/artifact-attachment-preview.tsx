@@ -1,14 +1,7 @@
 import { Button } from "@nakama/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
-  ArrowDown01Icon,
   Csv02Icon,
   Download04Icon,
   File01Icon,
@@ -298,12 +291,7 @@ export function FilePreviewCard({
         className
       )}
     >
-      <button
-        aria-label={`Preview ${filename}`}
-        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={onOpen}
-        type="button"
-      >
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <FilePreviewTile Icon={Icon} kind={kind} />
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span
@@ -318,7 +306,7 @@ export function FilePreviewCard({
               : type}
           </span>
         </span>
-      </button>
+      </div>
       <div className="flex shrink-0">
         <Button
           aria-label={`Open ${filename}`}
@@ -328,26 +316,15 @@ export function FilePreviewCard({
         >
           Open
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                aria-label={`More actions for ${filename}`}
-                className="h-10 w-8 rounded-l-none border-l-0 sm:h-8"
-                size="icon"
-                variant="outline"
-              />
-            }
-          >
-            <ArrowDown01Icon aria-hidden className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onDownload}>
-              <Download04Icon aria-hidden className="size-4" />
-              Download
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          aria-label={`Download ${filename}`}
+          className="h-10 w-8 rounded-l-none border-l-0 sm:h-8"
+          onClick={onDownload}
+          size="icon"
+          variant="outline"
+        >
+          <Download04Icon aria-hidden className="size-3.5" />
+        </Button>
       </div>
     </div>
   );

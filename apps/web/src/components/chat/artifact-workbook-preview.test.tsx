@@ -66,34 +66,22 @@ test("file card opens its preview and offers a separate download action", async 
         />
       )
     );
-    await act(async () =>
-      element
-        .querySelector<HTMLButtonElement>('[aria-label="Preview report.xlsx"]')!
-        .click()
-    );
-    expect(previews).toBe(1);
+    expect(element.querySelectorAll("button:not([disabled])").length).toBe(2);
     await act(async () =>
       element
         .querySelector<HTMLButtonElement>('[aria-label="Open report.xlsx"]')!
         .click()
     );
-    expect(previews).toBe(2);
+    expect(previews).toBe(1);
     await act(async () =>
       element
         .querySelector<HTMLButtonElement>(
-          '[aria-label="More actions for report.xlsx"]'
+          '[aria-label="Download report.xlsx"]'
         )!
         .click()
     );
-
-    const download = Array.from(
-      document.querySelectorAll<HTMLElement>('[role="menuitem"]')
-    ).find((entry) => entry.textContent?.includes("Download"))!;
-
-    expect(download).toBeDefined();
-    await act(async () => download.click());
     expect(downloads).toBe(1);
-    expect(previews).toBe(2);
+    expect(previews).toBe(1);
   } finally {
     await act(async () => root.unmount());
     element.remove();
