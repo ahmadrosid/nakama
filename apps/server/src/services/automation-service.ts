@@ -28,6 +28,7 @@ import {
   resolveProfileId,
 } from "./automation-profile-access";
 import {
+  assertAutomationVersion,
   automationBelongsToOrg,
   normalizeToolLimit,
   toRunRecord,
@@ -221,6 +222,8 @@ export class AutomationService {
     if (!existing) {
       throw new Error("Automation not found.");
     }
+
+    assertAutomationVersion(existing, input.version);
 
     const userTimezone = await this.getUserTimezone();
 

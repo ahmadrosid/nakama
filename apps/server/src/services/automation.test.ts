@@ -367,6 +367,26 @@ describe("AutomationService", () => {
 
     expect(unchanged.profileId).toBe(otherId);
     expect(unchanged.name).toBe("Digest 2");
+
+    // The first update moved the version on, so the version from create is old.
+    await expect(
+      service.update(
+        automation.id,
+        ORG_ID,
+        { name: "Digest 3", version: automation.version },
+        { orgRole: "member" }
+      )
+    ).rejects.toMatchObject({ status: 409 });
+    expect((await service.get(automation.id, ORG_ID))?.name).toBe("Digest 2");
+
+    const current = await service.update(
+      automation.id,
+      ORG_ID,
+      { name: "Digest 3", version: unchanged.version },
+      { orgRole: "member" }
+    );
+
+    expect(current.name).toBe("Digest 3");
   });
 
   test("rejects blank profileId on update", async () => {

@@ -1,5 +1,8 @@
 import uFuzzy from "@leeoniya/ufuzzy";
-import type { StoredAutomation } from "@nakama/core/contract";
+import type {
+  StoredAutomation,
+  UpdateAutomationRequest,
+} from "@nakama/core/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
@@ -80,8 +83,13 @@ export function useAutomationsPage() {
     null
   );
 
-  const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
-  const editOpened = useRef<StoredAutomation | null>(null);
+  // `opened` is the automation as the dialog loaded it.
+  const [edit, setEdit] = useState<{
+    draft: StoredAutomation;
+    opened: StoredAutomation;
+  } | null>(null);
+
+  const editDraft = edit?.draft ?? null;
   const editProfileId = editDraft?.profileId ?? null;
 
   const { data: editProfile } = useProfileQuery(editProfileId);
@@ -233,38 +241,44 @@ export function useAutomationsPage() {
   }, [selectedId, lastRun, refetchRuns]);
 
   async function handleSaveEdit() {
-    if (!editDraft || busy) {
+    if (!edit || busy) {
       return;
     }
 
     setError(null);
-
-    // Send only what this dialog changed, so a save from an older tab keeps
-    // the newer settings of the other fields.
-    const opened = editOpened.current;
+    const { draft, opened } = edit;
 
     const changed = (key: keyof StoredAutomation) =>
-      JSON.stringify(editDraft[key]) !== JSON.stringify(opened?.[key]);
+      JSON.stringify(draft[key]) !== JSON.stringify(opened[key]);
+
+    // Only what this dialog changed. The server refuses the save when the
+    // automation changed after the dialog opened.
+    const input: UpdateAutomationRequest = {
+      ...(changed("delivery") && { delivery: draft.delivery ?? null }),
+      ...(changed("description") && { description: draft.description }),
+      ...(changed("enabled") && { enabled: draft.enabled }),
+      ...(changed("name") && { name: draft.name }),
+      ...(changed("profileId") && { profileId: draft.profileId }),
+      ...(changed("prompt") && { prompt: draft.prompt }),
+      // A limit holds the old agent's ids, so an agent change always sends it.
+      ...((changed("toolLimit") || changed("profileId")) && {
+        toolLimit: draft.toolLimit ?? null,
+      }),
+      ...(changed("trigger") && { trigger: draft.trigger }),
+    };
+
+    if (Object.keys(input).length === 0) {
+      setEdit(null);
+
+      return;
+    }
 
     try {
       await updateMutation.mutateAsync({
-        automationId: editDraft.id,
-        input: {
-          ...(changed("delivery") && { delivery: editDraft.delivery ?? null }),
-          ...(changed("description") && {
-            description: editDraft.description,
-          }),
-          ...(changed("enabled") && { enabled: editDraft.enabled }),
-          ...(changed("name") && { name: editDraft.name }),
-          ...(changed("profileId") && { profileId: editDraft.profileId }),
-          ...(changed("prompt") && { prompt: editDraft.prompt }),
-          ...(changed("toolLimit") && {
-            toolLimit: editDraft.toolLimit ?? null,
-          }),
-          ...(changed("trigger") && { trigger: editDraft.trigger }),
-        },
+        automationId: draft.id,
+        input: { ...input, version: opened.version },
       });
-      setEditDraft(null);
+      setEdit(null);
     } catch (err) {
       setError(formatError(err));
     }
@@ -302,7 +316,7 @@ export function useAutomationsPage() {
       setDeleteTarget(null);
 
       if (editDraft?.id === deleteTarget.id) {
-        setEditDraft(null);
+        setEdit(null);
       }
     } catch (err) {
       setError(formatError(err));
@@ -327,15 +341,15 @@ export function useAutomationsPage() {
   }
 
   function openEdit(automation: StoredAutomation) {
-    editOpened.current = automation;
-    setEditDraft({ ...automation });
+    setEdit({ draft: { ...automation }, opened: automation });
   }
 
   function updateEditDraft(patch: Partial<StoredAutomation>) {
-    if (!editDraft) {
+    if (!edit) {
       return;
     }
 
+    const editDraft = edit.draft;
     const next = { ...editDraft, ...patch };
 
     // A limit holds the old agent's ids, so a new agent starts with all tools.
@@ -343,7 +357,7 @@ export function useAutomationsPage() {
       delete next.toolLimit;
     }
 
-    setEditDraft(next);
+    setEdit({ draft: next, opened: edit.opened });
   }
 
   async function refresh() {
@@ -387,6 +401,7 @@ export function useAutomationsPage() {
     automations,
     automationsRefreshing,
     busy,
+    closeEdit: () => setEdit(null),
     deleteTarget,
     editDraft,
     error: error ?? (automationsError ? formatError(automationsError) : null),
@@ -413,7 +428,6 @@ export function useAutomationsPage() {
     selectedProfileName,
     selectedRunSummary,
     setDeleteTarget,
-    setEditDraft,
     setSearchQuery,
     setSelectedId,
     toolOptions,

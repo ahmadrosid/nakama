@@ -135,6 +135,7 @@ export function registerAutomationRoutes(
           z.object({ type: z.literal("webhook") }),
         ])
         .optional(),
+      version: z.number().optional(),
     })
     .passthrough()
     .openapi("UpdateAutomationRequest");
