@@ -21,6 +21,7 @@ import {
   readChatgptOAuthFromInstance,
   readXaiOAuthFromInstance,
   saveUserConfig,
+  saveUserThinkingSettings,
   saveUserTimezone,
   saveUserWebPublicUrl,
   validateProviderApiKeyFormat,
@@ -243,6 +244,39 @@ describe("user config multi-provider", () => {
     }
 
     delete process.env.NAKAMA_CONFIG_DIR;
+  });
+
+  test("keeps a provider that is saved during a thinking settings save", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-save-race-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const first = {
+      apiKey: "",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      id: createProviderInstanceId(),
+      label: "First",
+      type: "groq" as const,
+    };
+
+    const second = {
+      ...first,
+      id: createProviderInstanceId(),
+      label: "Second",
+    };
+
+    const config = { defaultProviderId: first.id, providers: [first] };
+    await saveUserConfig(config);
+
+    await Promise.all([
+      saveUserThinkingSettings({ effort: "high", enabled: true }),
+      saveUserConfig({ ...config, providers: [first, second] }),
+    ]);
+
+    const loaded = await loadUserConfig();
+    expect(loaded!.providers.map((provider) => provider.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
   });
 
   test("round-trips multiple provider instances", async () => {

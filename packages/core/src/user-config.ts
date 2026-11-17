@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
 
 import { NakamaApiError } from "./api-error";
+import { createChatLock } from "./channel-chat-lock";
 import {
   isValidBaseUrl,
   normalizeBaseUrl,
@@ -522,30 +523,33 @@ export async function saveUserThinkingSettings(
 ): Promise<void> {
   const effort = validateThinkingEffort(settings.effort);
   const enabled = settings.enabled;
-  const existing = await loadUserConfig();
 
-  if (existing) {
-    await saveUserConfig({
-      ...existing,
-      thinkingEffort: effort,
-      thinkingEnabled: enabled,
+  await userConfigSaveLock.withLock(getUserConfigPath(), async () => {
+    const existing = await loadUserConfig();
+
+    if (existing) {
+      await writeUserConfig({
+        ...existing,
+        thinkingEffort: effort,
+        thinkingEnabled: enabled,
+      });
+
+      return;
+    }
+
+    const raw = await readTextOrNull(getUserConfigPath());
+
+    const parsed =
+      raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
+    const lines = buildConfigIniLines(parsed.global, parsed.sections, {
+      thinking: enabled ? "on" : "off",
+      thinking_effort: effort,
     });
 
-    return;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    thinking: enabled ? "on" : "off",
-    thinking_effort: effort,
-  });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
+    await writeTextFile(getUserConfigPath(), lines.join("\n"), {
+      ensureDir: getUserConfigDir(),
+    });
   });
 }
 
@@ -579,28 +583,30 @@ export async function saveUserTimezone(
     throw new NakamaApiError(`Invalid timezone: ${trimmed}`, 400);
   }
 
-  const existing = await loadUserConfig();
+  return userConfigSaveLock.withLock(getUserConfigPath(), async () => {
+    const existing = await loadUserConfig();
 
-  if (existing) {
-    await saveUserConfig({ ...existing, timezone: trimmed });
+    if (existing) {
+      await writeUserConfig({ ...existing, timezone: trimmed });
+
+      return trimmed;
+    }
+
+    const raw = await readTextOrNull(getUserConfigPath());
+
+    const parsed =
+      raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
+    const lines = buildConfigIniLines(parsed.global, parsed.sections, {
+      timezone: trimmed,
+    });
+
+    await writeTextFile(getUserConfigPath(), lines.join("\n"), {
+      ensureDir: getUserConfigDir(),
+    });
 
     return trimmed;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    timezone: trimmed,
   });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
-  });
-
-  return trimmed;
 }
 
 function readWebPublicUrl(values: Record<string, string>): string | undefined {
@@ -641,38 +647,52 @@ export async function saveUserWebPublicUrl(
   }
 
   const normalized = normalizeBaseUrl(trimmed);
-  const existing = await loadUserConfig();
 
-  if (existing) {
+  return userConfigSaveLock.withLock(getUserConfigPath(), async () => {
+    const existing = await loadUserConfig();
+
+    if (existing) {
+      const raw = await readTextOrNull(getUserConfigPath());
+
+      const parsed =
+        raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
+      await writeParsedConfigIni(parsed.global, parsed.sections, {
+        web_public_url: normalized,
+      });
+
+      return normalized;
+    }
+
     const raw = await readTextOrNull(getUserConfigPath());
 
     const parsed =
       raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
 
-    await writeParsedConfigIni(parsed.global, parsed.sections, {
+    const lines = buildConfigIniLines(parsed.global, parsed.sections, {
       web_public_url: normalized,
     });
 
+    await writeTextFile(getUserConfigPath(), lines.join("\n"), {
+      ensureDir: getUserConfigDir(),
+    });
+
     return normalized;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    web_public_url: normalized,
   });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
-  });
-
-  return normalized;
 }
 
-export async function saveUserConfig(config: UserConfig): Promise<void> {
+// Each save reads the whole file and writes it back. Without this, a save
+// that started from an older read erases a provider saved after that read.
+// shortcut: One process only, same as providerPublicationLock.
+const userConfigSaveLock = createChatLock();
+
+export function saveUserConfig(config: UserConfig): Promise<void> {
+  return userConfigSaveLock.withLock(getUserConfigPath(), () =>
+    writeUserConfig(config)
+  );
+}
+
+async function writeUserConfig(config: UserConfig): Promise<void> {
   const raw = await readTextOrNull(getUserConfigPath());
 
   const existingParsed =
