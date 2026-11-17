@@ -80,9 +80,17 @@ describe("audit event coverage", () => {
       ],
       ["DELETE", "/v1/sessions/session_1", "session.delete"],
       ["DELETE", "/v1/auth/sessions/session_1", "session.revoke"],
-      ["POST", "/v1/sessions/session_1/browser/takeover", "session.takeover"],
-      ["POST", "/v1/sessions/session_1/browser/handoff", "session.handoff"],
-      ["POST", "/v1/sessions/session_1/browser/login", "session.login"],
+      [
+        "POST",
+        "/v1/sessions/session_1/browser/takeover",
+        "session.browser_takeover",
+      ],
+      [
+        "POST",
+        "/v1/sessions/session_1/browser/handoff",
+        "session.browser_handoff",
+      ],
+      ["POST", "/v1/sessions/session_1/browser/login", "session.browser_login"],
       ["DELETE", "/v1/auth/users/user_1/sessions", "session.revoke_all"],
     ] as const) {
       expect(describeAuditEvent(method, path)?.action).toBe(action);

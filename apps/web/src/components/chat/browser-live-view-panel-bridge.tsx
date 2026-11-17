@@ -1,4 +1,5 @@
 import { Button } from "@nakama/ui/button";
+import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { readRecord } from "@/components/chat/web-search.shared";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -38,42 +39,120 @@ function stopBrowser(sessionId: string) {
   void client.stopSessionBrowser(sessionId).catch(() => null);
 }
 
+type BrowserControl = "handoff" | "login" | "takeover";
+
+/** Writes one audit event. A failed write is shown, never dropped. */
+async function recordControl(
+  sessionId: string,
+  control: BrowserControl
+): Promise<boolean> {
+  try {
+    await client.recordSessionBrowserControl(sessionId, control);
+
+    return true;
+  } catch {
+    toast("Could not record who holds the browser");
+
+    return false;
+  }
+}
+
 /** Records in the audit log who holds the browser: the user or the agent. */
-function BrowserControlActions({
+export function BrowserControlActions({
   loginPageRef,
   onStop,
-  sessionId,
+  sessionIdRef,
 }: {
   loginPageRef: { current: boolean };
   onStop: () => void;
-  sessionId: string;
+  sessionIdRef: { current: string | null | undefined };
 }) {
-  const [userHasControl, setUserHasControl] = useState(false);
+  // The chat the user took control in. The hand back goes to that chat, even
+  // after the user opens a different one.
+  const [heldSessionId, setHeldSessionId] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const heldRef = useRef<string | null>(null);
 
-  const record = (control: "handoff" | "login" | "takeover") =>
-    client.recordSessionBrowserControl(sessionId, control).catch(() => null);
+  const handBack = async () => {
+    const held = heldRef.current;
+
+    if (!held) {
+      return;
+    }
+
+    if (loginPageRef.current && !(await recordControl(held, "login"))) {
+      return;
+    }
+
+    if (await recordControl(held, "handoff")) {
+      heldRef.current = null;
+      setHeldSessionId(null);
+    }
+  };
+
+  // Closing the panel ends the user's turn, so it hands back too.
+  useEffect(
+    () => () => {
+      const held = heldRef.current;
+
+      if (!held) {
+        return;
+      }
+
+      heldRef.current = null;
+
+      void (async () => {
+        if (loginPageRef.current) {
+          await recordControl(held, "login");
+        }
+
+        await recordControl(held, "handoff");
+      })();
+    },
+    [loginPageRef]
+  );
 
   return (
     <>
       <Button
-        onClick={() => {
-          if (!userHasControl) {
-            void record("takeover");
-          } else if (loginPageRef.current) {
-            void record("login").then(() => record("handoff"));
-          } else {
-            void record("handoff");
-          }
+        disabled={pending}
+        onClick={async () => {
+          setPending(true);
 
-          setUserHasControl(!userHasControl);
+          try {
+            if (heldRef.current) {
+              await handBack();
+            } else {
+              const sessionId = sessionIdRef.current;
+
+              if (sessionId && (await recordControl(sessionId, "takeover"))) {
+                heldRef.current = sessionId;
+                setHeldSessionId(sessionId);
+              }
+            }
+          } finally {
+            setPending(false);
+          }
         }}
         size="sm"
         type="button"
         variant="outline"
       >
-        {userHasControl ? "Hand back to agent" : "Take control"}
+        {heldSessionId ? "Hand back to agent" : "Take control"}
       </Button>
-      <Button onClick={onStop} size="sm" type="button" variant="outline">
+      <Button
+        disabled={pending}
+        onClick={async () => {
+          setPending(true);
+          // The server refuses a hand back once the browser is gone.
+          await handBack();
+          heldRef.current = null;
+          onStop();
+        }}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         Stop browser
       </Button>
     </>
@@ -98,6 +177,11 @@ export function BrowserLiveViewPanelBridge({
   useEffect(() => {
     loginPageRef.current = lastPageAskedForLogin(messages);
   }, [messages]);
+  const sessionIdRef = useRef(sessionId);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
   const activeIdRef = useRef(activeId);
   const dismissedUrlRef = useRef<string | null>(null);
 
@@ -147,7 +231,7 @@ export function BrowserLiveViewPanelBridge({
                 hide(PANEL_ID);
                 stopBrowser(sessionId);
               }}
-              sessionId={sessionId}
+              sessionIdRef={sessionIdRef}
             />
           ),
           id: PANEL_ID,

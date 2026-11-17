@@ -979,11 +979,17 @@ export function registerSessionRoutes(
   app.post(
     "/v1/sessions/:sessionId/browser/:control{takeover|handoff|login}",
     async (c) => {
-      requireOrgMemberFromContext(c);
+      const auth = requireOrgMemberFromContext(c);
       const { orgId, sessionId } = await requireSessionAccess(c);
 
       if (!(await agent.getSessionSummary(sessionId, orgId))) {
         return errorResponse("Session not found", 404);
+      }
+
+      // No running browser means there is nothing to hold, so the claim is
+      // refused and the audit event records a failure.
+      if (!(await getUserBrowser(orgId, auth.user.id)).liveViewUrl) {
+        return errorResponse("Browser is not running", 409);
       }
 
       return new Response(null, { status: 204 });

@@ -256,7 +256,7 @@ export function describeAuditEvent(
   );
 
   if (match && method === "POST") {
-    return event(`session.${match[2]}`, "session", match[1]);
+    return event(`session.browser_${match[2]}`, "session", match[1]);
   }
 
   // DELETE /v1/auth/sessions/:id revokes a browser login session.
