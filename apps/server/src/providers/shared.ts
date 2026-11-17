@@ -1,6 +1,7 @@
 import type {
   ChatCompletionResult,
   ChatMessage,
+  LlmToolDefinition,
   StreamChatHandlers,
   ThinkingEffort,
   ToolCall,
@@ -452,46 +453,65 @@ export function readRecord<Value>(value: Value): ProviderJsonRecord {
   return value as ProviderJsonRecord;
 }
 
+const loggedEnumRewrites = new WeakSet<object>();
+
 /**
  * Gemini rejects a function-declaration enum with an empty or non-scalar member,
- * and MCP servers publish such schemas. Drop those members before a provider
- * sees the schema: an absent member still allows the request, while the empty
- * one fails the whole turn.
+ * and MCP servers publish such schemas. Gateways cannot tell which model sits
+ * behind them, so they drop those members too: an absent member still allows the
+ * request, while the empty one fails the whole turn. Unchanged tools keep their
+ * original schema object.
  */
-export function dropEmptyEnumMembers<Schema extends object>(
-  schema: Schema
-): Schema {
-  // SAFETY: The walker rebuilds the same JSON Schema shape it was given.
-  return sanitizeEnumMembers(readRecord(schema)) as Schema;
-}
+export function dropEmptyToolEnumMembers(
+  tools: LlmToolDefinition[] | undefined,
+  label: string
+): LlmToolDefinition[] | undefined {
+  return tools?.map((tool) => {
+    const parameters = dropEmptyEnumMembers(tool.parameters);
 
-function sanitizeEnumMembers(value: ProviderJsonValue): ProviderJsonValue {
-  if (Array.isArray(value)) {
-    return value.map(sanitizeEnumMembers);
-  }
-
-  if (!(value instanceof Object)) {
-    return value;
-  }
-
-  const sanitized: ProviderJsonRecord = {};
-
-  for (const [key, entry] of Object.entries(readRecord(value))) {
-    if (key === "enum" && Array.isArray(entry)) {
-      const members = entry.filter(isUsableEnumMember);
-
-      if (members.length > 0) {
-        sanitized.enum = members;
-      }
-
-      continue;
+    if (parameters === tool.parameters) {
+      return tool;
     }
 
-    sanitized[key] = sanitizeEnumMembers(entry);
-  }
+    if (!loggedEnumRewrites.has(tool.parameters)) {
+      loggedEnumRewrites.add(tool.parameters);
+      console.warn(
+        `${label}: removed empty or non-scalar enum members from the "${tool.name}" tool schema.`
+      );
+    }
 
-  return sanitized;
+    return { ...tool, parameters };
+  });
 }
+
+// Keywords whose value is one subschema or a list of subschemas. Other keys
+// (default, examples, const, x-*) hold data and stay as published.
+const SUBSCHEMA_KEYS = new Set([
+  "additionalItems",
+  "additionalProperties",
+  "allOf",
+  "anyOf",
+  "contains",
+  "else",
+  "if",
+  "items",
+  "not",
+  "oneOf",
+  "prefixItems",
+  "propertyNames",
+  "then",
+  "unevaluatedItems",
+  "unevaluatedProperties",
+]);
+
+// Keywords whose value maps names to subschemas.
+const SUBSCHEMA_MAP_KEYS = new Set([
+  "$defs",
+  "definitions",
+  "dependentSchemas",
+  "patternProperties",
+  "properties",
+]);
 
 const usableEnumMemberSchema = z.union([
   z.string().min(1),
@@ -499,8 +519,83 @@ const usableEnumMemberSchema = z.union([
   z.boolean(),
 ]);
 
-function isUsableEnumMember(value: ProviderJsonValue): boolean {
-  return usableEnumMemberSchema.safeParse(value).success;
+function dropEmptyEnumMembers<Schema>(schema: Schema): Schema {
+  if (!isJsonRecord(schema)) {
+    return schema;
+  }
+
+  const entries = Object.entries(schema);
+
+  const next = entries.flatMap(([key, entry]) => {
+    const value = sanitizeSchemaKeyword(key, entry);
+
+    return value === undefined ? [] : [[key, value] as const];
+  });
+
+  const changed =
+    next.length !== entries.length ||
+    next.some(([, value], index) => value !== entries[index]?.[1]);
+
+  // SAFETY: Only enum members were removed; every other key keeps its shape.
+  return changed ? (Object.fromEntries(next) as Schema) : schema;
+}
+
+function sanitizeSchemaKeyword(
+  key: string,
+  entry: ProviderJsonValue
+): ProviderJsonValue | undefined {
+  if (key === "enum") {
+    if (!Array.isArray(entry)) {
+      return entry;
+    }
+
+    const members = entry.filter(
+      (member) => usableEnumMemberSchema.safeParse(member).success
+    );
+
+    if (members.length === entry.length) {
+      return entry;
+    }
+
+    return members.length > 0 ? members : undefined;
+  }
+
+  if (SUBSCHEMA_KEYS.has(key)) {
+    return Array.isArray(entry)
+      ? sanitizeEach(entry)
+      : dropEmptyEnumMembers(entry);
+  }
+
+  if (SUBSCHEMA_MAP_KEYS.has(key) && isJsonRecord(entry)) {
+    const entries = Object.entries(entry);
+    const values = entries.map(([, value]) => value);
+    const sanitized = sanitizeEach(values);
+
+    return sanitized === values
+      ? entry
+      : Object.fromEntries(
+          entries.map(([name], index) => [name, sanitized[index] ?? null])
+        );
+  }
+
+  return entry;
+}
+
+function sanitizeEach(values: ProviderJsonValue[]): ProviderJsonValue[] {
+  const next = values.map(dropEmptyEnumMembers);
+
+  return next.every((value, index) => value === values[index]) ? values : next;
+}
+
+// Also accepts null-prototype objects, which `instanceof Object` misses.
+function isJsonRecord<Value>(
+  value: Value
+): value is Value & ProviderJsonRecord {
+  if (value === null || value === undefined || Array.isArray(value)) {
+    return false;
+  }
+
+  return value instanceof Object || Object.getPrototypeOf(value) === null;
 }
 
 /** Defaults a missing effort to medium and lowers it to what the host and model accept. */

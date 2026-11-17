@@ -25,7 +25,6 @@ import {
   buildChatCompletionResult,
   buildProviderHttpError,
   buildProviderResponseError,
-  dropEmptyEnumMembers,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -464,7 +463,7 @@ export function toOpenAITools(tools: LlmToolDefinition[] | undefined) {
     function: {
       description: tool.description,
       name: tool.name,
-      parameters: dropEmptyEnumMembers(tool.parameters),
+      parameters: tool.parameters,
     },
     type: "function" as const,
   }));

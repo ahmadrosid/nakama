@@ -11,7 +11,7 @@ import type {
 } from "@nakama/core";
 import { z } from "zod";
 import {
-  dropEmptyEnumMembers,
+  dropEmptyToolEnumMembers,
   normalizeThinkingEffort,
   type ProviderJsonRecord,
   type ProviderJsonValue,
@@ -133,7 +133,7 @@ function sanitizeSchemaValue<Value>(value: Value): ProviderJsonValue {
 export function sanitizeGeminiToolParameters(
   parameters: LlmToolDefinition["parameters"]
 ): LlmToolDefinition["parameters"] {
-  const sanitized = dropEmptyEnumMembers(sanitizeSchemaValue(parameters));
+  const sanitized = sanitizeSchemaValue(parameters);
 
   // SAFETY: The input is the core-owned JSON Schema contract, sanitized recursively above.
   return sanitized as LlmToolDefinition["parameters"];
@@ -149,9 +149,11 @@ function buildGeminiTools(
     result.push({ googleSearch: {} });
   }
 
-  if (tools?.length) {
+  const declaredTools = dropEmptyToolEnumMembers(tools, "Gemini");
+
+  if (declaredTools?.length) {
     result.push({
-      functionDeclarations: tools.map((tool) => ({
+      functionDeclarations: declaredTools.map((tool) => ({
         description: tool.description,
         name: tool.name,
         parametersJsonSchema: sanitizeGeminiToolParameters(tool.parameters),
