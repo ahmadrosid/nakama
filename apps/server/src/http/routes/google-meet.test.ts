@@ -199,6 +199,29 @@ describe("Meet extension keys", () => {
     expect((await status(key)).status).toBe(200);
   });
 
+  test("a browser session gets 410 for start-capture, and OpenAPI lists only the key route", async () => {
+    const { action, admin, app } = await setup(() => "test");
+
+    const response = await action(admin, "start-capture", {
+      url: "https://meet.google.com/abc-defg-hij",
+    });
+
+    expect(response.status).toBe(410);
+
+    const overview = await action(admin, "meetings");
+    expect((await overview.json()).meetings).toEqual([]);
+
+    const { paths } = z
+      .object({ paths: z.record(z.string(), z.unknown()) })
+      .parse(
+        await (await app.fetch(new Request(`${base}/openapi.json`))).json()
+      );
+
+    expect(paths["/v1/meet/actions/start-capture"]).toBeUndefined();
+    expect(paths["/v1/meet/actions/leave"]).toBeDefined();
+    expect(paths["/v1/meet/extension/start"]).toBeDefined();
+  });
+
   test("an expired key gets 401, and use renews it", async () => {
     const { pair, status } = await setup();
     const key = await pair();

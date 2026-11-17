@@ -30,6 +30,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ExportProfileDialog } from "@/components/profiles/ExportProfileDialog";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import { RegressionCasesList } from "@/components/regression-cases";
 import { SlackSettingsCard } from "@/components/SlackSettingsCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { TeamsSettingsCard } from "@/components/TeamsSettingsCard";
@@ -44,7 +45,7 @@ import {
 } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { client, formatError } from "@/lib/client";
-import { profilePath } from "@/lib/navigation";
+import { canAccessIntegrationsPage, profilePath } from "@/lib/navigation";
 import { isProfileOwner } from "@/lib/profiles";
 import { queryKeys } from "@/lib/query-keys";
 import { buildProfileChannels } from "@/pages/profiles/profile-channels";
@@ -124,6 +125,13 @@ function initialProfileSection(
   return hash === "#profile-connections" ? "channels" : "prompt";
 }
 
+/** The chosen section, or the first one this member can see. */
+function visibleSection(sections: { value: string }[], section: string) {
+  return sections.some((item) => item.value === section)
+    ? section
+    : (sections[0]?.value ?? "tools");
+}
+
 function ProfileSectionTab({
   hint,
   label,
@@ -151,12 +159,14 @@ function buildProfileSections({
   showBehavior,
   showChannels,
   showPrompt,
+  showTests,
 }: {
   channels: { connected: boolean }[] | null;
   detail: NonNullable<ProfilesPageState["detail"]>;
   showBehavior: boolean;
   showChannels: boolean;
   showPrompt: boolean;
+  showTests: boolean;
 }) {
   const channelHint = channels
     ? `${channels.filter((channel) => channel.connected).length}/${channels.length}`
@@ -185,6 +195,7 @@ function buildProfileSections({
       label: "Skills",
       value: "skills",
     },
+    ...(showTests ? [{ hint: "", label: "Tests", value: "tests" }] : []),
   ];
 }
 
@@ -204,6 +215,7 @@ function profileTabAccess(
     showBehavior: isOrgAdmin || isOwner,
     showChannels: (canPack || isOwner) && !detail.isSuper,
     showPrompt: canPack || isOwner,
+    showTests: canAccessIntegrationsPage(orgRole),
   };
 }
 
@@ -231,6 +243,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
     showBehavior,
     showChannels,
     showPrompt,
+    showTests,
   } = profileTabAccess(detail, user, activeOrg?.role);
 
   const channelsReady = !(isPending || channelsError);
@@ -241,6 +254,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
     showBehavior,
     showChannels,
     showPrompt,
+    showTests,
   });
 
   return (
@@ -253,11 +267,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         className="min-w-0 space-y-6"
         key={detail.id}
         onValueChange={(value) => setSection(String(value))}
-        value={
-          sections.some((item) => item.value === section)
-            ? section
-            : (sections[0]?.value ?? "tools")
-        }
+        value={visibleSection(sections, section)}
       >
         <Tabs.List
           aria-label="Agent sections"
@@ -332,6 +342,11 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             }}
           />
         </Tabs.Panel>
+        {showTests ? (
+          <Tabs.Panel className="w-0 min-w-full" value="tests">
+            <RegressionCasesList profileId={detail.id} />
+          </Tabs.Panel>
+        ) : null}
       </Tabs.Root>
       <MoveProfileDialog
         onOpenChange={setMoveOpen}

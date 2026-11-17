@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +6,7 @@ import {
   loadDiscordConfigFile,
   loadTelegramConfigFile,
   loadWhatsAppConfigFile,
+  saveWhatsAppConfig,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
@@ -13,6 +14,7 @@ import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { asTestFetch } from "../providers/test-helpers";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
+import { WorkerManagerService } from "./worker-manager-service";
 
 const TEST_ORG_ID = "org_test";
 
@@ -383,6 +385,26 @@ describe("AgentService WhatsApp allowed phones", () => {
     expect(
       (await loadWhatsAppConfigFile(ORG_ID))?.allowUnpairedGroupMembers
     ).toBe(true);
+  });
+
+  test("a new pairing code does not restart the running worker", async () => {
+    const service = await createWhatsAppService();
+    const owner = { orgId: ORG_ID, profileId: "well-test-report-validator" };
+    await saveWhatsAppConfig({ profileId: owner.profileId }, owner);
+    const workers = new WorkerManagerService(configDir);
+
+    const restart = spyOn(workers, "saveChannelConfig").mockRejectedValue(
+      new Error("worker restarted")
+    );
+
+    service.channelWorkers = workers;
+
+    const saved = await service.regenerateWhatsAppPairingCode(owner);
+
+    expect(restart).not.toHaveBeenCalled();
+    expect((await loadWhatsAppConfigFile(owner))?.pairingCode).toBe(
+      saved.pairingCode ?? ""
+    );
   });
 });
 

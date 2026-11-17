@@ -281,9 +281,13 @@ export function registerDataPortabilityRoutes(
                 .openapi("BackupStatusResponse"),
             },
           },
-          description: "The last scheduled backup's 409, or null",
+          description: "The last failed scheduled backup, or null",
         },
         403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },

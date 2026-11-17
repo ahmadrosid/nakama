@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "./contract";
 import {
+  formatImageDescriptionText,
   replaceImagePartsWithDescriptions,
   resolveMessagesForNonVisionProvider,
   resolveUserContentForNonVisionProvider,
@@ -65,8 +66,47 @@ describe("resolveUserContentForNonVisionProvider", () => {
 
     expect(result).toEqual([
       { text: "What is this?", type: "text" },
-      { text: "[Image]\nA red square.", type: "text" },
+      { text: expect.stringContaining("A red square."), type: "text" },
     ]);
+  });
+
+  test("does not send the bare stored label", () => {
+    const result = resolveUserContentForNonVisionProvider([
+      {
+        data: tinyPngBase64,
+        description: "A red square.",
+        mediaType: "image/png",
+        type: "image",
+      },
+    ]);
+
+    expect(result).not.toBe(formatImageDescriptionText("A red square."));
+  });
+
+  test("gives old [Image] text the same text as an image part", () => {
+    const fromImage = resolveUserContentForNonVisionProvider([
+      {
+        data: tinyPngBase64,
+        description: "A chart.",
+        mediaType: "image/png",
+        type: "image",
+      },
+    ]);
+
+    expect(
+      resolveUserContentForNonVisionProvider([
+        { text: "[Image]\nA chart.", type: "text" },
+      ])
+    ).toEqual(fromImage);
+    expect(resolveUserContentForNonVisionProvider("[Image]\nA chart.")).toEqual(
+      fromImage
+    );
+  });
+
+  test("keeps plain user text", () => {
+    expect(resolveUserContentForNonVisionProvider("What is this?")).toBe(
+      "What is this?"
+    );
   });
 });
 
@@ -88,7 +128,7 @@ describe("resolveMessagesForNonVisionProvider", () => {
     ];
 
     expect(resolveMessagesForNonVisionProvider(messages)).toEqual([
-      { content: "[Image]\nA chart.", role: "user" },
+      { content: expect.stringContaining("A chart."), role: "user" },
       { content: "Looks like a chart.", role: "assistant" },
     ]);
   });

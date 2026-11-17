@@ -54,6 +54,7 @@ describe("platform org routes", () => {
         createdAt: expect.any(String),
         desktopModelsEnabled: true,
         id: expect.stringMatching(/^org_/),
+        memberApprovalRequired: false,
         monthlyLlmTurnLimit: 0,
         name: "Acme Corp",
         parentOrgId: null,
@@ -303,6 +304,7 @@ describe("platform org routes", () => {
     const updated = await app.fetch(
       new Request(`http://localhost:4310/v1/platform/orgs/${organization.id}`, {
         body: JSON.stringify({
+          memberApprovalRequired: true,
           skillsCuratorEnabled: true,
           skillsPostTurnReview: true,
           skillsWriteApproval: true,
@@ -319,6 +321,7 @@ describe("platform org routes", () => {
     expect(stored?.skillsCuratorEnabled).toBe(true);
     expect(stored?.skillsPostTurnReview).toBe(true);
     expect(stored?.skillsWriteApproval).toBe(true);
+    expect(stored?.memberApprovalRequired).toBe(true);
   });
 
   test("org admin cannot archive via platform delete", async () => {

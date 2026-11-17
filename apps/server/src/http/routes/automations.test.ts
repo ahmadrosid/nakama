@@ -3,10 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  type GetAutomationRunResponse,
   getDiscordConfigDir,
   getDiscordConfigPath,
   getTelegramConfigDir,
   getTelegramConfigPath,
+  type ListAutomationRunsResponse,
+  type RunAutomationResponse,
 } from "@nakama/core";
 import { setupTestConfigDir } from "../../test-config-dir";
 import {
@@ -197,10 +200,167 @@ describe("automation destination authorization over HTTP", () => {
       );
 
     expect((await call("/runs", "GET")).status).toBe(403);
+    expect((await call("/runs/run_any", "GET")).status).toBe(403);
     expect((await call("/run", "POST")).status).toBe(403);
     expect((await call("/webhook-secret", "POST")).status).toBe(403);
     expect(
       (await call("", "PUT", JSON.stringify({ enabled: false }))).status
     ).toBe(403);
+  });
+});
+
+describe("automation run history over HTTP", () => {
+  test("the list leaves out finished transcripts and the run route returns one compressed", async () => {
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+    const service = fixture.automationService;
+
+    const automation = await service.create(
+      orgId,
+      {
+        description: "Report",
+        name: "Report",
+        prompt: "Summarize the week",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const longPrompt = "Summarize the week. ".repeat(500);
+    const finished = await service.createRun(automation.id);
+    service.setRunProgress(finished.id, {
+      output: "Writing",
+      progress: [
+        { content: longPrompt, role: "user" },
+        { content: "Writing", role: "assistant" },
+      ],
+    });
+    await service.completeRun(finished.id, automation.id, { output: "Done" });
+
+    const live = await service.createRun(automation.id);
+    service.setRunProgress(live.id, {
+      output: "Working",
+      progress: [{ content: "Working", role: "assistant" }],
+    });
+
+    const get = (path: string, headers: Record<string, string> = {}) =>
+      fixture.app.fetch(
+        new Request(`http://localhost:4310/v1/automations/${path}`, {
+          headers: { ...session.headers(), ...headers },
+        })
+      );
+
+    const list = await get(`${automation.id}/runs`);
+    expect(list.status).toBe(200);
+    // SAFETY: The 200 above means the route returned its list response.
+    const { runs } = (await list.json()) as ListAutomationRunsResponse;
+    const listed = runs.find((run) => run.id === finished.id);
+    expect(listed).toMatchObject({ output: "Done", status: "completed" });
+    expect(listed).not.toHaveProperty("progress");
+    expect(runs.find((run) => run.id === live.id)?.progress).toEqual([
+      { content: "Working", role: "assistant" },
+    ]);
+
+    const one = await get(`${automation.id}/runs/${finished.id}`, {
+      "Accept-Encoding": "gzip",
+    });
+
+    expect(one.status).toBe(200);
+    expect(one.headers.get("Content-Encoding")).toBe("gzip");
+
+    // SAFETY: The 200 above means the route returned its run response.
+    const { run } = JSON.parse(
+      new TextDecoder().decode(Bun.gunzipSync(await one.bytes()))
+    ) as GetAutomationRunResponse;
+
+    expect(run.progress).toEqual([
+      { content: longPrompt, role: "user" },
+      { content: "Done", role: "assistant" },
+    ]);
+    expect((await get(`${automation.id}/runs/run_missing`)).status).toBe(404);
+
+    // Another org's automation is not found, even with a real run id
+    const now = new Date().toISOString();
+    await fixture.databaseAdapter.upsertOrganization({
+      createdAt: now,
+      id: "org_other",
+      name: "Other",
+      slug: "other",
+      updatedAt: now,
+    });
+    await fixture.databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "profile_other",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Other Bot",
+      orgId: "org_other",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const foreign = await service.create(
+      "org_other",
+      {
+        description: "Report",
+        name: "Report",
+        prompt: "Summarize the week",
+        trigger: { type: "manual" },
+      },
+      "profile_other"
+    );
+
+    const foreignRun = await service.createRun(foreign.id);
+    expect((await get(`${foreign.id}/runs/${foreignRun.id}`)).status).toBe(404);
+  });
+
+  test("running an automation now returns the finished run with its transcript", async () => {
+    const progress = [
+      { content: "Summarize the week", role: "user" as const },
+      { content: "Done", role: "assistant" as const },
+    ];
+
+    const fixture = createFixture({
+      agent: (service) => ({
+        providerConfigured: true,
+        runAutomation: async (automationId: string) => {
+          const run = await service.createRun(automationId);
+          service.setRunProgress(run.id, { output: "Done", progress });
+          await service.completeRun(run.id, automationId, { output: "Done" });
+
+          return { output: "Done" };
+        },
+      }),
+    });
+
+    const { orgId, session } = await loginMember(fixture);
+
+    const automation = await fixture.automationService.create(
+      orgId,
+      {
+        description: "Report",
+        name: "Report",
+        prompt: "Summarize the week",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const response = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}/run`, {
+        headers: { "X-CSRF-Token": session.csrfToken, ...session.headers() },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    // SAFETY: The 200 above means the route returned its run response.
+    const { run } = (await response.json()) as RunAutomationResponse;
+    expect(run).toMatchObject({
+      output: "Done",
+      progress,
+      status: "completed",
+    });
   });
 });

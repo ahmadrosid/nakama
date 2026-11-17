@@ -622,6 +622,8 @@ export interface StoredOrganizationRecord {
   /** Nakama Desktop may use this org's models. Absent means on. */
   desktopModelsEnabled?: boolean;
   id: string;
+  /** Accepted invites wait for an org admin before the user joins. */
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -637,6 +639,14 @@ export interface StoredOrganizationRecord {
   skillsWriteApproval?: boolean;
   slug: string;
   updatedAt: string;
+}
+
+/** An accepted invite waiting for an org admin; not a member until approved. */
+export interface StoredOrgJoinRequestRecord {
+  createdAt: string;
+  orgId: string;
+  role: OrgRole;
+  userId: string;
 }
 
 export interface StoredOrgMemberRecord {
@@ -903,6 +913,12 @@ export interface DatabaseAdapter {
     sessionId: string,
     messages: StoredSessionMessageRecord[]
   ): Promise<void>;
+  /** Moves a join request into org_members in one transaction; null when there was none. An existing member is returned as is. */
+  approveOrgJoinRequest(
+    orgId: string,
+    userId: string,
+    approvedAt: string
+  ): Promise<StoredOrgMemberRecord | null>;
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
@@ -1017,6 +1033,8 @@ export interface DatabaseAdapter {
   createMfaBackupCode(record: StoredMfaBackupCode): Promise<void>;
 
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
+  /** False when the user already has a request for this org. */
+  createOrgJoinRequest(record: StoredOrgJoinRequestRecord): Promise<boolean>;
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
   createPasskey(record: StoredPasskeyRecord): Promise<void>;
@@ -1181,9 +1199,6 @@ export interface DatabaseAdapter {
   ): Promise<StoredComposioUserConnectionRecord | null>;
   getComputer(id: string): Promise<StoredComputerRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
-  getLastUserMessageForSession(
-    sessionId: string
-  ): Promise<StoredSessionMessageRecord | null>;
 
   getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
   getManagedSecret(
@@ -1206,6 +1221,10 @@ export interface DatabaseAdapter {
   getOrgInviteByTokenHash(
     tokenHash: string
   ): Promise<StoredOrgInviteRecord | null>;
+  getOrgJoinRequest(
+    orgId: string,
+    userId: string
+  ): Promise<StoredOrgJoinRequestRecord | null>;
   getOrgMember(
     orgId: string,
     userId: string
@@ -1464,6 +1483,9 @@ export interface DatabaseAdapter {
     orgId: string
   ): Promise<StoredNotificationDestinationRecord[]>;
   listOrganizations(): Promise<StoredOrganizationRecord[]>;
+  listOrgJoinRequests(
+    orgId: string
+  ): Promise<Array<StoredOrgJoinRequestRecord & { email: string }>>;
   listOrgMembers(orgId: string): Promise<StoredOrgMemberRecord[]>;
   listOrgMemoryProposals(
     orgId: string,
@@ -1596,6 +1618,8 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
   /** Frees a claimed automation webhook delivery ID so a redelivery can run. */
+  /** Deletes the request, and the account its accept created when it has no other org. */
+  rejectOrgJoinRequest(orgId: string, userId: string): Promise<boolean>;
   releaseAutomationWebhookDelivery(
     automationId: string,
     deliveryId: string

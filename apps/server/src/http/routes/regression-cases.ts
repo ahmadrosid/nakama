@@ -1,9 +1,11 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createId, getUserMessageText } from "@nakama/core";
-import type {
-  ListRegressionCasesResponse,
-  RegressionCase,
-  RegressionCaseResponse,
+import { findAgentQuestionnaireAnswers } from "@nakama/core/agent-questionnaire";
+import {
+  type ListRegressionCasesResponse,
+  MAX_REGRESSION_EXPECTED_RESULT_LENGTH,
+  type RegressionCase,
+  type RegressionCaseResponse,
 } from "@nakama/core/contract";
 import type { StoredRegressionCaseRecord } from "@nakama/db";
 import { DatabaseAutomationStore } from "@nakama/db";
@@ -20,8 +22,6 @@ import {
   readJson,
 } from "../shared";
 import type { HonoApp } from "../types";
-
-const MAX_EXPECTED_RESULT_LENGTH = 20_000;
 
 const MAX_CASE_PAGE_SIZE = 100;
 
@@ -51,7 +51,8 @@ const createRegressionCaseSchema = z
           .string()
           .trim()
           .min(1)
-          .max(MAX_EXPECTED_RESULT_LENGTH),
+          .max(MAX_REGRESSION_EXPECTED_RESULT_LENGTH),
+        messageIndex: z.number().int().min(0),
         sourceId: z.string().trim().min(1),
         sourceType: z.literal("session"),
       })
@@ -63,7 +64,7 @@ const createRegressionCaseSchema = z
           .string()
           .trim()
           .min(1)
-          .max(MAX_EXPECTED_RESULT_LENGTH),
+          .max(MAX_REGRESSION_EXPECTED_RESULT_LENGTH),
         sourceId: z.string().trim().min(1),
         sourceType: z.literal("automation_run"),
       })
@@ -111,6 +112,8 @@ const storedUserMessageSchema = z.object({
   content: z.union([z.string(), z.array(storedMessagePartSchema)]),
   role: z.literal("user"),
 });
+
+const storedRoleSchema = z.object({ role: z.string() });
 
 /**
  * Automation runs have no per-run page yet, so their link opens the page that
@@ -175,11 +178,29 @@ function parseOffset(raw: string | undefined): number | null {
   return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
-type StoredUserMessage = z.infer<typeof storedUserMessageSchema>;
+/**
+ * The question behind the reply at `replyIndex`: the nearest user message
+ * before it. Questionnaire answers continue that question, so they are skipped.
+ */
+function inputBeforeReply(
+  payloads: unknown[],
+  replyIndex: number
+): string | null {
+  for (let index = replyIndex - 1; index >= 0; index -= 1) {
+    const parsed = storedUserMessageSchema.safeParse(payloads[index]);
 
-/** The last user turn is the input; earlier turns are not a fallback. */
-function storedUserMessageText(message: StoredUserMessage): string {
-  return getUserMessageText(message.content).trim();
+    if (!parsed.success) {
+      continue;
+    }
+
+    const text = getUserMessageText(parsed.data.content).trim();
+
+    if (text && !findAgentQuestionnaireAnswers(text)) {
+      return text;
+    }
+  }
+
+  return null;
 }
 
 export function registerRegressionCaseRoutes(
@@ -323,15 +344,18 @@ export function registerRegressionCaseRoutes(
         return errorResponse("Source chat is still running.", 409);
       }
 
-      const message = await databaseAdapter.getLastUserMessageForSession(
-        body.sourceId
-      );
+      // Same index space as branching: the web sends the reply's historyIndex.
+      const payloads = (
+        await databaseAdapter.listMessagesForSession(body.sourceId)
+      ).map((message) => message.payload);
 
-      const parsed = message
-        ? storedUserMessageSchema.safeParse(message.payload)
-        : null;
+      const reply = storedRoleSchema.safeParse(payloads[body.messageIndex]);
 
-      const text = parsed?.success ? storedUserMessageText(parsed.data) : null;
+      if (!reply.success || reply.data.role !== "assistant") {
+        return errorResponse("messageIndex must point at a reply.", 400);
+      }
+
+      const text = inputBeforeReply(payloads, body.messageIndex);
 
       if (!text) {
         return errorResponse(

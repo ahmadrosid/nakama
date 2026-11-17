@@ -154,7 +154,7 @@ describe("data portability routes", () => {
     );
   });
 
-  test("platform admin reads the last scheduled backup's 409", async () => {
+  test("platform admin reads the last failed scheduled backup", async () => {
     const { app, authService, databaseAdapter } = createApp();
 
     const session = await loginPlatformAdminSession(
@@ -163,13 +163,15 @@ describe("data portability routes", () => {
       databaseAdapter
     );
 
-    const lastError = async () => {
-      const response = await app.fetch(
+    const status = () =>
+      app.fetch(
         new Request("http://localhost:4310/v1/platform/data/backup-status", {
           headers: session.headers(),
         })
       );
 
+    const lastError = async () => {
+      const response = await status();
       expect(response.status).toBe(200);
 
       return (await response.json()).lastError;
@@ -190,20 +192,34 @@ describe("data portability routes", () => {
       process.env.NAKAMA_BACKUP_DIR = dir;
       expect(await lastError()).toBeNull();
 
+      let started = () => {};
+
+      const running = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+
       // An empty backup dir runs the first backup at once.
       const stop = await startScheduledBackups({
         dir,
-        exportFile: () => Promise.reject(blocked),
+        exportFile: () => {
+          started();
+
+          return Promise.reject(blocked);
+        },
         key: Buffer.alloc(32, 4),
       });
 
-      await Bun.sleep(50);
-      stop();
+      await running;
+      await stop();
 
       expect(await lastError()).toEqual({
         at: expect.any(String),
         message: blocked.message,
       });
+
+      // A record it cannot read is an error, not "no failure"
+      await writeFile(join(dir, "scheduled-backup-error.json"), "not json");
+      expect((await status()).status).toBe(500);
     } finally {
       if (previousDir === undefined) {
         delete process.env.NAKAMA_BACKUP_DIR;

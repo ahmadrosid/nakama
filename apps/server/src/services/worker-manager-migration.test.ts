@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, mock, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -356,6 +356,30 @@ test("migration archives duplicate legacy WhatsApp credentials when the claimed 
   ).toBe(true);
   expect(await Bun.file(join(activeDir, "config.ini")).exists()).toBe(true);
   expect((await readWorkerDesiredState("org_a")).whatsapp).toBe(false);
+});
+
+test("a PM2 daemon that never answers fails the migration and frees the next operation", async () => {
+  const { createInMemoryDatabaseAdapter } = await import("@nakama/db");
+  const db = createInMemoryDatabaseAdapter();
+  const pm2 = createMockPm2();
+  const service = new WorkerManagerService(projectRoot, pm2);
+
+  // The daemon never calls back; the clock moves past the connect deadline.
+  pm2.connect = mock(() => {
+    jest.advanceTimersByTime(60_000);
+  });
+  jest.useFakeTimers();
+
+  try {
+    await expect(service.migrateAgentChannels(db)).rejects.toThrow();
+  } finally {
+    jest.useRealTimers();
+  }
+
+  expect(pm2.describe).not.toHaveBeenCalled();
+  pm2.connect = mock((cb: (err: Error | null) => void) => cb(null));
+  await service.migrateAgentChannels(db);
+  expect(pm2.describe).toHaveBeenCalled();
 });
 
 test("failed stop preserves credentials and blocks owner recovery", async () => {

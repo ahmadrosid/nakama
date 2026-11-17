@@ -137,8 +137,9 @@ export type CaptureSocketData = {
 
 type SocketData = CaptureSocketData;
 
-// Agents only read meetings. Capture, imports, uploads, stop and delete
-// stay in the Google Meet page so an agent cannot change or remove data.
+// Agents only read meetings. Imports, uploads, stop and delete stay in the
+// Google Meet page, and only the extension's Meet key starts a capture, so an
+// agent cannot change or remove data.
 const descriptions = {
   meetings:
     "List your assigned profile's meetings with their state. Chrome starts live capture.",
@@ -1103,8 +1104,10 @@ export class GoogleMeetService {
       this.sockets.size ||
       this.sessions.size
     ) {
-      throw new Error(
-        "Stop Google Meet capture and wait for imports/transcription before backing up or restoring"
+      // A NakamaApiError, so the scheduled backup status keeps this reason for the admin
+      throw new NakamaApiError(
+        "Stop Google Meet capture and wait for imports/transcription before backing up or restoring",
+        409
       );
     }
 

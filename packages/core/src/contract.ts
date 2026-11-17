@@ -75,6 +75,8 @@ export interface StoredAutomation extends AutomationDefinition {
   createdAt: string;
   enabled: boolean;
   lastRunAt?: string | null;
+  /** Set a moment after the last run ends, once its delivery is tried. */
+  lastRunDeliveryStatus?: AutomationDeliveryStatus | null;
   lastRunStatus?: AutomationRunStatus | null;
   nextRunAt?: string | null;
   orgId?: string | null;
@@ -138,6 +140,24 @@ export interface RegressionCase {
   profileId: string;
   source: RegressionCaseSource;
 }
+
+/** The cap on a case's `expectedResult`, in UTF-16 code units. */
+export const MAX_REGRESSION_EXPECTED_RESULT_LENGTH = 20_000;
+
+export type CreateRegressionCaseRequest =
+  | {
+      expectedResult: string;
+      /** The reply's index in the session history; its input is the user message before it. */
+      messageIndex: number;
+      sourceId: string;
+      sourceType: "session";
+    }
+  | {
+      automationId: string;
+      expectedResult: string;
+      sourceId: string;
+      sourceType: "automation_run";
+    };
 
 export interface RegressionCaseResponse {
   case: RegressionCase;
@@ -559,7 +579,7 @@ export interface NakamaUpgradeResponse {
 }
 
 export interface BackupStatusResponse {
-  /** The last scheduled backup's 409, until the next good backup. */
+  /** The last failed scheduled backup, until the next good backup. */
   lastError: { at: string; message: string } | null;
 }
 
@@ -656,6 +676,8 @@ export interface OrganizationSummary {
   /** Nakama Desktop may use this org's models. */
   desktopModelsEnabled?: boolean;
   id: string;
+  /** Accepted invites wait for an org admin before the user joins. */
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -746,6 +768,7 @@ export interface OrganizationOverviewResponse {
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
   desktopModelsEnabled?: boolean;
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -899,6 +922,18 @@ export interface ListOrgMembersResponse {
 
 export interface ListOrgInvitesResponse {
   invites: OrgInviteSummary[];
+}
+
+/** An accepted invite waiting for an org admin to approve or reject it. */
+export interface OrgJoinRequest {
+  createdAt: string;
+  email: string;
+  role: OrgRole;
+  userId: string;
+}
+
+export interface ListOrgJoinRequestsResponse {
+  requests: OrgJoinRequest[];
 }
 
 export interface AddOrgMemberRequest {
@@ -1213,6 +1248,8 @@ export interface AcceptOrgInviteRequest {
 export interface AcceptOrgInviteResponse {
   email: string;
   orgId: string;
+  /** True when the org requires approval: no session is created until an admin approves. */
+  pending: boolean;
   role: OrgRole;
 }
 
@@ -1544,8 +1581,13 @@ export interface CreateAutomationWebhookSecretResponse {
   secret: string;
 }
 
+/** A finished run leaves out `progress`; `GetAutomationRunResponse` has it. */
 export interface ListAutomationRunsResponse {
   runs: AutomationRunRecord[];
+}
+
+export interface GetAutomationRunResponse {
+  run: AutomationRunRecord;
 }
 
 export interface MarkAutomationRunsReadResponse {

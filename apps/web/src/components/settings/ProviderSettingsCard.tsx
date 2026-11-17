@@ -1,3 +1,4 @@
+import type { ProviderInstanceSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@nakama/ui/card";
 import {
@@ -28,6 +29,7 @@ import {
 } from "@/hooks/use-app-queries";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import { client, formatError } from "@/lib/client";
+import type { SelectedProvider } from "@/lib/models";
 import { ProviderInstanceCard } from "./provider-instance-card";
 
 interface ProviderSettingsCardProps {
@@ -225,8 +227,8 @@ export function ProviderSettingsCard({
 
       <AddProviderDialog
         key={addFormKey}
-        onAdded={(providerId) => {
-          setAddedProviderId(providerId);
+        onAdded={(provider) => {
+          setAddedProviderId(provider.id);
           toast("Provider added.");
           onFormError(null);
         }}
@@ -252,21 +254,25 @@ function ProviderSettingsSkeleton() {
   );
 }
 
-function AddProviderDialog({
+export function AddProviderDialog({
   open,
   onOpenChange,
   onAdded,
   onClosed,
+  provider,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdded: (providerId: string) => void;
+  onAdded: (provider: ProviderInstanceSummary) => void;
   onClosed: () => void;
+  /** The provider the form opens on. */
+  provider?: SelectedProvider;
 }) {
   const form = useProviderSetupForm({
+    initialProvider: provider,
     onSuccess: (result) => {
       onOpenChange(false);
-      onAdded(result.provider.id);
+      onAdded(result.provider);
     },
   });
 

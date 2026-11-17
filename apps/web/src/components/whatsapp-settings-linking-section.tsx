@@ -13,26 +13,10 @@ import { QRCodeSVG } from "qrcode.react";
 import { type ReactNode, useState } from "react";
 import { SettingsRow } from "@/components/integration-settings.shared";
 
-function pairingCodeDescription(
-  pairingCode: string | null,
-  paired: boolean
-): string {
-  if (pairingCode) {
-    return "Open Linked Devices in WhatsApp and enter this code. It expires in 10 minutes.";
-  }
-
-  if (paired) {
-    return "This number is linked. Generate a new code only if you need to relink.";
-  }
-
-  return "Optional — use this instead of scanning the QR code.";
-}
-
 function WhatsAppPairingCodeControls({
   copied,
   onCopyPairingCode,
   onRegeneratePairingCode,
-  paired,
   pairingCode,
   regeneratePending,
   savePending,
@@ -40,7 +24,6 @@ function WhatsAppPairingCodeControls({
   copied: boolean;
   onCopyPairingCode: () => void;
   onRegeneratePairingCode: () => void;
-  paired: boolean;
   pairingCode: string | null;
   regeneratePending: boolean;
   savePending: boolean;
@@ -87,27 +70,6 @@ function WhatsAppPairingCodeControls({
     );
   }
 
-  if (paired) {
-    return (
-      <Button
-        disabled={regeneratePending || savePending}
-        onClick={onRegeneratePairingCode}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {regeneratePending ? (
-          <Spinner />
-        ) : (
-          <>
-            <RefreshIcon aria-hidden="true" className="size-3.5" />
-            New code
-          </>
-        )}
-      </Button>
-    );
-  }
-
   return (
     <Button
       disabled={regeneratePending || savePending}
@@ -122,9 +84,68 @@ function WhatsAppPairingCodeControls({
           Generating…
         </>
       ) : (
-        "Generate pairing code"
+        "Get pairing code"
       )}
     </Button>
+  );
+}
+
+/**
+ * The QR scan links the agent's own number. A person who chats from another
+ * phone pairs it by sending this code to that number in a private chat.
+ */
+export function WhatsAppPairPhoneRow({
+  copied,
+  onCopyPairingCode,
+  onRegeneratePairingCode,
+  pairingCode,
+  regeneratePending,
+  savePending,
+}: {
+  copied: boolean;
+  onCopyPairingCode: () => void;
+  onRegeneratePairingCode: () => void;
+  pairingCode: string | null;
+  regeneratePending: boolean;
+  savePending: boolean;
+}) {
+  return (
+    <div>
+      <SettingsRow
+        description={
+          pairingCode
+            ? "The code works for 10 minutes and replaces the phone paired before."
+            : "Use this when the agent has its own number."
+        }
+        label="Chat from your own WhatsApp"
+      >
+        <WhatsAppPairingCodeControls
+          copied={copied}
+          onCopyPairingCode={onCopyPairingCode}
+          onRegeneratePairingCode={onRegeneratePairingCode}
+          pairingCode={pairingCode}
+          regeneratePending={regeneratePending}
+          savePending={savePending}
+        />
+      </SettingsRow>
+      {pairingCode ? (
+        <ol
+          aria-label="Steps to pair your WhatsApp"
+          className="list-decimal space-y-1 px-4 pb-3 pl-8 text-muted-foreground text-xs"
+        >
+          <li>
+            Open <strong>WhatsApp</strong> on the phone you chat from
+          </li>
+          <li>
+            Send this code as a message to the{" "}
+            <strong>{"agent’s WhatsApp number"}</strong>
+          </li>
+          <li>
+            Wait for the reply <strong>Linked successfully</strong>
+          </li>
+        </ol>
+      ) : null}
+    </div>
   );
 }
 
@@ -178,102 +199,48 @@ function WhatsAppReconnectRow({
 
 export function WhatsAppSettingsLinkingSection({
   paired,
-  pairingCode,
-  copied,
   savePending,
   regeneratePending,
-  onCopyPairingCode,
-  onRegeneratePairingCode,
   showReconnect,
   reconnectPending,
   onReconnect,
   rowClassName,
 }: {
   paired: boolean;
-  pairingCode: string | null;
-  copied: boolean;
   savePending: boolean;
   regeneratePending: boolean;
-  onCopyPairingCode: () => void;
-  onRegeneratePairingCode: () => void;
   showReconnect: boolean;
   reconnectPending: boolean;
   onReconnect: () => void;
   rowClassName?: string;
 }) {
-  const [relinkMethod, setRelinkMethod] = useState<"code" | "qr" | null>(null);
+  const [confirmRelink, setConfirmRelink] = useState(false);
+
+  if (!showReconnect) {
+    return null;
+  }
 
   return (
     <div className="divide-y divide-border border-border border-t">
-      {relinkMethod ? (
+      {confirmRelink ? (
         <ConfirmDialog
           confirmLabel="Relink WhatsApp"
           description="This will disconnect the current account. Your agent cannot receive WhatsApp messages until you link it again."
-          onClose={() => setRelinkMethod(null)}
+          onClose={() => setConfirmRelink(false)}
           onConfirm={async () => {
-            if (relinkMethod === "code") {
-              onRegeneratePairingCode();
-            } else {
-              onReconnect();
-            }
+            onReconnect();
           }}
           title="Relink WhatsApp?"
         />
       ) : null}
-      <details
-        className="px-4 py-3 text-sm"
-        open={paired || Boolean(pairingCode)}
-      >
-        <summary className="cursor-pointer text-muted-foreground">
-          Link with a code instead
-        </summary>
-        <SettingsRow
-          className={rowClassName}
-          description={pairingCodeDescription(pairingCode, paired)}
-          label="Link with a code"
-        >
-          <WhatsAppPairingCodeControls
-            copied={copied}
-            onCopyPairingCode={onCopyPairingCode}
-            onRegeneratePairingCode={() =>
-              paired ? setRelinkMethod("code") : onRegeneratePairingCode()
-            }
-            paired={paired}
-            pairingCode={pairingCode}
-            regeneratePending={regeneratePending}
-            savePending={savePending}
-          />
-        </SettingsRow>
-
-        {pairingCode ? (
-          <ol
-            aria-label="Steps to connect WhatsApp with a pairing code"
-            className="list-decimal space-y-1 px-4 py-3 pl-8 text-muted-foreground text-xs"
-          >
-            <li>
-              <strong>Open WhatsApp</strong> on your phone
-            </li>
-            <li>
-              Open <strong>Settings</strong>, then{" "}
-              <strong>Linked Devices</strong>
-            </li>
-            <li>
-              Choose <strong>Link with phone number</strong> and enter this code
-            </li>
-          </ol>
-        ) : null}
-      </details>
-
-      {showReconnect ? (
-        <WhatsAppReconnectRow
-          onReconnect={() => (paired ? setRelinkMethod("qr") : onReconnect())}
-          paired={paired}
-          reconnectPending={reconnectPending}
-          regeneratePending={regeneratePending}
-          rowClassName={rowClassName}
-          savePending={savePending}
-        />
-      ) : null}
+      <WhatsAppReconnectRow
+        onReconnect={() => (paired ? setConfirmRelink(true) : onReconnect())}
+        paired={paired}
+        reconnectPending={reconnectPending}
+        regeneratePending={regeneratePending}
+        rowClassName={rowClassName}
+        savePending={savePending}
+      />
     </div>
   );
 }

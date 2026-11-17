@@ -225,8 +225,13 @@ async function readMeetInput<Action extends keyof typeof meetingActionSchemas>(
   return parsed.data;
 }
 
+// Actions a browser session can call. Only a Meet key starts a capture,
+// through /v1/meet/extension/start.
+const { "start-capture": _startCapture, ...sessionActionSchemas } =
+  meetingActionSchemas;
+
 export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
-  for (const [action, schema] of Object.entries(meetingActionSchemas)) {
+  for (const [action, schema] of Object.entries(sessionActionSchemas)) {
     app.openAPIRegistry.registerPath(
       createRoute({
         method: "post",
@@ -273,8 +278,11 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
     // SAFETY: The validated value satisfies the contract checked by this assertion.
     const action = c.req.param("actionKey") as MeetAction;
 
-    if (!Object.hasOwn(meetingActionSchemas, action)) {
-      throw new NakamaApiError("Unknown meeting action", 404);
+    if (!Object.hasOwn(sessionActionSchemas, action)) {
+      // Pages and scripts made for extension v0.2 still call this action.
+      throw action === "start-capture"
+        ? new NakamaApiError("Update the Nakama Meet extension to v0.3.", 410)
+        : new NakamaApiError("Unknown meeting action", 404);
     }
 
     const input = await readMeetInput(c.req.raw, action);
@@ -293,8 +301,7 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
           id: auth.user.id,
           role: auth.orgRole === "admin" ? "admin" : "member",
         },
-        c.req.raw.signal,
-        captureSocketUrl(c.req.raw)
+        c.req.raw.signal
       )
     );
   });

@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
-import { createId, NakamaApiError } from "@nakama/core";
+import { createId } from "@nakama/core";
 import type {
   RegressionCaseRun,
   RegressionCaseRunResponse,
@@ -57,7 +57,7 @@ const regressionCaseRunResponseSchema = z
   .openapi("RegressionCaseRunResponse");
 
 const errorResponses = Object.fromEntries(
-  [400, 403, 404].map((status) => [
+  [400, 403, 404, 409].map((status) => [
     status,
     {
       content: { "application/json": { schema: errorSchema } },
@@ -82,6 +82,8 @@ export function registerRegressionCaseRunRoutes(
   if (!databaseAdapter) {
     return;
   }
+
+  const runningCases = new Set<string>();
 
   /** The case the caller may read in the active org, or null for a 404. */
   const readableCase = async (
@@ -165,36 +167,43 @@ export function registerRegressionCaseRunRoutes(
         return errorResponse("Regression case not found", 404);
       }
 
+      // One rerun per case at a time, so repeat clicks do not stack runs.
+      const runKey = `${record.orgId}:${record.id}`;
+
+      if (runningCases.has(runKey)) {
+        return errorResponse("This case is already rerunning.", 409);
+      }
+
+      runningCases.add(runKey);
+
+      const createdAt = new Date().toISOString();
+      let result: Awaited<ReturnType<typeof options.agent.runRegressionCase>>;
+
+      try {
+        result = await options.agent.runRegressionCase({
+          input: record.input,
+          orgId: record.orgId,
+          profileId: record.profileId,
+          signal: c.req.raw.signal,
+          userId: auth.user.id,
+        });
+      } finally {
+        runningCases.delete(runKey);
+      }
+
       const run: StoredRegressionCaseRunRecord = {
         caseId: record.id,
-        createdAt: new Date().toISOString(),
+        createdAt,
         createdByUserId: auth.user.id,
-        error: null,
+        error: result.error,
         id: createId("regrun"),
         orgId: record.orgId,
-        output: null,
-        status: "completed",
+        output: result.output,
+        status: result.error === null ? "completed" : "failed",
         verdict: null,
         verdictAt: null,
         verdictByUserId: null,
       };
-
-      try {
-        run.output = await options.agent.runRegressionCase({
-          input: record.input,
-          orgId: record.orgId,
-          profileId: record.profileId,
-          userId: auth.user.id,
-        });
-      } catch (error) {
-        // The run never started, so there is no result to keep.
-        if (error instanceof NakamaApiError) {
-          throw error;
-        }
-
-        run.status = "failed";
-        run.error = error instanceof Error ? error.message : String(error);
-      }
 
       await databaseAdapter.createRegressionCaseRun(run);
 
@@ -211,18 +220,35 @@ export function registerRegressionCaseRunRoutes(
       const { auth, record } = await readableCase(c);
       const body = await readJson(c.req.raw, markRegressionCaseRunSchema);
 
-      const marked =
+      const runId = decodeURIComponent(c.req.param("runId") ?? "");
+
+      const existing =
         record &&
-        (await databaseAdapter.setRegressionCaseRunVerdict(
+        (await databaseAdapter.getRegressionCaseRun(
           record.orgId,
           record.id,
-          decodeURIComponent(c.req.param("runId") ?? ""),
-          {
-            at: new Date().toISOString(),
-            userId: auth.user.id,
-            verdict: body.verdict,
-          }
+          runId
         ));
+
+      if (!(record && existing)) {
+        return errorResponse("Regression case run not found", 404);
+      }
+
+      // A failed run has no answer to judge.
+      if (existing.status === "failed") {
+        return errorResponse("A failed run cannot be marked.", 409);
+      }
+
+      const marked = await databaseAdapter.setRegressionCaseRunVerdict(
+        record.orgId,
+        record.id,
+        runId,
+        {
+          at: new Date().toISOString(),
+          userId: auth.user.id,
+          verdict: body.verdict,
+        }
+      );
 
       if (!marked) {
         return errorResponse("Regression case run not found", 404);

@@ -2,6 +2,8 @@ import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
+import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
 import { Cancel01Icon } from "hugeicons-react";
 import { useReducer, useState } from "react";
@@ -17,13 +19,17 @@ import {
   OrgMembersSecretBanner,
 } from "@/components/settings/org-members-card-header";
 import { OrgMembersTable } from "@/components/settings/org-members-table";
+import { updateOrgFlag } from "@/components/settings/SkillsCuratorOrgCard";
+import type { AuthContextValue } from "@/context/auth-context-shared";
 import { useAuth } from "@/context/use-auth";
 import {
   useAddOrgMember,
   useInviteOrgMember,
   useOrgInvites,
+  useOrgJoinRequests,
   useOrgMembers,
   useRemoveOrgMember,
+  useReviewOrgJoinRequest,
   useRevokeOrgInvite,
   useSetOrgMemberDisabled,
   useUpdateOrgMember,
@@ -443,6 +449,7 @@ export function OrgMembersCard() {
 
           {tab === "settings" ? (
             <>
+              <MemberApprovalRow activeOrg={activeOrg} updateOrg={updateOrg} />
               <InviteDomainsForm
                 allowedDomains={activeOrg.allowedInviteDomains ?? []}
                 key={activeOrg.id}
@@ -486,6 +493,7 @@ export function OrgMembersCard() {
                   updatePending={updateMemberMutation.isPending}
                 />
 
+                <PendingJoinRequests orgId={activeOrg.id} />
                 <PendingInvites orgId={activeOrg.id} />
 
                 {statusLine ? (
@@ -515,6 +523,105 @@ export function OrgMembersCard() {
         updatePending={updateMemberMutation.isPending}
       />
     </>
+  );
+}
+
+function MemberApprovalRow({
+  activeOrg,
+  updateOrg,
+}: {
+  activeOrg: NonNullable<AuthContextValue["activeOrg"]>;
+  updateOrg: AuthContextValue["updateOrg"];
+}) {
+  const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
+  const busy = busyOrgId === activeOrg.id;
+
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <p className="font-medium text-foreground text-sm">
+        Approve new members before they join
+      </p>
+      <div className="flex shrink-0 items-center gap-2">
+        {busy ? <Spinner /> : null}
+        <Switch
+          aria-label="Approve new members before they join"
+          checked={activeOrg.memberApprovalRequired === true}
+          disabled={busy}
+          onCheckedChange={(checked) =>
+            void updateOrgFlag(
+              updateOrg,
+              activeOrg.id,
+              { memberApprovalRequired: checked },
+              setBusyOrgId
+            )
+          }
+          size="sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PendingJoinRequests({ orgId }: { orgId: string }) {
+  const requests = useOrgJoinRequests(orgId).data?.requests ?? [];
+  const review = useReviewOrgJoinRequest(orgId);
+
+  const decide = (approve: boolean, userId: string) =>
+    review.mutate(
+      { approve, userId },
+      { onError: (error) => toast(formatError(error)) }
+    );
+
+  if (requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Waiting for approval"
+      className="border-border border-t"
+    >
+      <h3 className="bg-muted/40 px-4 py-2.5 text-muted-foreground text-sm">
+        Waiting for approval
+      </h3>
+      <ul className="divide-y divide-border border-border border-t text-sm">
+        {requests.map((request) => (
+          <li
+            className="flex items-center justify-between gap-3 px-4 py-2"
+            key={request.userId}
+          >
+            <p className="min-w-0 truncate">
+              {request.email}
+              <span className="ml-1.5 text-muted-foreground capitalize">
+                {request.role}
+              </span>
+            </p>
+            <div className="flex shrink-0 gap-1">
+              <Button
+                aria-label={`Approve ${request.email}`}
+                disabled={review.isPending}
+                onClick={() => decide(true, request.userId)}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Approve
+              </Button>
+              <Button
+                aria-label={`Reject ${request.email}`}
+                disabled={review.isPending}
+                onClick={() => decide(false, request.userId)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Reject
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

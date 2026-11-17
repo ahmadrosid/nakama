@@ -131,7 +131,10 @@ describe("discoverModelsForProvider", () => {
       createInMemoryDatabaseAdapter()
     );
 
-    const created = await service.createProvider({ type: "command_code" });
+    const created = await service.createProvider({
+      model: "claude-sonnet-4-6",
+      type: "command_code",
+    });
 
     const result = await service.discoverModelsForProvider(created.provider.id);
 
