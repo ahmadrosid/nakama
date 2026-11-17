@@ -31,6 +31,7 @@ import { useCatalogModelRows } from "@/hooks/use-catalog-model-rows";
 import { formatError } from "@/lib/client";
 import {
   buildCreateProviderRequest,
+  configuredProviderOptionKeys,
   defaultModelForProvider,
   defaultOllamaSetupBaseUrl,
   defaultProviderDisplayName,
@@ -78,15 +79,10 @@ export function useProviderSetupForm(
   const catalog =
     catalogResponse?.catalog ?? catalogResponse?.models ?? EMPTY_CATALOG;
 
-  const configuredTypes = useMemo(() => {
-    const types = new Set<string>();
-
-    for (const provider of providersResponse?.providers ?? []) {
-      types.add(provider.type);
-    }
-
-    return types;
-  }, [providersResponse?.providers]);
+  const configuredTypes = useMemo(
+    () => configuredProviderOptionKeys(providersResponse?.providers),
+    [providersResponse?.providers]
+  );
 
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>(
     options.initialProvider ?? "openai"
@@ -143,10 +139,11 @@ export function useProviderSetupForm(
 
   // A taken type drops its preset and the name that came with it.
   const leaveTakenType = useEffectEvent((taken: ReadonlySet<string>) => {
-    if (isProviderTypeAlreadyConfigured(selectedProvider, taken)) {
-      setSelectedProvider(
-        firstAvailableProviderOption(taken, selectedProvider)
-      );
+    if (
+      isProviderTypeAlreadyConfigured(selectedProvider, taken, selectedOption)
+    ) {
+      // A taken preset leaves its type free: do not stay on it.
+      setSelectedProvider(firstAvailableProviderOption(taken));
       setSelectedOption(undefined);
       setDisplayName("");
     }
@@ -268,7 +265,7 @@ export function useProviderSetupForm(
 
   const handleProviderSelect = useCallback(
     (provider: SelectedProvider, option?: ProviderOption) => {
-      if (isProviderTypeAlreadyConfigured(provider, configuredTypes)) {
+      if (isProviderTypeAlreadyConfigured(provider, configuredTypes, option)) {
         return;
       }
 
@@ -515,7 +512,13 @@ export function useProviderSetupForm(
         return;
       }
 
-      if (isProviderTypeAlreadyConfigured(selectedProvider, configuredTypes)) {
+      if (
+        isProviderTypeAlreadyConfigured(
+          selectedProvider,
+          configuredTypes,
+          selectedOption
+        )
+      ) {
         setFormError("This provider is already added.");
 
         return;
@@ -627,6 +630,7 @@ export function useProviderSetupForm(
       customModels,
       displayName,
       selectedModel,
+      selectedOption,
       selectedProvider,
       configuredTypes,
       createProvider,

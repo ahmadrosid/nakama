@@ -159,15 +159,38 @@ function allowsMultipleProviderInstances(provider: SelectedProvider): boolean {
   return provider === "openai_compatible" || provider === "ollama";
 }
 
+/**
+ * The picker entries the saved providers take. A preset has no type of its own,
+ * so its saved name tells it from the plain entry (AI Club from Netra Runtime).
+ */
+export function configuredProviderOptionKeys(
+  providers: ReadonlyArray<{ label: string; type: string }> = []
+): Set<string> {
+  return new Set(
+    providers.map((provider) => {
+      const preset = PROVIDER_OPTIONS.find(
+        (option) =>
+          option.preset &&
+          option.id === provider.type &&
+          option.label === provider.label.trim()
+      );
+
+      return preset ? providerOptionKey(preset) : provider.type;
+    })
+  );
+}
+
+/** `configured` holds picker entry keys, see `configuredProviderOptionKeys`. */
 export function isProviderTypeAlreadyConfigured(
   provider: SelectedProvider,
-  configuredTypes: ReadonlySet<string>
+  configured: ReadonlySet<string>,
+  option?: ProviderOption
 ): boolean {
   if (allowsMultipleProviderInstances(provider)) {
     return false;
   }
 
-  return configuredTypes.has(provider);
+  return configured.has(option ? providerOptionKey(option) : provider);
 }
 
 export function firstAvailableProviderOption(
@@ -178,8 +201,13 @@ export function firstAvailableProviderOption(
     return preferred;
   }
 
+  // A preset is picked by hand only: the type alone does not name it.
   const next = PROVIDER_OPTIONS.find(
-    (option) => !isProviderTypeAlreadyConfigured(option.id, configuredTypes)
+    (option) =>
+      !(
+        option.preset ||
+        isProviderTypeAlreadyConfigured(option.id, configuredTypes)
+      )
   );
 
   return next?.id ?? "openai_compatible";
