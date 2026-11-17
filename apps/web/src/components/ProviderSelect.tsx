@@ -56,7 +56,7 @@ export function ProviderSelect({
     const alreadyAdded: typeof PROVIDER_OPTIONS = [];
 
     for (const option of PROVIDER_OPTIONS) {
-      if (isProviderTypeAlreadyConfigured(option.id, configured)) {
+      if (isProviderTypeAlreadyConfigured(option.id, configured, option)) {
         alreadyAdded.push(option);
 
         continue;
@@ -119,7 +119,8 @@ export function ProviderSelect({
                 {group.options.map((option) => {
                   const alreadyConfigured = isProviderTypeAlreadyConfigured(
                     option.id,
-                    configured
+                    configured,
+                    option
                   );
 
                   return (
