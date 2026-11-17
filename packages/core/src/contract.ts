@@ -1570,6 +1570,8 @@ export interface UpdateAutomationRequest {
   /** null removes the limit. */
   toolLimit?: AutomationToolLimit | null;
   trigger?: AutomationTrigger;
+  /** The version the editor loaded. A newer saved version returns 409. */
+  version?: number;
 }
 
 export interface RunAutomationResponse {

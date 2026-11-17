@@ -3,7 +3,7 @@ import type {
   AutomationToolLimit,
   StoredAutomation,
 } from "@nakama/core";
-import { isAutomationRunUnread } from "@nakama/core";
+import { isAutomationRunUnread, NakamaApiError } from "@nakama/core";
 import { z } from "zod";
 
 const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
@@ -13,6 +13,19 @@ export function automationBelongsToOrg(
   orgId: string
 ): boolean {
   return automation.orgId === orgId;
+}
+
+/** Refuses a save made from an older copy; no version skips the check. */
+export function assertAutomationVersion(
+  automation: StoredAutomation,
+  version?: number
+): void {
+  if (version !== undefined && version !== automation.version) {
+    throw new NakamaApiError(
+      "This automation changed after you opened it. Open it again to edit.",
+      409
+    );
+  }
 }
 
 export function toRunRecord(
