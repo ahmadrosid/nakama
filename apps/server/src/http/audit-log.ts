@@ -250,6 +250,15 @@ export function describeAuditEvent(
     return event("session.delete", "session", match[1]);
   }
 
+  // Who holds the chat's browser: the user took over, handed back, or signed in.
+  match = pathname.match(
+    /^\/v1\/sessions\/([^/]+)\/browser\/(takeover|handoff|login)$/
+  );
+
+  if (match && method === "POST") {
+    return event(`session.${match[2]}`, "session", match[1]);
+  }
+
   // DELETE /v1/auth/sessions/:id revokes a browser login session.
   match = pathname.match(/^\/v1\/auth\/sessions\/([^/]+)$/);
 

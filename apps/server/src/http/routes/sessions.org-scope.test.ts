@@ -240,6 +240,9 @@ const CROSS_ORG_ROUTES: Array<{
   { method: "POST", path: (id) => `/v1/sessions/${id}/stop` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/browser` },
   { method: "DELETE", path: (id) => `/v1/sessions/${id}/browser` },
+  { method: "POST", path: (id) => `/v1/sessions/${id}/browser/takeover` },
+  { method: "POST", path: (id) => `/v1/sessions/${id}/browser/handoff` },
+  { method: "POST", path: (id) => `/v1/sessions/${id}/browser/login` },
   {
     body: { messageIndex: 0 },
     method: "POST",
@@ -426,6 +429,54 @@ describe("session routes are scoped to the caller's active org", () => {
       (await app.fetch(new Request(url, { headers: attacker.headers() })))
         .status
     ).toBe(404);
+  });
+
+  test("browser control writes one audit event per step, scoped to the session's org", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+
+    const owner = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    for (const control of ["takeover", "login", "handoff"]) {
+      const response = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/sessions/${victimSessionId}/browser/${control}`,
+          {
+            body: JSON.stringify({ password: "hunter2" }),
+            headers: owner.headers({ "X-CSRF-Token": owner.csrfToken }),
+            method: "POST",
+          }
+        )
+      );
+
+      expect(response.status).toBe(204);
+    }
+
+    const events = (await databaseAdapter.listAuditEvents({})).filter(
+      (event) => event.action.startsWith("session.")
+    );
+
+    expect(events.map((event) => event.action).sort()).toEqual([
+      "session.handoff",
+      "session.login",
+      "session.takeover",
+    ]);
+
+    for (const event of events) {
+      expect(event).toMatchObject({
+        actorUserId: "user_victim",
+        metadata: { outcome: "success", status: 204 },
+        orgId: VICTIM_ORG,
+        resourceId: victimSessionId,
+        resourceType: "session",
+      });
+    }
+
+    expect(JSON.stringify(events)).not.toContain("hunter2");
   });
 
   for (const route of CROSS_ORG_ROUTES) {

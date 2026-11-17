@@ -1,5 +1,6 @@
 import { Button } from "@nakama/ui/button";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { readRecord } from "@/components/chat/web-search.shared";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import type { ChatListItem } from "@/lib/chat-history";
 import { client } from "@/lib/client";
@@ -19,9 +20,64 @@ function latestAgentBrowserCall(messages: ChatListItem[]): string | null {
   return null;
 }
 
+/** True when the agent's last page asked for a password. */
+function lastPageAskedForLogin(messages: ChatListItem[]): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+
+    if (message?.role === "tool" && message.tool === "browser_navigate") {
+      return readRecord(message.toolResult)?.loginForm === true;
+    }
+  }
+
+  return false;
+}
+
 /** Kernel saves the profile when the browser stops; a failed stop times out. */
 function stopBrowser(sessionId: string) {
   void client.stopSessionBrowser(sessionId).catch(() => null);
+}
+
+/** Records in the audit log who holds the browser: the user or the agent. */
+function BrowserControlActions({
+  loginPageRef,
+  onStop,
+  sessionId,
+}: {
+  loginPageRef: { current: boolean };
+  onStop: () => void;
+  sessionId: string;
+}) {
+  const [userHasControl, setUserHasControl] = useState(false);
+
+  const record = (control: "handoff" | "login" | "takeover") =>
+    client.recordSessionBrowserControl(sessionId, control).catch(() => null);
+
+  return (
+    <>
+      <Button
+        onClick={() => {
+          if (!userHasControl) {
+            void record("takeover");
+          } else if (loginPageRef.current) {
+            void record("login").then(() => record("handoff"));
+          } else {
+            void record("handoff");
+          }
+
+          setUserHasControl(!userHasControl);
+        }}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {userHasControl ? "Hand back to agent" : "Take control"}
+      </Button>
+      <Button onClick={onStop} size="sm" type="button" variant="outline">
+        Stop browser
+      </Button>
+    </>
+  );
 }
 
 /**
@@ -37,6 +93,11 @@ export function BrowserLiveViewPanelBridge({
 }) {
   const { show, hide, activeId } = useChatAttachmentPanel();
   const call = useMemo(() => latestAgentBrowserCall(messages), [messages]);
+  const loginPageRef = useRef(false);
+
+  useEffect(() => {
+    loginPageRef.current = lastPageAskedForLogin(messages);
+  }, [messages]);
   const activeIdRef = useRef(activeId);
   const dismissedUrlRef = useRef<string | null>(null);
 
@@ -79,18 +140,15 @@ export function BrowserLiveViewPanelBridge({
           ),
           defaultWidth: 768,
           headerActions: (
-            <Button
-              onClick={() => {
+            <BrowserControlActions
+              loginPageRef={loginPageRef}
+              onStop={() => {
                 dismissedUrlRef.current = liveViewUrl;
                 hide(PANEL_ID);
                 stopBrowser(sessionId);
               }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Stop browser
-            </Button>
+              sessionId={sessionId}
+            />
           ),
           id: PANEL_ID,
           onClose: () => {
