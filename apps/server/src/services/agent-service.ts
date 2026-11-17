@@ -4346,45 +4346,59 @@ export class AgentService {
       );
     }
 
-    const existing = this.userConfig?.providers ?? [];
-    const instance = buildProviderInstanceFromCreateRequest(request, existing);
-    const model = resolveInitialModel(instance, request.model);
+    const created = await providerPublicationLock.withLock(
+      "providers",
+      async () => {
+        // Read before the provider list, so no await sits between read and save.
+        const thinking = await this.resolveThinkingSettings();
+        const existing = this.userConfig?.providers ?? [];
 
-    const providers = [...existing, instance];
-    const isFirst = providers.length === 1;
-    const thinking = await this.resolveThinkingSettings();
+        const instance = buildProviderInstanceFromCreateRequest(
+          request,
+          existing
+        );
 
-    const baseConfig = this.userConfig ?? {
-      defaultProviderId: null,
-      providers: [],
-      thinkingEffort: thinking.effort,
-      thinkingEnabled: thinking.enabled,
-    };
+        const model = resolveInitialModel(instance, request.model);
 
-    this.userConfig = {
-      ...baseConfig,
-      defaultProviderId:
-        isFirst || !baseConfig.defaultProviderId
-          ? instance.id
-          : baseConfig.defaultProviderId,
-      providers,
-    };
+        const providers = [...existing, instance];
+        const isFirst = providers.length === 1;
 
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+        const baseConfig = this.userConfig ?? {
+          defaultProviderId: null,
+          providers: [],
+          thinkingEffort: thinking.effort,
+          thinkingEnabled: thinking.enabled,
+        };
 
-    if (isFirst) {
+        const defaultProviderId =
+          isFirst || !baseConfig.defaultProviderId
+            ? instance.id
+            : baseConfig.defaultProviderId;
+
+        const config = { ...baseConfig, defaultProviderId, providers };
+        await saveUserConfig(config);
+        this.userConfig = config;
+        this.refreshProviderConfig();
+
+        return {
+          isFirst,
+          response: {
+            defaultProviderId,
+            initialModel: model,
+            provider: toProviderInstanceSummary(
+              instance,
+              countModelsForInstance(instance)
+            ),
+          },
+        };
+      }
+    );
+
+    if (created.isFirst) {
       await this.ensureSoulScaffolded();
     }
 
-    return {
-      defaultProviderId: this.userConfig.defaultProviderId!,
-      initialModel: model,
-      provider: toProviderInstanceSummary(
-        instance,
-        countModelsForInstance(instance)
-      ),
-    };
+    return created.response;
   }
 
   async updateProvider(
@@ -4515,49 +4529,59 @@ export class AgentService {
     providerId: string,
     oauth: XaiOAuthCredentials
   ): Promise<void> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
-    }
+    await providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
 
-    const current = findProviderInstance(this.userConfig, providerId);
+      const current = findProviderInstance(this.userConfig, providerId);
 
-    if (!current || current.type !== "xai_oauth") {
-      throw new Error("Grok provider not found.");
-    }
+      if (!current || current.type !== "xai_oauth") {
+        throw new Error("Grok provider not found.");
+      }
 
-    const updated = applyXaiOAuthToInstance(current, oauth);
-    this.userConfig = {
-      ...this.userConfig,
-      providers: this.userConfig.providers.map((instance) =>
-        instance.id === providerId ? updated : instance
-      ),
-    };
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+      const updated = applyXaiOAuthToInstance(current, oauth);
+
+      const config = {
+        ...this.userConfig,
+        providers: this.userConfig.providers.map((instance) =>
+          instance.id === providerId ? updated : instance
+        ),
+      };
+
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+    });
   }
   async persistChatgptOAuth(
     providerId: string,
     oauth: ChatgptOAuthCredentials
   ): Promise<void> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
-    }
+    await providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
 
-    const current = findProviderInstance(this.userConfig, providerId);
+      const current = findProviderInstance(this.userConfig, providerId);
 
-    if (!current || current.type !== "chatgpt") {
-      throw new Error("ChatGPT provider not found.");
-    }
+      if (!current || current.type !== "chatgpt") {
+        throw new Error("ChatGPT provider not found.");
+      }
 
-    const updated = applyChatgptOAuthToInstance(current, oauth);
-    this.userConfig = {
-      ...this.userConfig,
-      providers: this.userConfig.providers.map((instance) =>
-        instance.id === providerId ? updated : instance
-      ),
-    };
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+      const updated = applyChatgptOAuthToInstance(current, oauth);
+
+      const config = {
+        ...this.userConfig,
+        providers: this.userConfig.providers.map((instance) =>
+          instance.id === providerId ? updated : instance
+        ),
+      };
+
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+    });
   }
 
   async getModels(
@@ -4730,10 +4754,7 @@ export class AgentService {
       type: request.provider,
     });
 
-    const instance = findProviderInstance(
-      this.userConfig,
-      result.defaultProviderId
-    );
+    const instance = findProviderInstance(this.userConfig, result.provider.id);
 
     return {
       currentModel: result.initialModel,
@@ -4889,13 +4910,23 @@ export class AgentService {
       `provider:${providerId}`,
       updated.apiKey
     );
-    this.userConfig = {
-      ...this.userConfig!,
-      providers: this.userConfig!.providers.map((instance) =>
-        instance.id === providerId ? updated : instance
-      ),
-    };
-    this.refreshProviderConfig();
+
+    // The checks above use the network, so only this write takes the lock.
+    await providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        return;
+      }
+
+      this.userConfig = {
+        ...this.userConfig,
+        providers: this.userConfig.providers.map((instance) =>
+          instance.id === providerId
+            ? applyProviderInstanceUpdate(instance, { apiKey })
+            : instance
+        ),
+      };
+      this.refreshProviderConfig();
+    });
 
     return {
       provider: {
@@ -4939,7 +4970,10 @@ export class AgentService {
 
   /** After a data-root restore, reload provider config and clear in-memory session state. */
   async reloadAfterDataRestore(): Promise<void> {
-    this.userConfig = await loadUserConfig();
+    await providerPublicationLock.withLock("providers", async () => {
+      this.userConfig = await loadUserConfig();
+    });
+
     await this.refreshManagedProviderKeys();
     this.refreshProviderConfig();
     this.sessions.invalidateAll({ cognito: true });
