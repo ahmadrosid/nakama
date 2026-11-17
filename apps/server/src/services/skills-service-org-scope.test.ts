@@ -216,6 +216,47 @@ describe("skills are scoped per org", () => {
     expect(await db.getSkillByName("deploy-notes", "org_a")).not.toBeNull();
   });
 
+  test("org B cannot delete org A's skill by id", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+
+    await service.createAndAssignRawSkillToProfile(
+      "org_a",
+      "profile_a",
+      ORG_A_SKILL
+    );
+
+    const orgARow = await db.getSkillByName("deploy-notes", "org_a");
+
+    await expect(service.deleteSkill(orgARow!.id, "org_b")).rejects.toThrow(
+      "Skill not found."
+    );
+    expect(await db.getSkillByName("deploy-notes", "org_a")).not.toBeNull();
+  });
+
+  test("org A deletes its own skill by id and keeps org B's copy", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+
+    await service.createAndAssignRawSkillToProfile(
+      "org_a",
+      "profile_a",
+      ORG_A_SKILL
+    );
+    await service.createAndAssignRawSkillToProfile(
+      "org_b",
+      "profile_b",
+      ORG_B_SKILL
+    );
+
+    const orgARow = await db.getSkillByName("deploy-notes", "org_a");
+
+    await service.deleteSkill(orgARow!.id, "org_a");
+
+    expect(await db.getSkillByName("deploy-notes", "org_a")).toBeNull();
+    expect(await db.getSkillByName("deploy-notes", "org_b")).not.toBeNull();
+  });
+
   test("org B patches its own copy of a shared name", async () => {
     const db = await openDb();
     const service = new SkillsService(db);

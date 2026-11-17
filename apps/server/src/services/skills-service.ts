@@ -1092,8 +1092,8 @@ export class SkillsService {
     }
   }
 
-  async deleteSkill(skillId: string): Promise<void> {
-    const record = await this.requireSkill(skillId);
+  async deleteSkill(skillId: string, orgId?: string): Promise<void> {
+    const record = await this.requireSkill(skillId, orgId);
 
     if (isPluginOwnedSkill(record)) {
       throw new Error("Plugin-owned skills cannot be deleted.");
@@ -2795,11 +2795,18 @@ export class SkillsService {
     });
   }
 
-  private async requireSkill(skillId: string): Promise<StoredSkillRecord> {
+  private async requireSkill(
+    skillId: string,
+    orgId?: string
+  ): Promise<StoredSkillRecord> {
     const skill = await this.db.getSkill(skillId);
 
     if (!skill) {
       throw new Error("Skill not found.");
+    }
+
+    if (orgId && skill.orgId && skill.orgId !== orgId) {
+      throw new NakamaApiError("Skill not found.", 404);
     }
 
     return skill;
