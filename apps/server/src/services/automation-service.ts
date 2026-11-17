@@ -29,7 +29,7 @@ import {
 } from "./automation-profile-access";
 import {
   automationBelongsToOrg,
-  normalizeToolLimit,
+  scopeToolLimit,
   toRunRecord,
 } from "./automation-records";
 import type { ManagedSecrets } from "./managed-secrets";
@@ -185,7 +185,11 @@ export class AutomationService {
     }
 
     if (input.toolLimit) {
-      automation.toolLimit = normalizeToolLimit(input.toolLimit);
+      automation.toolLimit = await scopeToolLimit(
+        this.db,
+        automation,
+        input.toolLimit
+      );
     }
 
     const profile = await this.db.getProfile(profileId);
@@ -281,7 +285,11 @@ export class AutomationService {
     if (input.toolLimit === null) {
       toolLimit = undefined;
     } else if (input.toolLimit !== undefined) {
-      toolLimit = normalizeToolLimit(input.toolLimit);
+      toolLimit = await scopeToolLimit(
+        this.db,
+        { orgId, profileId },
+        input.toolLimit
+      );
     }
 
     const prompt = input.prompt?.trim() || existing.prompt;

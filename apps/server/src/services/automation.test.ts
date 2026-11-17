@@ -98,6 +98,49 @@ async function assignComposeioGmailSender(
 describe("AutomationService", () => {
   test("stores a tool limit and who saved it", async () => {
     const db = await createTestDb();
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_a",
+      name: "web_search",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile(PROFILE_ID, "tool_a");
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: { url: "https://example.com/mcp" },
+      createdAt: now,
+      enabled: true,
+      id: "mcp_a",
+      lastError: null,
+      name: "docs",
+      orgId: ORG_ID,
+      status: "connected",
+      transport: "http",
+      updatedAt: now,
+    });
+    await db.assignMcpServerToProfile(PROFILE_ID, "mcp_a");
+    await db.upsertComposioToolkit({
+      cachedTools: [],
+      createdAt: now,
+      displayName: "Gmail",
+      id: "toolkit_gmail",
+      lastError: null,
+      orgId: ORG_ID,
+      status: "enabled",
+      toolkitSlug: "gmail",
+      updatedAt: now,
+    });
+    await db.replaceProfileComposioToolkits(PROFILE_ID, [
+      {
+        allowedActions: null,
+        profileId: PROFILE_ID,
+        toolkitId: "toolkit_gmail",
+      },
+    ]);
 
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
@@ -110,9 +153,9 @@ describe("AutomationService", () => {
         name: "Briefing",
         prompt: "Brief me",
         toolLimit: {
-          composioToolkits: ["Gmail", "gmail"],
-          mcpServerIds: [],
-          toolIds: [" tool_a ", ""],
+          composioToolkits: ["Gmail", "gmail", "slack"],
+          mcpServerIds: ["mcp_a", "mcp_foreign"],
+          toolIds: [" tool_a ", "", "tool_foreign"],
         },
         trigger: { type: "manual" },
       },
@@ -121,9 +164,10 @@ describe("AutomationService", () => {
     );
 
     const stored = await service.get(created.id, ORG_ID);
+    // Ids the agent does not have drop silently.
     expect(stored?.toolLimit).toEqual({
       composioToolkits: ["gmail"],
-      mcpServerIds: [],
+      mcpServerIds: ["mcp_a"],
       toolIds: ["tool_a"],
     });
     expect(stored?.runAsUserId).toBe("user_a");
