@@ -10,7 +10,7 @@ import {
 } from "@/context/auth-context-shared";
 import { useProviderSetupForm } from "@/hooks/use-provider-setup-form";
 import { client } from "@/lib/client";
-import { PROVIDER_OPTIONS } from "@/lib/models";
+import { PROVIDER_OPTIONS, providerOptionKey } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 import { ProviderSelect } from "./ProviderSelect";
 import { ProviderSetupForm, ProviderSetupFormBody } from "./ProviderSetupForm";
@@ -457,10 +457,10 @@ test("a preset picked in the picker sets up its provider type under the preset's
   expect(trigger()?.textContent).toBe(base.label);
 
   await pick(preset);
-  // The type is added elsewhere: the form moves off it and drops the preset.
+  // The preset is added elsewhere: the form moves off it and drops the preset.
   await act(async () => {
     queryClient.setQueryData(queryKeys.providers, {
-      providers: [{ type: preset.id }],
+      providers: [{ label: preset.label, type: preset.id }],
     });
     // The query cache tells its observers on the next tick.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -468,6 +468,82 @@ test("a preset picked in the picker sets up its provider type under the preset's
   expect(form.selectedProvider).not.toBe(preset.id);
   expect(form.displayName).toBe("");
   expect(trigger()?.textContent).not.toBe(preset.label);
+
+  queryClient.clear();
+});
+
+test("a saved preset and its base provider do not block each other", async () => {
+  const preset = PROVIDER_OPTIONS.find((option) => option.preset);
+
+  const base = PROVIDER_OPTIONS.find(
+    (option) => option.id === preset?.id && !option.preset
+  );
+
+  if (!(preset && base)) {
+    throw new Error("expected a preset and its base provider entry");
+  }
+
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  queryClient.setQueryData(queryKeys.models, { catalog: [] });
+
+  let form!: ReturnType<typeof useProviderSetupForm>;
+
+  function Harness() {
+    form = useProviderSetupForm();
+
+    return null;
+  }
+
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The hook reads only isAuthenticated from auth. */
+            { isAuthenticated: true } as AuthContextValue
+          }
+        >
+          <AppContext.Provider
+            value={
+              /* SAFETY: createProvider is only called on submit, which this test never does. */
+              {
+                createProvider: () => Promise.reject(new Error("unused")),
+              } as never
+            }
+          >
+            <Harness />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    )
+  );
+
+  async function saved(label: string) {
+    await act(async () =>
+      queryClient.setQueryData(queryKeys.providers, {
+        providers: [{ id: "saved", label, type: base?.id }],
+      })
+    );
+    await act(async () => form.handleProviderSelect("openai"));
+  }
+
+  await saved(preset.label);
+  await act(async () => form.handleProviderSelect(preset.id, preset));
+  expect(form.selectedOptionKey).toBe("openai");
+  await act(async () => form.handleProviderSelect(base.id, base));
+  expect(form.selectedOptionKey).toBe(base.id);
+
+  await saved(base.label);
+  await act(async () => form.handleProviderSelect(base.id, base));
+  expect(form.selectedOptionKey).toBe("openai");
+  await act(async () => form.handleProviderSelect(preset.id, preset));
+  expect(form.selectedOptionKey === providerOptionKey(preset)).toBe(true);
+  expect(form.displayName).toBe(preset.label);
 
   queryClient.clear();
 });
