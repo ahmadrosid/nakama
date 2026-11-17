@@ -62,7 +62,11 @@ export function readMcpOAuthGrant(
 /** A stalled well-known endpoint must not hold a Test connection open (#326). */
 const OAUTH_PROBE_TIMEOUT_MS = 5000;
 
+/** How long a repeated Sign in hands back the same link. */
 const OAUTH_FLOW_TTL_MS = 10 * 60_000;
+
+/** Consent can outlast the link reuse window, so the callback gets longer. */
+const OAUTH_CALLBACK_TTL_MS = 30 * 60_000;
 
 /**
  * Whether a server that refused us speaks OAuth, decided by the RFC 9728
@@ -159,7 +163,6 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
       callbackBaseUrl: this.callbackBaseUrl,
       codeVerifier: undefined,
       state,
-      tokens: undefined,
     });
 
     return state;
@@ -184,25 +187,31 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
     this.authorizationUrl = authorizationUrl.toString();
   }
 
-  pendingAuthorizationUrl(): string | undefined {
+  /** Age of a complete browser flow started for this origin, if one is stored. */
+  private pendingFlowAge(): number | undefined {
     const startedAt = this.grant.authorizationStartedAt;
 
-    if (startedAt === undefined) {
+    if (
+      startedAt === undefined ||
+      !this.grant.authorizationUrl ||
+      !this.grant.state ||
+      !this.grant.codeVerifier ||
+      !this.grant.clientInformation ||
+      this.grant.callbackBaseUrl?.replace(/\/$/, "") !==
+        this.callbackBaseUrl.replace(/\/$/, "")
+    ) {
       return;
     }
 
     const age = Date.now() - startedAt;
 
-    if (
-      this.grant.tokens ||
-      !this.grant.state ||
-      !this.grant.codeVerifier ||
-      !this.grant.clientInformation ||
-      this.grant.callbackBaseUrl?.replace(/\/$/, "") !==
-        this.callbackBaseUrl.replace(/\/$/, "") ||
-      age < 0 ||
-      age >= OAUTH_FLOW_TTL_MS
-    ) {
+    return age < 0 ? undefined : age;
+  }
+
+  pendingAuthorizationUrl(): string | undefined {
+    const age = this.pendingFlowAge();
+
+    if (age === undefined || age >= OAUTH_FLOW_TTL_MS) {
       return;
     }
 
@@ -256,8 +265,10 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
       this.grant.authorizationUrl === undefined &&
       Boolean(this.grant.codeVerifier && this.grant.clientInformation);
 
+    const age = this.pendingFlowAge();
+
     return (
-      (Boolean(this.pendingAuthorizationUrl()) || legacyPending) &&
+      ((age !== undefined && age < OAUTH_CALLBACK_TTL_MS) || legacyPending) &&
       pending.length > 0 &&
       pending.length === given.length &&
       timingSafeEqual(pending, given)

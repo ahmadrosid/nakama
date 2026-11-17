@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
@@ -328,5 +328,115 @@ describe("MCP browser authorization", () => {
     expect(
       readMcpOAuthGrant((await db.getMcpServer(created.server.id))?.config)
     ).toBeUndefined();
+  });
+
+  test("slow consent still completes, a callback after thirty minutes does not", async () => {
+    const now = Date.now();
+    using clock = spyOn(Date, "now").mockReturnValue(now);
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    const created = await service.createServer(
+      { config: { url: remote.url }, name: "slow-consent", transport: "http" },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    const url = z.string().parse(created.authorizationUrl);
+
+    const complete = () =>
+      service.completeOAuth(created.server.id, {
+        callbackBaseUrl: CALLBACK_BASE_URL,
+        code: remote.issueCode(url),
+        state: z.string().parse(new URL(url).searchParams.get("state")),
+      });
+
+    clock.mockReturnValue(now + 30 * 60_000);
+    await expect(complete()).rejects.toMatchObject({ status: 400 });
+    clock.mockReturnValue(now + 11 * 60_000);
+    expect((await complete()).server.status).toBe("connected");
+    await manager.disconnectAll();
+  });
+
+  test("a provider error or a refused code ends the flow, so the next sign-in is new", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    const { app } = createMinimalHonoApp({
+      databaseAdapter: db,
+      mcpService: service,
+    });
+
+    const created = await service.createServer(
+      { config: { url: remote.url }, name: "denied", transport: "http" },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    const stateOf = (url: string | undefined) =>
+      z
+        .string()
+        .parse(new URL(z.string().parse(url)).searchParams.get("state"));
+
+    const reconnect = () =>
+      service.connectServer(created.server.id, {
+        callbackBaseUrl: CALLBACK_BASE_URL,
+      });
+
+    const denied = await app.fetch(
+      new Request(
+        `${CALLBACK_BASE_URL}/v1/mcp/oauth/callback/${created.server.id}?${new URLSearchParams({ error: "access_denied", state: stateOf(created.authorizationUrl) })}`
+      )
+    );
+
+    expect(denied.status).toBe(400);
+    const second = await reconnect();
+    expect(second.authorizationUrl).not.toBe(created.authorizationUrl);
+
+    await expect(
+      service.completeOAuth(created.server.id, {
+        callbackBaseUrl: CALLBACK_BASE_URL,
+        code: "issued-never",
+        state: stateOf(second.authorizationUrl),
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect((await reconnect()).authorizationUrl).not.toBe(
+      second.authorizationUrl
+    );
+    await manager.disconnectAll();
+  });
+
+  test("background connects that queue behind one another connect once", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+
+    const created = await service.createServer(
+      { config: { url: remote.url }, name: "queued", transport: "http" },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    const url = z.string().parse(created.authorizationUrl);
+    await service.completeOAuth(created.server.id, {
+      callbackBaseUrl: CALLBACK_BASE_URL,
+      code: remote.issueCode(url),
+      state: z.string().parse(new URL(url).searchParams.get("state")),
+    });
+    await manager.disconnect(created.server.id);
+    using connect = spyOn(manager, "connect");
+
+    const results = await Promise.all(
+      [0, 1, 2].map(() =>
+        service.connectServer(created.server.id, { reauthorize: false })
+      )
+    );
+
+    expect(results.map((result) => result.server.status)).toEqual([
+      "connected",
+      "connected",
+      "connected",
+    ]);
+    expect(connect).toHaveBeenCalledTimes(1);
+    await manager.disconnectAll();
   });
 });

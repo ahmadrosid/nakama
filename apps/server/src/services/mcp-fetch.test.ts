@@ -56,7 +56,8 @@ describe("MCP remote fetch", () => {
         controller.abort(reason);
         await new Promise<void>((resolve) => setImmediate(resolve));
         expect(outcome).toBe("rejected");
-        expect(failure).toBe(reason);
+        // A caller's abort keeps its reason; the deadline says what timed out.
+        expect(source === "deadline" ? failure?.cause : failure).toBe(reason);
         expect(fetchSpy).not.toHaveBeenCalled();
         expect(dnsSpy).toHaveBeenCalledTimes(1);
         expect(deadlineSpy).toHaveBeenCalledWith(5000);

@@ -41,6 +41,13 @@ export async function assertNotLinkLocal(
       // The OS lookup can finish later; only this wait is cancellable.
       lookup(bare, { all: true }).then(result.resolve, result.reject);
       addresses = (await result.promise).map((record) => record.address);
+    } catch (error) {
+      // A caller's abort keeps its own reason; a bare timeout names no cause.
+      if (deadline.aborted && !signal?.aborted) {
+        throw new Error(`DNS lookup for ${bare} timed out.`, { cause: error });
+      }
+
+      throw error;
     } finally {
       stop.removeEventListener("abort", onAbort);
     }

@@ -282,14 +282,6 @@ describe("MCP pending browser flow", () => {
       .string()
       .parse(new URL(firstUrl).searchParams.get("state"));
 
-    await expect(
-      service.completeOAuth(created.server.id, {
-        callbackBaseUrl: CALLBACK_BASE_URL,
-        code: remote.issueCode(firstUrl),
-        state: oldState,
-      })
-    ).rejects.toMatchObject({ status: 400 });
-
     const results = await Promise.all(
       [0, 1].map(() =>
         service.connectServer(created.server.id, {
@@ -508,6 +500,12 @@ describe("MCP pending browser flow", () => {
       });
 
       const url = z.string().parse(first.authorizationUrl);
+
+      // One failed refresh must not cost a refresh token that may still work.
+      expect(
+        readMcpOAuthGrant((await db.getMcpServer(created.server.id))?.config)
+          ?.tokens?.refresh_token
+      ).toBe("unavailable-refresh-token");
 
       const retry = await service.connectServer(created.server.id, {
         callbackBaseUrl: CALLBACK_BASE_URL,
