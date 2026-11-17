@@ -153,4 +153,43 @@ describe("openai-compatible wire API", () => {
     expect(calls[0]?.url).toContain("/chat/completions");
     expect(calls[0]?.body.reasoning).toBeUndefined();
   });
+
+  test("wireApi responses drops empty enum members from tool schemas", async () => {
+    const calls = stubFetch(RESPONSE_PAYLOAD);
+
+    const provider = createOpenAICompatibleProvider({
+      apiKey: "k",
+      baseUrl: "https://endpoint.test/v1",
+      displayName: "Endpoint",
+      model: "gemini-3.1-pro",
+      supportsThinking: false,
+      wireApi: "responses",
+    });
+
+    await provider.generateChat({
+      ...CHAT_INPUT,
+      tools: [
+        {
+          description: "d",
+          name: "plan",
+          parameters: {
+            properties: { mode: { enum: ["", "auto"], type: "string" } },
+            type: "object",
+          },
+        },
+      ],
+    });
+
+    expect(calls[0]?.body.tools).toEqual([
+      {
+        description: "d",
+        name: "plan",
+        parameters: {
+          properties: { mode: { enum: ["auto"], type: "string" } },
+          type: "object",
+        },
+        type: "function",
+      },
+    ]);
+  });
 });
