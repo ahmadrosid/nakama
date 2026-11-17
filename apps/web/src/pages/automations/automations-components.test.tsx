@@ -135,30 +135,6 @@ test("automations follow the selected agent and Super Nakama shows all", async (
     );
     expect(page.automations.map((item) => item.id)).toEqual(["agent-a"]);
     expect(page.selected?.id).toBe("agent-a");
-    const staleAutomation = automations[0]!;
-
-    let savedAutomation = {
-      ...staleAutomation,
-      prompt: "Updated in another tab",
-    };
-
-    using update = spyOn(client, "updateAutomation").mockImplementation(
-      async (_id, input) => {
-        savedAutomation = {
-          ...savedAutomation,
-          enabled: input.enabled ?? savedAutomation.enabled,
-          prompt: input.prompt ?? savedAutomation.prompt,
-        };
-
-        return savedAutomation;
-      }
-    );
-
-    await act(async () => page.handleToggleEnabled(staleAutomation, false));
-    expect(savedAutomation.enabled).toBe(false);
-    expect(savedAutomation.prompt).toBe("Updated in another tab");
-    expect(update).toHaveBeenCalledWith(staleAutomation.id, { enabled: false });
-
     await act(async () =>
       useActiveChatProfileStore.setState({ profileId: "super" })
     );
@@ -196,6 +172,85 @@ test("automations follow the selected agent and Super Nakama shows all", async (
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
     expect(page.error).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    useActiveChatProfileStore.setState(previousState);
+    queryClient.clear();
+  }
+});
+
+test("a toggle and an edit save send only the changed settings", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const automation: StoredAutomation = {
+    createdAt: "2026-10-01T00:00:00Z",
+    description: "",
+    enabled: true,
+    id: "agent-a",
+    name: "Old name",
+    profileId: "agent-a",
+    prompt: "Run task",
+    steps: [],
+    trigger: { type: "manual" },
+    updatedAt: "2026-10-01T00:00:00Z",
+    version: 1,
+  };
+
+  queryClient.setQueryData(queryKeys.automations.all, {
+    automations: [automation],
+  });
+  queryClient.setQueryData(queryKeys.profiles.all, [{ id: "agent-a" }]);
+  queryClient.setQueryData(queryKeys.automations.runs(automation.id), []);
+  // Each update refetches the run list.
+  using _listRuns = spyOn(client, "listAutomationRuns").mockResolvedValue([]);
+
+  using update = spyOn(client, "updateAutomation").mockResolvedValue(
+    automation
+  );
+
+  const previousState = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({ profileId: "agent-a" });
+  let page!: AutomationsPageState;
+
+  function Probe() {
+    page = useAutomationsPage();
+
+    return null;
+  }
+
+  const root = createRoot(document.createElement("div"));
+
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <AuthContext.Provider
+              value={
+                /* SAFETY: The unauthenticated view reads only these auth flags. */
+                { isAuthenticated: false, isLoading: false } as AuthContextValue
+              }
+            >
+              <Probe />
+            </AuthContext.Provider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      )
+    );
+    await act(async () => page.handleToggleEnabled(automation, false));
+    expect(update).toHaveBeenLastCalledWith(automation.id, { enabled: false });
+
+    await act(async () => page.openEdit(automation));
+    await act(async () => page.updateEditDraft({ name: "New name" }));
+    await act(async () => page.handleSaveEdit());
+    expect(update).toHaveBeenLastCalledWith(automation.id, {
+      name: "New name",
+    });
+    expect(page.editDraft).toBeNull();
   } finally {
     await act(async () => root.unmount());
     useActiveChatProfileStore.setState(previousState);

@@ -81,6 +81,7 @@ export function useAutomationsPage() {
   );
 
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
+  const editOpened = useRef<StoredAutomation | null>(null);
   const editProfileId = editDraft?.profileId ?? null;
 
   const { data: editProfile } = useProfileQuery(editProfileId);
@@ -238,18 +239,29 @@ export function useAutomationsPage() {
 
     setError(null);
 
+    // Send only what this dialog changed, so a save from an older tab keeps
+    // the newer settings of the other fields.
+    const opened = editOpened.current;
+
+    const changed = (key: keyof StoredAutomation) =>
+      JSON.stringify(editDraft[key]) !== JSON.stringify(opened?.[key]);
+
     try {
       await updateMutation.mutateAsync({
         automationId: editDraft.id,
         input: {
-          delivery: editDraft.delivery ?? null,
-          description: editDraft.description,
-          enabled: editDraft.enabled,
-          name: editDraft.name,
-          profileId: editDraft.profileId,
-          prompt: editDraft.prompt,
-          toolLimit: editDraft.toolLimit ?? null,
-          trigger: editDraft.trigger,
+          ...(changed("delivery") && { delivery: editDraft.delivery ?? null }),
+          ...(changed("description") && {
+            description: editDraft.description,
+          }),
+          ...(changed("enabled") && { enabled: editDraft.enabled }),
+          ...(changed("name") && { name: editDraft.name }),
+          ...(changed("profileId") && { profileId: editDraft.profileId }),
+          ...(changed("prompt") && { prompt: editDraft.prompt }),
+          ...(changed("toolLimit") && {
+            toolLimit: editDraft.toolLimit ?? null,
+          }),
+          ...(changed("trigger") && { trigger: editDraft.trigger }),
         },
       });
       setEditDraft(null);
@@ -315,6 +327,7 @@ export function useAutomationsPage() {
   }
 
   function openEdit(automation: StoredAutomation) {
+    editOpened.current = automation;
     setEditDraft({ ...automation });
   }
 
