@@ -2,6 +2,9 @@ import {
   type CreateRegressionCaseRequest,
   type ListRegressionCasesResponse,
   MAX_REGRESSION_EXPECTED_RESULT_LENGTH,
+  type RegressionCase,
+  type RegressionCaseRun,
+  type RegressionCaseVerdict,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
@@ -15,6 +18,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { Textarea } from "@nakama/ui/textarea";
 import { toast } from "@nakama/ui/toast";
 import {
+  type InfiniteData,
   type UseMutationResult,
   useInfiniteQuery,
   useMutation,
@@ -176,6 +180,127 @@ function SaveRegressionCaseForm({
   );
 }
 
+function RegressionCaseItem({
+  item,
+  profileId,
+}: {
+  item: RegressionCase;
+  profileId: string;
+}) {
+  const queryClient = useQueryClient();
+
+  const showRun = (run: RegressionCaseRun) =>
+    queryClient.setQueryData<InfiniteData<ListRegressionCasesResponse>>(
+      queryKeys.profiles.regressionCases(profileId),
+      (data) =>
+        data && {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            cases: page.cases.map((entry) =>
+              entry.id === item.id ? { ...entry, latestRun: run } : entry
+            ),
+          })),
+        }
+    );
+
+  const rerun = useMutation({
+    mutationFn: () => client.rerunRegressionCase(profileId, item.id),
+    onSuccess: showRun,
+  });
+
+  const mark = useMutation({
+    mutationFn: (input: { runId: string; verdict: RegressionCaseVerdict }) =>
+      client.markRegressionCaseRun(
+        profileId,
+        item.id,
+        input.runId,
+        input.verdict
+      ),
+    onSuccess: showRun,
+  });
+
+  const run = item.latestRun;
+  // A late mark of the old run must not replace a newer run in the list
+  const busy = rerun.isPending || mark.isPending;
+  const error = rerun.error ?? mark.error;
+
+  return (
+    <li className="space-y-2 p-4">
+      <div className="flex items-center justify-between gap-3 text-muted-foreground text-xs">
+        <span>{formatSessionTimestamp(item.createdAt)}</span>
+        <span className="flex items-center gap-3">
+          <Link className="underline" to={item.source.path}>
+            {item.source.type === "session" ? "Open chat" : "Open automation"}
+          </Link>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              mark.reset();
+              rerun.mutate();
+            }}
+            size="sm"
+            variant="outline"
+          >
+            {rerun.isPending ? <Spinner className="size-4" /> : "Rerun"}
+          </Button>
+        </span>
+      </div>
+      <p className="line-clamp-3 whitespace-pre-wrap text-sm">{item.input}</p>
+      {run ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <p className="font-medium text-muted-foreground text-xs">
+              Expected
+            </p>
+            <p className="max-h-60 overflow-y-auto whitespace-pre-wrap text-sm">
+              {item.expectedResult}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="font-medium text-muted-foreground text-xs">
+              New result
+            </p>
+            <p
+              className={`max-h-60 overflow-y-auto whitespace-pre-wrap text-sm ${run.status === "failed" ? "text-destructive" : ""}`}
+            >
+              {run.status === "failed" ? run.error : run.output}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="line-clamp-3 whitespace-pre-wrap border-border border-l-2 pl-3 text-muted-foreground text-sm">
+          {item.expectedResult}
+        </p>
+      )}
+      {run?.status === "completed" ? (
+        <div className="flex gap-2">
+          {(["pass", "fail"] as const).map((verdict) => (
+            <Button
+              aria-pressed={run.verdict === verdict}
+              disabled={busy}
+              key={verdict}
+              onClick={() => {
+                rerun.reset();
+                mark.mutate({ runId: run.id, verdict });
+              }}
+              size="sm"
+              variant={run.verdict === verdict ? "default" : "outline"}
+            >
+              {verdict === "pass" ? "Pass" : "Fail"}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      {error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {formatError(error)}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
 export function RegressionCasesList({ profileId }: { profileId: string }) {
   const query = useInfiniteQuery({
     getNextPageParam: (lastPage: ListRegressionCasesResponse) =>
@@ -220,22 +345,7 @@ export function RegressionCasesList({ profileId }: { profileId: string }) {
     <div className="space-y-3">
       <ul className="divide-y divide-border rounded-lg border border-border">
         {cases.map((item) => (
-          <li className="space-y-2 p-4" key={item.id}>
-            <div className="flex items-center justify-between gap-3 text-muted-foreground text-xs">
-              <span>{formatSessionTimestamp(item.createdAt)}</span>
-              <Link className="underline" to={item.source.path}>
-                {item.source.type === "session"
-                  ? "Open chat"
-                  : "Open automation"}
-              </Link>
-            </div>
-            <p className="line-clamp-3 whitespace-pre-wrap text-sm">
-              {item.input}
-            </p>
-            <p className="line-clamp-3 whitespace-pre-wrap border-border border-l-2 pl-3 text-muted-foreground text-sm">
-              {item.expectedResult}
-            </p>
-          </li>
+          <RegressionCaseItem item={item} key={item.id} profileId={profileId} />
         ))}
       </ul>
       {query.error ? (

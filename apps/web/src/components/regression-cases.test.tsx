@@ -22,6 +22,7 @@ function regressionCase(id: string): RegressionCase {
     expectedResult: `Expected ${id}`,
     id,
     input: `Input ${id}`,
+    latestRun: null,
     profileId: "p",
     source: { automationId: null, id: "s", path: "/chat/p/s", type: "session" },
   };
@@ -110,4 +111,57 @@ test("a failed Load more keeps the loaded cases and drops a repeated row", async
   await act(async () => loadMore()!.click());
   await waitFor(() => container.textContent?.includes("Input c") ?? false);
   expect(container.querySelectorAll("li")).toHaveLength(3);
+});
+
+test("a rerun shows the new result and a mark stays on the case", async () => {
+  const run = {
+    caseId: "a",
+    createdAt: "2026-11-11T00:00:00.000Z",
+    createdByUserId: "u",
+    error: null,
+    id: "run_1",
+    output: "New reply",
+    status: "completed" as const,
+    verdict: null,
+    verdictAt: null,
+    verdictByUserId: null,
+  };
+
+  const spies = [
+    spyOn(client, "listRegressionCases").mockResolvedValue({
+      cases: [regressionCase("a")],
+      nextOffset: null,
+    }),
+    spyOn(client, "rerunRegressionCase").mockResolvedValue(run),
+    spyOn(client, "markRegressionCaseRun").mockResolvedValue({
+      ...run,
+      verdict: "fail",
+    }),
+  ];
+
+  cleanups.push(async () => {
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+  });
+
+  const { container } = await renderList();
+
+  const button = (label: string) =>
+    [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === label
+    );
+
+  await waitFor(() => Boolean(button("Rerun")));
+  // Nothing to mark before the first rerun
+  expect(button("Pass")).toBeUndefined();
+
+  await act(async () => button("Rerun")!.click());
+  await waitFor(() => container.textContent?.includes("New reply") ?? false);
+  expect(container.textContent).toContain("Expected a");
+
+  await act(async () => button("Fail")!.click());
+  await waitFor(() => button("Fail")?.getAttribute("aria-pressed") === "true");
+  expect(spies[2]).toHaveBeenCalledWith("p", "a", "run_1", "fail");
+  expect(button("Pass")?.getAttribute("aria-pressed")).toBe("false");
 });

@@ -1,9 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { createId } from "@nakama/core";
-import type {
-  RegressionCaseRun,
-  RegressionCaseRunResponse,
-} from "@nakama/core/contract";
+import type { RegressionCaseRunResponse } from "@nakama/core/contract";
 import type {
   StoredRegressionCaseRecord,
   StoredRegressionCaseRunRecord,
@@ -21,7 +18,11 @@ import {
   readJson,
 } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
-import { canReadRegressionCase } from "./regression-cases";
+import {
+  canReadRegressionCase,
+  regressionCaseRunSchema,
+  toRegressionCaseRun,
+} from "./regression-cases";
 
 const errorSchema = z.object({ error: z.string() }).openapi("ApiErrorResponse");
 
@@ -40,20 +41,7 @@ const markRegressionCaseRunSchema = z
   .openapi("MarkRegressionCaseRunRequest");
 
 const regressionCaseRunResponseSchema = z
-  .object({
-    run: z.object({
-      caseId: z.string(),
-      createdAt: z.string(),
-      createdByUserId: z.string().nullable(),
-      error: z.string().nullable(),
-      id: z.string(),
-      output: z.string().nullable(),
-      status: z.enum(["completed", "failed"]),
-      verdict: z.enum(["pass", "fail"]).nullable(),
-      verdictAt: z.string().nullable(),
-      verdictByUserId: z.string().nullable(),
-    }),
-  })
+  .object({ run: regressionCaseRunSchema })
   .openapi("RegressionCaseRunResponse");
 
 const errorResponses = Object.fromEntries(
@@ -65,13 +53,6 @@ const errorResponses = Object.fromEntries(
     },
   ])
 );
-
-function toRegressionCaseRun({
-  orgId: _orgId,
-  ...run
-}: StoredRegressionCaseRunRecord): RegressionCaseRun {
-  return run;
-}
 
 export function registerRegressionCaseRunRoutes(
   app: HonoApp,
