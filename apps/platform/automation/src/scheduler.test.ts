@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import type { NakamaClient } from "@nakama/client";
+import { describe, expect, spyOn, test } from "bun:test";
+import { NakamaClient } from "@nakama/client";
 import type { AutomationSchedule } from "@nakama/core";
 import { AutomationWorkerScheduler } from "./scheduler";
 
@@ -45,6 +45,79 @@ describe("AutomationWorkerScheduler", () => {
 
     expect(scheduler.getStatus()).toEqual({ running: true, scheduledJobs: 1 });
     scheduler.stop();
+  });
+
+  test("logs a failed Curator request and runs the next due organization", async () => {
+    const curatorPath = "/v1/internal/curator/orgs";
+    const runRequests: Array<{ body: unknown; path: string }> = [];
+
+    const client = new NakamaClient({
+      baseUrl: "http://nakama.test",
+      async fetch(input, init) {
+        const request = new Request(input, init);
+        const { pathname } = new URL(request.url);
+
+        if (pathname === "/v1/settings/timezone") {
+          return Response.json({ timezone: "UTC" });
+        }
+
+        if (pathname === "/v1/internal/automations/schedules") {
+          return Response.json([]);
+        }
+
+        if (pathname === curatorPath) {
+          return Response.json({
+            orgs: [
+              {
+                id: "archived-org",
+                skillsCuratorEnabled: true,
+                skillsCuratorLastRunAt: null,
+              },
+              {
+                id: "recent-org",
+                skillsCuratorEnabled: true,
+                skillsCuratorLastRunAt: new Date().toISOString(),
+              },
+              {
+                id: "due-org",
+                skillsCuratorEnabled: true,
+                skillsCuratorLastRunAt: "2000-01-01T00:00:00.000Z",
+              },
+            ],
+          });
+        }
+
+        expect(request.method).toBe("POST");
+        const body: unknown = await request.json();
+        runRequests.push({ body, path: pathname });
+
+        if (pathname === `${curatorPath}/archived-org/run`) {
+          return Response.json({ error: "Not found" }, { status: 404 });
+        }
+
+        return Response.json({ result: { status: "completed" } });
+      },
+    });
+
+    const scheduler = new AutomationWorkerScheduler(client);
+    const log = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await scheduler.start();
+
+      expect(runRequests).toEqual([
+        { body: { trigger: "seed" }, path: `${curatorPath}/archived-org/run` },
+        { body: { trigger: "schedule" }, path: `${curatorPath}/due-org/run` },
+      ]);
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining("archived-org"),
+        expect.objectContaining({ status: 404 })
+      );
+    } finally {
+      scheduler.stop();
+      log.mockRestore();
+    }
   });
 
   test("reschedules polling when the workspace-global interval changes", async () => {

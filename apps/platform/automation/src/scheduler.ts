@@ -29,8 +29,12 @@ async function tickSkillCurator(
       continue;
     }
 
-    await client.runSkillCuratorInternal(org.id, { trigger: action });
-    ran += 1;
+    try {
+      await client.runSkillCuratorInternal(org.id, { trigger: action });
+      ran += 1;
+    } catch (error) {
+      console.error(`Failed to run skill curator for ${org.id}:`, error);
+    }
   }
 
   return { ran, skipped };
