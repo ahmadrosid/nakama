@@ -229,9 +229,15 @@ export interface HealthResponse {
   composioAvailable: boolean;
   /** A Composio project API key is saved on this server. */
   composioConfigured: boolean;
+  /** `NAKAMA_OIDC_ISSUER_URL` is set: the web app shows the SSO button. */
+  oidcConfigured: boolean;
+  /** Provider label for the SSO button. Null when OIDC is off. */
+  oidcProviderName: string | null;
   ok: true;
   /** `NAKAMA_ENABLE_ONBOARDING` is on: a new user gets the goal prompt. */
   onboardingEnabled: boolean;
+  /** Email+password sign-in is accepted. False when the install is SSO-only. */
+  passwordLoginEnabled: boolean;
   providerConfigured: boolean;
   /** `NAKAMA_DISABLE_UPDATE_CHECK` is not set: platform admins see newer releases. */
   updateCheckEnabled: boolean;
