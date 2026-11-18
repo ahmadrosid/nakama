@@ -1,7 +1,8 @@
 /**
  * Apps offered as one-click presets. They connect through Composio when it
  * can. An app with a `url` falls back to its own MCP sign-in when Composio
- * cannot connect it. Each `toolkit` must have Composio-managed sign-in.
+ * cannot connect it. Each `toolkit` must have Composio-managed sign-in; an
+ * app without one always uses its own MCP sign-in.
  *
  * Not offered: Canva. Its MCP server refuses an OAuth redirect to any host it
  * has not allowlisted, Composio's `canva_mcp` has no managed sign-in, and the
@@ -33,7 +34,20 @@ export function unregisteredPopularServers(
 
   return POPULAR_SERVERS.filter(
     (item) =>
-      (slugs.has(item.toolkit) || "url" in item) &&
+      (("toolkit" in item && slugs.has(item.toolkit)) || "url" in item) &&
       !names.has(item.name.toLowerCase())
   );
+}
+
+/**
+ * The Composio toolkit to connect `app` through, or null when Composio does
+ * not offer it here and the app signs in to its own MCP server instead.
+ */
+export function composioToolkitFor(
+  app: (typeof POPULAR_SERVERS)[number],
+  offered: readonly { slug: string }[]
+) {
+  const slug = "toolkit" in app ? app.toolkit : null;
+
+  return slug && offered.some((toolkit) => toolkit.slug === slug) ? slug : null;
 }

@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { unregisteredPopularServers } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
+import {
+  composioToolkitFor,
+  POPULAR_SERVERS,
+  unregisteredPopularServers,
+} from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 
 const names = (servers: readonly { name: string }[]) =>
   servers.map((server) => server.name);
@@ -24,4 +28,16 @@ test("skips an app the org already added as an MCP server", () => {
   expect(
     unregisteredPopularServers([{ name: "notion" }], [{ slug: "notion" }])
   ).toEqual([]);
+});
+
+const notion = POPULAR_SERVERS.find((app) => app.name === "Notion");
+
+test("connects Notion through Composio only when Composio offers it", () => {
+  if (!notion) {
+    throw new Error("Notion preset missing");
+  }
+
+  expect(composioToolkitFor(notion, [{ slug: "notion" }])).toBe("notion");
+  expect(composioToolkitFor(notion, [{ slug: "canva" }])).toBeNull();
+  expect(composioToolkitFor(notion, [])).toBeNull();
 });
