@@ -55,7 +55,13 @@ function AppLogo({
           fill="currentColor"
           viewBox={preset.viewBox}
         >
-          <path d={preset.path} />
+          {"layers" in preset ? (
+            preset.layers.map((layer) => (
+              <path d={layer.path} fill={layer.fill} key={layer.fill} />
+            ))
+          ) : (
+            <path d={preset.path} />
+          )}
         </svg>
       ) : (
         name.charAt(0).toUpperCase()
