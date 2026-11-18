@@ -28,6 +28,7 @@ import {
   buildChatCompletionResult,
   buildProviderHttpError,
   buildProviderResponseError,
+  dropEmptyToolEnumMembers,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -81,7 +82,12 @@ export function createOpenAICompatibleProvider(
   const useResponsesApi = options.wireApi === "responses";
 
   return {
-    generateChat(input: GenerateChatInput) {
+    generateChat(chatInput: GenerateChatInput) {
+      const input = {
+        ...chatInput,
+        tools: dropEmptyToolEnumMembers(chatInput.tools, label),
+      };
+
       if (useResponsesApi) {
         return generateOpenAIResponsesChat({
           apiKey,
@@ -160,7 +166,12 @@ export function createOpenAICompatibleProvider(
       });
     },
     name: options.providerName ?? "openai_compatible",
-    streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
+    streamChat(chatInput: GenerateChatInput, handlers: StreamChatHandlers) {
+      const input = {
+        ...chatInput,
+        tools: dropEmptyToolEnumMembers(chatInput.tools, label),
+      };
+
       if (useResponsesApi) {
         return generateOpenAIResponsesChat({
           apiKey,

@@ -89,6 +89,7 @@ export function registerOrgMemberRoutes(
   const updateOrganizationSchema = z
     .object({
       allowedInviteDomains: z.array(z.string()).optional(),
+      desktopModelsEnabled: z.boolean().optional(),
       memberApprovalRequired: z.boolean().optional(),
       monthlyLlmTokenLimit: z.number().optional(),
       monthlyLlmTurnLimit: z.number().optional(),

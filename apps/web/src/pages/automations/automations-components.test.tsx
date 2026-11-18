@@ -69,6 +69,50 @@ test("automation notification opens the automation under its agent", async () =>
   }
 });
 
+async function renderAutomationsPage(
+  queryClient: QueryClient,
+  { isAuthenticated = false, url = "/automations" } = {}
+) {
+  const previousState = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({ profileId: "agent-a" });
+  let page!: AutomationsPageState;
+
+  function Probe() {
+    page = useAutomationsPage();
+
+    return null;
+  }
+
+  const root = createRoot(document.createElement("div"));
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[url]}>
+        <QueryClientProvider client={queryClient}>
+          <AuthContext.Provider
+            value={
+              /* SAFETY: The page reads only these auth flags. */
+              { isAuthenticated, isLoading: false } as AuthContextValue
+            }
+          >
+            <Probe />
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      </MemoryRouter>
+    )
+  );
+
+  return {
+    get page() {
+      return page;
+    },
+    async unmount() {
+      await act(async () => root.unmount());
+      useActiveChatProfileStore.setState(previousState);
+      queryClient.clear();
+    },
+  };
+}
+
 test("automations follow the selected agent and Super Nakama shows all", async () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -103,58 +147,33 @@ test("automations follow the selected agent and Super Nakama shows all", async (
     queryClient.setQueryData(queryKeys.automations.runs(automation.id), []);
   }
 
-  const previousState = useActiveChatProfileStore.getState();
-  useActiveChatProfileStore.setState({ profileId: "agent-a" });
-  let page!: AutomationsPageState;
-
-  function Probe() {
-    page = useAutomationsPage();
-
-    return null;
-  }
-
-  const container = document.createElement("div");
-  const root = createRoot(container);
+  const view = await renderAutomationsPage(queryClient, {
+    url: "/automations?automation=agent-b",
+  });
 
   try {
-    await act(async () =>
-      root.render(
-        <MemoryRouter initialEntries={["/automations?automation=agent-b"]}>
-          <QueryClientProvider client={queryClient}>
-            <AuthContext.Provider
-              value={
-                /* SAFETY: The unauthenticated view reads only these auth flags. */
-                { isAuthenticated: false, isLoading: false } as AuthContextValue
-              }
-            >
-              <Probe />
-            </AuthContext.Provider>
-          </QueryClientProvider>
-        </MemoryRouter>
-      )
-    );
-    expect(page.automations.map((item) => item.id)).toEqual(["agent-a"]);
-    expect(page.selected?.id).toBe("agent-a");
+    expect(view.page.automations.map((item) => item.id)).toEqual(["agent-a"]);
+    expect(view.page.selected?.id).toBe("agent-a");
     await act(async () =>
       useActiveChatProfileStore.setState({ profileId: "super" })
     );
-    expect(page.automations).toEqual(automations);
-    expect(page.selected?.id).toBe("agent-b");
-    await act(async () => page.setSearchQuery("agent-b"));
-    expect(page.filteredAutomations.map((item) => item.id)).toEqual([
+    expect(view.page.automations).toEqual(automations);
+    expect(view.page.selected?.id).toBe("agent-b");
+    await act(async () => view.page.setSearchQuery("agent-b"));
+    expect(view.page.filteredAutomations.map((item) => item.id)).toEqual([
       "agent-b",
     ]);
     await act(async () =>
       useActiveChatProfileStore.setState({ profileId: "agent-a" })
     );
-    expect(page.filteredAutomations).toEqual([]);
-    expect(page.selected?.id).toBe("agent-a");
+    expect(view.page.filteredAutomations).toEqual([]);
+    expect(view.page.selected?.id).toBe("agent-a");
     await act(async () =>
       useActiveChatProfileStore.setState({ profileId: "empty-agent" })
     );
-    expect(page.automations).toEqual([]);
-    expect(page.selected).toBeNull();
-    expect(page.selectedId).toBeNull();
+    expect(view.page.automations).toEqual([]);
+    expect(view.page.selected).toBeNull();
+    expect(view.page.selectedId).toBeNull();
 
     await act(async () => {
       await queryClient
@@ -166,16 +185,88 @@ test("automations follow the selected agent and Super Nakama shows all", async (
         .catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    expect(page.error).not.toBeNull();
+    expect(view.page.error).not.toBeNull();
     await act(async () => {
       queryClient.setQueryData(queryKeys.automations.all, { automations });
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    expect(page.error).toBeNull();
+    expect(view.page.error).toBeNull();
   } finally {
-    await act(async () => root.unmount());
-    useActiveChatProfileStore.setState(previousState);
-    queryClient.clear();
+    await view.unmount();
+  }
+});
+
+test("a toggle and an edit save send only the changed settings", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const automation: StoredAutomation = {
+    createdAt: "2026-10-01T00:00:00Z",
+    delivery: { channel: "telegram", chatId: 1 },
+    description: "",
+    enabled: true,
+    id: "agent-a",
+    name: "Old name",
+    profileId: "agent-a",
+    prompt: "Run task",
+    steps: [],
+    trigger: { type: "manual" },
+    updatedAt: "2026-10-01T00:00:00Z",
+    version: 1,
+  };
+
+  queryClient.setQueryData(queryKeys.automations.all, {
+    automations: [automation],
+  });
+  queryClient.setQueryData(queryKeys.profiles.all, [{ id: "agent-a" }]);
+  queryClient.setQueryData(queryKeys.automations.runs(automation.id), []);
+  // Each update refetches the run list.
+  using _listRuns = spyOn(client, "listAutomationRuns").mockResolvedValue([]);
+
+  using update = spyOn(client, "updateAutomation").mockResolvedValue(
+    automation
+  );
+
+  const view = await renderAutomationsPage(queryClient);
+  const { id } = automation;
+
+  try {
+    await act(async () => view.page.handleToggleEnabled(automation, false));
+    expect(update).toHaveBeenLastCalledWith(id, { enabled: false });
+
+    await act(async () => view.page.openEdit(automation));
+    await act(async () => view.page.updateEditDraft({ name: "New name" }));
+    await act(async () => view.page.handleSaveEdit());
+    expect(update).toHaveBeenLastCalledWith(id, {
+      name: "New name",
+      version: 1,
+    });
+    expect(view.page.editDraft).toBeNull();
+
+    // A new agent drops the tool limit, also one saved after the editor opened.
+    await act(async () => view.page.openEdit(automation));
+    await act(async () => view.page.updateEditDraft({ profileId: "agent-b" }));
+    await act(async () => view.page.handleSaveEdit());
+    expect(update).toHaveBeenLastCalledWith(id, {
+      profileId: "agent-b",
+      toolLimit: null,
+      version: 1,
+    });
+
+    await act(async () => view.page.openEdit(automation));
+    await act(async () => view.page.updateEditDraft({ delivery: undefined }));
+    await act(async () => view.page.handleSaveEdit());
+    expect(update).toHaveBeenLastCalledWith(id, { delivery: null, version: 1 });
+
+    await act(async () => view.page.openEdit(automation));
+    await act(async () => view.page.handleSaveEdit());
+    expect(update).toHaveBeenCalledTimes(4);
+    expect(view.page.editDraft).toBeNull();
+  } finally {
+    await view.unmount();
   }
 });
 
@@ -739,40 +830,17 @@ test("marking runs read avoids duplicate requests and recovers after failure", a
     refreshing.promise
   );
 
-  const previousState = useActiveChatProfileStore.getState();
-  useActiveChatProfileStore.setState({ profileId: "agent-a" });
-  const container = document.createElement("div");
-  const root = createRoot(container);
-
-  function Probe() {
-    useAutomationsPage();
-
-    return null;
-  }
-
   async function settle() {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
   }
 
+  const view = await renderAutomationsPage(queryClient, {
+    isAuthenticated: true,
+  });
+
   try {
-    await act(async () =>
-      root.render(
-        <MemoryRouter>
-          <QueryClientProvider client={queryClient}>
-            <AuthContext.Provider
-              value={
-                /* SAFETY: This test only needs the authentication flags. */
-                { isAuthenticated: true, isLoading: false } as AuthContextValue
-              }
-            >
-              <Probe />
-            </AuthContext.Provider>
-          </QueryClientProvider>
-        </MemoryRouter>
-      )
-    );
     expect(markRead).toHaveBeenCalledTimes(1);
     await act(async () => {
       queryClient.setQueryData(runsKey, [{ ...run, output: "Updated output" }]);
@@ -829,12 +897,10 @@ test("marking runs read avoids duplicate requests and recovers after failure", a
   } finally {
     marking.resolve("2026-10-01T00:02:00Z");
     refreshing.resolve([{ ...run, read: true }]);
-    await act(async () => root.unmount());
-    useActiveChatProfileStore.setState(previousState);
+    await view.unmount();
     markRead.mockRestore();
     listRuns.mockRestore();
     listAutomations.mockRestore();
-    queryClient.clear();
   }
 });
 

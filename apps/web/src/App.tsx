@@ -42,6 +42,11 @@ const IntegrationsPage = lazyPage(
   "IntegrationsPage"
 );
 
+const DesktopConnectPage = lazyPage(
+  () => import("@/pages/DesktopConnectPage"),
+  "DesktopConnectPage"
+);
+
 const LoginPage = lazyPage(() => import("@/pages/LoginPage"), "LoginPage");
 
 const PasswordResetPage = lazyPage(
@@ -218,6 +223,14 @@ function AppShell() {
             />
             <Route element={<AuthGuard />}>
               <Route element={<SetupGuard />}>
+                <Route
+                  element={
+                    <RouteBoundary fullScreen>
+                      <DesktopConnectPage />
+                    </RouteBoundary>
+                  }
+                  path="/desktop/connect"
+                />
                 <Route
                   element={
                     <RouteBoundary fullScreen>

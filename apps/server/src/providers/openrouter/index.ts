@@ -33,6 +33,7 @@ import { toOpenAIMessages } from "../openai";
 import {
   buildChatCompletionResult,
   buildProviderHttpError,
+  dropEmptyToolEnumMembers,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -124,7 +125,7 @@ function toSdkTools(
     return;
   }
 
-  return tools.map((tool) => ({
+  return dropEmptyToolEnumMembers(tools, PROVIDER_LABEL)?.map((tool) => ({
     function: {
       description: tool.description,
       name: tool.name,

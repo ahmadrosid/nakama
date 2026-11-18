@@ -240,6 +240,9 @@ const CROSS_ORG_ROUTES: Array<{
   { method: "POST", path: (id) => `/v1/sessions/${id}/stop` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/browser` },
   { method: "DELETE", path: (id) => `/v1/sessions/${id}/browser` },
+  { method: "POST", path: (id) => `/v1/sessions/${id}/browser/takeover` },
+  { method: "POST", path: (id) => `/v1/sessions/${id}/browser/handoff` },
+  { method: "POST", path: (id) => `/v1/sessions/${id}/browser/login` },
   {
     body: { messageIndex: 0 },
     method: "POST",
@@ -426,6 +429,112 @@ describe("session routes are scoped to the caller's active org", () => {
       (await app.fetch(new Request(url, { headers: attacker.headers() })))
         .status
     ).toBe(404);
+  });
+
+  test("browser control writes an audit event only while the caller's browser runs", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+
+    const owner = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const postControls = async () => {
+      const statuses: number[] = [];
+
+      for (const control of ["takeover", "login", "handoff"]) {
+        const response = await app.fetch(
+          new Request(
+            `http://localhost:4310/v1/sessions/${victimSessionId}/browser/${control}`,
+            {
+              body: JSON.stringify({ password: "hunter2" }),
+              headers: owner.headers({ "X-CSRF-Token": owner.csrfToken }),
+              method: "POST",
+            }
+          )
+        );
+
+        statuses.push(response.status);
+      }
+
+      return statuses;
+    };
+
+    const browserEvents = async () =>
+      (await databaseAdapter.listAuditEvents({})).filter((event) =>
+        event.action.startsWith("session.browser_")
+      );
+
+    const originalFetch = globalThis.fetch;
+    const originalProvider = process.env.NAKAMA_BROWSER_PROVIDER;
+    const originalKey = process.env.KERNEL_API_KEY;
+    let browserRuns = false;
+
+    process.env.NAKAMA_BROWSER_PROVIDER = "kernel";
+    process.env.KERNEL_API_KEY = "kernel-key";
+
+    globalThis.fetch = asTestFetch(async () =>
+      browserRuns
+        ? Response.json({
+            browser_live_view_url: "https://live.onkernel.com/victim",
+            cdp_ws_url: "wss://cdp.onkernel.com/victim",
+            session_id: "kernel-1",
+          })
+        : Response.json({}, { status: 404 })
+    );
+
+    try {
+      expect(await postControls()).toEqual([409, 409, 409]);
+
+      for (const event of await browserEvents()) {
+        expect(event.metadata).toMatchObject({ outcome: "failure" });
+      }
+
+      browserRuns = true;
+
+      expect(await postControls()).toEqual([204, 204, 204]);
+    } finally {
+      globalThis.fetch = originalFetch;
+
+      if (originalProvider === undefined) {
+        delete process.env.NAKAMA_BROWSER_PROVIDER;
+      } else {
+        process.env.NAKAMA_BROWSER_PROVIDER = originalProvider;
+      }
+
+      if (originalKey === undefined) {
+        delete process.env.KERNEL_API_KEY;
+      } else {
+        process.env.KERNEL_API_KEY = originalKey;
+      }
+    }
+
+    const events = await browserEvents();
+
+    const succeeded = events.filter(
+      (event) => event.metadata?.outcome === "success"
+    );
+
+    expect(events).toHaveLength(6);
+    expect(succeeded.map((event) => event.action).sort()).toEqual([
+      "session.browser_handoff",
+      "session.browser_login",
+      "session.browser_takeover",
+    ]);
+
+    for (const event of succeeded) {
+      expect(event).toMatchObject({
+        actorUserId: "user_victim",
+        metadata: { outcome: "success", status: 204 },
+        orgId: VICTIM_ORG,
+        resourceId: victimSessionId,
+        resourceType: "session",
+      });
+    }
+
+    expect(JSON.stringify(events)).not.toContain("hunter2");
   });
 
   for (const route of CROSS_ORG_ROUTES) {

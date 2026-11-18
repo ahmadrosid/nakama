@@ -20,7 +20,7 @@ type AutomationsDialogsProps = Pick<
   | "automations"
   | "busy"
   | "editDraft"
-  | "setEditDraft"
+  | "closeEdit"
   | "deleteTarget"
   | "setDeleteTarget"
   | "handleSaveEdit"
@@ -35,7 +35,7 @@ export function AutomationsDialogs({
   automations,
   busy,
   editDraft,
-  setEditDraft,
+  closeEdit,
   deleteTarget,
   setDeleteTarget,
   handleSaveEdit,
@@ -50,7 +50,7 @@ export function AutomationsDialogs({
       <Dialog
         onOpenChange={(open) => {
           if (!(open || busy)) {
-            setEditDraft(null);
+            closeEdit();
           }
         }}
         open={editDraft !== null}
@@ -103,7 +103,7 @@ export function AutomationsDialogs({
                   <Button
                     className="min-h-11 rounded-xl px-4 sm:min-h-10"
                     disabled={busy}
-                    onClick={() => setEditDraft(null)}
+                    onClick={() => closeEdit()}
                     type="button"
                     variant="outline"
                   >

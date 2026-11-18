@@ -138,3 +138,52 @@ describe("buildGeminiChatConfig tool sanitization", () => {
     });
   });
 });
+
+describe("buildGeminiChatConfig enum members", () => {
+  function declaredParameters(enumValues: string[]) {
+    const config = buildGeminiChatConfig(
+      {
+        tools: [
+          {
+            description: "Plan a trial",
+            name: "plan_trial",
+            parameters: {
+              properties: {
+                graduationStrategy: { enum: enumValues, type: "string" },
+              },
+              type: "object",
+            },
+          },
+        ],
+      },
+      "system",
+      "gemini-2.5-flash"
+    );
+
+    const functionTool = (config.tools ?? []).find(
+      (tool) => "functionDeclarations" in tool
+    );
+
+    if (!(functionTool && "functionDeclarations" in functionTool)) {
+      throw new Error("Expected function declarations");
+    }
+
+    return functionTool.functionDeclarations?.[0]?.parametersJsonSchema;
+  }
+
+  test("drops empty enum members that Gemini rejects", () => {
+    expect(declaredParameters(["", "auto"])).toEqual({
+      properties: {
+        graduationStrategy: { enum: ["auto"], type: "string" },
+      },
+      type: "object",
+    });
+  });
+
+  test("drops an enum that only holds an empty string", () => {
+    expect(declaredParameters([""])).toEqual({
+      properties: { graduationStrategy: { type: "string" } },
+      type: "object",
+    });
+  });
+});
