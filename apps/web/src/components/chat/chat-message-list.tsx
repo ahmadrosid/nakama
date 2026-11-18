@@ -58,6 +58,7 @@ import {
   ProfileCreatedCard,
 } from "@/components/chat/assistant-tool-group";
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
+import { BrowserSignInCard } from "@/components/chat/browser-live-view-panel-bridge";
 import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dialogs";
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { DocumentAttachmentPreview } from "@/components/chat/document-attachment-preview";
@@ -452,6 +453,9 @@ function ChatMessageListSession({
             }
             showThinking={showThinking}
             showUsage={showUsage}
+            signInSessionId={
+              readOnly || turnIndex !== turns.length - 1 ? null : sessionId
+            }
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
             usedPluginTools={usedPluginTools}
@@ -549,6 +553,7 @@ function ChatMessageListSession({
 }
 
 function AssistantTurn({
+  signInSessionId,
   readOnly = false,
   sessionId,
   onContinueToolSetup,
@@ -573,6 +578,8 @@ function AssistantTurn({
   questionnaireAnswers,
   usedPluginTools,
 }: {
+  /** Set on the last turn only; an older login page asks for nothing now. */
+  signInSessionId?: string | null;
   readOnly?: boolean;
   sessionId?: string;
   onContinueToolSetup?: (setupId: string) => Promise<void>;
@@ -697,6 +704,7 @@ function AssistantTurn({
         messages={turnMessages}
         profileId={profileId}
       />
+      <BrowserSignInCard messages={turnMessages} sessionId={signInSessionId} />
       <PluginDrafts
         complete={interactiveTurnComplete}
         messages={turnMessages}
