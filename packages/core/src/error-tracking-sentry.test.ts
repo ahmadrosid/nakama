@@ -54,6 +54,18 @@ test("the event forces our own fingerprint so grouping survives across installs"
   expect(event.fingerprint).toEqual([report.fingerprint]);
 });
 
+test("the event carries the cause next to the stack", () => {
+  const report = buildErrorReport(
+    new Error("wrapper", { cause: new RangeError("root") }),
+    { source: "server" }
+  );
+
+  const event = toSentryEvent(report);
+
+  expect(event.extra?.cause).toStartWith("RangeError");
+  expect(event.extra?.stack).toBe(report.stack);
+});
+
 test("no user identity is sent", () => {
   const event = toSentryEvent(sampleReport());
 

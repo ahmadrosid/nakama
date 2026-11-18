@@ -46,6 +46,15 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
     event("plugin.release_install", "plugin"),
   ],
   ["POST /v1/profiles/pack/import", event("profile.import", "profile")],
+  // This server's own Nakama Cloud sign-in: it changes the default provider.
+  [
+    "POST /v1/nakama-cloud/sign-in",
+    event("provider.nakama_cloud_sign_in", "provider", "nakama-cloud"),
+  ],
+  [
+    "DELETE /v1/nakama-cloud",
+    event("provider.nakama_cloud_sign_out", "provider", "nakama-cloud"),
+  ],
 ]);
 
 /**
@@ -161,6 +170,20 @@ export function describeAuditEvent(
     };
   }
 
+  match = pathname.match(
+    /^\/v1\/orgs\/([^/]+)\/join-requests\/([^/]+)(\/approve)?$/
+  );
+
+  if (
+    match &&
+    ((method === "POST" && match[3]) || (method === "DELETE" && !match[3]))
+  ) {
+    return {
+      ...event(match[3] ? "member.approve" : "member.reject", "user", match[2]),
+      orgId: decodePathPart(match[1]),
+    };
+  }
+
   match = pathname.match(/^\/v1\/orgs\/([^/]+)\/members$/);
 
   if (match && method === "POST") {
@@ -234,6 +257,15 @@ export function describeAuditEvent(
 
   if (match && method === "DELETE") {
     return event("session.delete", "session", match[1]);
+  }
+
+  // Who holds the chat's browser: the user took over, handed back, or signed in.
+  match = pathname.match(
+    /^\/v1\/sessions\/([^/]+)\/browser\/(takeover|handoff|login)$/
+  );
+
+  if (match && method === "POST") {
+    return event(`session.browser_${match[2]}`, "session", match[1]);
   }
 
   // DELETE /v1/auth/sessions/:id revokes a browser login session.

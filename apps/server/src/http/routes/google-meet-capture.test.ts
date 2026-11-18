@@ -175,6 +175,53 @@ describe("Meet capture socket on the main server", () => {
     expect((await status.json()).captureProtocol).toBe(3);
   });
 
+  test("start opens no other port when the old capture port variable is set", async () => {
+    // Before v0.3 this variable put a second listener on this port.
+    const probe = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: { data() {} },
+    });
+
+    const port = probe.port;
+    probe.stop(true);
+    const previous = process.env.NAKAMA_MEET_CAPTURE_PORT;
+    process.env.NAKAMA_MEET_CAPTURE_PORT = String(port);
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const { start } = await serveCapture();
+
+      await start();
+      await expect(fetch(`http://127.0.0.1:${port}/capture`)).rejects.toThrow();
+    } finally {
+      warn.mockRestore();
+
+      if (previous === undefined) {
+        delete process.env.NAKAMA_MEET_CAPTURE_PORT;
+      } else {
+        process.env.NAKAMA_MEET_CAPTURE_PORT = previous;
+      }
+    }
+  });
+
+  test("refuses a v0.2 upgrade with the ticket in the URL and keeps the ticket", async () => {
+    const { origin, start } = await serveCapture();
+    const { captureUrl, meetingId, ticket } = await start();
+
+    const old = `${captureUrl}?meetingId=${meetingId}&token=${ticket}`;
+    expect((await openSocket(old).closed).opened).toBe(false);
+    expect(
+      (await fetch(`${origin}/v1/meet/capture?token=${ticket}`)).status
+    ).toBe(400);
+
+    const valid = openSocket(captureUrl, auth(ticket, meetingId));
+    await Bun.sleep(200);
+    expect(valid.ws.readyState).toBe(WebSocket.OPEN);
+    valid.ws.close();
+    await valid.closed;
+  });
+
   test("closes with 1008 when no auth message comes within 5 s", async () => {
     const { start } = await serveCapture();
     const { captureUrl } = await start();
@@ -184,7 +231,8 @@ describe("Meet capture socket on the main server", () => {
 
     expect((await closed).code).toBe(1008);
     expect(Date.now() - begin).toBeGreaterThanOrEqual(4900);
-  }, 10_000);
+    // The 5 s server timer plus setup; slow Windows runners need the margin.
+  }, 20_000);
 
   test("closes with 1008 on a bad, wrong-meeting or expired ticket, or audio before auth", async () => {
     const { leave, start } = await serveCapture();

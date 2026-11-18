@@ -3,6 +3,7 @@ import type { AgentService } from "../services/agent-service";
 import type { AuthService } from "../services/auth-service";
 import type { AutomationService } from "../services/automation-service";
 import type { ComposioService } from "../services/composio-service";
+import type { ComputerAuthService } from "../services/computer-auth";
 import type { GoogleMeetService } from "../services/google-meet/service";
 import type { McpService } from "../services/mcp-service";
 import type { OrgMemoryService } from "../services/org-memory-service";
@@ -19,6 +20,8 @@ export interface ServerOptions {
   authService?: AuthService | null;
   automationService: AutomationService;
   composioService?: ComposioService | null;
+  /** Nakama Desktop computers; null leaves /v1/llm/* unregistered. */
+  computerAuth?: ComputerAuthService | null;
   databaseAdapter?: DatabaseAdapter | null;
   googleMeetService?: GoogleMeetService | null;
   mcpService: McpService;

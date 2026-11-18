@@ -84,4 +84,29 @@ describe("web search settings route", () => {
       source: "settings",
     });
   });
+
+  test("a platform admin saves Keenable without a key", async () => {
+    const { app, databaseAdapter } = await createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+
+    const saved = await app.fetch(
+      new Request("http://localhost:4310/v1/settings/web-search", {
+        body: JSON.stringify({ provider: "keenable" }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "PUT",
+      })
+    );
+
+    expect(saved.status).toBe(200);
+
+    expect(await saved.json()).toMatchObject({
+      configured: true,
+      endpoint: "https://api.keenable.ai/v1/search",
+      provider: "keenable",
+      source: "missing",
+    });
+  });
 });

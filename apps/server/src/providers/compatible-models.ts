@@ -38,9 +38,9 @@ function openRouterCustomModelsToCatalog(
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      contextWindow: entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       id: entry.id,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      maxOutputTokens: entry.maxOutputTokens ?? DEFAULT_MAX_OUTPUT,
       name: entry.name?.trim() || entry.id,
       provider: "openrouter",
       supportsThinking: resolveOpenRouterCatalogThinking(entry),
@@ -79,9 +79,9 @@ function cerebrasCustomModelsToCatalog(
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      contextWindow: entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       id: entry.id,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      maxOutputTokens: entry.maxOutputTokens ?? DEFAULT_MAX_OUTPUT,
       name: entry.name?.trim() || entry.id,
       provider: "cerebras",
       supportsThinking: resolveCerebrasCatalogThinking(entry),
@@ -141,6 +141,7 @@ export function catalogCustomModelsToCatalog(
   provider: ProviderName
 ): ProviderModelOption[] {
   const staticById = new Map(staticModels.map((model) => [model.id, model]));
+  const hasSavedDefault = entries.some((entry) => entry.default === true);
 
   return entries.map((entry) => {
     const existing = staticById.get(entry.id);
@@ -157,8 +158,8 @@ export function catalogCustomModelsToCatalog(
       provider,
     };
 
-    if (entry.default) {
-      model.default = true;
+    if (hasSavedDefault) {
+      model.default = entry.default === true;
     }
 
     if (entry.contextWindow !== undefined) {
@@ -211,9 +212,9 @@ function customModelsToCatalog(
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      contextWindow: entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       id: entry.id,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      maxOutputTokens: entry.maxOutputTokens ?? DEFAULT_MAX_OUTPUT,
       name: entry.name?.trim() || entry.id,
       provider,
     };

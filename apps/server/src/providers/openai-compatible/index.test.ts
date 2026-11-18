@@ -479,3 +479,94 @@ describe("OpenAI-compatible provider", () => {
     );
   });
 });
+
+describe("OpenAI-compatible tool schemas", () => {
+  const PLAN_TOOL = {
+    description: "Plan a trial",
+    name: "plan_trial",
+    parameters: {
+      properties: {
+        graduationStrategy: { enum: ["", "auto"], type: "string" },
+      },
+      type: "object",
+    },
+  };
+
+  const SENT_TOOLS = [
+    {
+      function: {
+        description: "Plan a trial",
+        name: "plan_trial",
+        parameters: {
+          properties: {
+            graduationStrategy: { enum: ["auto"], type: "string" },
+          },
+          type: "object",
+        },
+      },
+      type: "function",
+    },
+  ];
+
+  function createGateway() {
+    return createOpenAICompatibleProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://api.example.com/v1",
+      displayName: "Gateway",
+      model: "test-model",
+      supportsThinking: false,
+    });
+  }
+
+  test("drops empty enum members before sending", async () => {
+    let sentBody = "{}";
+
+    globalThis.fetch = asTestFetch(
+      mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sentBody = String(init?.body ?? "{}");
+
+        return Response.json({
+          choices: [{ message: { content: "Answer" } }],
+        });
+      })
+    );
+
+    const result = await createGateway().generateChat({
+      messages: [{ content: "Plan", role: "user" }],
+      system: "You are helpful.",
+      tools: [PLAN_TOOL],
+    });
+
+    expect(parseJsonRecord(sentBody).tools).toEqual(SENT_TOOLS);
+    expect(result.content).toBe("Answer");
+  });
+
+  test("drops empty enum members on the streaming path", async () => {
+    let sentBody = "{}";
+
+    globalThis.fetch = asTestFetch(
+      mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        sentBody = String(init?.body ?? "{}");
+
+        return new Response(
+          streamFromChunks([
+            'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+            "data: [DONE]\n\n",
+          ]),
+          { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+        );
+      })
+    );
+
+    await createGateway().streamChat(
+      {
+        messages: [{ content: "Plan", role: "user" }],
+        system: "You are helpful.",
+        tools: [PLAN_TOOL],
+      },
+      { onChunk: () => undefined }
+    );
+
+    expect(parseJsonRecord(sentBody).tools).toEqual(SENT_TOOLS);
+  });
+});

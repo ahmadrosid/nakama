@@ -11,6 +11,7 @@ import type {
 } from "@nakama/core";
 import { z } from "zod";
 import {
+  dropEmptyToolEnumMembers,
   normalizeThinkingEffort,
   type ProviderJsonRecord,
   type ProviderJsonValue,
@@ -148,9 +149,11 @@ function buildGeminiTools(
     result.push({ googleSearch: {} });
   }
 
-  if (tools?.length) {
+  const declaredTools = dropEmptyToolEnumMembers(tools, "Gemini");
+
+  if (declaredTools?.length) {
     result.push({
-      functionDeclarations: tools.map((tool) => ({
+      functionDeclarations: declaredTools.map((tool) => ({
         description: tool.description,
         name: tool.name,
         parametersJsonSchema: sanitizeGeminiToolParameters(tool.parameters),

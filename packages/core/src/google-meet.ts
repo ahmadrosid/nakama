@@ -50,6 +50,9 @@ export type MeetAction =
   | "revoke-extension"
   | "extension-keys";
 
+/** Actions a browser session can call. Only a Meet key starts a capture. */
+export type MeetSessionAction = Exclude<MeetAction, "start-capture">;
+
 export interface MeetActionInput {
   after?: number;
   code?: string;
@@ -82,7 +85,6 @@ export interface MeetImportProgress {
 
 export interface MeetOverview {
   canConfigure: boolean;
-  captureProtocol: number;
   /** Uploads and imports can be transcribed. */
   configured: boolean;
   enabled: boolean;

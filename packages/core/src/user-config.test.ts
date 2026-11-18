@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NakamaApiError } from "./api-error";
 import { pathExists } from "./fs";
+import { resolveWebPublicUrl, resolveWebPublicUrlConfig } from "./runtime";
 import {
   applyChatgptOAuthToInstance,
   applyXaiOAuthToInstance,
@@ -20,10 +21,112 @@ import {
   readChatgptOAuthFromInstance,
   readXaiOAuthFromInstance,
   saveUserConfig,
+  saveUserThinkingSettings,
   saveUserTimezone,
   saveUserWebPublicUrl,
   validateProviderApiKeyFormat,
 } from "./user-config";
+
+describe("resolveWebPublicUrlConfig", () => {
+  let configDir: string;
+  let previousConfigDir: string | undefined;
+
+  beforeEach(async () => {
+    previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    configDir = await mkdtemp(join(tmpdir(), "nakama-public-url-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+  });
+
+  afterEach(async () => {
+    if (previousConfigDir === undefined) {
+      delete process.env.NAKAMA_CONFIG_DIR;
+    } else {
+      process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+    }
+
+    await rm(configDir, { force: true, recursive: true });
+  });
+
+  test("reports the winning environment variable and preserves the existing URL", async () => {
+    await saveUserWebPublicUrl("https://saved.example.com/base");
+
+    const cases = [
+      {
+        env: {
+          NAKAMA_PUBLIC_URL: "https://alias.example.com",
+          NAKAMA_WEB_PUBLIC_URL: " https://web.example.com/base/// ",
+        },
+        source: "NAKAMA_WEB_PUBLIC_URL",
+        url: "https://web.example.com/base",
+      },
+      {
+        env: { NAKAMA_PUBLIC_URL: "https://alias.example.com/" },
+        source: "NAKAMA_PUBLIC_URL",
+        url: "https://alias.example.com",
+      },
+      {
+        env: {
+          NAKAMA_PUBLIC_URL: "https://alias.example.com",
+          NAKAMA_WEB_PUBLIC_URL: "  ",
+        },
+        source: "NAKAMA_PUBLIC_URL",
+        url: "https://alias.example.com",
+      },
+      { env: {}, source: "config.ini", url: "https://saved.example.com/base" },
+      {
+        env: { NAKAMA_WEB_PUBLIC_URL: "http://localhost:4310" },
+        source: "NAKAMA_WEB_PUBLIC_URL",
+        url: "http://localhost:4310",
+      },
+      {
+        env: { NAKAMA_WEB_PUBLIC_URL: "invalid" },
+        source: "NAKAMA_WEB_PUBLIC_URL",
+        url: "invalid",
+      },
+    ] as const;
+
+    for (const { env, source, url } of cases) {
+      expect(resolveWebPublicUrlConfig(env)).toEqual({ source, url });
+      expect(resolveWebPublicUrl(env)).toBe(url);
+    }
+  });
+
+  test("reports no configured URL when the file is missing or invalid", async () => {
+    expect(resolveWebPublicUrlConfig({})).toEqual({
+      source: "none",
+      url: undefined,
+    });
+    await writeFile(getUserConfigPath(), "web_public_url=invalid\n");
+    expect(resolveWebPublicUrlConfig({})).toEqual({
+      source: "none",
+      url: undefined,
+    });
+  });
+
+  test("keeps desktop selection consistent with the existing resolver", async () => {
+    await saveUserWebPublicUrl("https://saved.example.com");
+    const env = { NAKAMA_DESKTOP: "1" };
+    expect(resolveWebPublicUrlConfig(env)).toEqual({
+      source: "none",
+      url: undefined,
+    });
+    expect(resolveWebPublicUrl(env)).toBeUndefined();
+    expect(
+      resolveWebPublicUrlConfig({
+        ...env,
+        NAKAMA_WEB_PUBLIC_URL: "https://explicit.example.com",
+      })
+    ).toEqual({
+      source: "NAKAMA_WEB_PUBLIC_URL",
+      url: "https://explicit.example.com",
+    });
+    await saveUserWebPublicUrl("http://127.0.0.1:4310");
+    expect(resolveWebPublicUrlConfig(env)).toEqual({
+      source: "config.ini",
+      url: "http://127.0.0.1:4310",
+    });
+  });
+});
 
 describe("saveUserTimezone", () => {
   // readJson casts the body without validating it, so timezone can arrive
@@ -143,6 +246,39 @@ describe("user config multi-provider", () => {
     delete process.env.NAKAMA_CONFIG_DIR;
   });
 
+  test("keeps a provider that is saved during a thinking settings save", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-save-race-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const first = {
+      apiKey: "",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      id: createProviderInstanceId(),
+      label: "First",
+      type: "groq" as const,
+    };
+
+    const second = {
+      ...first,
+      id: createProviderInstanceId(),
+      label: "Second",
+    };
+
+    const config = { defaultProviderId: first.id, providers: [first] };
+    await saveUserConfig(config);
+
+    await Promise.all([
+      saveUserThinkingSettings({ effort: "high", enabled: true }),
+      saveUserConfig({ ...config, providers: [first, second] }),
+    ]);
+
+    const loaded = await loadUserConfig();
+    expect(loaded!.providers.map((provider) => provider.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
+  });
+
   test("round-trips multiple provider instances", async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
@@ -199,6 +335,56 @@ describe("user config multi-provider", () => {
       true
     );
     expect(loaded?.providers[1]?.wireApi).toBe("responses");
+  });
+
+  test("a line break in a saved value cannot add keys or sections", async () => {
+    configDir = await mkdtemp(join(tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    // An org admin in Nakama Cloud chose this org name.
+    const orgName =
+      "Acme\n[provider.anthropic-main]\nbase_url=https://attacker.example";
+
+    await saveUserConfig({
+      defaultProviderId: "anthropic-main",
+      providers: [
+        {
+          apiKey: "",
+          createdAt: "2026-06-07T10:00:00.000Z",
+          id: "anthropic-main",
+          label: "Anthropic",
+          type: "anthropic",
+        },
+        {
+          apiKey: "",
+          baseUrl: "https://withnakama.com",
+          createdAt: "2026-06-07T11:00:00.000Z",
+          id: "nakama-cloud",
+          label: "Nakama Cloud",
+          nakamaCloud: {
+            account: "ada@example.com",
+            computerId: "computer_1",
+            orgId: "org_1",
+            orgName,
+          },
+          type: "nakama_cloud",
+        },
+      ],
+      thinkingEffort: "medium",
+      thinkingEnabled: true,
+      timezone: "UTC",
+    });
+
+    const loaded = await loadUserConfig();
+
+    expect(
+      loaded?.providers.find((provider) => provider.id === "anthropic-main")
+        ?.baseUrl
+    ).toBeUndefined();
+    expect(
+      loaded?.providers.find((provider) => provider.id === "nakama-cloud")
+        ?.nakamaCloud?.orgName
+    ).toBe("Acme [provider.anthropic-main] base_url=https://attacker.example");
   });
 
   test("round-trips discovered models_json for discovery providers", async () => {

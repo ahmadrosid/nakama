@@ -893,6 +893,74 @@ describe("plugin HTTP API", () => {
     );
   });
 
+  test("an action that runs past its deadline fails like an action error unless the host held it up", async () => {
+    const { app, authService, databaseAdapter, pluginService } = createApp({
+      // A host call that answers only when the deadline cancels it.
+      onHostRequest: (_request, _context, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => reject(new Error("host call cancelled")),
+            { once: true }
+          );
+        }),
+    });
+
+    const admin = await setupFreshInstallSession(app, databaseAdapter);
+
+    const platform = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    await installRelease(
+      app,
+      platform,
+      pluginBundle("1.0.0", {
+        "actions/list.js":
+          'export async function run() { console.error("stderr-secret-7f3a"); await new Promise((resolve) => setTimeout(resolve, 60_000)); }',
+        "actions/wipe.js":
+          'export async function run(input, context) { await context.host({ type: "slow" }); return null; }',
+      })
+    );
+    await pluginService.addOrgPlugin(admin.orgId!, "notes");
+    const added = await pluginService.getOrgPluginDetail(admin.orgId!, "notes");
+    await pluginService.enableOrgPlugin(admin.orgId!, "notes", added!.revision);
+
+    const previousTimeout = process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
+    process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "1000";
+
+    try {
+      const timedOut = await jsonRequest(
+        app,
+        "/v1/plugins/notes/actions/list",
+        admin,
+        { body: JSON.stringify({ input: {} }), method: "POST" }
+      );
+
+      expect(timedOut.status).toBe(422);
+      expect(await readApiErrorMessage(timedOut)).not.toContain(
+        "stderr-secret-7f3a"
+      );
+
+      const hostHeldUp = await jsonRequest(
+        app,
+        "/v1/plugins/notes/actions/wipe",
+        admin,
+        { body: JSON.stringify({ input: {} }), method: "POST" }
+      );
+
+      expect(hostHeldUp.status).toBe(500);
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS;
+      } else {
+        process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = previousTimeout;
+      }
+    }
+  }, 30_000);
+
   test("cookie-authenticated mutations require CSRF including npm package installs", async () => {
     const { app, authService, databaseAdapter } = createApp();
     await setupFreshInstallSession(app, databaseAdapter);

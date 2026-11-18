@@ -32,6 +32,8 @@ import {
 import { toOpenAIMessages } from "../openai";
 import {
   buildChatCompletionResult,
+  buildProviderHttpError,
+  dropEmptyToolEnumMembers,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -95,10 +97,10 @@ function formatOpenRouterError<ProviderError>(error: ProviderError): Error {
     return new Error(`${PROVIDER_LABEL} returned an invalid response.`);
   }
 
+  // Same mapping as the other adapters: an empty balance (402) is the
+  // caller's to fix, and the user reads OpenRouter's reason.
   if (error instanceof OpenRouterError) {
-    return new Error(
-      `${PROVIDER_LABEL} request failed (${error.statusCode}): ${error.body}`
-    );
+    return buildProviderHttpError(PROVIDER_LABEL, error.statusCode, error.body);
   }
 
   if (error instanceof Error) {
@@ -123,7 +125,7 @@ function toSdkTools(
     return;
   }
 
-  return tools.map((tool) => ({
+  return dropEmptyToolEnumMembers(tools, PROVIDER_LABEL)?.map((tool) => ({
     function: {
       description: tool.description,
       name: tool.name,

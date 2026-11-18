@@ -1466,14 +1466,20 @@ async function generateReply(
             },
           };
     } catch (error) {
-      // A connection that lands after a chunk or a tool call has gone out is
-      // the same shape as a broken stream: keep the partial reply in history,
-      // close the steps that never got their tool end, and let the interrupted
-      // path retry it once with its note, instead of the turn gate replaying
-      // the call from scratch and leaving those steps open.
+      // A connection or provider failure (5xx) that lands after a chunk or a
+      // tool call has gone out is the same shape as a broken stream: keep the
+      // partial reply in history, close the steps that never got their tool
+      // end, and let the interrupted path retry it once with its note, instead
+      // of the turn gate replaying the call from scratch and streaming the
+      // same text again. A step can make more than one request (Anthropic
+      // pause_turn), so a later request can fail after output.
+      const retryableFailure =
+        isTransientConnectionError(error) ||
+        (error instanceof NakamaApiError && error.status >= 500);
+
       const streamError =
         (content || thinking || pendingToolInputs.size > 0) &&
-        isTransientConnectionError(error) &&
+        retryableFailure &&
         !(error instanceof ProviderStreamInterruptedError)
           ? Object.assign(
               new ProviderStreamInterruptedError(

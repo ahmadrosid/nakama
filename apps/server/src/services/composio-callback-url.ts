@@ -45,10 +45,27 @@ export function resolveRequestClientOrigin(
       return;
     }
 
-    throw new NakamaApiError("Origin is not allowed.", 400);
+    throw new NakamaApiError(originNotAllowedMessage(configured), 400);
   }
 
   return candidate;
+}
+
+/**
+ * Tells the operator which setting vouches for the origin, without echoing the
+ * caller's origin or the configured URL back to an unauthenticated caller.
+ * The check itself stays as strict as `isAllowedClientOrigin` makes it (#2493).
+ */
+function originNotAllowedMessage(configured: string | undefined): string {
+  if (configured) {
+    return "Origin is not allowed. Open Nakama at its public web URL, or change that URL (NAKAMA_WEB_PUBLIC_URL, or System → Preferences → Public web URL).";
+  }
+
+  if (trustForwardedHeaders()) {
+    return "Origin is not allowed. It does not match the X-Forwarded-Host and X-Forwarded-Proto your proxy sent. Fix the proxy's forwarded headers, or set NAKAMA_WEB_PUBLIC_URL to the address you open Nakama at.";
+  }
+
+  return "Origin is not allowed. Set NAKAMA_WEB_PUBLIC_URL to the address you open Nakama at (for example http://203.0.113.10:4310), or set NAKAMA_TRUST_PROXY=true if a reverse proxy in front of Nakama sets X-Forwarded-Host.";
 }
 
 function readClaimedOrigin(

@@ -3,7 +3,8 @@ services:
     # Set NAKAMA_VERSION (e.g. 0.4.57) to pin a release; a rollback is the previous number.
     image: ghcr.io/ahmadrosid/nakama:${NAKAMA_VERSION:-latest}
     ports:
-      - "4310:4310"
+      # Loopback only: put an HTTPS proxy in front. Docker-published ports skip ufw.
+      - "127.0.0.1:4310:4310"
     env_file:
       - nakama-secrets.env
     environment:

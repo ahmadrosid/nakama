@@ -8,6 +8,7 @@ import type {
   CreateAutomationWebhookSecretResponse,
   CreateWorkflowRequest,
   DraftAutomationResponse,
+  GetAutomationRunResponse,
   GetWorkflowRunResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -132,6 +133,17 @@ export class AutomationsClient extends PluginsClient {
     );
 
     return response.runs;
+  }
+
+  async getAutomationRun(
+    automationId: string,
+    runId: string
+  ): Promise<AutomationRunRecord> {
+    const response = await this.request<GetAutomationRunResponse>(
+      `/v1/automations/${encodeURIComponent(automationId)}/runs/${encodeURIComponent(runId)}`
+    );
+
+    return response.run;
   }
 
   async markAutomationRunsRead(automationId: string): Promise<string> {

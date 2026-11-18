@@ -31,6 +31,7 @@ const PROVIDER_PRESETS: Array<{
   { label: "Exa", value: "exa" },
   { label: "Firecrawl", value: "firecrawl" },
   { label: "Serply", value: "serply" },
+  { label: "Keenable", value: "keenable" },
 ];
 
 function useSavedHint() {
@@ -65,8 +66,15 @@ function useWebSearchSettingsForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [savedHint, setSavedHint] = useSavedHint();
 
+  // Keenable runs without a key, so a key is optional and only lifts its rate
+  // limits; `configured` alone does not mean one is saved.
+  const keyOptional = provider === "keenable";
+
   const keyAlreadySaved =
-    settings?.provider === provider && settings?.configured === true;
+    settings?.provider === provider &&
+    (keyOptional
+      ? settings?.source === "settings"
+      : settings?.configured === true);
 
   const managedByEnvironment =
     settings?.provider === provider && settings?.source === "environment";
@@ -152,6 +160,7 @@ function useWebSearchSettingsForm() {
     apiKey,
     formError,
     keyAlreadySaved,
+    keyOptional,
     managedByEnvironment,
     manageKey,
     pending: saveMutation.isPending,
@@ -174,6 +183,7 @@ function useWebSearchSettingsForm() {
 function WebSearchApiKeyFields({
   apiKey,
   keyAlreadySaved,
+  keyOptional,
   managedByEnvironment,
   pending,
   onApiKeyChange,
@@ -181,6 +191,7 @@ function WebSearchApiKeyFields({
 }: {
   apiKey: string;
   keyAlreadySaved: boolean;
+  keyOptional: boolean;
   managedByEnvironment: boolean;
   pending: boolean;
   onApiKeyChange: (value: string) => void;
@@ -208,7 +219,9 @@ function WebSearchApiKeyFields({
                 ? "Managed by environment"
                 : keyAlreadySaved
                   ? "Saved"
-                  : "Paste API key"
+                  : keyOptional
+                    ? "Optional, for higher rate limits"
+                    : "Paste API key"
             }
             type={showApiKey ? "text" : "password"}
             value={apiKey}
@@ -235,7 +248,7 @@ function WebSearchApiKeyFields({
           disabled={
             pending ||
             managedByEnvironment ||
-            !(apiKey.trim() || keyAlreadySaved)
+            !(apiKey.trim() || keyAlreadySaved || keyOptional)
           }
           id="btn-web-search-save"
           onClick={onSave}
@@ -306,6 +319,7 @@ export function WebSearchSettingsCard() {
           <WebSearchApiKeyFields
             apiKey={form.apiKey}
             keyAlreadySaved={form.keyAlreadySaved}
+            keyOptional={form.keyOptional}
             managedByEnvironment={form.managedByEnvironment}
             onApiKeyChange={(value) => {
               form.setApiKey(value);

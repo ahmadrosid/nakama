@@ -4,6 +4,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  MODEL_CONNECTION_CLOSED_MESSAGE,
+  ProviderStreamInterruptedError,
+} from "./api-error";
+import {
   buildErrorReport,
   type ErrorReport,
   fingerprintError,
@@ -117,6 +121,68 @@ test("the report scrubs the message and stack", () => {
   expect(report.runtime.bun).toBe(Bun.version);
 });
 
+const PROVIDER_FAILURE = "Netra Runtime stream failed after it started.";
+
+const SOCKET_FAILURE = "socket closed";
+
+// The shape chat.ts throws when a provider stream drops: plain words on top, the
+// provider's message and the socket code underneath.
+function interruptedTurn(withCause: boolean): ProviderStreamInterruptedError {
+  const outer = new ProviderStreamInterruptedError(
+    MODEL_CONNECTION_CLOSED_MESSAGE
+  );
+
+  if (!withCause) {
+    return outer;
+  }
+
+  const socket = Object.assign(
+    new TypeError(
+      `${SOCKET_FAILURE}, key sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345`
+    ),
+    { code: "ECONNRESET" }
+  );
+
+  const provider = Object.assign(
+    new ProviderStreamInterruptedError(PROVIDER_FAILURE),
+    { cause: socket }
+  );
+
+  return Object.assign(outer, { cause: provider });
+}
+
+test("the report keeps the scrubbed cause chain a wrapper hides", () => {
+  const report = buildErrorReport(interruptedTurn(true), {
+    kind: "turn",
+    source: "server",
+  });
+
+  expect(report.message).toBe(MODEL_CONNECTION_CLOSED_MESSAGE);
+  expect(report.cause).toContain(PROVIDER_FAILURE);
+  expect(report.cause).toContain(SOCKET_FAILURE);
+  expect(report.cause).toContain("ECONNRESET");
+  expect(report.cause).not.toContain("sk-ant-api03");
+});
+
+test("a cause does not change the fingerprint, so issues keep their grouping", () => {
+  const plain = buildErrorReport(interruptedTurn(false));
+  const caused = buildErrorReport(interruptedTurn(true));
+
+  expect(plain.cause).toBeUndefined();
+  expect(caused.fingerprint).toBe(plain.fingerprint);
+});
+
+test("a cause cycle ends the chain instead of looping", () => {
+  const first = new Error("first");
+  const second = new Error("second", { cause: first });
+  first.cause = second;
+
+  const report = buildErrorReport(first);
+
+  expect(report.cause?.startsWith("Error: second")).toBe(true);
+  expect(report.cause).not.toContain("Error: first");
+});
+
 test("a non-Error rejection still produces a report", () => {
   const report = buildErrorReport("plain string failure", {
     source: "worker:discord",
@@ -187,6 +253,16 @@ test("a report the sink could not deliver stays queued for the next start", asyn
 
   expect(queued).toHaveLength(1);
   expect(queued[0]?.id).toBe(report.id);
+});
+
+test("a queued report keeps its cause for the retry", async () => {
+  setErrorSink(() => false);
+
+  await reportError(new Error("wrapper", { cause: new RangeError("root") }), {
+    source: "server",
+  });
+
+  expect(readPendingErrorReports()[0]?.cause).toStartWith("RangeError");
 });
 
 test("the queue is written before the send, which is what survives a hard exit", async () => {

@@ -71,6 +71,7 @@ import type {
   LoadedAttachmentBytes,
   ModelsResponse,
   MoveProfileRequest,
+  NakamaCloudStatus,
   PatchSkillRequest,
   ProfileResponse,
   ProviderChatOptions,
@@ -185,6 +186,7 @@ import {
   loadUserVisionSettings,
   loadWebSearchSettingsPublic,
   loadWhatsAppSettingsPublic,
+  MODEL_CONNECTION_CLOSED_MESSAGE,
   messageContentHasImages,
   NakamaApiError,
   nanoid,
@@ -192,6 +194,7 @@ import {
   normalizeUserContextContent,
   type OrgRole,
   ollamaRequiresApiKey,
+  ProviderStreamInterruptedError,
   parseAgentChannel,
   parseSentryDsn,
   partitionTools,
@@ -294,6 +297,12 @@ import {
   fetchChatgptCodexModels,
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
+import {
+  NAKAMA_CLOUD_PROVIDER_ID,
+  type NakamaCloudConnection,
+  NakamaCloudSignIn,
+  useNakamaCloudSignIn,
+} from "../providers/nakama-cloud";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import {
@@ -399,6 +408,7 @@ import {
   applyProviderInstanceUpdate,
   buildProviderInstanceFromCreateRequest,
   countModelsForInstance,
+  decodeStoredModelSelection,
   mergeModelsForConfig,
   modelExistsOnInstance,
   providerPublicationLock,
@@ -438,6 +448,7 @@ import {
 import {
   type OneShotKind,
   READ_ONLY_TOOL_NAMES,
+  REPLAYABLE_TOOL_NAMES,
   refuseToolsOutside,
   type TurnKind,
   turnPolicy,
@@ -468,6 +479,9 @@ const QUESTIONNAIRE_ANSWERS_CONTEXT =
 
 /** sub_agent chats one parent may start; the cap proposed on #2036. */
 const MAX_CHILD_SESSIONS = 5;
+
+/** How often the desktop reloads the team's model list from Nakama Cloud. */
+const NAKAMA_CLOUD_MODELS_TTL_MS = 5 * 60 * 1000;
 
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
@@ -602,6 +616,8 @@ export class AgentService {
       this.scheduleSessionTitleGeneration(sessionId),
     sessions: this.sessions,
   });
+  private readonly nakamaCloud: NakamaCloudSignIn | null;
+  private nakamaCloudModelsCheckedAt = 0;
   private readonly sessionTitleService: SessionTitleService;
   private readonly orgUsageQuotaService: OrgUsageQuotaService;
   private skillPostTurnReviewService: SkillPostTurnReviewService;
@@ -625,6 +641,12 @@ export class AgentService {
     this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
+    this.nakamaCloud = managedSecrets
+      ? new NakamaCloudSignIn(managedSecrets, (connection) =>
+          this.saveNakamaCloudAccount(connection)
+        )
+      : null;
+    useNakamaCloudSignIn(this.nakamaCloud);
     this.sessionTitleService = new SessionTitleService(
       db,
       () => this.userConfig
@@ -708,6 +730,7 @@ export class AgentService {
       estimated: boolean;
       inputTokens: number;
       outputTokens: number;
+      turns?: number;
     }): void => {
       void this.db
         .incrementLlmTurnUsage(scopedOrgId, turn)
@@ -2052,14 +2075,11 @@ export class AgentService {
       : save();
   }
 
-  async regenerateWhatsAppPairingCode(
+  // No worker restart: the worker reads config.ini on every message.
+  regenerateWhatsAppPairingCode(
     orgId: ChannelConfigScope
   ): Promise<WhatsAppSettingsResponse> {
-    return isChannelOwner(orgId) && this.channelWorkers
-      ? this.channelWorkers.saveChannelConfig("whatsapp", orgId, () =>
-          regenerateWhatsAppPairingCode(orgId)
-        )
-      : regenerateWhatsAppPairingCode(orgId);
+    return regenerateWhatsAppPairingCode(orgId);
   }
 
   async runAutomationPrompt(
@@ -2209,6 +2229,14 @@ export class AgentService {
     const orgRole = policy.orgRole ?? input.orgRole;
     const profile = await this.requireExecutionProfile(orgId, profileId);
 
+    // An ACP agent runs its own tools, past the read-only gate.
+    if (policy.tools?.readOnly && profile.acpAgent) {
+      throw new NakamaApiError(
+        "An ACP agent profile cannot be rerun read-only.",
+        409
+      );
+    }
+
     const tools = policy.tools
       ? [
           ...(await this.resolveProfileTools(profile, kind, {
@@ -2302,7 +2330,7 @@ export class AgentService {
 
         if (step.status !== "completed" || result === null) {
           const value =
-            REPLAYABLE_AUTOMATION_TOOLS.has(step.toolName) &&
+            REPLAYABLE_TOOL_NAMES.has(step.toolName) &&
             tools.some((item) => item.name === step.toolName)
               ? await executeToolCall(
                   tools,
@@ -2439,46 +2467,100 @@ export class AgentService {
   }
 
   /**
-   * Sends a saved case's input once to its profile's current config and
-   * returns the reply. Tools that may change data refuse instead of running.
+   * Sends a saved case's input once to its profile's current config. Tools
+   * outside the read-only list refuse instead of running. Throws only when the
+   * run is refused; a run that fails, ends early or gives no reply resolves
+   * with `error`.
    */
   async runRegressionCase(input: {
     input: string;
     orgId: string;
     profileId: string;
+    /** The caller's request; it ends the run when the caller goes away. */
+    signal?: AbortSignal;
     userId: string;
-  }): Promise<string> {
-    const profile = await this.requireExecutionProfile(
-      input.orgId,
-      input.profileId
-    );
+  }): Promise<
+    { error: string; output: null } | { error: null; output: string }
+  > {
+    // The deadline and the caller's signal cover setup too, so a hung tool or
+    // prompt lookup cannot hold the request and the case lock open.
+    const timeout = AbortSignal.timeout(REGRESSION_RERUN_TIMEOUT_MS);
+    const signals = { caller: input.signal, timeout };
 
-    // An ACP agent runs its own tools, past the read-only gate.
-    if (profile.acpAgent) {
-      throw new NakamaApiError(
-        "An ACP agent profile cannot be rerun read-only.",
-        409
-      );
-    }
+    const signal = input.signal
+      ? AbortSignal.any([input.signal, timeout])
+      : timeout;
 
-    if (!this._providerConfigured) {
-      throw new Error("Provider is not configured.");
-    }
+    // Setup or a harness that ignores the signal is not waited for.
+    const aborted = new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason);
+      }
 
-    const { chat, close } = await this.openOneShotChat("regression_rerun", {
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    });
+
+    // The loser of a race settles later with no one listening.
+    aborted.catch(() => undefined);
+
+    // This refuses an ACP agent profile first, which needs no provider.
+    const opening = this.openOneShotChat("regression_rerun", {
       orgId: input.orgId,
       profileId: input.profileId,
       userId: input.userId,
     });
 
-    try {
-      const reply = await chat.sendStream(
-        input.input,
-        { onChunk() {} },
-        { signal: AbortSignal.timeout(REGRESSION_RERUN_TIMEOUT_MS) }
-      );
+    // A chat that opens after the run gave up still ends its ACP access.
+    opening.then(
+      ({ close }) => {
+        if (signal.aborted) {
+          close();
+        }
+      },
+      (error) => {
+        if (signal.aborted) {
+          console.error("Regression rerun setup failed after it ended:", error);
+        }
+      }
+    );
 
-      return reply.trim();
+    let opened: Awaited<typeof opening>;
+
+    try {
+      opened = await Promise.race([opening, aborted]);
+    } catch (error) {
+      // Setup refused the run, as for an ACP profile or a missing profile.
+      if (!signal.aborted) {
+        throw error;
+      }
+
+      return { error: regressionRerunError(error, signals), output: null };
+    }
+
+    const { chat, close } = opened;
+
+    if (!this._providerConfigured) {
+      close();
+      throw new NakamaApiError("Provider is not configured.", 409);
+    }
+
+    try {
+      const sent = chat.sendStream(input.input, { onChunk() {} }, { signal });
+
+      sent.catch(() => undefined);
+
+      const reply = (await Promise.race([sent, aborted])).trim();
+
+      // No reply is no answer to judge, so the run is stored as failed.
+      if (!reply) {
+        return { error: "The rerun ended with no reply.", output: null };
+      }
+
+      return { error: null, output: reply };
+    } catch (error) {
+      return { error: regressionRerunError(error, signals), output: null };
     } finally {
       close();
     }
@@ -4274,6 +4356,201 @@ export class AgentService {
     };
   }
 
+  /** Starts sign-in to Nakama Cloud in the browser; returns the Connect address. */
+  async startNakamaCloudSignIn(input: {
+    cloudUrl: string;
+    computerName?: string;
+  }): Promise<{ code: string; connectUrl: string }> {
+    if (!this.nakamaCloud) {
+      throw new NakamaApiError("Secrets are not set up on this computer.", 503);
+    }
+
+    return this.nakamaCloud.start(input);
+  }
+
+  nakamaCloudStatus(): NakamaCloudStatus {
+    const instance = this.userConfig?.providers.find(
+      (entry) => entry.type === "nakama_cloud" && entry.nakamaCloud
+    );
+
+    const cloudUrl = instance?.baseUrl;
+    const computerId = instance?.nakamaCloud?.computerId;
+
+    return {
+      account: instance?.nakamaCloud?.account ?? null,
+      cloudUrl: cloudUrl ?? null,
+      // The cloud refused this computer: the account is saved, but only a
+      // new sign-in makes it work again.
+      needsSignIn: Boolean(
+        cloudUrl &&
+          computerId &&
+          this.nakamaCloud?.passesFor(cloudUrl, computerId).refused
+      ),
+      orgName: instance?.nakamaCloud?.orgName ?? null,
+      otherProviders:
+        this.userConfig?.providers.filter(
+          (entry) => entry.type !== "nakama_cloud"
+        ).length ?? 0,
+      signedIn: Boolean(instance),
+    };
+  }
+
+  /**
+   * The team's models change in the cloud. Reload them in the background,
+   * at most once in NAKAMA_CLOUD_MODELS_TTL_MS, so the picker shows new
+   * models and drops removed ones. A failed load keeps the saved list.
+   */
+  private refreshNakamaCloudModelsSoon(): void {
+    const instance = this.userConfig?.providers.find(
+      (entry) => entry.type === "nakama_cloud" && entry.nakamaCloud
+    );
+
+    const cloudUrl = instance?.baseUrl;
+    const computerId = instance?.nakamaCloud?.computerId;
+
+    if (
+      !(this.nakamaCloud && cloudUrl && computerId) ||
+      Date.now() - this.nakamaCloudModelsCheckedAt < NAKAMA_CLOUD_MODELS_TTL_MS
+    ) {
+      return;
+    }
+
+    this.nakamaCloudModelsCheckedAt = Date.now();
+
+    void this.nakamaCloud
+      .cloudModels(cloudUrl, computerId)
+      .then(async (models) => {
+        const current = this.userConfig?.providers.find(
+          (entry) => entry.id === instance.id
+        );
+
+        // Signed out meanwhile, or nothing changed.
+        if (
+          !(this.userConfig && current) ||
+          JSON.stringify(current.customModels ?? []) === JSON.stringify(models)
+        ) {
+          return;
+        }
+
+        const next = {
+          ...this.userConfig,
+          providers: this.userConfig.providers.map((entry) =>
+            entry.id === instance.id
+              ? { ...entry, customModels: models }
+              : entry
+          ),
+        };
+
+        // Saved first: a failed save leaves the config as it was.
+        await saveUserConfig(next);
+        this.userConfig = next;
+        this.refreshProviderConfig();
+      })
+      .catch(() => undefined);
+  }
+
+  /** Removes the Nakama Cloud provider. The device key stays for a new sign-in. */
+  async signOutNakamaCloud(): Promise<void> {
+    // Also ends an unfinished sign-in, so a late Connect cannot sign in.
+    this.nakamaCloud?.stop();
+
+    if (!this.userConfig) {
+      return;
+    }
+
+    for (const entry of this.userConfig.providers) {
+      if (entry.type === "nakama_cloud" && entry.baseUrl && entry.nakamaCloud) {
+        await this.nakamaCloud?.revoke(
+          entry.baseUrl,
+          entry.nakamaCloud.computerId
+        );
+      }
+    }
+
+    const providers = this.userConfig.providers.filter(
+      (entry) => entry.type !== "nakama_cloud"
+    );
+
+    const config = {
+      ...this.userConfig,
+      defaultProviderId:
+        this.userConfig.defaultProviderId === NAKAMA_CLOUD_PROVIDER_ID
+          ? (providers[0]?.id ?? null)
+          : this.userConfig.defaultProviderId,
+      providers,
+    };
+
+    await saveUserConfig(config);
+    this.userConfig = config;
+    this.refreshProviderConfig();
+  }
+
+  /** The browser sign-in finished: Nakama Cloud becomes the default provider. */
+  private async saveNakamaCloudAccount(
+    connection: NakamaCloudConnection
+  ): Promise<void> {
+    const thinking = await this.resolveThinkingSettings();
+
+    const base = this.userConfig ?? {
+      defaultProviderId: null,
+      providers: [],
+      thinkingEffort: thinking.effort,
+      thinkingEnabled: thinking.enabled,
+    };
+
+    const isFirst = base.providers.length === 0;
+
+    const instance: ProviderInstance = {
+      apiKey: "",
+      baseUrl: connection.cloudUrl,
+      createdAt: new Date().toISOString(),
+      customModels: connection.models,
+      id: NAKAMA_CLOUD_PROVIDER_ID,
+      label: "Nakama Cloud",
+      nakamaCloud: connection.account,
+      type: "nakama_cloud",
+    };
+
+    const next = {
+      ...base,
+      defaultProviderId: NAKAMA_CLOUD_PROVIDER_ID,
+      providers: [
+        ...base.providers.filter((entry) => entry.id !== instance.id),
+        instance,
+      ],
+    };
+
+    // Saved first: if the save fails, this computer is not signed in at all,
+    // rather than signed in until the next restart.
+    await saveUserConfig(next);
+    this.userConfig = next;
+    this.refreshProviderConfig();
+    this.nakamaCloudModelsCheckedAt = Date.now();
+
+    // The provider changed now, in the browser callback, not in a request
+    // the audit log sees, so it is recorded here.
+    await this.db
+      .createAuditEvent({
+        action: "provider.nakama_cloud_connect",
+        actorUserId: null,
+        createdAt: new Date().toISOString(),
+        id: `audit_${randomUUID()}`,
+        metadata: {
+          cloudOrgName: connection.account.orgName,
+          cloudUrl: connection.cloudUrl,
+        },
+        orgId: null,
+        requestId: null,
+        resourceId: NAKAMA_CLOUD_PROVIDER_ID,
+        resourceType: "provider",
+      })
+      .catch(() => undefined);
+
+    if (isFirst) {
+      await this.ensureSoulScaffolded();
+    }
+  }
+
   async createProvider(
     request: CreateProviderRequest
   ): Promise<CreateProviderResponse> {
@@ -4284,45 +4561,59 @@ export class AgentService {
       );
     }
 
-    const existing = this.userConfig?.providers ?? [];
-    const instance = buildProviderInstanceFromCreateRequest(request, existing);
-    const model = resolveInitialModel(instance, request.model);
+    const created = await providerPublicationLock.withLock(
+      "providers",
+      async () => {
+        // Read before the provider list, so no await sits between read and save.
+        const thinking = await this.resolveThinkingSettings();
+        const existing = this.userConfig?.providers ?? [];
 
-    const providers = [...existing, instance];
-    const isFirst = providers.length === 1;
-    const thinking = await this.resolveThinkingSettings();
+        const instance = buildProviderInstanceFromCreateRequest(
+          request,
+          existing
+        );
 
-    const baseConfig = this.userConfig ?? {
-      defaultProviderId: null,
-      providers: [],
-      thinkingEffort: thinking.effort,
-      thinkingEnabled: thinking.enabled,
-    };
+        const model = resolveInitialModel(instance, request.model);
 
-    this.userConfig = {
-      ...baseConfig,
-      defaultProviderId:
-        isFirst || !baseConfig.defaultProviderId
-          ? instance.id
-          : baseConfig.defaultProviderId,
-      providers,
-    };
+        const providers = [...existing, instance];
+        const isFirst = providers.length === 1;
 
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+        const baseConfig = this.userConfig ?? {
+          defaultProviderId: null,
+          providers: [],
+          thinkingEffort: thinking.effort,
+          thinkingEnabled: thinking.enabled,
+        };
 
-    if (isFirst) {
+        const defaultProviderId =
+          isFirst || !baseConfig.defaultProviderId
+            ? instance.id
+            : baseConfig.defaultProviderId;
+
+        const config = { ...baseConfig, defaultProviderId, providers };
+        await saveUserConfig(config);
+        this.userConfig = config;
+        this.refreshProviderConfig();
+
+        return {
+          isFirst,
+          response: {
+            defaultProviderId,
+            initialModel: model,
+            provider: toProviderInstanceSummary(
+              instance,
+              countModelsForInstance(instance)
+            ),
+          },
+        };
+      }
+    );
+
+    if (created.isFirst) {
       await this.ensureSoulScaffolded();
     }
 
-    return {
-      defaultProviderId: this.userConfig.defaultProviderId!,
-      initialModel: model,
-      provider: toProviderInstanceSummary(
-        instance,
-        countModelsForInstance(instance)
-      ),
-    };
+    return created.response;
   }
 
   async updateProvider(
@@ -4453,55 +4744,66 @@ export class AgentService {
     providerId: string,
     oauth: XaiOAuthCredentials
   ): Promise<void> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
-    }
+    await providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
 
-    const current = findProviderInstance(this.userConfig, providerId);
+      const current = findProviderInstance(this.userConfig, providerId);
 
-    if (!current || current.type !== "xai_oauth") {
-      throw new Error("Grok provider not found.");
-    }
+      if (!current || current.type !== "xai_oauth") {
+        throw new Error("Grok provider not found.");
+      }
 
-    const updated = applyXaiOAuthToInstance(current, oauth);
-    this.userConfig = {
-      ...this.userConfig,
-      providers: this.userConfig.providers.map((instance) =>
-        instance.id === providerId ? updated : instance
-      ),
-    };
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+      const updated = applyXaiOAuthToInstance(current, oauth);
+
+      const config = {
+        ...this.userConfig,
+        providers: this.userConfig.providers.map((instance) =>
+          instance.id === providerId ? updated : instance
+        ),
+      };
+
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+    });
   }
   async persistChatgptOAuth(
     providerId: string,
     oauth: ChatgptOAuthCredentials
   ): Promise<void> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
-    }
+    await providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
 
-    const current = findProviderInstance(this.userConfig, providerId);
+      const current = findProviderInstance(this.userConfig, providerId);
 
-    if (!current || current.type !== "chatgpt") {
-      throw new Error("ChatGPT provider not found.");
-    }
+      if (!current || current.type !== "chatgpt") {
+        throw new Error("ChatGPT provider not found.");
+      }
 
-    const updated = applyChatgptOAuthToInstance(current, oauth);
-    this.userConfig = {
-      ...this.userConfig,
-      providers: this.userConfig.providers.map((instance) =>
-        instance.id === providerId ? updated : instance
-      ),
-    };
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+      const updated = applyChatgptOAuthToInstance(current, oauth);
+
+      const config = {
+        ...this.userConfig,
+        providers: this.userConfig.providers.map((instance) =>
+          instance.id === providerId ? updated : instance
+        ),
+      };
+
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+    });
   }
 
   async getModels(
     options: { source?: "catalog" | "remote" } = {}
   ): Promise<ModelsResponse> {
     await this.refreshManagedProviderKeys();
+    this.refreshNakamaCloudModelsSoon();
     const active = getActiveProviderInstance(this.userConfig);
     const currentProviderId = this.userConfig?.defaultProviderId ?? null;
     const configuredProviders = this.userConfig?.providers ?? [];
@@ -4668,10 +4970,7 @@ export class AgentService {
       type: request.provider,
     });
 
-    const instance = findProviderInstance(
-      this.userConfig,
-      result.defaultProviderId
-    );
+    const instance = findProviderInstance(this.userConfig, result.provider.id);
 
     return {
       currentModel: result.initialModel,
@@ -4827,13 +5126,23 @@ export class AgentService {
       `provider:${providerId}`,
       updated.apiKey
     );
-    this.userConfig = {
-      ...this.userConfig!,
-      providers: this.userConfig!.providers.map((instance) =>
-        instance.id === providerId ? updated : instance
-      ),
-    };
-    this.refreshProviderConfig();
+
+    // The checks above use the network, so only this write takes the lock.
+    await providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        return;
+      }
+
+      this.userConfig = {
+        ...this.userConfig,
+        providers: this.userConfig.providers.map((instance) =>
+          instance.id === providerId
+            ? applyProviderInstanceUpdate(instance, { apiKey })
+            : instance
+        ),
+      };
+      this.refreshProviderConfig();
+    });
 
     return {
       provider: {
@@ -4877,7 +5186,10 @@ export class AgentService {
 
   /** After a data-root restore, reload provider config and clear in-memory session state. */
   async reloadAfterDataRestore(): Promise<void> {
-    this.userConfig = await loadUserConfig();
+    await providerPublicationLock.withLock("providers", async () => {
+      this.userConfig = await loadUserConfig();
+    });
+
     await this.refreshManagedProviderKeys();
     this.refreshProviderConfig();
     this.sessions.invalidateAll({ cognito: true });
@@ -5854,6 +6166,94 @@ export class AgentService {
   }
 
   /**
+   * The provider for one Nakama Desktop model call: this install's provider
+   * for the model, billed to the org and member, with the org's quota hold
+   * and a recorder that counts each call against the org's monthly limits.
+   * Null when no provider is set up; a 404 when the model is not here.
+   */
+  async desktopModelHarness(input: {
+    model: string;
+    orgId: string;
+    userId: string;
+  }): Promise<{
+    assertCanStart?: (reservedTokens: number) => Promise<() => Promise<void>>;
+    chatOptions?: ProviderChatOptions;
+    provider: ProviderClient;
+    recordUsage?: (usage: {
+      estimated: boolean;
+      inputTokens: number;
+      outputTokens: number;
+      turns?: number;
+    }) => void;
+  } | null> {
+    await this.refreshManagedProviderKeys();
+
+    const resolved = resolveProfileProviderSelection({
+      defaultProviderId: this.userConfig?.defaultProviderId,
+      profileModel: input.model,
+      providers: this.userConfig?.providers ?? [],
+    });
+
+    // The desktop asks for one model by name. A model this server no longer
+    // has is an error, not the default model shown under the old name.
+    const requested = decodeStoredModelSelection(input.model);
+
+    if (
+      resolved &&
+      !(
+        (!requested || requested.providerId === resolved.instance.id) &&
+        modelExistsOnInstance(
+          resolved.instance,
+          requested?.modelId ?? input.model
+        )
+      )
+    ) {
+      throw new NakamaApiError(
+        "This model is no longer available. Pick another model.",
+        404
+      );
+    }
+
+    const provider = resolved
+      ? createProviderForInstance(
+          resolved.instance,
+          resolved.model,
+          process.env,
+          {
+            onChatgptTokenRefresh: (instanceId, oauth) =>
+              this.persistChatgptOAuth(instanceId, oauth),
+            onXaiTokenRefresh: (instanceId, oauth) =>
+              this.persistXaiOAuth(instanceId, oauth),
+            resolveInstance: (instanceId) =>
+              findProviderInstance(this.userConfig, instanceId),
+          }
+        )
+      : null;
+
+    if (!(resolved && provider)) {
+      return null;
+    }
+
+    const harness = this.createHarness({
+      modelId: resolved.model,
+      orgId: input.orgId,
+      provider,
+      providerInstance: resolved.instance,
+      thinking: this.resolveWorkspaceThinkingDefaults(),
+      userId: input.userId,
+    });
+
+    return harness.provider
+      ? {
+          assertCanStart: this.llmTurnQuotaCheckerFor(input.orgId),
+          chatOptions: harness.chatOptions,
+          provider: harness.provider,
+          recordUsage: this.turnUsageRecorderFor(input.orgId),
+        }
+      : null;
+  }
+
+  /**
    * `orgId` is the tenant the calls made through this harness are billed to.
    * Without one the provider is left unwrapped: the ledger has no unattributed
    * bucket, so an org-less harness must not be allowed to add to any org's.
@@ -6286,8 +6686,7 @@ export class AgentService {
         storedTools.some(
           (record) =>
             record.name === tool.name &&
-            (record.handlerType === "builtin" ||
-              record.handlerType === "browser") &&
+            record.handlerType === "builtin" &&
             READ_ONLY_TOOL_NAMES.has(tool.name)
         )
       )
@@ -6713,7 +7112,8 @@ export class AgentService {
       {
         ...workspaceThinking,
         effort: record.thinkingEffort ?? workspaceThinking.effort,
-      }
+      },
+      sessionId
     );
 
     // Part of the "no tools" contract: session-history and channel-artifact
@@ -6847,6 +7247,7 @@ export class AgentService {
               this.persistXaiOAuth(instanceId, oauth),
             resolveInstance: (instanceId) =>
               findProviderInstance(this.userConfig, instanceId),
+            sessionId,
           }
         );
 
@@ -7258,7 +7659,8 @@ export class AgentService {
     userId?: string | null,
     acpSessionKey?: string,
     acpTools?: { context: ToolContext; tools: ToolDefinition[] },
-    thinking: ThinkingSettings = this.resolveWorkspaceThinkingDefaults()
+    thinking: ThinkingSettings = this.resolveWorkspaceThinkingDefaults(),
+    sessionId?: string
   ): AgentDependencies {
     if (profile.acpAgent && profile.orgId) {
       const sessionKey = acpSessionKey ?? `${profile.id}:${randomUUID()}`;
@@ -7314,6 +7716,7 @@ export class AgentService {
           this.persistXaiOAuth(instanceId, oauth),
         resolveInstance: (instanceId) =>
           findProviderInstance(this.userConfig, instanceId),
+        sessionId,
       }
     );
 
@@ -7508,21 +7911,39 @@ function parseAutomationToolArguments(serialized: string): AgentJsonRecord {
   return agentJsonRecordSchema.parse(parsed);
 }
 
-// The rerun answers in its request, so it ends before Bun's 255s idle timeout.
-const REGRESSION_RERUN_TIMEOUT_MS = 240_000;
+// The rerun request keeps its socket open, so this is the only deadline.
+const REGRESSION_RERUN_TIMEOUT_MS = 10 * 60_000;
 
-// parallelSafe means concurrent calls are allowed. It does not mean a tool has no side effects.
-const REPLAYABLE_AUTOMATION_TOOLS = new Set([
-  "knowledge_base_search",
-  "list_artifacts",
-  "list_profile_sessions",
-  "read_file",
-  "read_profile_session",
-  "read_session_history",
-  "search_files",
-  "web_fetch",
-  "web_search",
-]);
+/**
+ * What a member sees when a started rerun fails. Provider and tool errors can
+ * hold keys, hosts or paths, so no error message passes through. A provider's
+ * HTTP error is a NakamaApiError too, with the provider's raw body as its text.
+ */
+function regressionRerunError<ErrorValue>(
+  error: ErrorValue,
+  signals: { caller?: AbortSignal; timeout: AbortSignal }
+): string {
+  if (signals.timeout.aborted) {
+    return `The rerun timed out after ${REGRESSION_RERUN_TIMEOUT_MS / 60_000} minutes.`;
+  }
+
+  if (signals.caller?.aborted) {
+    return "The rerun was cancelled.";
+  }
+
+  if (error instanceof ProviderStreamInterruptedError) {
+    return MODEL_CONNECTION_CLOSED_MESSAGE;
+  }
+
+  // Providers map their own 429 to 502, so a 429 is the org's LLM quota.
+  if (error instanceof NakamaApiError && error.status === 429) {
+    return "The monthly LLM quota is reached.";
+  }
+
+  console.error("Regression rerun failed:", error);
+
+  return "The rerun failed. An admin can find the cause in the server log.";
+}
 
 function warnStepWrite(error: Error | string): void {
   console.warn(

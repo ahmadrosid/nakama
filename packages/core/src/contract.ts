@@ -75,6 +75,8 @@ export interface StoredAutomation extends AutomationDefinition {
   createdAt: string;
   enabled: boolean;
   lastRunAt?: string | null;
+  /** Set a moment after the last run ends, once its delivery is tried. */
+  lastRunDeliveryStatus?: AutomationDeliveryStatus | null;
   lastRunStatus?: AutomationRunStatus | null;
   nextRunAt?: string | null;
   orgId?: string | null;
@@ -138,6 +140,24 @@ export interface RegressionCase {
   profileId: string;
   source: RegressionCaseSource;
 }
+
+/** The cap on a case's `expectedResult`, in UTF-16 code units. */
+export const MAX_REGRESSION_EXPECTED_RESULT_LENGTH = 20_000;
+
+export type CreateRegressionCaseRequest =
+  | {
+      expectedResult: string;
+      /** The reply's index in the session history; its input is the user message before it. */
+      messageIndex: number;
+      sourceId: string;
+      sourceType: "session";
+    }
+  | {
+      automationId: string;
+      expectedResult: string;
+      sourceId: string;
+      sourceType: "automation_run";
+    };
 
 export interface RegressionCaseResponse {
   case: RegressionCase;
@@ -559,7 +579,7 @@ export interface NakamaUpgradeResponse {
 }
 
 export interface BackupStatusResponse {
-  /** The last scheduled backup's 409, until the next good backup. */
+  /** The last failed scheduled backup, until the next good backup. */
   lastError: { at: string; message: string } | null;
 }
 
@@ -653,7 +673,11 @@ export interface OrganizationSummary {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
+  /** Nakama Desktop may use this org's models. */
+  desktopModelsEnabled?: boolean;
   id: string;
+  /** Accepted invites wait for an org admin before the user joins. */
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -743,6 +767,8 @@ export interface OrganizationOverviewResponse {
 
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
+  desktopModelsEnabled?: boolean;
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -898,6 +924,18 @@ export interface ListOrgInvitesResponse {
   invites: OrgInviteSummary[];
 }
 
+/** An accepted invite waiting for an org admin to approve or reject it. */
+export interface OrgJoinRequest {
+  createdAt: string;
+  email: string;
+  role: OrgRole;
+  userId: string;
+}
+
+export interface ListOrgJoinRequestsResponse {
+  requests: OrgJoinRequest[];
+}
+
 export interface AddOrgMemberRequest {
   email: string;
   name: string;
@@ -929,6 +967,61 @@ export interface BrowserSessionSummary {
   lastUsedAt: string | null;
   /** Raw User-Agent the session signed in with; null for sessions not seen since it was recorded. */
   userAgent: string | null;
+}
+
+/** A computer that runs Nakama Desktop with this account's models. */
+export interface ComputerSummary {
+  createdAt: string;
+  id: string;
+  lastSeenAt: string | null;
+  name: string;
+}
+
+export interface ListComputersResponse {
+  computers: ComputerSummary[];
+}
+
+export interface EnrollComputerRequest {
+  installId: string;
+  name: string;
+  /** Ed25519 public key, base64 of the raw 32 bytes. */
+  publicKey: string;
+}
+
+export interface EnrollComputerResponse {
+  computerId: string;
+  /** One-time code for the computer only; the Connect page sends it to 127.0.0.1. */
+  confirmCode: string;
+}
+
+/** This computer's sign-in to Nakama Cloud (local server). */
+export interface NakamaCloudStatus {
+  account: string | null;
+  cloudUrl: string | null;
+  /** Signed in, but the cloud refused this computer since. */
+  needsSignIn: boolean;
+  orgName: string | null;
+  /** Providers this computer has besides Nakama Cloud (its own keys). */
+  otherProviders: number;
+  signedIn: boolean;
+}
+
+/**
+ * The code Nakama Desktop and the Connect page both show for one sign-in,
+ * made from its state. A Connect link that this computer did not start
+ * shows a code that the app does not.
+ */
+export async function desktopConnectCode(state: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(state))
+  );
+
+  const value =
+    (digest[0] ?? 0) * 65_536 + (digest[1] ?? 0) * 256 + (digest[2] ?? 0);
+
+  const digits = String(value % 1_000_000).padStart(6, "0");
+
+  return `${digits.slice(0, 3)} ${digits.slice(3)}`;
 }
 
 export interface ListBrowserSessionsResponse {
@@ -1155,6 +1248,8 @@ export interface AcceptOrgInviteRequest {
 export interface AcceptOrgInviteResponse {
   email: string;
   orgId: string;
+  /** True when the org requires approval: no session is created until an admin approves. */
+  pending: boolean;
   role: OrgRole;
 }
 
@@ -1475,6 +1570,8 @@ export interface UpdateAutomationRequest {
   /** null removes the limit. */
   toolLimit?: AutomationToolLimit | null;
   trigger?: AutomationTrigger;
+  /** The version the editor loaded. A newer saved version returns 409. */
+  version?: number;
 }
 
 export interface RunAutomationResponse {
@@ -1486,8 +1583,13 @@ export interface CreateAutomationWebhookSecretResponse {
   secret: string;
 }
 
+/** A finished run leaves out `progress`; `GetAutomationRunResponse` has it. */
 export interface ListAutomationRunsResponse {
   runs: AutomationRunRecord[];
+}
+
+export interface GetAutomationRunResponse {
+  run: AutomationRunRecord;
 }
 
 export interface MarkAutomationRunsReadResponse {
@@ -1740,7 +1842,7 @@ export interface UpdateImageGenerationRequest {
 }
 
 /** Search back-end that replaces the provider-hosted `web_search` tool. */
-export type WebSearchProvider = "exa" | "firecrawl" | "serply";
+export type WebSearchProvider = "exa" | "firecrawl" | "serply" | "keenable";
 
 export interface WebSearchSettingsResponse {
   apiKeyMasked: string | null;
@@ -3130,7 +3232,8 @@ export type ProviderName =
   | "meta"
   | "qwen"
   | "qwen_cn"
-  | "vercel_ai_gateway";
+  | "vercel_ai_gateway"
+  | "nakama_cloud";
 
 export interface ChatgptOAuthCredentials {
   accessToken: string;

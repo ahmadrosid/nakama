@@ -8,7 +8,11 @@ import {
   type ProviderName,
   type StreamChatHandlers,
 } from "@nakama/core";
-import { buildProviderResponseError, buildTokenUsage } from "../shared";
+import {
+  buildProviderHttpError,
+  buildProviderResponseError,
+  buildTokenUsage,
+} from "../shared";
 import {
   buildAnthropicThinkingRequest,
   continueAnthropicUntilDone,
@@ -19,6 +23,7 @@ const DEFAULT_PROVIDER_LABEL = "Anthropic";
 export interface AnthropicProviderOptions {
   apiKey: string;
   baseUrl?: string;
+  extraHeaders?: Record<string, string>;
   /** Injected in tests to mock HTTP without touching global fetch. */
   fetch?: typeof fetch;
   model?: string;
@@ -26,24 +31,39 @@ export interface AnthropicProviderOptions {
   providerName?: ProviderName;
 }
 
-function createAnthropicClient(
-  apiKey: string,
-  baseUrl?: string,
-  fetchImpl?: typeof fetch
-): Anthropic {
-  const options: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey,
-    fetch: fetchImpl ?? fetchWithoutIdleTimeout,
+interface AnthropicClientOptions {
+  apiKey: string;
+  baseUrl?: string;
+  extraHeaders?: Record<string, string>;
+  fetch?: typeof fetch;
+}
+
+function createAnthropicClient(options: AnthropicClientOptions): Anthropic {
+  const clientOptions: ConstructorParameters<typeof Anthropic>[0] = {
+    apiKey: options.apiKey,
+    defaultHeaders: options.extraHeaders,
+    fetch: options.fetch ?? fetchWithoutIdleTimeout,
   };
 
-  if (baseUrl?.trim()) {
-    options.baseURL = baseUrl.trim();
+  if (options.baseUrl?.trim()) {
+    clientOptions.baseURL = options.baseUrl.trim();
   }
 
-  return new Anthropic(options);
+  return new Anthropic(clientOptions);
 }
 
 function formatAnthropicError(error: Error, label: string): Error {
+  // Same mapping as the other adapters, so the user reads the provider's
+  // reason instead of a generic server error. Aborts and dropped connections
+  // carry no status and keep the plain error below.
+  if (error instanceof APIError && error.status !== undefined) {
+    return buildProviderHttpError(
+      label,
+      error.status,
+      error.error ? JSON.stringify(error.error) : error.message
+    );
+  }
+
   if (error instanceof APIError) {
     return new Error(
       `${label} request failed (${error.status}): ${error.message}`
@@ -76,11 +96,12 @@ export function createAnthropicProvider(
 ): ProviderClient {
   const model = options.model ?? "claude-sonnet-4-6";
 
-  const client = createAnthropicClient(
-    options.apiKey,
-    options.baseUrl,
-    options.fetch
-  );
+  const client = createAnthropicClient({
+    apiKey: options.apiKey,
+    baseUrl: options.baseUrl,
+    extraHeaders: options.extraHeaders,
+    fetch: options.fetch,
+  });
 
   const name: ProviderName = options.providerName ?? "anthropic";
   const label = options.providerLabel ?? DEFAULT_PROVIDER_LABEL;

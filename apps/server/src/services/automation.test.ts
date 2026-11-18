@@ -98,6 +98,49 @@ async function assignComposeioGmailSender(
 describe("AutomationService", () => {
   test("stores a tool limit and who saved it", async () => {
     const db = await createTestDb();
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_a",
+      name: "web_search",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile(PROFILE_ID, "tool_a");
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: { url: "https://example.com/mcp" },
+      createdAt: now,
+      enabled: true,
+      id: "mcp_a",
+      lastError: null,
+      name: "docs",
+      orgId: ORG_ID,
+      status: "connected",
+      transport: "http",
+      updatedAt: now,
+    });
+    await db.assignMcpServerToProfile(PROFILE_ID, "mcp_a");
+    await db.upsertComposioToolkit({
+      cachedTools: [],
+      createdAt: now,
+      displayName: "Gmail",
+      id: "toolkit_gmail",
+      lastError: null,
+      orgId: ORG_ID,
+      status: "enabled",
+      toolkitSlug: "gmail",
+      updatedAt: now,
+    });
+    await db.replaceProfileComposioToolkits(PROFILE_ID, [
+      {
+        allowedActions: null,
+        profileId: PROFILE_ID,
+        toolkitId: "toolkit_gmail",
+      },
+    ]);
 
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
@@ -110,9 +153,9 @@ describe("AutomationService", () => {
         name: "Briefing",
         prompt: "Brief me",
         toolLimit: {
-          composioToolkits: ["Gmail", "gmail"],
-          mcpServerIds: [],
-          toolIds: [" tool_a ", ""],
+          composioToolkits: ["Gmail", "gmail", "slack"],
+          mcpServerIds: ["mcp_a", "mcp_foreign"],
+          toolIds: [" tool_a ", "", "tool_foreign"],
         },
         trigger: { type: "manual" },
       },
@@ -121,9 +164,10 @@ describe("AutomationService", () => {
     );
 
     const stored = await service.get(created.id, ORG_ID);
+    // Ids the agent does not have drop silently.
     expect(stored?.toolLimit).toEqual({
       composioToolkits: ["gmail"],
-      mcpServerIds: [],
+      mcpServerIds: ["mcp_a"],
       toolIds: ["tool_a"],
     });
     expect(stored?.runAsUserId).toBe("user_a");
@@ -153,6 +197,207 @@ describe("AutomationService", () => {
     const cleared = await service.get(created.id, ORG_ID);
     expect(cleared?.toolLimit).toBeUndefined();
     expect(cleared?.runAsUserId).toBe("user_b");
+  });
+
+  test("scopes the tool limit on update", async () => {
+    const db = await createTestDb();
+    const now = new Date().toISOString();
+
+    for (const id of ["tool_a", "tool_b"]) {
+      await db.upsertTool({
+        createdAt: now,
+        description: "",
+        handlerConfig: {},
+        handlerType: "builtin",
+        id,
+        name: id,
+        updatedAt: now,
+      });
+      await db.assignToolToProfile(PROFILE_ID, id);
+    }
+
+    const server = {
+      cachedTools: [],
+      config: { url: "https://example.com/mcp" },
+      createdAt: now,
+      enabled: true,
+      id: "mcp_a",
+      lastError: null,
+      name: "docs",
+      orgId: ORG_ID,
+      status: "connected" as const,
+      transport: "http" as const,
+      updatedAt: now,
+    };
+
+    await db.upsertMcpServer(server);
+    await db.assignMcpServerToProfile(PROFILE_ID, "mcp_a");
+    // Switched off and not assigned: still a foreign id.
+    await db.upsertMcpServer({
+      ...server,
+      enabled: false,
+      id: "mcp_other",
+      name: "other",
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_other",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Other Bot",
+      orgId: ORG_ID,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile("profile_other", "tool_b");
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const userA = { orgRole: "admin" as const, userId: "user_a" };
+    const userB = { orgRole: "admin" as const, userId: "user_b" };
+
+    const limit = {
+      composioToolkits: [],
+      mcpServerIds: ["mcp_a"],
+      toolIds: ["tool_a", "tool_b"],
+    };
+
+    const created = await service.create(
+      ORG_ID,
+      {
+        name: "Briefing",
+        prompt: "Brief me",
+        toolLimit: limit,
+        trigger: { type: "manual" },
+      },
+      undefined,
+      userA
+    );
+
+    const read = async () => (await service.get(created.id, ORG_ID))!;
+
+    // A server that is switched off stays; ids the agent lacks drop.
+    await db.upsertMcpServer({ ...server, enabled: false });
+    await service.update(
+      created.id,
+      ORG_ID,
+      {
+        toolLimit: {
+          ...limit,
+          mcpServerIds: ["mcp_a", "mcp_other", "mcp_foreign"],
+          toolIds: ["tool_a", "tool_b", "tool_foreign"],
+        },
+      },
+      userA
+    );
+    expect((await read()).toolLimit).toEqual(limit);
+
+    // The stored limit sent back loses a stale id, and the saver stays.
+    await db.unassignToolFromProfile(PROFILE_ID, "tool_a");
+    await service.update(created.id, ORG_ID, { toolLimit: limit }, userB);
+    expect((await read()).toolLimit?.toolIds).toEqual(["tool_b"]);
+    expect((await read()).runAsUserId).toBe("user_a");
+
+    // A real change to the limit lends the editor's sign-ins.
+    await service.update(
+      created.id,
+      ORG_ID,
+      { toolLimit: { ...limit, mcpServerIds: [], toolIds: ["tool_b"] } },
+      userB
+    );
+    expect((await read()).runAsUserId).toBe("user_b");
+
+    // A new agent alone gets the stored limit scoped to it.
+    await db.assignToolToProfile(PROFILE_ID, "tool_a");
+    await service.update(created.id, ORG_ID, { toolLimit: limit }, userA);
+    await service.update(
+      created.id,
+      ORG_ID,
+      { profileId: "profile_other" },
+      userA
+    );
+    expect((await read()).toolLimit).toEqual({
+      composioToolkits: [],
+      mcpServerIds: [],
+      toolIds: ["tool_b"],
+    });
+  });
+
+  test("scopes a shared agent's tool limit to its source", async () => {
+    const db = await createTestDb();
+    const now = new Date().toISOString();
+
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_team",
+      name: "Team",
+      parentOrgId: ORG_ID,
+      slug: "team",
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_source",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Source",
+      orgId: ORG_ID,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    await db.upsertTool({
+      createdAt: now,
+      description: "",
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "tool_a",
+      name: "web_search",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile("profile_source", "tool_a");
+
+    const publication = await db.publishOrgSharedResource({
+      createdAt: now,
+      id: "agent_publication",
+      orgId: ORG_ID,
+      resourceId: "profile_source",
+      resourceKind: "agent",
+      updatedAt: now,
+    });
+
+    await db.createSharedAgentInstance(
+      "org_team",
+      publication.id,
+      "profile_instance",
+      now
+    );
+
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+
+    const created = await service.create(
+      "org_team",
+      {
+        name: "Briefing",
+        profileId: "profile_instance",
+        prompt: "Brief me",
+        toolLimit: {
+          composioToolkits: [],
+          mcpServerIds: [],
+          toolIds: ["tool_a", "tool_foreign"],
+        },
+        trigger: { type: "manual" },
+      },
+      undefined,
+      { orgRole: "admin", userId: "user_a" }
+    );
+
+    expect(created.toolLimit?.toolIds).toEqual(["tool_a"]);
   });
 
   test("only an org admin can automate an agent that has the email tool", async () => {
@@ -367,6 +612,26 @@ describe("AutomationService", () => {
 
     expect(unchanged.profileId).toBe(otherId);
     expect(unchanged.name).toBe("Digest 2");
+
+    // The first update moved the version on, so the version from create is old.
+    await expect(
+      service.update(
+        automation.id,
+        ORG_ID,
+        { name: "Digest 3", version: automation.version },
+        { orgRole: "member" }
+      )
+    ).rejects.toMatchObject({ status: 409 });
+    expect((await service.get(automation.id, ORG_ID))?.name).toBe("Digest 2");
+
+    const current = await service.update(
+      automation.id,
+      ORG_ID,
+      { name: "Digest 3", version: unchanged.version },
+      { orgRole: "member" }
+    );
+
+    expect(current.name).toBe("Digest 3");
   });
 
   test("rejects blank profileId on update", async () => {
@@ -785,9 +1050,19 @@ test("automation list reflects a run starting and finishing", async () => {
   expect((await service.listForOrg("another_org")).automations).toEqual([]);
 
   await service.completeRun(run.id, automation.id, { output: "Done" });
-  expect((await service.listForOrg(ORG_ID)).automations[0]?.lastRunStatus).toBe(
-    "completed"
-  );
+  expect((await service.listForOrg(ORG_ID)).automations[0]).toMatchObject({
+    lastRunDeliveryStatus: null,
+    lastRunStatus: "completed",
+  });
+
+  // Delivery is recorded after the run ends, so the list carries it too.
+  await service.updateRunDelivery(run.id, automation.id, {
+    deliveryError: "Bot was blocked.",
+    deliveryStatus: "failed",
+  });
+  expect(
+    (await service.listForOrg(ORG_ID)).automations[0]?.lastRunDeliveryStatus
+  ).toBe("failed");
 });
 
 describe("AutomationRunner", () => {
@@ -902,16 +1177,29 @@ describe("AutomationRunner", () => {
         status: fails ? "failed" : "completed",
       });
       expect(runner.getActiveRunCount()).toBe(0);
+      // The list leaves out a finished transcript; getRun returns it.
+      expect(runs[0]?.progress).toBeUndefined();
+      const runId = runs[0]!.id;
 
       const reloadedService = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
 
-      const reloaded = (
-        await reloadedService.listRuns(automation.id, ORG_ID)
-      )[0]!;
+      const reloaded = (await reloadedService.getRun(
+        automation.id,
+        ORG_ID,
+        runId
+      ))!;
 
-      expect(reloaded.progress).toEqual(runs[0]?.progress);
+      expect(reloaded.progress).toEqual(
+        (await service.getRun(automation.id, ORG_ID, runId))?.progress
+      );
+      await expect(
+        reloadedService.getRun(automation.id, "other-org", runId)
+      ).rejects.toThrow();
+      expect(
+        await reloadedService.getRun(automation.id, ORG_ID, "run_missing")
+      ).toBeNull();
       expect(reloaded.progress?.[0]).toMatchObject({
         content: "Find news",
         role: "user",
@@ -2638,8 +2926,12 @@ describe("webhook automations", () => {
     expect(prompt.indexOf("Ignore all previous")).toBeGreaterThan(
       prompt.indexOf("<webhook-payload>")
     );
-    expect(run?.progress?.[0]?.content).toBe("Review the pull request.");
-    expect(JSON.stringify(run?.progress)).not.toContain("Ignore all previous");
+
+    const saved = await service.getRun(automation.id, ORG_ID, run!.id);
+    expect(saved?.progress?.[0]?.content).toBe("Review the pull request.");
+    expect(JSON.stringify(saved?.progress)).not.toContain(
+      "Ignore all previous"
+    );
   });
 
   test("keeps the payload out of a failed run's saved progress", async () => {
@@ -2660,7 +2952,10 @@ describe("webhook automations", () => {
 
     const [run] = await service.listRuns(automation.id);
     expect(run?.status).toBe("failed");
-    expect(JSON.stringify(run)).not.toContain("private-commit-message");
+
+    const saved = await service.getRun(automation.id, ORG_ID, run!.id);
+    expect(saved?.progress?.length).toBeGreaterThan(0);
+    expect(JSON.stringify(saved)).not.toContain("private-commit-message");
   });
 
   test("starts no second run for a repeated delivery id", async () => {

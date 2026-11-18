@@ -410,6 +410,8 @@ export interface LlmTurnUsageDelta {
   estimated: boolean;
   inputTokens: number;
   outputTokens: number;
+  /** Turns to add; 1 when unset. 0 counts only the tokens of the call. */
+  turns?: number;
 }
 
 export interface StoredLlmTurnUsageRecord {
@@ -617,7 +619,11 @@ export interface StoredOrganizationRecord {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
+  /** Nakama Desktop may use this org's models. Absent means on. */
+  desktopModelsEnabled?: boolean;
   id: string;
+  /** Accepted invites wait for an org admin before the user joins. */
+  memberApprovalRequired?: boolean;
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -633,6 +639,14 @@ export interface StoredOrganizationRecord {
   skillsWriteApproval?: boolean;
   slug: string;
   updatedAt: string;
+}
+
+/** An accepted invite waiting for an org admin; not a member until approved. */
+export interface StoredOrgJoinRequestRecord {
+  createdAt: string;
+  orgId: string;
+  role: OrgRole;
+  userId: string;
 }
 
 export interface StoredOrgMemberRecord {
@@ -802,6 +816,22 @@ export interface StoredArtifactOwnerRecord extends StoredArtifactRecord {
   userName: string | null;
 }
 
+/** A computer that runs Nakama Desktop for one user in one org. */
+export interface StoredComputerRecord {
+  createdAt: string;
+  id: string;
+  installId: string;
+  lastSeenAt: string | null;
+  name: string;
+  orgId: string;
+  /** SHA-256 of the one-time confirm code; null once the computer confirmed. */
+  pendingCodeHash: string | null;
+  /** Ed25519 public key, base64 (raw 32 bytes). */
+  publicKey: string;
+  revokedAt: string | null;
+  userId: string;
+}
+
 export interface StoredArtifactShareRecord {
   createdAt: string;
   createdByUserId: string;
@@ -865,6 +895,14 @@ export interface DatabaseAdapter {
     teamOrgId: string
   ): Promise<boolean>;
 
+  /**
+   * Inserts a profile only when its id is still free. Resolves to `false`,
+   * leaving the existing row untouched, when the id is already taken, so
+   * allocation and insertion stay atomic for concurrent callers.
+   */
+  /** Clears the pending confirm code once the computer proved it has it. */
+  activateComputer(id: string): Promise<void>;
+
   activateUserMfa(
     id: string,
     totpSecretEnc: string,
@@ -875,6 +913,12 @@ export interface DatabaseAdapter {
     sessionId: string,
     messages: StoredSessionMessageRecord[]
   ): Promise<void>;
+  /** Moves a join request into org_members in one transaction; null when there was none. An existing member is returned as is. */
+  approveOrgJoinRequest(
+    orgId: string,
+    userId: string,
+    approvedAt: string
+  ): Promise<StoredOrgMemberRecord | null>;
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
@@ -936,6 +980,15 @@ export interface DatabaseAdapter {
     teamOrgId: string,
     completedAt: string
   ): Promise<boolean>;
+  /**
+   * Records a nonce of a signed computer request. False when it was already
+   * used, so a request cannot be replayed. Also drops expired nonces.
+   */
+  consumeComputerNonce(
+    nonce: string,
+    expiresAt: string,
+    now: string
+  ): Promise<boolean>;
   consumeMfaBackupCode(
     userId: string,
     codeHash: string,
@@ -980,6 +1033,8 @@ export interface DatabaseAdapter {
   createMfaBackupCode(record: StoredMfaBackupCode): Promise<void>;
 
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
+  /** False when the user already has a request for this org. */
+  createOrgJoinRequest(record: StoredOrgJoinRequestRecord): Promise<boolean>;
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
   createPasskey(record: StoredPasskeyRecord): Promise<void>;
@@ -991,12 +1046,6 @@ export interface DatabaseAdapter {
 
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
-
-  /**
-   * Inserts a profile only when its id is still free. Resolves to `false`,
-   * leaving the existing row untouched, when the id is already taken, so
-   * allocation and insertion stay atomic for concurrent callers.
-   */
   createProfileIfAbsent(record: StoredProfileRecord): Promise<boolean>;
 
   createRegressionCase(record: StoredRegressionCaseRecord): Promise<void>;
@@ -1040,6 +1089,7 @@ export interface DatabaseAdapter {
   deleteMfaBackupCodes(userId: string): Promise<void>;
   deleteNotificationDestination(id: string): Promise<boolean>;
   deleteOrganization(id: string): Promise<boolean>;
+  /** Also revokes the member's Nakama Desktop computers in that org. */
   deleteOrgMember(orgId: string, userId: string): Promise<boolean>;
   deleteOrgPlugin(
     orgId: string,
@@ -1068,6 +1118,15 @@ export interface DatabaseAdapter {
    */
   disableUserUnlessLastAdmin(id: string, disabledAt: string): Promise<boolean>;
   enableUser(id: string): Promise<void>;
+  /**
+   * Saves a computer's key. The active row for the same user, org and install
+   * is reused, so signing in again does not make a second computer. Null when
+   * that row is confirmed and has a different key: a link cannot replace the
+   * key of a computer that works.
+   */
+  enrollComputer(
+    record: StoredComputerRecord
+  ): Promise<StoredComputerRecord | null>;
   /**
    * Resolves to `false`, with nothing written, when the user is missing or is
    * the last usable admin of a live org or the last usable platform admin.
@@ -1138,10 +1197,8 @@ export interface DatabaseAdapter {
   getComposioUserConnectionById(
     id: string
   ): Promise<StoredComposioUserConnectionRecord | null>;
+  getComputer(id: string): Promise<StoredComputerRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
-  getLastUserMessageForSession(
-    sessionId: string
-  ): Promise<StoredSessionMessageRecord | null>;
 
   getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
   getManagedSecret(
@@ -1164,6 +1221,10 @@ export interface DatabaseAdapter {
   getOrgInviteByTokenHash(
     tokenHash: string
   ): Promise<StoredOrgInviteRecord | null>;
+  getOrgJoinRequest(
+    orgId: string,
+    userId: string
+  ): Promise<StoredOrgJoinRequestRecord | null>;
   getOrgMember(
     orgId: string,
     userId: string
@@ -1384,6 +1445,11 @@ export interface DatabaseAdapter {
     orgId: string,
     userId: string
   ): Promise<StoredComposioUserConnectionRecord[]>;
+  /** Newest first, revoked computers included. */
+  listComputersForUser(
+    orgId: string,
+    userId: string
+  ): Promise<StoredComputerRecord[]>;
   listEphemeralAttachments(): Promise<StoredAttachmentRecord[]>;
   listFilePins(
     orgId: string,
@@ -1417,6 +1483,9 @@ export interface DatabaseAdapter {
     orgId: string
   ): Promise<StoredNotificationDestinationRecord[]>;
   listOrganizations(): Promise<StoredOrganizationRecord[]>;
+  listOrgJoinRequests(
+    orgId: string
+  ): Promise<Array<StoredOrgJoinRequestRecord & { email: string }>>;
   listOrgMembers(orgId: string): Promise<StoredOrgMemberRecord[]>;
   listOrgMemoryProposals(
     orgId: string,
@@ -1549,6 +1618,8 @@ export interface DatabaseAdapter {
   ): Promise<void>;
   putManagedSecret(secret: Omit<StoredManagedSecret, "version">): Promise<void>;
   /** Frees a claimed automation webhook delivery ID so a redelivery can run. */
+  /** Deletes the request, and the account its accept created when it has no other org. */
+  rejectOrgJoinRequest(orgId: string, userId: string): Promise<boolean>;
   releaseAutomationWebhookDelivery(
     automationId: string,
     deliveryId: string
@@ -1596,25 +1667,38 @@ export interface DatabaseAdapter {
     userId: string,
     revokedAt: string
   ): Promise<boolean>;
+  /**
+   * Every active browser session, and every Nakama Desktop computer, of the
+   * user. Resolves to the number of browser sessions revoked.
+   */
   revokeBrowserSessionsForUser(
     userId: string,
     revokedAt: string
   ): Promise<number>;
   /**
    * Every active browser session except the caller's current session. A null
-   * session id revokes all of them for non-browser authentication modes.
+   * session id revokes all of them for non-browser authentication modes. The
+   * user's Nakama Desktop computers are all revoked too.
    */
   revokeBrowserSessionsForUserExcept(
     userId: string,
     sessionId: string | null,
     revokedAt: string
   ): Promise<number>;
+  /** False when the computer is not this user's in this org, or already revoked. */
+  revokeComputer(input: {
+    id: string;
+    orgId: string;
+    revokedAt: string;
+    userId: string;
+  }): Promise<boolean>;
   /** Only a pending invite of this org; the org check is in the statement. */
   revokeOrgInvite(
     orgId: string,
     id: string,
     revokedAt: string
   ): Promise<boolean>;
+  setComputerLastSeen(id: string, lastSeenAt: string): Promise<void>;
   setFilePinned(
     orgId: string,
     userId: string,

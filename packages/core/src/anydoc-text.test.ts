@@ -144,6 +144,31 @@ describe("convertDocumentBytes", () => {
     );
   });
 
+  test("cuts 1 MiB of multi-byte output on a character boundary without stalling", async () => {
+    const line = "plain line é 漢 😀\n";
+    const markdown = line.repeat(Math.ceil((1024 * 1024) / line.length)).trim();
+
+    const started = performance.now();
+
+    const result = await convertDocumentBytes(SAMPLE_CSV, {
+      convertFn: () => Promise.resolve(markdown),
+      format: "csv",
+      maxOutputBytes: ANYDOC_MAX_OUTPUT_BYTES,
+    });
+
+    const elapsed = performance.now() - started;
+
+    const body = result.text.slice(0, -1);
+    const bodyBytes = Buffer.byteLength(body, "utf8");
+
+    expect(result.truncated).toBe(true);
+    expect(markdown.startsWith(body)).toBe(true);
+    expect(bodyBytes).toBeLessThanOrEqual(ANYDOC_MAX_OUTPUT_BYTES);
+    // At most one cut character (4 bytes for the emoji) is left out.
+    expect(bodyBytes).toBeGreaterThan(ANYDOC_MAX_OUTPUT_BYTES - 4);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
   test("surfaces a timeout when conversion stalls", async () => {
     let observedSignal: AbortSignal | undefined;
     // The contract under test is a wall-clock budget, so the test waits on

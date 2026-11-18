@@ -81,10 +81,12 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  atomic(migrateComputersTables);
   atomic(migrateAutomationWebhookDeliveriesTable);
   atomic(migrateAutomationWebhookSecretsTable);
   atomic(migrateRegressionCasesTable);
   atomic(migrateRegressionCaseRunsTable);
+  atomic(migrateOrgJoinRequests);
   atomic(migrateManagedSecretsTable);
   atomic(migrateArtifactsTable);
   atomic((database) =>
@@ -2596,6 +2598,51 @@ CREATE INDEX IF NOT EXISTS artifacts_org_user ON artifacts (org_id, user_id);
   `);
 }
 
+/** Nakama Desktop computers; schema.sql makes these only for a new database. */
+function migrateComputersTables(db: Database): void {
+  const orgColumns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
+  if (!orgColumns.some((column) => column.name === "desktop_models_enabled")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN desktop_models_enabled INTEGER NOT NULL DEFAULT 1;"
+    );
+  }
+
+  db.exec(`
+-- A computer that runs Nakama Desktop for one user in one org. It signs in
+-- with a device key; only the public key is stored here.
+CREATE TABLE IF NOT EXISTS computers (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  install_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT,
+  revoked_at TEXT,
+  -- Set until the computer proves it got the Connect result on 127.0.0.1.
+  pending_code_hash TEXT,
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS computers_active_install_unique
+  ON computers (org_id, user_id, install_id)
+  WHERE revoked_at IS NULL;
+
+-- Nonces of signed computer requests, kept until they are too old to replay.
+CREATE TABLE IF NOT EXISTS computer_nonces (
+  nonce TEXT PRIMARY KEY NOT NULL,
+  expires_at TEXT NOT NULL
+);
+  `);
+}
+
 function migrateNotificationWebhookDeliveriesTable(db: Database): void {
   db.exec(`
 CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
@@ -2668,6 +2715,33 @@ CREATE INDEX IF NOT EXISTS regression_cases_profile_created
 
   // The table first shipped without this column.
   addNullableTextColumnIfMissing(db, "regression_cases", "private_to_user_id");
+}
+
+function migrateOrgJoinRequests(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_join_requests (
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, user_id),
+  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS org_join_requests_user ON org_join_requests (user_id);
+  `);
+
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "member_approval_required")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN member_approval_required INTEGER NOT NULL DEFAULT 0;"
+    );
+  }
 }
 
 function migrateRegressionCaseRunsTable(db: Database): void {

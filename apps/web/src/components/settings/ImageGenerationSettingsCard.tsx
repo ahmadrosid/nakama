@@ -1,6 +1,7 @@
 import type { ProviderInstanceSummary } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
+import { AddProviderDialog } from "@/components/settings/ProviderSettingsCard";
 import {
   type SettingsModelOption,
   SettingsModelSelect,
@@ -17,6 +18,7 @@ import {
   groupModelsByProvider,
   IMAGE_GENERATION_MODEL_OPTIONS,
   IMAGE_GENERATION_SELECTION,
+  MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS,
   profileModelLabel,
 } from "@/lib/models";
 
@@ -25,11 +27,14 @@ const CLEAR_IMAGE_GENERATION_MODEL_VALUE = "__image_generation_unset__";
 /** Saved model that turns image generation off (server: IMAGE_GENERATION_OFF). */
 const IMAGE_GENERATION_OFF_VALUE = "off";
 
+/** Picks MiniMax before a MiniMax provider exists: opens Add provider. */
+const ADD_MINIMAX_VALUE = "__add_minimax__";
+
 type ImageGenerationChoice = SettingsModelOption;
 
 type ImageGenerationProviderSummary = Pick<
   ProviderInstanceSummary,
-  "chatgptPlanType" | "hasApiKey" | "id" | "type"
+  "chatgptPlanType" | "hasApiKey" | "id" | "label" | "type"
 >;
 
 /**
@@ -68,6 +73,26 @@ function imageGenerationChoices(
     group.models.some((model) => model.provider === "openai_compatible")
   );
 
+  // MiniMax image models are fixed, so a MiniMax provider offers them even
+  // with no chat models saved.
+  const minimaxGroups = providers.flatMap((provider) =>
+    provider.type === "minimax" || provider.type === "minimax_cn"
+      ? [
+          {
+            models: MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS.map((option) => ({
+              id: option.id,
+              name: option.name,
+              provider: provider.type,
+            })),
+            providerId: provider.id,
+            providerLabel: provider.label,
+          },
+        ]
+      : []
+  );
+
+  const imageModelGroups = [...compatibleGroups, ...minimaxGroups];
+
   const labelGroups = [
     ...(openaiAvailable
       ? [
@@ -82,7 +107,7 @@ function imageGenerationChoices(
           },
         ]
       : []),
-    ...compatibleGroups,
+    ...imageModelGroups,
   ];
 
   // With nothing saved, the server makes images with a connected ChatGPT.
@@ -121,7 +146,7 @@ function imageGenerationChoices(
           },
         ]
       : []),
-    ...compatibleGroups.flatMap((group) =>
+    ...imageModelGroups.flatMap((group) =>
       group.models.map((model) => ({
         label: `${group.providerLabel}: ${model.name}`,
         name: model.name,
@@ -131,6 +156,9 @@ function imageGenerationChoices(
     ),
     ...(chatgptAvailable
       ? [{ label: "Off", value: IMAGE_GENERATION_OFF_VALUE }]
+      : []),
+    ...(minimaxGroups.length === 0
+      ? [{ label: "MiniMax", value: ADD_MINIMAX_VALUE }]
       : []),
   ];
 
@@ -167,19 +195,28 @@ function imageGenerationChoices(
       : selection !== null &&
         freeChatgptIds.has(chatgptGroupOf(selection)?.providerId ?? "");
 
-  return { chatgptFreeNote, choices, labelOf, providerAvailable };
+  return { chatgptFreeNote, choices, labelOf };
 }
 
 export function ImageGenerationSettingsCard() {
   const [formError, setFormError] = useState<string | null>(null);
   // null until the saved model loads, so it does not read as the automatic pick.
   const [selection, setSelection] = useState<string | null>(null);
-  const [savedHint, setSavedHint] = useState<string | null>(null);
+
+  // The saved model, labelled at render: a provider added just now has no
+  // label until the provider list refetches.
+  const [savedHint, setSavedHint] = useState<{ model: string | null } | null>(
+    null
+  );
+
   const { data: modelsResponse } = useModelsQuery();
   const { data: imageGenerationSettings } = useImageGenerationSettings();
   const saveImageGenerationMutation = useSaveImageGenerationSettings();
+  const [addMinimaxOpen, setAddMinimaxOpen] = useState(false);
+  // A new key after each close gives the next Add a fresh form.
+  const [addFormKey, setAddFormKey] = useState(0);
 
-  const { chatgptFreeNote, choices, labelOf, providerAvailable } = useMemo(
+  const { chatgptFreeNote, choices, labelOf } = useMemo(
     () =>
       imageGenerationChoices(
         modelsResponse?.models ?? [],
@@ -209,6 +246,37 @@ export function ImageGenerationSettingsCard() {
     return () => window.clearTimeout(timeout);
   }, [savedHint]);
 
+  const saveModel = (model: string | null) => {
+    setFormError(null);
+    setSelection(model ?? "");
+    setSavedHint(null);
+
+    // A change can be undone from the toast.
+    const previous = imageGenerationSettings?.model ?? null;
+
+    saveImageGenerationMutation.mutate(model, {
+      onError: (error) => {
+        setSelection(imageGenerationSettings?.model ?? "");
+        setFormError(formatError(error));
+      },
+      onSuccess: (saved) => {
+        setSelection(saved.model ?? "");
+
+        if (previous !== (saved.model ?? null)) {
+          toast("Image generation model changed.", 8000, {
+            label: "Undo",
+            onClick: () =>
+              saveImageGenerationMutation.mutate(previous, {
+                onSuccess: (restored) => setSelection(restored.model ?? ""),
+              }),
+          });
+        }
+
+        setSavedHint({ model: saved.model ?? null });
+      },
+    });
+  };
+
   return (
     <SettingsModelTile
       footer={
@@ -224,7 +292,7 @@ export function ImageGenerationSettingsCard() {
                 className="text-emerald-700 text-xs dark:text-emerald-300"
                 role="status"
               >
-                {savedHint}
+                Saved · {labelOf(savedHint.model)}
               </p>
             ) : null}
             {formError ? (
@@ -239,48 +307,47 @@ export function ImageGenerationSettingsCard() {
     >
       <SettingsModelSelect
         ariaLabel="Image generation model"
-        disabled={saveImageGenerationMutation.isPending || !providerAvailable}
+        disabled={saveImageGenerationMutation.isPending}
         onValueChange={(value) => {
           if (!value) {
             return;
           }
 
-          const model =
-            value === CLEAR_IMAGE_GENERATION_MODEL_VALUE ? null : String(value);
+          if (value === ADD_MINIMAX_VALUE) {
+            setAddMinimaxOpen(true);
 
-          setFormError(null);
-          setSelection(model ?? "");
-          setSavedHint(null);
+            return;
+          }
 
-          // A change can be undone from the toast.
-          const previous = imageGenerationSettings?.model ?? null;
-
-          saveImageGenerationMutation.mutate(model, {
-            onError: (error) => {
-              setSelection(imageGenerationSettings?.model ?? "");
-              setFormError(formatError(error));
-            },
-            onSuccess: (saved) => {
-              setSelection(saved.model ?? "");
-
-              if (previous !== (saved.model ?? null)) {
-                toast("Image generation model changed.", 8000, {
-                  label: "Undo",
-                  onClick: () =>
-                    saveImageGenerationMutation.mutate(previous, {
-                      onSuccess: (restored) =>
-                        setSelection(restored.model ?? ""),
-                    }),
-                });
-              }
-
-              setSavedHint(`Saved · ${labelOf(saved.model)}`);
-            },
-          });
+          saveModel(
+            value === CLEAR_IMAGE_GENERATION_MODEL_VALUE ? null : String(value)
+          );
         }}
         options={choices}
         triggerLabel={labelOf(selection)}
         value={selection || CLEAR_IMAGE_GENERATION_MODEL_VALUE}
+      />
+      <AddProviderDialog
+        key={addFormKey}
+        onAdded={(provider) => {
+          // The form lets the user switch away from MiniMax.
+          if (provider.type === "minimax" || provider.type === "minimax_cn") {
+            saveModel(
+              encodeModelSelection(
+                provider.id,
+                MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS[0].id
+              )
+            );
+
+            return;
+          }
+
+          toast("Provider added.");
+        }}
+        onClosed={() => setAddFormKey((key) => key + 1)}
+        onOpenChange={setAddMinimaxOpen}
+        open={addMinimaxOpen}
+        provider="minimax"
       />
     </SettingsModelTile>
   );

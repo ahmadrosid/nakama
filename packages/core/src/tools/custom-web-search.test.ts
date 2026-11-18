@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
+import { NakamaApiError } from "../api-error";
+import { asTestFetch } from "../channel-test-helpers";
 import type { WebSearchConfigFile } from "../web-search-config";
 import {
   createCustomWebSearchTool,
@@ -149,6 +151,45 @@ describe("createCustomWebSearchTool", () => {
     );
   });
 
+  test("stops reading a runaway response instead of buffering it", async () => {
+    const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
+    const totalChunks = 64;
+    let pulled = 0;
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled === 0) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              '{"results":[{"url":"https://a.example","title":"'
+            )
+          );
+        }
+
+        if (pulled === totalChunks) {
+          controller.enqueue(new TextEncoder().encode('"}]}'));
+          controller.close();
+
+          return;
+        }
+
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+    });
+
+    globalThis.fetch = asTestFetch(() =>
+      Promise.resolve(new Response(body, { status: 200 }))
+    );
+
+    const tool = createCustomWebSearchTool(config({}));
+
+    await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
+      NakamaApiError
+    );
+    expect(pulled).toBeLessThan(totalChunks);
+  });
+
   test("sends the Serply query in the URL of a GET", async () => {
     const captured: CapturedRequest[] = [];
     stubFetch({ body: { results: [] } }, captured);
@@ -229,6 +270,71 @@ describe("createCustomWebSearchTool", () => {
     await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
       "Serply returned 429"
     );
+  });
+
+  test("sends a keyless Keenable search to the public endpoint", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch(
+      {
+        body: {
+          results: [
+            {
+              acquired_at: "2026-11-01T00:00:00Z",
+              description: "",
+              snippet: "Bun 1.4 release notes",
+              title: "Bun 1.4",
+              url: "https://bun.sh/blog/bun-v1.4",
+            },
+          ],
+        },
+      },
+      captured
+    );
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "",
+        endpoint: "https://api.keenable.ai/v1/search",
+        provider: "keenable",
+      })
+    );
+
+    const output = await tool?.run({ query: "bun release" }, {});
+
+    expect(captured[0]?.method).toBe("POST");
+    expect(captured[0]?.url).toBe("https://api.keenable.ai/v1/search/public");
+    expect(captured[0]?.headers["x-keenable-title"]).toBe("Nakama");
+    expect(captured[0]?.headers["x-api-key"]).toBeUndefined();
+    expect(captured[0]?.body).toEqual({ max_results: 5, query: "bun release" });
+    expect(output).toEqual({
+      provider: "keenable",
+      query: "bun release",
+      results: [
+        {
+          snippet: "Bun 1.4 release notes",
+          title: "Bun 1.4",
+          url: "https://bun.sh/blog/bun-v1.4",
+        },
+      ],
+    });
+  });
+
+  test("sends a Keenable key to the keyed endpoint", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch({ body: { results: [] } }, captured);
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "keenable-key",
+        endpoint: "https://api.keenable.ai/v1/search",
+        provider: "keenable",
+      })
+    );
+
+    await tool?.run({ query: "bun release" }, {});
+
+    expect(captured[0]?.url).toBe("https://api.keenable.ai/v1/search");
+    expect(captured[0]?.headers["x-api-key"]).toBe("keenable-key");
   });
 });
 

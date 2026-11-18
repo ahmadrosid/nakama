@@ -219,6 +219,35 @@ for (const action of authScopeRequests) {
   );
 }
 
+test("a pending invite keeps the org this client already uses", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+
+      return new URL(request.url).pathname === "/v1/auth/accept-invite"
+        ? Response.json(
+            {
+              email: "user@example.com",
+              orgId: "team-a",
+              pending: true,
+              role: "member",
+            },
+            { status: 202 }
+          )
+        : Response.json({ profiles: [] });
+    },
+    orgId: "original",
+  });
+
+  await client.acceptOrgInvite({ token: "invite" });
+  await client.listProfiles();
+  expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe("original");
+});
+
 test.each(["switch", "reset"] as const)(
   "a late identity read cannot replace client scope after %s",
   async (mode) => {

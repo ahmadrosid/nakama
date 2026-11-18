@@ -14,7 +14,6 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
   const context: MeetExecutionContext = {
     actionKey: "configure",
     actor: { id: "a", role: "admin" },
-    captureUrl: async () => "ws://localhost/capture",
     createCapture: () => ({ token: "test", url: "ws://localhost/capture" }),
     dataDir: dir,
     openaiKey: () => "secret-api-key",
@@ -435,7 +434,6 @@ test("uploads and imports use the chosen provider; live calls still need OpenAI"
   const context: MeetExecutionContext = {
     actionKey: "meetings",
     actor: { id: "a", role: "admin" },
-    captureUrl: async () => "ws://localhost/capture",
     composio: {
       downloadMeetRecording: mock(async () => {
         throw new Error("Unexpected download");

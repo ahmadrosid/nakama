@@ -13,6 +13,8 @@ import { useMemo, useState } from "react";
 import {
   isProviderTypeAlreadyConfigured,
   PROVIDER_OPTIONS,
+  type ProviderOption,
+  providerOptionKey,
   type SelectedProvider,
 } from "@/lib/models";
 
@@ -21,8 +23,9 @@ interface ProviderSelectProps {
   configuredTypes?: ReadonlySet<string>;
   disabled?: boolean;
   id?: string;
-  onValueChange: (value: SelectedProvider) => void;
-  value: SelectedProvider;
+  onValueChange: (value: SelectedProvider, option?: ProviderOption) => void;
+  /** The chosen entry's key: its preset, or else its provider type. */
+  value: string;
 }
 
 export function ProviderSelect({
@@ -38,7 +41,8 @@ export function ProviderSelect({
 
   const selectedLabel = useMemo(
     () =>
-      PROVIDER_OPTIONS.find((option) => option.id === value)?.label ?? value,
+      PROVIDER_OPTIONS.find((option) => providerOptionKey(option) === value)
+        ?.label ?? value,
     [value]
   );
 
@@ -52,7 +56,7 @@ export function ProviderSelect({
     const alreadyAdded: typeof PROVIDER_OPTIONS = [];
 
     for (const option of PROVIDER_OPTIONS) {
-      if (isProviderTypeAlreadyConfigured(option.id, configured)) {
+      if (isProviderTypeAlreadyConfigured(option.id, configured, option)) {
         alreadyAdded.push(option);
 
         continue;
@@ -115,23 +119,29 @@ export function ProviderSelect({
                 {group.options.map((option) => {
                   const alreadyConfigured = isProviderTypeAlreadyConfigured(
                     option.id,
-                    configured
+                    configured,
+                    option
                   );
 
                   return (
                     <CommandItem
-                      data-checked={value === option.id ? true : undefined}
+                      data-checked={
+                        value === providerOptionKey(option) ? true : undefined
+                      }
                       disabled={alreadyConfigured}
-                      key={option.id}
+                      key={providerOptionKey(option)}
                       onSelect={() => {
                         if (alreadyConfigured) {
                           return;
                         }
 
-                        onValueChange(option.id);
+                        onValueChange(option.id, option);
                         setOpen(false);
                       }}
-                      value={`${option.label} ${option.id}`}
+                      // A preset stays findable by its provider type (AI Club by "netra").
+                      value={[option.label, option.preset, option.id]
+                        .filter(Boolean)
+                        .join(" ")}
                     >
                       {option.label}
                     </CommandItem>

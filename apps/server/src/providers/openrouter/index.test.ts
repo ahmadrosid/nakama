@@ -564,4 +564,51 @@ describe("createOpenRouterProvider", () => {
       },
     ]);
   });
+
+  test("drops empty enum members from tool schemas", async () => {
+    let sentBody: ProviderJsonRecord = {};
+
+    const provider = createOpenRouterProvider({
+      apiKey: "sk-or-v1-test",
+      fetcher: async (input, init) => {
+        const request =
+          input instanceof Request ? input : new Request(input, init);
+
+        sentBody = parseJsonRecord(await request.text());
+
+        return new Response(chatCompletionResponse("Answer"), {
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    });
+
+    await provider.generateChat({
+      messages: [{ content: "Plan", role: "user" }],
+      system: "You are helpful.",
+      tools: [
+        {
+          description: "Plan a trial",
+          name: "plan_trial",
+          parameters: {
+            properties: { mode: { enum: ["", "auto"], type: "string" } },
+            type: "object",
+          },
+        },
+      ],
+    });
+
+    expect(sentBody.tools).toEqual([
+      {
+        function: {
+          description: "Plan a trial",
+          name: "plan_trial",
+          parameters: {
+            properties: { mode: { enum: ["auto"], type: "string" } },
+            type: "object",
+          },
+        },
+        type: "function",
+      },
+    ]);
+  });
 });

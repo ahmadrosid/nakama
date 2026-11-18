@@ -66,7 +66,8 @@ export class SessionTitleService {
       const provider = await createProviderForProfile(
         this.db,
         session.profileId,
-        this.getUserConfig()
+        this.getUserConfig(),
+        { sessionId }
       );
 
       if (!provider) {

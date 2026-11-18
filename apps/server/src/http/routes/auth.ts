@@ -411,6 +411,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     .object({
       email: z.string(),
       orgId: z.string(),
+      pending: z.boolean(),
       role: z.enum(["admin", "member"]),
     })
     .openapi("AcceptOrgInviteResponse");
@@ -554,6 +555,10 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       200: {
         content: { "application/json": { schema: acceptInviteResponseSchema } },
         description: "Invite accepted",
+      },
+      202: {
+        content: { "application/json": { schema: acceptInviteResponseSchema } },
+        description: "Invite accepted, waiting for an org admin to approve",
       },
       400: {
         content: { "application/json": { schema: errorSchema } },
@@ -1653,10 +1658,10 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
-    const body = await readJson<RequestPasswordResetRequest>(
-      c.req.raw,
-      requestPasswordResetSchema
-    );
+    // Like every other guarded auth route, refuse a non-JSON body before any
+    // lookup, so a cross-site text/plain form cannot make this route read a
+    // session or a local token.
+    assertJsonRequest(c.req.raw);
 
     const auth = await authenticateRequest(
       c.req.raw,
@@ -1664,17 +1669,22 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       databaseAdapter
     );
 
+    // Public routes skip the auth middleware. Keep a signed-in caller before
+    // the remaining guards so a refused request still names who made it.
+    if (auth) {
+      c.set("auth", auth);
+    }
+
     const allowManualToken = auth?.isPlatformAdmin === true;
 
     if (allowManualToken && auth) {
       assertBrowserCsrf(c.req.raw, auth, authService);
     }
 
-    // Public routes skip the auth middleware. Keep a signed-in caller so the
-    // audit row names who asked for the reset.
-    if (auth) {
-      c.set("auth", auth);
-    }
+    const body = await readJson<RequestPasswordResetRequest>(
+      c.req.raw,
+      requestPasswordResetSchema
+    );
 
     return json<RequestPasswordResetResponse>(
       await orgService.requestPasswordReset(body.email, allowManualToken)
@@ -1716,6 +1726,19 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const accepted = await orgService.acceptInvite(body);
 
+    // No session until an admin approves: the org would answer 403 anyway
+    if (accepted.pending) {
+      return json<AcceptOrgInviteResponse>(
+        {
+          email: accepted.user.email,
+          orgId: accepted.orgId,
+          pending: true,
+          role: accepted.role,
+        },
+        202
+      );
+    }
+
     const response = await createBrowserSessionResponse(
       authService,
       databaseAdapter,
@@ -1727,6 +1750,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       {
         email: accepted.user.email,
         orgId: accepted.orgId,
+        pending: false,
         role: accepted.role,
       },
       200,

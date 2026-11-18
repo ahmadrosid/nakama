@@ -52,7 +52,12 @@ export function DataPortabilityPanel() {
 
   const [error, setError] = useState<string | null>(null);
   const backupStatus = useBackupStatusQuery();
-  const lastBackupError = backupStatus.data?.lastError;
+
+  // A failed refetch keeps old data; do not show that next to "Cannot check"
+  const lastBackupError = backupStatus.isError
+    ? null
+    : backupStatus.data?.lastError;
+
   const [exporting, setExporting] = useState(false);
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();

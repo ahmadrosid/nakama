@@ -10,6 +10,7 @@ import {
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import {
   getWhatsAppConfigDir,
+  regenerateWhatsAppPairingCode,
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
 } from "@nakama/core/whatsapp-config";
@@ -428,6 +429,54 @@ describe("createChatHandler", () => {
       await handleMessage({ jid: pairJid, text: "hello agent" });
       expect(calls.createSession).toBe(1);
       expect(calls.sendStream).toBe(1);
+    });
+  });
+
+  test("a new pairing replaces the paired phone; the linked number and allowed phones still chat", async () => {
+    await withTempHome(async (homeDir) => {
+      const linkedNumber = { id: "628100000000@s.whatsapp.net" };
+      const firstPhone = "6281111111111@s.whatsapp.net";
+      const secondPhone = "6282222222222@s.whatsapp.net";
+
+      // After the QR link, the agent's own number is the paired JID.
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: linkedNumber.id,
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
+        phoneNumber: "628100000000",
+      });
+
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
+        profiles: defaultProfiles(),
+      });
+
+      await handleMessage({ jid: firstPhone, text: PAIRING_CODE });
+      const { pairingCode } = await regenerateWhatsAppPairingCode();
+      await handleMessage({ jid: secondPhone, text: pairingCode ?? "" });
+
+      expect(
+        sent.filter((message) => message.text.includes("Linked successfully"))
+      ).toHaveLength(2);
+
+      await handleMessage({ jid: firstPhone, text: "hello from first phone" });
+      expect(calls.sendStream).toBe(0);
+
+      await handleMessage({ jid: secondPhone, text: "hello" });
+      await handleMessage({
+        fromMe: true,
+        jid: linkedNumber.id,
+        me: linkedNumber,
+        text: "hello from the linked number",
+      });
+      expect(calls.sendStream).toBe(2);
+
+      await saveWhatsAppConfig({ allowedPhones: "6281111111111" });
+      await handleMessage({ jid: firstPhone, text: "hello again" });
+      expect(calls.sendStream).toBe(3);
     });
   });
 

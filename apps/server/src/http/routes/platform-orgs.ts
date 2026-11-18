@@ -37,6 +37,7 @@ export function registerPlatformOrgRoutes(
   const updateOrganizationSchema = z
     .object({
       allowedInviteDomains: z.array(z.string()).optional(),
+      memberApprovalRequired: z.boolean().optional(),
       monthlyLlmTokenLimit: z.number().int().min(0).optional(),
       monthlyLlmTurnLimit: z.number().int().min(0).optional(),
       monthlyLlmWarningPercent: z.number().int().min(1).max(99).optional(),

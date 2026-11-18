@@ -1,14 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage, ToolCall } from "@nakama/core";
+import type {
+  ChatMessage,
+  JsonSchema,
+  LlmToolDefinition,
+  ToolCall,
+} from "@nakama/core";
 import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
 import {
   buildProviderHttpError,
+  dropEmptyToolEnumMembers,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   formatHttpErrorBody,
   mergePendingToolCall,
   normalizeThinkingEffort,
   type PendingToolCall,
+  type ProviderJsonRecord,
   parseJsonRecord,
   readRecord,
   readSseEvents,
@@ -261,9 +268,139 @@ describe("buildProviderHttpError", () => {
     expect(error.message).toBe(formatHttpErrorBody("OpenAI", 401, body));
   });
 
-  test("maps a 403 to 400 and every other provider failure to 502", () => {
+  test("maps a 402 or 403 to 400 and every other provider failure to 502", () => {
+    expect(buildProviderHttpError("OpenAI", 402, "").status).toBe(400);
     expect(buildProviderHttpError("OpenAI", 403, "").status).toBe(400);
     expect(buildProviderHttpError("OpenAI", 429, "").status).toBe(502);
     expect(buildProviderHttpError("OpenAI", 500, "").status).toBe(502);
+  });
+
+  test("maps an account refusal sent with another status to 400", () => {
+    const quota = { code: "insufficient_quota", type: "insufficient_quota" };
+    const rateLimit = { code: "rate_limit_exceeded", type: "requests" };
+
+    // Raw HTTP bodies nest the error; OpenAI SDK errors arrive flat.
+    expect(
+      buildProviderHttpError("OpenAI", 429, JSON.stringify({ error: quota }))
+        .status
+    ).toBe(400);
+    expect(
+      buildProviderHttpError("OpenAI", 429, JSON.stringify(quota)).status
+    ).toBe(400);
+    expect(
+      buildProviderHttpError(
+        "OpenAI",
+        429,
+        JSON.stringify({ error: rateLimit })
+      ).status
+    ).toBe(502);
+  });
+});
+
+function toolWith(parameters: ProviderJsonRecord): LlmToolDefinition {
+  // SAFETY: MCP servers publish schemas wider than the core JsonSchema type.
+  return {
+    description: "Plan",
+    name: "plan",
+    parameters: parameters as JsonSchema,
+  };
+}
+
+function sanitizedParameters(
+  parameters: ProviderJsonRecord
+): ProviderJsonRecord {
+  return readRecord(
+    dropEmptyToolEnumMembers([toolWith(parameters)], "Test")?.[0]?.parameters
+  );
+}
+
+describe("dropEmptyToolEnumMembers", () => {
+  test("keeps usable members and drops empty or non-scalar ones", () => {
+    expect(
+      sanitizedParameters({
+        enum: ["", "fast", null, { nested: true }, "slow"],
+        type: "string",
+      })
+    ).toEqual({ enum: ["fast", "slow"], type: "string" });
+  });
+
+  test("drops an enum that has no usable member", () => {
+    expect(sanitizedParameters({ enum: ["", null], type: "string" })).toEqual({
+      type: "string",
+    });
+  });
+
+  test("walks nested properties, items and anyOf", () => {
+    expect(
+      sanitizedParameters({
+        properties: {
+          config: {
+            properties: {
+              graduationStrategy: { enum: [""], type: "string" },
+            },
+            type: "object",
+          },
+          modes: {
+            items: { enum: ["", "fast"], type: "string" },
+            type: "array",
+          },
+          variant: { anyOf: [{ enum: ["", "a"] }, { type: "number" }] },
+        },
+        type: "object",
+      })
+    ).toEqual({
+      properties: {
+        config: {
+          properties: { graduationStrategy: { type: "string" } },
+          type: "object",
+        },
+        modes: {
+          items: { enum: ["fast"], type: "string" },
+          type: "array",
+        },
+        variant: { anyOf: [{ enum: ["a"] }, { type: "number" }] },
+      },
+      type: "object",
+    });
+  });
+
+  test("leaves default, examples and const values as published", () => {
+    const parameters = {
+      default: { enum: ["", "a"] },
+      examples: [{ enum: [""] }],
+      properties: { mode: { const: { enum: [""] }, type: "object" } },
+      type: "object",
+    };
+
+    expect(sanitizedParameters(parameters)).toBe(parameters);
+  });
+
+  test("walks a null-prototype schema", () => {
+    const parameters = Object.assign(Object.create(null), {
+      properties: { mode: { enum: ["", "auto"], type: "string" } },
+      type: "object",
+    });
+
+    expect(sanitizedParameters(parameters)).toEqual({
+      properties: { mode: { enum: ["auto"], type: "string" } },
+      type: "object",
+    });
+  });
+
+  test("returns the same tool when nothing changes", () => {
+    const tool = toolWith({
+      properties: { mode: { enum: ["fast"], type: "string" } },
+      type: "object",
+    });
+
+    expect(dropEmptyToolEnumMembers([tool], "Test")?.[0]).toBe(tool);
+  });
+
+  test("does not mutate the input schema", () => {
+    const parameters = { enum: ["", "fast"], type: "string" };
+
+    sanitizedParameters(parameters);
+
+    expect(parameters).toEqual({ enum: ["", "fast"], type: "string" });
   });
 });
