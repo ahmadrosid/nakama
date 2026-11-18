@@ -112,7 +112,8 @@ function normalizeToolLimit(limit: AutomationToolLimit): AutomationToolLimit {
  */
 export async function scopeToolLimit(
   db: DatabaseAdapter,
-  { orgId, profileId }: Pick<StoredAutomation, "orgId" | "profileId">,
+  orgId: string,
+  profileId: string,
   limit: AutomationToolLimit
 ): Promise<AutomationToolLimit> {
   const clean = normalizeToolLimit(limit);
@@ -142,9 +143,66 @@ export async function scopeToolLimit(
       .map((toolkit) => toolkit.toolkitSlug.toLowerCase())
   );
 
+  // listMcpServersForProfile leaves out a server that is switched off. Keep
+  // one the agent still has, so it works again when it is switched back on.
+  if (clean.mcpServerIds.some((id) => !serverIds.has(id))) {
+    const asked = new Set(clean.mcpServerIds);
+
+    const off = (await db.listMcpServers()).filter(
+      (server) => !server.enabled && asked.has(server.id)
+    );
+
+    await Promise.all(
+      off.map(async ({ id }) => {
+        const profiles = await db.listProfilesForMcpServer(id);
+
+        if (profiles.some((profile) => profile.id === sourceId)) {
+          serverIds.add(id);
+        }
+      })
+    );
+  }
+
   return {
     composioToolkits: clean.composioToolkits.filter((slug) => slugs.has(slug)),
     mcpServerIds: clean.mcpServerIds.filter((id) => serverIds.has(id)),
     toolIds: clean.toolIds.filter((id) => toolIds.has(id)),
+  };
+}
+
+/**
+ * The limit an update stores, and whether the caller changed it. A stored
+ * limit moves to a new agent scoped to that agent. A resend of the stored
+ * limit that only loses stale ids is not a change by the caller.
+ */
+export async function updatedToolLimit(
+  db: DatabaseAdapter,
+  orgId: string,
+  profileId: string,
+  existing: StoredAutomation,
+  input: AutomationToolLimit | null | undefined
+): Promise<{ changed: boolean; toolLimit?: AutomationToolLimit }> {
+  const stored = existing.toolLimit;
+
+  if (input === null) {
+    return { changed: Boolean(stored) };
+  }
+
+  const requested = input ?? stored;
+
+  if (!requested || (!input && profileId === existing.profileId)) {
+    return { changed: false, toolLimit: stored };
+  }
+
+  const toolLimit = await scopeToolLimit(db, orgId, profileId, requested);
+  const same = (limit: AutomationToolLimit) =>
+    JSON.stringify(limit) === JSON.stringify(stored);
+
+  return {
+    changed:
+      Boolean(input) &&
+      !same(toolLimit) &&
+      !same(normalizeToolLimit(requested)),
+    toolLimit,
   };
 }

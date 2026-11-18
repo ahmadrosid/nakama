@@ -32,6 +32,7 @@ import {
   automationBelongsToOrg,
   scopeToolLimit,
   toRunRecord,
+  updatedToolLimit,
   webhookSignatureHex,
   webhookSignatureMatches,
 } from "./automation-records";
@@ -188,7 +189,8 @@ export class AutomationService {
     if (input.toolLimit) {
       automation.toolLimit = await scopeToolLimit(
         this.db,
-        automation,
+        orgId,
+        profileId,
         input.toolLimit
       );
     }
@@ -283,17 +285,13 @@ export class AutomationService {
       profileId,
     });
 
-    let toolLimit = existing.toolLimit;
-
-    if (input.toolLimit === null) {
-      toolLimit = undefined;
-    } else if (input.toolLimit !== undefined) {
-      toolLimit = await scopeToolLimit(
-        this.db,
-        { orgId, profileId },
-        input.toolLimit
-      );
-    }
+    const { changed: limitChanged, toolLimit } = await updatedToolLimit(
+      this.db,
+      orgId,
+      profileId,
+      existing,
+      input.toolLimit
+    );
 
     const prompt = input.prompt?.trim() || existing.prompt;
 
@@ -304,7 +302,7 @@ export class AutomationService {
       prompt !== existing.prompt ||
       profileId !== existing.profileId ||
       JSON.stringify(delivery) !== JSON.stringify(existing.delivery) ||
-      JSON.stringify(toolLimit) !== JSON.stringify(existing.toolLimit) ||
+      limitChanged ||
       (trigger.type === "webhook" && existing.trigger.type !== "webhook");
 
     const updated: StoredAutomation = {
