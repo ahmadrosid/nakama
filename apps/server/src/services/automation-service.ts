@@ -455,20 +455,22 @@ export class AutomationService {
   }
 
   async delete(id: string, orgId: string): Promise<boolean> {
-    const existing = await this.get(id, orgId);
+    return this.updateLock.withLock(id, async () => {
+      const existing = await this.get(id, orgId);
 
-    if (!existing) {
-      return false;
-    }
+      if (!existing) {
+        return false;
+      }
 
-    const deleted = await this.store.delete(id);
+      const deleted = await this.store.delete(id);
 
-    // The secret row goes with the automation (FK cascade).
-    if (deleted) {
-      await this.notifyChange();
-    }
+      // The secret row goes with the automation (FK cascade).
+      if (deleted) {
+        await this.notifyChange();
+      }
 
-    return deleted;
+      return deleted;
+    });
   }
 
   async listRuns(
