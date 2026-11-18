@@ -195,6 +195,7 @@ export async function updatedToolLimit(
   }
 
   const toolLimit = await scopeToolLimit(db, orgId, profileId, requested);
+
   const same = (limit: AutomationToolLimit) =>
     JSON.stringify(limit) === JSON.stringify(stored);
 
