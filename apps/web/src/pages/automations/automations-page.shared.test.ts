@@ -6,6 +6,7 @@ import {
   previewAutomationSchedule,
   readSchedulePreset,
   schedulePresetTrigger,
+  summarizeAutomationListMeta,
 } from "./automations-page.shared";
 
 test("run conversations retain tools and text and only animate a running run", () => {
@@ -82,6 +83,45 @@ test("daily cron reads as plain words and other triggers stay readable", () => {
     describeTrigger({ cron: "30 */3 * * *", type: "schedule" }).label
   ).toBe("Every 3 hours at :30");
   expect(describeTrigger({ type: "manual" }).label).toBe("Manual only");
+});
+
+test("a webhook trigger is not treated as a schedule", () => {
+  const trigger = { type: "webhook" } as const;
+
+  expect(previewAutomationSchedule(trigger, "UTC")).toBeNull();
+  expect(schedulePresetTrigger("daily", trigger)).toEqual({
+    cron: "0 7 * * *",
+    timezone: undefined,
+    type: "schedule",
+  });
+  expect(
+    schedulePresetTrigger("webhook", {
+      cron: "0 7 * * *",
+      timezone: "Asia/Jakarta",
+      type: "schedule",
+    })
+  ).toEqual({ type: "webhook" });
+
+  const automation = {
+    createdAt: "2026-10-01T00:00:00Z",
+    description: "",
+    enabled: true,
+    id: "automation",
+    name: "Task",
+    profileId: "agent",
+    prompt: "Run task",
+    steps: [],
+    trigger,
+    updatedAt: "2026-10-01T00:00:00Z",
+    version: 1,
+  };
+
+  expect(summarizeAutomationListMeta(automation)).not.toBe(
+    summarizeAutomationListMeta({
+      ...automation,
+      trigger: { cron: "0 7 * * *", type: "schedule" },
+    })
+  );
 });
 
 test("schedule presets recognize supported frequencies without changing custom schedules", () => {

@@ -7,7 +7,7 @@ import {
   installErrorHandlers,
   installErrorTrackingSink,
 } from "@nakama/core";
-import type { Server } from "bun";
+import type { Server, WebSocketHandler } from "bun";
 import { ensureProcessPath } from "./lib/ensure-process-path";
 import { createPluginAgentHost } from "./services/plugin-agent-host";
 
@@ -44,7 +44,9 @@ import {
   getActiveProviderInstance,
   getUserConfigDir,
   loadConfig,
+  log,
   NAKAMA_API_VERSION,
+  resolveWebPublicUrlConfig,
   setManagedSecretResolver,
   setManagedSecretWriter,
   writeRuntimeServerUrl,
@@ -70,8 +72,12 @@ import { AuthService } from "./services/auth-service";
 import { AutomationDeliveryService } from "./services/automation-delivery-service";
 import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
-import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
+import {
+  isLoopbackComposioCallbackBaseUrl,
+  resolveComposioCallbackBaseUrl,
+} from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
+import { ComputerAuthService } from "./services/computer-auth";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { setToolSecrets } from "./services/custom-tool-shared";
 import {
@@ -81,7 +87,10 @@ import {
   retireAppUserData,
 } from "./services/data-portability";
 import { openaiProviderKey } from "./services/google-meet/actions";
-import { GoogleMeetService } from "./services/google-meet/service";
+import {
+  type CaptureSocketData,
+  GoogleMeetService,
+} from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { decodeSecretsKey, ManagedSecrets } from "./services/managed-secrets";
 import { McpClientManager } from "./services/mcp-client-manager";
@@ -332,6 +341,7 @@ const automationService = new AutomationService(database.adapter, {
   canSendEmail: (profileId, _orgId) =>
     hasAutomationEmailDeliveryPath(database.adapter, profileId),
   getUserTimezone: () => agent.getUserTimezone(),
+  secrets: managedSecrets,
 });
 
 const automationDeliveryService = new AutomationDeliveryService(
@@ -579,6 +589,11 @@ const app = createHonoApp({
   authService,
   automationService,
   composioService,
+  computerAuth: new ComputerAuthService(
+    database.adapter,
+    Date.now,
+    managedSecrets
+  ),
   databaseAdapter: database.adapter,
   googleMeetService,
   mcpService,
@@ -612,10 +627,11 @@ const app = createHonoApp({
 const server = startServer({
   canFallbackToNextPort,
   // The limiter needs the peer address, and Bun only exposes it on `server`.
-  fetch: (request: Request, server: Server<unknown>) =>
+  fetch: (request: Request, server: Server<CaptureSocketData>) =>
     app.fetch(request, { server }),
   host,
   preferredPort: requestedPort,
+  websocket: googleMeetService.captureSocket,
 });
 
 const serverUrl = writeRuntimeServerUrl(
@@ -640,6 +656,39 @@ if (server.port !== requestedPort) {
 }
 
 console.log(`Nakama server listening on ${serverUrl}`);
+
+const publicUrlConfig = resolveWebPublicUrlConfig();
+
+const parsedPublicUrl =
+  publicUrlConfig.url && URL.canParse(publicUrlConfig.url)
+    ? new URL(publicUrlConfig.url)
+    : null;
+
+const publicUrlLogFields = {
+  publicWebUrl:
+    parsedPublicUrl && ["http:", "https:"].includes(parsedPublicUrl.protocol)
+      ? parsedPublicUrl.origin + parsedPublicUrl.pathname
+      : "not configured",
+  source: publicUrlConfig.source,
+  trustProxy: process.env.NAKAMA_TRUST_PROXY === "true",
+};
+
+log("info", "Public web URL", publicUrlLogFields);
+
+if (
+  process.env.NAKAMA_DESKTOP !== "1" &&
+  parsedPublicUrl?.protocol === "http:" &&
+  isLoopbackComposioCallbackBaseUrl(parsedPublicUrl.toString())
+) {
+  log(
+    "warn",
+    "Public web URL points to loopback. Set a reachable NAKAMA_WEB_PUBLIC_URL or update the saved web public URL, then restart Nakama.",
+    {
+      ...publicUrlLogFields,
+      code: "loopback_public_url",
+    }
+  );
+}
 
 console.log(`Nakama database ready at ${config.databaseUrl}`);
 
@@ -733,9 +782,11 @@ function startServer(options: {
   canFallbackToNextPort: boolean;
   fetch: (
     request: Request,
-    server: Server<unknown>
+    server: Server<CaptureSocketData>
   ) => Response | Promise<Response>;
-}): ReturnType<typeof Bun.serve> {
+  /** The only socket today is Meet capture, upgraded at `GET /v1/meet/capture`. */
+  websocket: WebSocketHandler<CaptureSocketData>;
+}): Server<CaptureSocketData> {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65_535)
     : options.preferredPort;
@@ -744,8 +795,8 @@ function startServer(options: {
 
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
     try {
-      return Bun.serve({
-        async fetch(request, server: Server<unknown>) {
+      return Bun.serve<CaptureSocketData>({
+        async fetch(request, server) {
           disableBunIdleTimeoutForLongHeldRequest(request, server);
           const response = await options.fetch(request, server);
           disableBunIdleTimeoutForSse(request, response, server);
@@ -759,6 +810,7 @@ function startServer(options: {
           getDataImportLimits().archiveBytes + 64 * 1024 * 1024
         ),
         port,
+        websocket: options.websocket,
       });
     } catch (error) {
       if (
@@ -824,7 +876,7 @@ function killLeftoverPm2Daemon(pidPath: string): void {
 }
 
 function registerRuntimeCleanup(
-  server: ReturnType<typeof Bun.serve>,
+  server: Server<CaptureSocketData>,
   serverUrl: string,
   database: Database,
   mcpClientManager: McpClientManager,

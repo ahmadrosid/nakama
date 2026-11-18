@@ -1,5 +1,6 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { RequestIdVariables } from "hono/request-id";
+import type { CaptureSocketData } from "../services/google-meet/service";
 import type { RequestAuthContext } from "./shared";
 
 /**
@@ -8,6 +9,7 @@ import type { RequestAuthContext } from "./shared";
  */
 type RequestAddressSource = {
   requestIP?: (request: Request) => { address: string } | null;
+  upgrade?: (request: Request, options: { data: CaptureSocketData }) => boolean;
 };
 
 export type AppEnv = {

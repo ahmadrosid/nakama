@@ -37,6 +37,8 @@ const AUTH_PATHS = new Set([
   "/v1/auth/passkey/login/options",
   "/v1/auth/mfa/totp/verify",
   "/v1/auth/mfa/passkey/verify",
+  // Public, and each call holds a pending pairing slot.
+  "/v1/meet/extension/pair",
 ]);
 
 export interface RateLimitOptions {

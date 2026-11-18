@@ -1,6 +1,10 @@
 import { ALL_MEMBERS_ID, type GroupRoster } from "@nakama/core/agent-groups";
 import type { DocumentAttachment } from "@nakama/core/contract";
-import { MAX_DOCUMENT_BYTES, parseDataUrl } from "@nakama/core/message-content";
+import {
+  MAX_DOCUMENT_BYTES,
+  parseDataUrl,
+  parseDocumentDataUrl,
+} from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
@@ -24,6 +28,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import type { FileUIPart } from "@/lib/ai-ui-types";
 import { findActiveSkillSlashRange } from "@/lib/chat-composer-skills";
 import {
   ALL_ATTACHMENT_ACCEPT,
@@ -47,6 +52,12 @@ const FULL_TEXTAREA_CLASS =
 // One row: the field on the left, stop and send on the right.
 const GROUP_SHELL_CLASS =
   "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-row [&_[data-slot=input-group]]:items-center [&_[data-slot=input-group]]:gap-2 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:py-2 [&_[data-slot=input-group]]:pr-2 [&_[data-slot=input-group]]:pl-4 [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]";
+
+// The server saves a ZIP's files in the group's shared folder.
+const GROUP_ATTACHMENT_ACCEPT = `${ALL_ATTACHMENT_ACCEPT},.zip,application/zip,application/x-zip-compressed`;
+
+const isZipFilePart = (file: FileUIPart) =>
+  Boolean(file.filename?.trim().toLowerCase().endsWith(".zip"));
 
 const composerSubmitButtonClassName = cn(
   composerHitTargetClass,
@@ -192,7 +203,7 @@ function GroupComposerForm({
       ) : null}
       <GroupAttachmentSummary />
       <PromptInput
-        accept={allowDocuments ? ALL_ATTACHMENT_ACCEPT : undefined}
+        accept={allowDocuments ? GROUP_ATTACHMENT_ACCEPT : undefined}
         className={cn(
           GROUP_SHELL_CLASS,
           attachments.files.length > 0 &&
@@ -208,7 +219,7 @@ function GroupComposerForm({
         onSubmit={({ files, text }) => {
           const content = text.trim();
 
-          // Images go with the documents; the server saves them for the agents.
+          // Images and ZIPs go with the documents; the server saves them for the agents.
           const documents = [
             ...filePartsToDocumentAttachments(files),
             ...files.filter(isImageFilePart).flatMap((file) => {
@@ -217,6 +228,11 @@ function GroupComposerForm({
               return image
                 ? [{ ...image, filename: file.filename ?? "image.png" }]
                 : [];
+            }),
+            ...files.filter(isZipFilePart).flatMap((file) => {
+              const zip = parseDocumentDataUrl(file.url, file.filename ?? "");
+
+              return zip ? [{ ...zip, mediaType: "application/zip" }] : [];
             }),
           ];
 

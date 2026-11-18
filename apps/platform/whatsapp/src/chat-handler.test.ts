@@ -10,12 +10,14 @@ import {
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import {
   getWhatsAppConfigDir,
+  regenerateWhatsAppPairingCode,
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
 } from "@nakama/core/whatsapp-config";
 import * as baileys from "@whiskeysockets/baileys";
 import { WhatsAppAuthStore } from "./auth-store";
 import { createChatHandler, resetChatLocksForTests } from "./chat-handler";
+import { resetWhatsAppBotMessagesForTests } from "./group-message";
 import { resetWhatsAppOutboundForTests } from "./inbound-message";
 import {
   createMockClient,
@@ -84,6 +86,8 @@ function createMockSocket() {
         jid,
         text: "text" in content ? (content.text ?? "") : "",
       });
+
+      return { key: { id: `BOT_MSG_${sent.length}` } };
     },
     sendPresenceUpdate: async () => {},
   };
@@ -136,6 +140,7 @@ beforeEach(() => {
   resetActiveStreamsForTests();
   resetChatLocksForTests();
   resetWhatsAppOutboundForTests();
+  resetWhatsAppBotMessagesForTests();
 });
 
 describe("createChatHandler", () => {
@@ -424,6 +429,54 @@ describe("createChatHandler", () => {
       await handleMessage({ jid: pairJid, text: "hello agent" });
       expect(calls.createSession).toBe(1);
       expect(calls.sendStream).toBe(1);
+    });
+  });
+
+  test("a new pairing replaces the paired phone; the linked number and allowed phones still chat", async () => {
+    await withTempHome(async (homeDir) => {
+      const linkedNumber = { id: "628100000000@s.whatsapp.net" };
+      const firstPhone = "6281111111111@s.whatsapp.net";
+      const secondPhone = "6282222222222@s.whatsapp.net";
+
+      // After the QR link, the agent's own number is the paired JID.
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: linkedNumber.id,
+        pairingCode: PAIRING_CODE,
+        pairingCodeExpiresAt: LIVE_CODE_EXPIRY,
+        phoneNumber: "628100000000",
+      });
+
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
+        profiles: defaultProfiles(),
+      });
+
+      await handleMessage({ jid: firstPhone, text: PAIRING_CODE });
+      const { pairingCode } = await regenerateWhatsAppPairingCode();
+      await handleMessage({ jid: secondPhone, text: pairingCode ?? "" });
+
+      expect(
+        sent.filter((message) => message.text.includes("Linked successfully"))
+      ).toHaveLength(2);
+
+      await handleMessage({ jid: firstPhone, text: "hello from first phone" });
+      expect(calls.sendStream).toBe(0);
+
+      await handleMessage({ jid: secondPhone, text: "hello" });
+      await handleMessage({
+        fromMe: true,
+        jid: linkedNumber.id,
+        me: linkedNumber,
+        text: "hello from the linked number",
+      });
+      expect(calls.sendStream).toBe(2);
+
+      await saveWhatsAppConfig({ allowedPhones: "6281111111111" });
+      await handleMessage({ jid: firstPhone, text: "hello again" });
+      expect(calls.sendStream).toBe(3);
     });
   });
 
@@ -781,6 +834,7 @@ function groupInbound(options: {
   senderJid?: string;
   senderJids?: string[];
   mentionedJids?: string[];
+  quotedMessageId?: string | null;
   quotedParticipant?: string | null;
   quotedText?: string | null;
   fromMe?: boolean;
@@ -793,6 +847,7 @@ function groupInbound(options: {
     jid: GROUP_JID,
     me: BOT_ME,
     mentionedJids: options.mentionedJids ?? [],
+    quotedMessageId: options.quotedMessageId ?? null,
     quotedParticipant: options.quotedParticipant ?? null,
     quotedText: options.quotedText ?? null,
     senderJid,
@@ -905,6 +960,51 @@ describe("createChatHandler group chats", () => {
 
       expect(calls.sendStream).toBe(1);
       expect(calls.createSession).toBe(1);
+    });
+  });
+
+  test("group reply triggers the agent only when it quotes a Nakama message", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
+
+      // The linked number is the owner's own number: a reply to a message the
+      // owner typed by hand quotes the same address as a reply to Nakama.
+      await handleMessage(
+        groupInbound({
+          fromMe: true,
+          quotedMessageId: "OWNER_TYPED_MSG",
+          quotedParticipant: BOT_ME.id,
+          text: "dapat dari reddit",
+        })
+      );
+
+      expect(calls.sendStream).toBe(0);
+      expect(calls.createSession).toBe(0);
+
+      await handleMessage(
+        groupInbound({
+          mentionedJids: [BOT_ME.id],
+          text: "@Nakama hello",
+        })
+      );
+
+      expect(calls.sendStream).toBe(1);
+
+      await handleMessage(
+        groupInbound({
+          quotedMessageId: "BOT_MSG_1",
+          quotedParticipant: BOT_ME.lid,
+          text: "follow up",
+        })
+      );
+
+      expect(calls.sendStream).toBe(2);
     });
   });
 

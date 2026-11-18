@@ -25,6 +25,7 @@ export class AutomationScheduler {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly dispatchedRunAt = new Set<string>();
   private started = false;
+  private generation = 0;
 
   constructor(
     private readonly delegate: AutomationSchedulerDelegate,
@@ -41,6 +42,8 @@ export class AutomationScheduler {
   }
 
   stop(): void {
+    this.generation += 1;
+
     for (const job of this.jobs.values()) {
       job.stop();
     }
@@ -58,8 +61,14 @@ export class AutomationScheduler {
   async reload(): Promise<void> {
     // Load and build before clearing anything. A failed list call or one bad
     // cron expression must leave the last good schedules running.
+    const generation = this.generation;
     const automations = await this.delegate.listScheduledAutomations();
     const defaultTimezone = await this.delegate.getDefaultTimezone();
+
+    if (!this.started || generation !== this.generation) {
+      return;
+    }
+
     const jobs = new Map<string, Cron>();
 
     for (const automation of automations) {

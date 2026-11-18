@@ -9,8 +9,17 @@ import type {
   WireApi,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
-import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  defaultDiscoveryBaseUrl,
+  isDiscoveryModelProvider,
+} from "@nakama/core/discovery-providers";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+} from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
@@ -22,8 +31,10 @@ import { useCatalogModelRows } from "@/hooks/use-catalog-model-rows";
 import { formatError } from "@/lib/client";
 import {
   buildCreateProviderRequest,
+  configuredProviderOptionKeys,
   defaultModelForProvider,
   defaultOllamaSetupBaseUrl,
+  defaultProviderDisplayName,
   filterModelsByProvider,
   firstAvailableProviderOption,
   getModelDisplayName,
@@ -32,6 +43,7 @@ import {
   modelsFromCustomRows,
   modelsFromOpenRouterRows,
   modelsFromShortlistRows,
+  type ProviderOption,
   resolveOpenRouterSetupModel,
   type SelectedProvider,
   validateApiKeyForProvider,
@@ -43,6 +55,8 @@ import {
 } from "@/lib/models";
 
 interface UseProviderSetupFormOptions {
+  /** The provider the form opens on. */
+  initialProvider?: SelectedProvider;
   onSuccess?: (result: CreateProviderResponse) => void;
 }
 
@@ -65,24 +79,23 @@ export function useProviderSetupForm(
   const catalog =
     catalogResponse?.catalog ?? catalogResponse?.models ?? EMPTY_CATALOG;
 
-  const configuredTypes = useMemo(() => {
-    const types = new Set<string>();
+  const configuredTypes = useMemo(
+    () => configuredProviderOptionKeys(providersResponse?.providers),
+    [providersResponse?.providers]
+  );
 
-    for (const provider of providersResponse?.providers ?? []) {
-      types.add(provider.type);
-    }
+  const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>(
+    options.initialProvider ?? "openai"
+  );
 
-    return types;
-  }, [providersResponse?.providers]);
-
-  const [selectedProvider, setSelectedProvider] =
-    useState<SelectedProvider>("openai");
+  // The picker entry: tells a preset (AI Club) from its provider type.
+  const [selectedOption, setSelectedOption] = useState<ProviderOption>();
 
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyTouched, setApiKeyTouched] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("");
+  const [pickedModel, setSelectedModel] = useState("");
   const [openRouterModels, setOpenRouterModels] = useState<ModelListRow[]>([]);
 
   const [openRouterRouting, setOpenRouterRouting] =
@@ -124,29 +137,30 @@ export function useProviderSetupForm(
     }
   }, [catalogQueryError]);
 
-  useEffect(() => {
-    setSelectedProvider((current) => {
-      if (!isProviderTypeAlreadyConfigured(current, configuredTypes)) {
-        return current;
-      }
+  // A taken type drops its preset and the name that came with it.
+  const leaveTakenType = useEffectEvent((taken: ReadonlySet<string>) => {
+    if (
+      isProviderTypeAlreadyConfigured(selectedProvider, taken, selectedOption)
+    ) {
+      // A taken preset leaves its type free: do not stay on it.
+      setSelectedProvider(firstAvailableProviderOption(taken));
+      setSelectedOption(undefined);
+      setDisplayName("");
+    }
+  });
 
-      return firstAvailableProviderOption(configuredTypes, current);
-    });
-  }, [configuredTypes]);
+  useEffect(() => leaveTakenType(configuredTypes), [configuredTypes]);
 
   const filteredModels = useMemo(() => {
+    // These providers have no catalog: the user browses or types the list.
     if (
-      selectedProvider === "openai_compatible" ||
-      selectedProvider === "netra" ||
+      isDiscoveryModelProvider(selectedProvider) ||
       selectedProvider === "ollama"
     ) {
-      return modelsFromCustomRows(customModels).map((model) =>
-        selectedProvider === "ollama"
-          ? { ...model, provider: "ollama" as const }
-          : selectedProvider === "netra"
-            ? { ...model, provider: "netra" as const }
-            : model
-      );
+      return modelsFromCustomRows(customModels).map((model) => ({
+        ...model,
+        provider: selectedProvider,
+      }));
     }
 
     if (selectedProvider === "openrouter") {
@@ -187,21 +201,13 @@ export function useProviderSetupForm(
     usesCatalogList,
   } = useCatalogModelRows(selectedProvider, filteredModels, setModelsError);
 
-  useEffect(() => {
-    if (filteredModels.length === 0) {
-      setSelectedModel("");
-
-      return;
-    }
-
-    setSelectedModel((current) => {
-      if (current && filteredModels.some((model) => model.id === current)) {
-        return current;
-      }
-
-      return defaultModelForProvider(filteredModels, selectedProvider);
-    });
-  }, [selectedProvider, filteredModels]);
+  // The picked model while the list has it, else the provider's default.
+  const selectedModel =
+    filteredModels.length === 0
+      ? ""
+      : pickedModel && filteredModels.some((model) => model.id === pickedModel)
+        ? pickedModel
+        : defaultModelForProvider(filteredModels, selectedProvider);
 
   const { keyCheck, runKeyCheck } = useApiKeyCheck(setApiKeyError);
 
@@ -258,12 +264,13 @@ export function useProviderSetupForm(
   );
 
   const handleProviderSelect = useCallback(
-    (provider: SelectedProvider) => {
-      if (isProviderTypeAlreadyConfigured(provider, configuredTypes)) {
+    (provider: SelectedProvider, option?: ProviderOption) => {
+      if (isProviderTypeAlreadyConfigured(provider, configuredTypes, option)) {
         return;
       }
 
       setSelectedProvider(provider);
+      setSelectedOption(option);
       // The last provider's model never fits the new one.
       setSelectedModel("");
       setFormError(null);
@@ -285,7 +292,11 @@ export function useProviderSetupForm(
 
       if (provider === "netra") {
         setBaseUrl(defaultDiscoveryBaseUrl("netra") ?? "");
-        setDisplayName("Netra Runtime");
+        // A preset saves under its own name: AI Club is Netra under AI Club's label.
+        setDisplayName(defaultProviderDisplayName(provider, option));
+      }
+
+      if (isDiscoveryModelProvider(provider)) {
         setCustomModels([]);
       }
 
@@ -309,7 +320,6 @@ export function useProviderSetupForm(
 
       if (provider === "openai_compatible") {
         setBaseUrl("");
-        setCustomModels([]);
       }
 
       setXaiOAuth(null);
@@ -443,8 +453,7 @@ export function useProviderSetupForm(
             : null;
 
       const nextModelsError =
-        selectedProvider === "openai_compatible" ||
-        selectedProvider === "netra" ||
+        isDiscoveryModelProvider(selectedProvider) ||
         selectedProvider === "ollama"
           ? validateCustomModelsInput(customModels)
           : usesCatalogList && catalogRows
@@ -503,7 +512,13 @@ export function useProviderSetupForm(
         return;
       }
 
-      if (isProviderTypeAlreadyConfigured(selectedProvider, configuredTypes)) {
+      if (
+        isProviderTypeAlreadyConfigured(
+          selectedProvider,
+          configuredTypes,
+          selectedOption
+        )
+      ) {
         setFormError("This provider is already added.");
 
         return;
@@ -526,7 +541,8 @@ export function useProviderSetupForm(
           ? resolveOpenRouterSetupModel(openRouterModels, selectedModel)
           : isShortlistCapabilityProvider(selectedProvider)
             ? resolveOpenRouterSetupModel(shortlistModels, selectedModel)
-            : selectedProvider === "ollama"
+            : selectedProvider === "ollama" ||
+                isDiscoveryModelProvider(selectedProvider)
               ? resolveOpenRouterSetupModel(customModels, selectedModel)
               : usesCatalogList && catalogRows
                 ? resolveOpenRouterSetupModel(catalogRows, selectedModel)
@@ -614,6 +630,7 @@ export function useProviderSetupForm(
       customModels,
       displayName,
       selectedModel,
+      selectedOption,
       selectedProvider,
       configuredTypes,
       createProvider,
@@ -624,10 +641,13 @@ export function useProviderSetupForm(
     ]
   );
 
-  // A typed key, name or picked model is work the user would lose.
+  // A typed key, name (not the default) or picked model is work to lose.
   const dirty =
     apiKey.trim() !== "" ||
-    displayName.trim() !== "" ||
+    ![
+      "",
+      defaultProviderDisplayName(selectedProvider, selectedOption),
+    ].includes(displayName.trim()) ||
     customModels.length > 0 ||
     catalogRows !== null ||
     openRouterModels.length > 0 ||
@@ -672,6 +692,7 @@ export function useProviderSetupForm(
     openRouterModelsError,
     openRouterRouting,
     selectedModel,
+    selectedOptionKey: selectedOption?.preset ?? selectedProvider,
     selectedProvider,
     setChatgptOAuth,
     setOpenRouterRouting,

@@ -30,7 +30,7 @@ export interface SentryEvent {
   };
   event_id: string;
   exception: { values: { type: string; value: string }[] };
-  extra?: { stack: string };
+  extra?: { cause?: string; stack?: string };
   fingerprint: string[];
   level: "error" | "info";
   logger: string;
@@ -116,8 +116,18 @@ export function toSentryEvent(report: ErrorReport): SentryEvent {
     // a self-hosted install is often the operator's own machine or cluster name.
   };
 
+  const extra: NonNullable<SentryEvent["extra"]> = {};
+
   if (report.stack) {
-    event.extra = { stack: report.stack };
+    extra.stack = report.stack;
+  }
+
+  if (report.cause) {
+    extra.cause = report.cause;
+  }
+
+  if (extra.stack || extra.cause) {
+    event.extra = extra;
   }
 
   return event;

@@ -8,6 +8,7 @@ import {
 } from "@whiskeysockets/baileys";
 import {
   explainGroupMessageHandling,
+  rememberWhatsAppBotMessage,
   type WhatsAppAccount,
 } from "./group-message";
 
@@ -34,6 +35,7 @@ export interface WhatsAppInboundChat {
     | { kind: "document"; message: proto.Message.IDocumentMessage };
   mentionedJids: string[];
   messageId: string | null;
+  quotedMessageId: string | null;
   quotedParticipant: string | null;
   quotedText: string | null;
   senderJid: string;
@@ -56,6 +58,7 @@ export function rememberWhatsAppOutbound(input: {
 
   if (id) {
     outboundSeenAt.set(`id:${input.jid}:${id}`, now);
+    rememberWhatsAppBotMessage(id);
   }
 
   const text = input.text?.trim();
@@ -153,6 +156,12 @@ function extractQuotedParticipant(
   return extractContextInfo(message)?.participant ?? null;
 }
 
+function extractQuotedMessageId(
+  message: proto.IMessage | null | undefined
+): string | null {
+  return extractContextInfo(message)?.stanzaId?.trim() || null;
+}
+
 function extractQuotedText(
   message: proto.IMessage | null | undefined
 ): string | null {
@@ -190,6 +199,7 @@ export function parseInboundWhatsAppMessage(
   const isGroup = Boolean(isJidGroup(remoteJid));
   const fromMe = Boolean(msg.key.fromMe);
   const mentionedJids = extractMentionedJids(msg.message);
+  const quotedMessageId = extractQuotedMessageId(msg.message);
   const quotedParticipant = extractQuotedParticipant(msg.message);
   const quotedText = extractQuotedText(msg.message);
 
@@ -197,6 +207,7 @@ export function parseInboundWhatsAppMessage(
     const decision = explainGroupMessageHandling({
       me,
       mentionedJids,
+      quotedMessageId,
       quotedParticipant,
       requireMention: options?.requireGroupMention,
       text: text || (media ? "[attachment]" : ""),
@@ -225,6 +236,7 @@ export function parseInboundWhatsAppMessage(
     me,
     mentionedJids,
     messageId: msg.key.id?.trim() || null,
+    quotedMessageId,
     quotedParticipant,
     quotedText,
     senderJid,

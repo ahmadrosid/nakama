@@ -6,6 +6,7 @@ import {
   fetchChatgptCodexModels,
   parseChatgptCodexModelsPayload,
   readChatgptAccountIdFromAccessToken,
+  readChatgptPlanType,
   refreshChatgptOAuthToken,
 } from "./oauth";
 
@@ -181,6 +182,52 @@ describe("readChatgptAccountIdFromAccessToken", () => {
 
   test("returns null when claim is missing", () => {
     expect(readChatgptAccountIdFromAccessToken(buildJwt({}))).toBeNull();
+  });
+
+  test.each([1, {}])(
+    "still reads the account id when the plan type is %p",
+    (planType) => {
+      const token = buildJwt({
+        [CHATGPT_JWT_CLAIM_PATH]: {
+          chatgpt_account_id: "acct_123",
+          chatgpt_plan_type: planType,
+        },
+      });
+
+      expect(readChatgptAccountIdFromAccessToken(token)).toBe("acct_123");
+      expect(readChatgptPlanType({ accessToken: token })).toBeUndefined();
+    }
+  );
+});
+
+describe("readChatgptPlanType", () => {
+  test.each(["free", "plus"])("reads plan type %s", (plan) => {
+    const token = buildJwt({
+      [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_plan_type: plan },
+    });
+
+    expect(readChatgptPlanType({ accessToken: token })).toBe(plan);
+  });
+
+  test("returns nothing when the claim or the token is missing", () => {
+    expect(readChatgptPlanType({ accessToken: buildJwt({}) })).toBeUndefined();
+    expect(readChatgptPlanType(null)).toBeUndefined();
+  });
+
+  test("returns nothing for an empty plan type", () => {
+    const token = buildJwt({
+      [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_plan_type: "" },
+    });
+
+    expect(readChatgptPlanType({ accessToken: token })).toBeUndefined();
+  });
+
+  test.each([
+    "not-a-jwt",
+    "a.%%%.c",
+    `a.${Buffer.from("{").toString("base64url")}.c`,
+  ])("returns nothing for a malformed token %s", (accessToken) => {
+    expect(readChatgptPlanType({ accessToken })).toBeUndefined();
   });
 });
 

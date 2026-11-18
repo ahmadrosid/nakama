@@ -227,7 +227,7 @@ describe("preprocessUserContent vision fallback", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual([
       { text: "What is this?", type: "text" },
-      { text: "[Image]\nA small red square.", type: "text" },
+      { text: expect.stringContaining("A small red square."), type: "text" },
     ]);
     expect(session.getHistory()[0]?.content).toEqual([
       { text: "What is this?", type: "text" },

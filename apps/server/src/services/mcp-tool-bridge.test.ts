@@ -68,6 +68,29 @@ function discoveryServer(): StoredMcpServerRecord {
 }
 
 describe("mcp tool bridge", () => {
+  test("marks a tool read-only only when its server says so", () => {
+    const server = {
+      ...discoveryServer(),
+      cachedTools: [
+        { description: "Look up", name: "lookup", readOnlyHint: true as const },
+        { description: "Delete", name: "delete" },
+      ],
+    };
+
+    const tools = buildMcpToolDefinitions(
+      [server],
+      failingMcpService("unused"),
+      serverLookup([server]),
+      "org_1",
+      "profile_1"
+    );
+
+    expect(tools.map((tool) => [tool.name, tool.readOnly])).toEqual([
+      ["office__lookup", true],
+      ["office__delete", false],
+    ]);
+  });
+
   test.each([
     ["read file", "read_document"],
     ["billing receipt", "download_invoice"],

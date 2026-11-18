@@ -91,7 +91,13 @@ const questionnaireResultSchema = z.object({
     questions: z.array(
       z.object({
         allowCustomAnswer: z.boolean(),
-        choices: z.array(z.object({ id: z.string(), label: z.string() })),
+        choices: z.array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            recommended: z.boolean().optional(),
+          })
+        ),
         id: z.string(),
         placeholder: z.string().optional(),
         prompt: z.string(),

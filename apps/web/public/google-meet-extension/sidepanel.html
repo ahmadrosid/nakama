@@ -2,64 +2,516 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta content="dark" name="color-scheme">
-    <title>Nakama transcript</title>
+    <meta content="light dark" name="color-scheme">
+    <title>Nakama Meet</title>
     <style>
+    /* Match Nakama's themes in apps/web/src/index.css. */
     :root {
-      --bg: #0a0a0b;
-      --card: #18181b;
-      --muted: #a1a1aa;
-      --border: #27272a;
-      --accent: #f59e0b;
-      color-scheme: dark;
+      --background: #fafafa;
+      --foreground: #171717;
+      --card: #ffffff;
+      --primary: #b45309;
+      --primary-hover: #92400e;
+      --primary-foreground: #ffffff;
+      --muted: #636363;
+      --border: #e5e5e5;
+      --hover: #f4f4f5;
+      --success: #15803d;
+      --success-bg: #dcfce7;
+      --success-border: #86efac;
+      --rec: #dc2626;
+      --rec-text: #b91c1c;
+      --rec-bg: #fef2f2;
+      --rec-border: #fecaca;
+      --speaker-a: #b45309;
+      --speaker-b: #0369a1;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #0a0a0b;
+        --foreground: #fafafa;
+        --card: #18181b;
+        --primary: #f59e0b;
+        --primary-hover: #fbbf24;
+        --primary-foreground: #0a0a0b;
+        --muted: #a1a1aa;
+        --border: #27272a;
+        --hover: #27272a;
+        --success: #4ade80;
+        --success-bg: #14532d33;
+        --success-border: #166534;
+        --rec: #ef4444;
+        --rec-text: #fca5a5;
+        --rec-bg: #450a0a;
+        --rec-border: #7f1d1d;
+        --speaker-a: #fbbf24;
+        --speaker-b: #7dd3fc;
+        color-scheme: dark;
+      }
     }
     * {
       box-sizing: border-box;
     }
+    [hidden] {
+      display: none !important;
+    }
     body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 100vh;
       padding: 16px;
       margin: 0;
       font:
-        14px / 1.5 system-ui,
+        14px / 1.5 Inter,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
         sans-serif;
-      color: #fafafa;
-      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      color: var(--foreground);
+      background: var(--background);
+    }
+    header {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    header svg {
+      flex-shrink: 0;
+      color: var(--foreground);
     }
     h1 {
-      margin: 0 0 4px;
-      font-size: 16px;
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
     }
-    #status {
-      margin-bottom: 16px;
+    h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    #connection {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    #connection::before {
+      width: 7px;
+      height: 7px;
+      content: "";
+      background: var(--muted);
+      border-radius: 50%;
+    }
+    #connection[data-connected="true"]::before {
+      background: var(--success);
+    }
+    .card {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+    ol.steps {
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+    ol.steps li {
+      display: flex;
+      gap: 8px;
+      align-items: center;
       font-size: 12px;
       color: var(--muted);
     }
-    #transcript {
+    .step {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+    }
+    .step[data-done="true"] {
+      color: var(--success);
+      background: var(--success-bg);
+      border-color: var(--success-border);
+    }
+    form {
+      display: grid;
+      gap: 8px;
+    }
+    label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    input {
+      min-height: 44px;
+      padding: 9px 12px;
+      font: inherit;
+      color: var(--foreground);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    input:focus-visible,
+    button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+    }
+    button {
+      min-height: 44px;
+      padding: 9px 14px;
+      font: inherit;
+      font-weight: 500;
+      color: var(--foreground);
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      transition:
+        background-color 120ms ease,
+        opacity 120ms ease;
+    }
+    button:hover:not(:disabled) {
+      background: var(--hover);
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+    #start,
+    #connect {
+      font-weight: 600;
+      color: var(--primary-foreground);
+      background: var(--primary);
+      border-color: transparent;
+    }
+    #start:hover:not(:disabled),
+    #connect:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    #settings {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      padding: 0;
+      color: var(--muted);
+      border-color: transparent;
+    }
+    #pair-code {
+      margin: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 28px;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: 0.12em;
+    }
+    #settings-origin {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
       overflow-wrap: anywhere;
     }
-    p {
-      padding: 12px 0;
-      margin: 0;
-      white-space: pre-wrap;
-      border-bottom: 1px solid var(--border);
+    #recording-card {
+      gap: 6px;
+      justify-items: center;
+      padding: 20px;
+      text-align: center;
     }
-    strong {
-      display: block;
-      margin-bottom: 3px;
+    .rec-label {
+      display: flex;
+      gap: 6px;
+      align-items: center;
       font-size: 12px;
-      color: var(--accent);
+      font-weight: 600;
+      color: var(--rec-text);
+      letter-spacing: 0.06em;
     }
-    #empty {
+    .rec-label::before {
+      width: 8px;
+      height: 8px;
+      content: "";
+      background: var(--rec);
+      border-radius: 50%;
+    }
+    #timer {
+      font-size: 40px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+    #meeting-info {
+      font-size: 12px;
       color: var(--muted);
+    }
+    #stop {
+      padding: 0 28px;
+      margin-top: 10px;
+      font-weight: 600;
+      color: var(--rec-text);
+      background: var(--rec-bg);
+      border-color: var(--rec-border);
+      border-radius: 999px;
+    }
+    #done-card .done-head {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .done-icon {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      color: var(--success);
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      border-radius: 50%;
+    }
+    #done-card[data-state="finishing"] .done-icon {
+      color: var(--primary);
+      background: transparent;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      animation: spin 900ms linear infinite;
+    }
+    #done-card[data-state="finishing"] .done-icon svg {
+      display: none;
+    }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    .done-copy {
+      display: grid;
+      min-width: 0;
+    }
+    #done-meta {
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+    }
+    .done-actions,
+    .done-row {
+      display: grid;
+      gap: 8px;
+    }
+    .done-row {
+      grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    }
+    #open-saved {
+      font-weight: 600;
+      color: var(--primary-foreground);
+      background: var(--primary);
+      border-color: transparent;
+    }
+    #open-saved:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    #live {
+      display: grid;
+      gap: 8px;
+      min-height: 0;
+    }
+    .live-heading {
+      display: flex;
+      align-items: center;
+    }
+    .live-heading h2 {
+      font-size: 13px;
+    }
+    #full-transcript {
+      padding: 0 4px;
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--primary);
+      border-color: transparent;
+    }
+    #transcript {
+      display: grid;
+      gap: 14px;
+      max-height: 60vh;
+      padding: 0;
+      margin: 0;
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      list-style: none;
+    }
+    #transcript li {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 10px;
+    }
+    #transcript time {
+      padding-top: 1px;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+    }
+    #transcript strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--speaker-a);
+    }
+    #transcript strong[data-tone="b"] {
+      color: var(--speaker-b);
+    }
+    #status {
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+      text-wrap: pretty;
+      overflow-wrap: anywhere;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button {
+        transition: none;
+      }
+      #done-card[data-state="finishing"] .done-icon {
+        animation: none;
+      }
     }
     </style>
   </head>
   <body>
-    <h1>Nakama transcript</h1>
-    <div aria-live="polite" id="status">Waiting for a meeting…</div>
-    <section aria-label="Live transcript" id="transcript">
-      <p id="empty">Start transcription to see the transcript here.</p>
+    <header>
+      <!-- Nakama mark, same as apps/web/public/nakama-mark.svg. -->
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="20"
+        viewBox="0 0 48 48"
+        width="20"
+      >
+        <path
+          d="M24 10.58L8.5 37.42L39.5 37.42Z"
+          stroke="currentColor"
+          stroke-linejoin="round"
+          stroke-width="4.2"
+        />
+        <circle cx="24" cy="10.58" fill="currentColor" r="7.5" />
+        <circle cx="8.5" cy="37.42" fill="currentColor" r="7.5" />
+        <circle cx="39.5" cy="37.42" fill="currentColor" r="7.5" />
+      </svg>
+      <h1>Nakama Meet</h1>
+      <span id="connection">Checking…</span>
+      <button
+        aria-controls="settings-panel"
+        aria-expanded="false"
+        aria-label="Settings"
+        hidden
+        id="settings"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="18"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+          />
+        </svg>
+      </button>
+    </header>
+    <section aria-label="Settings" class="card" hidden id="settings-panel">
+      <p id="settings-origin"></p>
+      <button hidden id="disconnect" type="button">Disconnect</button>
     </section>
+    <section aria-label="Setup" class="card" id="setup">
+      <h2 id="meeting">Getting ready</h2>
+      <ol aria-label="Transcription setup" class="steps">
+        <li>
+          <span aria-hidden="true" class="step" id="connect-step">1</span
+          ><span id="connect-label">Connect Nakama</span>
+        </li>
+        <li>
+          <span aria-hidden="true" class="step" id="meet-step">2</span
+          ><span id="meet-label">Open Google Meet</span>
+        </li>
+      </ol>
+      <form hidden id="connect-form">
+        <label for="origin">Nakama address</label>
+        <input
+          autocomplete="url"
+          id="origin"
+          placeholder="https://nakama.example.com"
+          required
+          spellcheck="false"
+          type="text"
+        >
+        <button id="connect" type="submit">Connect</button>
+      </form>
+      <p hidden id="pair-code"></p>
+      <button hidden id="cancel-pair" type="button">Cancel</button>
+      <button hidden id="start" type="button">Start transcription</button>
+    </section>
+    <section aria-label="Recording" class="card" hidden id="recording-card">
+      <span class="rec-label">RECORDING</span>
+      <span id="timer">00:00</span>
+      <span id="meeting-info"></span>
+      <button hidden id="stop" type="button">Stop transcription</button>
+    </section>
+    <section aria-label="Meeting result" class="card" hidden id="done-card">
+      <div class="done-head">
+        <span aria-hidden="true" class="done-icon">
+          <svg
+            fill="none"
+            height="18"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2.2"
+            viewBox="0 0 24 24"
+            width="18"
+          >
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        </span>
+        <div class="done-copy">
+          <h2 id="done-title">Transcript saved</h2>
+          <span id="done-meta"></span>
+        </div>
+      </div>
+      <div class="done-actions" id="done-actions">
+        <button id="open-saved" type="button">Open in Nakama</button>
+        <div class="done-row">
+          <button id="copy-text" type="button">Copy text</button>
+          <button id="record-again" type="button">Record again</button>
+        </div>
+      </div>
+    </section>
+    <section aria-label="Live transcript" hidden id="live">
+      <div class="live-heading">
+        <h2 id="live-title">Live transcript</h2>
+        <button hidden id="full-transcript" type="button">
+          Open in Nakama
+        </button>
+      </div>
+      <ol id="transcript"></ol>
+    </section>
+    <div aria-live="polite" id="status" role="status">Checking connection…</div>
     <script defer src="sidepanel.js"></script>
   </body>
 </html>

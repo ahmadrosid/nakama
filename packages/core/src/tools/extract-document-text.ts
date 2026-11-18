@@ -86,12 +86,14 @@ function resolveExtractFormat(
   mediaType: string,
   filename: string
 ): AnydocFormat | null {
-  if (looksLikeOleDocument(bytes)) {
-    return null;
-  }
-
   const normalized = normalizeDocumentMediaType(mediaType, filename);
   const fromMeta = resolveAnydocFormat(normalized, filename);
+
+  // anydoc reads a legacy .xls, and a chat already sends one through it on
+  // the turn it is attached. A legacy .doc has no dependable parser.
+  if (looksLikeOleDocument(bytes)) {
+    return fromMeta === "xlsx" ? fromMeta : null;
+  }
 
   if (fromMeta && EXTRACTABLE_FORMATS.has(fromMeta)) {
     return fromMeta;
@@ -187,11 +189,11 @@ export async function runExtractDocumentText(
 
     const safeFilename = filename?.trim() || "document";
 
-    if (looksLikeOleDocument(bytes)) {
+    const format = resolveExtractFormat(bytes, mediaType, safeFilename);
+
+    if (!format && looksLikeOleDocument(bytes)) {
       return { error: LEGACY_DOC_UNSUPPORTED_MESSAGE };
     }
-
-    const format = resolveExtractFormat(bytes, mediaType, safeFilename);
 
     const normalizedMediaType = normalizeDocumentMediaType(
       mediaType,
@@ -212,8 +214,7 @@ export async function runExtractDocumentText(
     }
 
     // Decode one byte past the limit: truncateMailBody still sees that the
-    // file is longer, and it trims one character per pass, so a 5 MB string
-    // would hold the event loop for minutes.
+    // file is longer, and the parser never holds more than the limit.
     const converted = textParser
       ? {
           text: await textParser({

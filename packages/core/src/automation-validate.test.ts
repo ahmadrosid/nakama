@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  computeAutomationNextRunAt,
+  isValidCronExpression,
   isWorkerSchedulable,
   resolveScheduleTimezone,
   validateAutomationInput,
@@ -58,7 +60,37 @@ describe("validateAutomationInput", () => {
   });
 });
 
-describe("isValidCronExpression", () => {});
+describe("isValidCronExpression", () => {
+  test.each([
+    "60 * * * *",
+    "0 24 * * *",
+    "0 0 0 * *",
+    "0 0 * 13 *",
+    "0 0 * * 8",
+    "*/0 * * * *",
+  ])("rejects an out-of-range field in %s", (cron) => {
+    expect(isValidCronExpression(cron)).toBe(false);
+  });
+
+  test.each([
+    "59 23 * * *",
+    "0 */2 * * *",
+    "0 9 * * 1",
+    "59 23 31 12 7",
+    "0 9 * * 1-5",
+    "0 9 * * 1,3,5",
+    " 0 9 * * * ",
+  ])("accepts the supported schedule %s", (cron) => {
+    expect(isValidCronExpression(cron)).toBe(true);
+  });
+
+  test.each(["* * * * * *", "@daily", "0 9 * JAN MON", "0 9 * *"])(
+    "keeps unsupported syntax rejected: %s",
+    (cron) => {
+      expect(isValidCronExpression(cron)).toBe(false);
+    }
+  );
+});
 
 describe("validateTimezone", () => {
   test("defaults to UTC", () => {
@@ -145,5 +177,17 @@ describe("isWorkerSchedulable", () => {
         now
       )
     ).toBe(false);
+  });
+});
+
+describe("webhook trigger", () => {
+  test("is valid, never scheduled and has no next run", () => {
+    const trigger = { type: "webhook" } as const;
+
+    expect(() =>
+      validateAutomationInput({ name: "PR review", prompt: "Review", trigger })
+    ).not.toThrow();
+    expect(isWorkerSchedulable({ enabled: true, trigger })).toBe(false);
+    expect(computeAutomationNextRunAt(trigger)).toBeNull();
   });
 });

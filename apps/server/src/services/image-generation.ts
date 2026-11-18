@@ -4,14 +4,17 @@ import {
   NakamaApiError,
   normalizeBaseUrl,
   type ProviderInstance,
+  readBoundedBody,
   type UserConfig,
 } from "@nakama/core";
+import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { isCompatibleModelId } from "../providers/compatible-models";
 import { readApiKeyForInstance } from "../providers/create";
 import {
   IMAGE_GENERATION_MODEL_ID,
   IMAGE_GENERATION_SELECTION,
   isAllowedImageGenerationSelection,
+  isMinimaxImageGenerationModel,
   modelSupportsImageGeneration,
 } from "../providers/models";
 import {
@@ -59,6 +62,11 @@ const DEFAULT_OPENAI_IMAGES_BASE_URL = "https://api.openai.com/v1";
  * (one took 11 minutes) must fail with a clear error instead of hanging the turn.
  */
 const IMAGE_GENERATION_TIMEOUT_MS = 180_000;
+
+/** One base64 PNG at the largest size is under 10 MB; this stops a runaway endpoint. */
+const MAX_IMAGE_RESPONSE_BYTES = 32 * 1024 * 1024;
+
+const MAX_IMAGE_ERROR_BODY_BYTES = 64 * 1024;
 
 export interface ResolvedImageGenerationSelection {
   apiKey: string;
@@ -261,7 +269,8 @@ export function resolveImageGenerationSelection(
 /**
  * `<providerId>::<modelId>` on one OpenAI-compatible provider that speaks the
  * OpenAI Images API. The model must be one of that provider's custom models,
- * since gateways often namespace ids (`cb/gpt-image-2`).
+ * since gateways often namespace ids (`cb/gpt-image-2`). A MiniMax provider
+ * takes only MiniMax image models.
  */
 function resolveCompatibleImageGenerationSelection(
   userConfig: UserConfig | null | undefined,
@@ -282,16 +291,23 @@ function resolveCompatibleImageGenerationSelection(
     );
   }
 
-  const baseUrl = instance?.baseUrl?.trim();
+  // MiniMax serves its own image models from the region default base URL.
+  const minimax =
+    instance?.type === "minimax" || instance?.type === "minimax_cn";
 
-  if (
-    !(
-      decoded &&
-      instance?.type === "openai_compatible" &&
-      baseUrl &&
-      isCompatibleModelId(decoded.modelId, instance.customModels)
-    )
-  ) {
+  const baseUrl =
+    instance?.baseUrl?.trim() ||
+    (minimax ? defaultDiscoveryBaseUrl(instance.type) : null);
+
+  const modelSupported =
+    decoded &&
+    instance &&
+    (minimax
+      ? modelSupportsImageGeneration(decoded.modelId, instance.type)
+      : instance.type === "openai_compatible" &&
+        isCompatibleModelId(decoded.modelId, instance.customModels));
+
+  if (!(decoded && instance && baseUrl && modelSupported)) {
     throw new NakamaApiError(
       "Configured image generation model is invalid. Update it in Settings → AI Providers (/settings/providers#image-generation).",
       400
@@ -380,6 +396,12 @@ export async function generateImageWithOpenAI(
         output_format: "png",
         prompt,
         size,
+        // MiniMax sends a URL unless asked for base64, and `auto` alone
+        // means a 4K image, over the size limit.
+        ...(isMinimaxImageGenerationModel(model) && {
+          response_format: "b64_json",
+          ...(size === "auto" && { area: "1K" }),
+        }),
       }),
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -391,16 +413,21 @@ export async function generateImageWithOpenAI(
   ).catch(rethrowTimeout);
 
   if (!response.ok) {
-    const body = await response.text().catch(rethrowTimeout);
+    const detail = await readBoundedBody(response, MAX_IMAGE_ERROR_BODY_BYTES)
+      .then((bytes) => bytes.toString("utf8"))
+      .catch(rethrowTimeout);
+
     throw new NakamaApiError(
-      `Image generation failed (${response.status}): ${body}`,
+      `Image generation failed (${response.status}): ${detail}`,
       502
     );
   }
 
-  const payload = parseOpenAIImageResponse(
-    await response.json().catch(rethrowTimeout)
+  const body = await readBoundedBody(response, MAX_IMAGE_RESPONSE_BYTES).catch(
+    rethrowTimeout
   );
+
+  const payload = parseOpenAIImageResponse(JSON.parse(body.toString("utf8")));
 
   const first = payload.data?.[0];
   const b64 = first?.b64_json?.trim();

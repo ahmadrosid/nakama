@@ -1,4 +1,5 @@
-import { Cron } from "croner";
+import { Cron, CronPattern } from "croner";
+import { NakamaApiError } from "./api-error";
 import type { AutomationTrigger } from "./contract";
 import { DEFAULT_TIMEZONE, validateTimezone } from "./user-config";
 
@@ -11,11 +12,20 @@ export const AUTOMATION_RUN_AT_GRACE_MS = 60_000;
 export function isValidCronExpression(cron: string): boolean {
   const fields = cron.trim().split(/\s+/);
 
-  if (fields.length !== 5) {
+  if (
+    fields.length !== 5 ||
+    !fields.every((field) => CRON_FIELD_PATTERN.test(field))
+  ) {
     return false;
   }
 
-  return fields.every((field) => CRON_FIELD_PATTERN.test(field));
+  try {
+    new CronPattern(cron.trim());
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function isValidRunAt(at: string): boolean {
@@ -98,7 +108,10 @@ export function validateAutomationInput(input: {
 
   if (input.trigger.type === "schedule") {
     if (!isValidCronExpression(input.trigger.cron)) {
-      throw new Error(`Invalid cron expression: ${input.trigger.cron}`);
+      throw new NakamaApiError(
+        `Invalid cron expression: ${input.trigger.cron}`,
+        400
+      );
     }
 
     validateTimezone(input.trigger.timezone);

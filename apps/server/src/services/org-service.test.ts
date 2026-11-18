@@ -581,6 +581,273 @@ describe("OrgService", () => {
     expect(sessionB?.revokedAt).toBeTruthy();
   });
 
+  describe("webhook secrets of a member who loses access", () => {
+    async function setup() {
+      const { authService, databaseAdapter, orgService } = createOrgService();
+
+      const created = await orgService.createOrganization({
+        admin: {
+          email: "admin@acme.com",
+          name: "Acme Admin",
+          phone: "+628123456789",
+        },
+        name: "Acme",
+        slug: "acme-webhook-secrets",
+      });
+
+      const orgId = created.organization.id;
+
+      const second = await orgService.createOrganization(
+        { name: "Beta", slug: "beta-webhook-secrets" },
+        created.adminMember!.member.userId
+      );
+
+      const addMember = async (
+        email: string,
+        role: "admin" | "member" = "member"
+      ) => {
+        const added = await orgService.addMember({
+          email,
+          name: email,
+          orgId,
+          phone: "+628111111111",
+          role,
+        });
+
+        return {
+          password: added.temporaryPassword!,
+          userId: added.member.userId,
+        };
+      };
+
+      const memberA = await addMember("a@acme.com");
+      const memberB = await addMember("b@acme.com");
+      const adminC = await addMember("c@acme.com", "admin");
+
+      const automations = new AutomationService(databaseAdapter, {
+        getUserTimezone: async () => "UTC",
+        secrets: new ManagedSecrets(
+          databaseAdapter,
+          Buffer.alloc(32, 1).toString("base64")
+        ),
+      });
+
+      const makeSecret = async (inOrgId: string, userId: string) => {
+        const automation = await automations.create(
+          inOrgId,
+          {
+            description: "Review",
+            name: "PR review",
+            prompt: "Review the pull request.",
+            trigger: { type: "webhook" },
+          },
+          undefined,
+          { orgRole: "member", userId }
+        );
+
+        await automations.createWebhookSecret(automation.id, inOrgId, userId);
+
+        return automation.id;
+      };
+
+      const remaining = async () =>
+        (await databaseAdapter.listAutomationWebhookSecrets())
+          .map((secret) => secret.automationId)
+          .sort();
+
+      return {
+        adminC,
+        adminUserId: created.adminMember!.member.userId,
+        automations,
+        databaseAdapter,
+        makeSecret,
+        memberA,
+        memberB,
+        orgId,
+        orgService,
+        remaining,
+        secondOrgId: second.organization.id,
+      };
+    }
+
+    test("removing a member deletes only their webhook secrets in that org", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+      const other = await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId);
+
+      expect(await ctx.remaining()).toEqual([b, other].sort());
+      expect(await ctx.remaining()).not.toContain(a);
+    });
+
+    test("removing the last admin is blocked and keeps their webhook secrets", async () => {
+      const ctx = await setup();
+      await ctx.databaseAdapter.deleteOrgMember(
+        ctx.secondOrgId,
+        "user_local_client"
+      );
+      const secret = await ctx.makeSecret(ctx.secondOrgId, ctx.adminUserId);
+
+      await expect(
+        ctx.orgService.removeMember(ctx.secondOrgId, ctx.adminUserId)
+      ).rejects.toMatchObject({ status: 409 });
+      expect(await ctx.remaining()).toEqual([secret]);
+    });
+
+    test("erasing the last admin is blocked and keeps their webhook secrets", async () => {
+      const ctx = await setup();
+      await ctx.databaseAdapter.deleteOrgMember(
+        ctx.secondOrgId,
+        "user_local_client"
+      );
+      const secret = await ctx.makeSecret(ctx.orgId, ctx.adminUserId);
+
+      await expect(
+        ctx.orgService.eraseUser(ctx.adminUserId, ctx.adminC.userId)
+      ).rejects.toMatchObject({ status: 409 });
+      expect(await ctx.remaining()).toEqual([secret]);
+    });
+
+    test("disabling a member deletes only their webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.disableMember(ctx.orgId, ctx.memberA.userId);
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("changing a password deletes the user's webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.changePassword({
+        currentPassword: ctx.memberA.password,
+        newPassword: "new-password-123",
+        userId: ctx.memberA.userId,
+      });
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("a wrong current password keeps the user's webhook secrets", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+
+      await expect(
+        ctx.orgService.changePassword({
+          currentPassword: "wrong-password-123",
+          newPassword: "new-password-123",
+          userId: ctx.memberA.userId,
+        })
+      ).rejects.toThrow();
+      expect(await ctx.remaining()).toEqual([a]);
+    });
+
+    test("erasing a user deletes their webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await ctx.orgService.eraseUser(ctx.memberA.userId, ctx.adminUserId);
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("a password reset deletes the user's webhook secrets in every org", async () => {
+      const ctx = await setup();
+      await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+      await ctx.makeSecret(ctx.secondOrgId, ctx.memberA.userId);
+      const b = await ctx.makeSecret(ctx.orgId, ctx.memberB.userId);
+
+      await expect(
+        ctx.orgService.resetPassword({
+          newPassword: "new-password-123",
+          token: "tc_reset_invalid",
+        })
+      ).rejects.toThrow();
+      expect(await ctx.remaining()).toHaveLength(3);
+
+      const requested = await ctx.orgService.requestPasswordReset(
+        "a@acme.com",
+        true
+      );
+
+      await ctx.orgService.resetPassword({
+        newPassword: "new-password-123",
+        token: requested.token!,
+      });
+
+      expect(await ctx.remaining()).toEqual([b]);
+    });
+
+    test("demoting an admin deletes their webhook secrets in that org only", async () => {
+      const ctx = await setup();
+      const c = await ctx.makeSecret(ctx.orgId, ctx.adminC.userId);
+      const other = await ctx.makeSecret(ctx.secondOrgId, ctx.adminC.userId);
+
+      await ctx.orgService.updateMember(ctx.orgId, ctx.adminC.userId, {
+        name: "Renamed",
+      });
+      await ctx.orgService.updateMember(ctx.orgId, ctx.memberA.userId, {
+        role: "admin",
+      });
+      expect(await ctx.remaining()).toEqual([c, other].sort());
+
+      await ctx.orgService.updateMember(ctx.orgId, ctx.adminC.userId, {
+        role: "member",
+      });
+
+      expect(await ctx.remaining()).toEqual([other]);
+    });
+
+    test("removing the maker revokes a secret that another member steered", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+
+      await ctx.automations.update(
+        a,
+        ctx.orgId,
+        { prompt: "Summarize the pull request." },
+        { orgRole: "member", userId: ctx.memberB.userId }
+      );
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberB.userId);
+      expect(await ctx.remaining()).toEqual([a]);
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId);
+      expect(await ctx.remaining()).toEqual([]);
+    });
+
+    test("a failed revoke keeps the membership so a retry can finish", async () => {
+      const ctx = await setup();
+      const a = await ctx.makeSecret(ctx.orgId, ctx.memberA.userId);
+
+      spyOn(
+        ctx.databaseAdapter,
+        "deleteAutomationWebhookSecretsForUser"
+      ).mockRejectedValueOnce(new Error("db down"));
+
+      await expect(
+        ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId)
+      ).rejects.toThrow("db down");
+      expect(
+        await ctx.databaseAdapter.getOrgMember(ctx.orgId, ctx.memberA.userId)
+      ).not.toBeNull();
+      expect(await ctx.remaining()).toEqual([a]);
+
+      await ctx.orgService.removeMember(ctx.orgId, ctx.memberA.userId);
+      expect(await ctx.remaining()).toEqual([]);
+    });
+  });
+
   test("updates own profile email phone and name", async () => {
     const { orgService } = createOrgService();
 
@@ -686,6 +953,281 @@ describe("OrgService", () => {
     expect(accepted.user.email).toBe("legacy@acme.com");
     expect(accepted.orgId).toBe(created.organization.id);
     expect(accepted.role).toBe("member");
+    expect(accepted.pending).toBe(false);
+  });
+
+  test("with approval on, an accepted invite waits outside the org until an admin decides", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const password = "approval-flow-pass";
+
+    const home = await orgService.createOrganization({
+      name: "Home",
+      slug: "home-approval",
+    });
+
+    const acme = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-approval",
+    });
+
+    await orgService.updateOrganization(acme.organization.id, {
+      memberApprovalRequired: true,
+    });
+
+    const invite = (orgId: string, email: string) =>
+      orgService.createInvite({
+        email,
+        invitedByUserId: "user_platform",
+        orgId,
+        role: "admin",
+      });
+
+    // The user already belongs to another org, which must stay untouched
+    const joined = await orgService.acceptInvite({
+      password,
+      token: (await invite(home.organization.id, "pat@acme.com")).token!,
+    });
+
+    const pending = await orgService.acceptInvite({
+      password,
+      token: (await invite(acme.organization.id, "pat@acme.com")).token!,
+    });
+
+    const userId = pending.user.id;
+    expect(pending.pending).toBe(true);
+    expect(joined.pending).toBe(false);
+
+    // Not a member anywhere in acme: middleware, seats and admin counts all read org_members
+    expect(
+      await databaseAdapter.getOrgMember(acme.organization.id, userId)
+    ).toBeNull();
+    expect(
+      (await databaseAdapter.listUserOrganizations(userId)).map(
+        ({ organization }) => organization.id
+      )
+    ).toEqual([home.organization.id]);
+    expect(
+      (await orgService.listJoinRequests(acme.organization.id)).requests
+    ).toEqual([
+      {
+        createdAt: expect.any(String),
+        email: "pat@acme.com",
+        role: "admin",
+        userId,
+      },
+    ]);
+
+    await orgService.approveJoinRequest(acme.organization.id, userId);
+    expect(
+      (await databaseAdapter.getOrgMember(acme.organization.id, userId))?.role
+    ).toBe("admin");
+    expect(
+      (await orgService.listJoinRequests(acme.organization.id)).requests
+    ).toEqual([]);
+    await expect(
+      orgService.approveJoinRequest(acme.organization.id, userId)
+    ).rejects.toMatchObject({ status: 404 });
+
+    const other = await orgService.acceptInvite({
+      password,
+      token: (await invite(acme.organization.id, "sam@acme.com")).token!,
+    });
+
+    await orgService.rejectJoinRequest(acme.organization.id, other.user.id);
+    expect(
+      await databaseAdapter.getOrgMember(acme.organization.id, other.user.id)
+    ).toBeNull();
+    await expect(
+      orgService.rejectJoinRequest(acme.organization.id, other.user.id)
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("join requests stay in step with members, the allowlist and erasure", async () => {
+    const sent: string[] = [];
+
+    const { databaseAdapter, orgService } = createOrgService({
+      // Undelivered, so createInvite hands back the token this test accepts with
+      send: async ({ subject, to }) => {
+        sent.push(`${to}: ${subject}`);
+
+        return { ok: false };
+      },
+    });
+
+    const password = "approval-edge-pass";
+
+    const acme = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-edges",
+    });
+
+    const orgId = acme.organization.id;
+
+    await orgService.updateOrganization(orgId, {
+      allowedInviteDomains: ["acme.com", "contractor.io"],
+      memberApprovalRequired: true,
+    });
+
+    const accept = async (email: string, org = orgId) =>
+      orgService.acceptInvite({
+        password,
+        token: (
+          await orgService.createInvite({
+            email,
+            invitedByUserId: "user_platform",
+            orgId: org,
+            role: "member",
+          })
+        ).token!,
+      });
+
+    const waiting = async () =>
+      (await orgService.listJoinRequests(orgId)).requests.map(
+        ({ email }) => email
+      );
+
+    // Add member while pending clears the request
+    await accept("pat@acme.com");
+    await orgService.addMember({
+      email: "pat@acme.com",
+      name: "Pat",
+      orgId,
+      phone: "",
+      role: "admin",
+    });
+    expect(await waiting()).toEqual([]);
+
+    // A request that raced a direct add approves as the existing member
+    const patUser = await databaseAdapter.getUserByEmail("pat@acme.com");
+    await databaseAdapter.createOrgJoinRequest({
+      createdAt: new Date().toISOString(),
+      orgId,
+      role: "member",
+      userId: patUser!.id,
+    });
+    await orgService.approveJoinRequest(orgId, patUser!.id);
+    expect((await databaseAdapter.getOrgMember(orgId, patUser!.id))?.role).toBe(
+      "admin"
+    );
+
+    // A request left over from approval-on does not block a later invite
+    const kim = await accept("kim@acme.com");
+    await orgService.updateOrganization(orgId, {
+      memberApprovalRequired: false,
+    });
+    expect((await accept("kim@acme.com")).pending).toBe(false);
+    expect(
+      await databaseAdapter.getOrgMember(orgId, kim.user.id)
+    ).not.toBeNull();
+    expect(await waiting()).toEqual([]);
+    await orgService.updateOrganization(orgId, {
+      memberApprovalRequired: true,
+    });
+
+    // Approve checks the allowlist as it is now; a platform admin may bypass it
+    const lee = await accept("lee@contractor.io");
+    await orgService.updateOrganization(orgId, {
+      allowedInviteDomains: ["acme.com"],
+    });
+    await expect(
+      orgService.approveJoinRequest(orgId, lee.user.id)
+    ).rejects.toMatchObject({ status: 400 });
+    await orgService.approveJoinRequest(orgId, lee.user.id, true);
+    expect(sent.at(-1)).toBe("lee@contractor.io: You can now sign in to Acme");
+
+    // Reject removes the account its accept created, and nothing else
+    const sam = await accept("sam@acme.com");
+    await orgService.rejectJoinRequest(orgId, sam.user.id);
+    expect(await databaseAdapter.getUserById(sam.user.id)).toBeNull();
+
+    const other = await orgService.createOrganization({
+      name: "Other",
+      slug: "other-edges",
+    });
+
+    await orgService.updateOrganization(other.organization.id, {
+      memberApprovalRequired: true,
+    });
+    await accept("pat@acme.com", other.organization.id);
+    await orgService.rejectJoinRequest(other.organization.id, patUser!.id);
+    expect(await databaseAdapter.getUserById(patUser!.id)).not.toBeNull();
+
+    // Erasing a waiting user drops the request
+    const eve = await accept("eve@acme.com");
+    await databaseAdapter.eraseUser({
+      email: "erased@example.invalid",
+      id: eve.user.id,
+      passwordHash: "x",
+      updatedAt: new Date().toISOString(),
+    });
+    expect(await waiting()).toEqual([]);
+
+    // Two accepts at once: one waits, the other is a 409, never a 500
+    const token = (
+      await orgService.createInvite({
+        email: "pat@acme.com",
+        invitedByUserId: "user_platform",
+        orgId: (
+          await orgService.createOrganization({ name: "Race", slug: "race" })
+        ).organization.id,
+        role: "member",
+      })
+    ).token!;
+
+    await orgService.updateOrganization(
+      (await databaseAdapter.getOrganizationBySlug("race"))!.id,
+      { memberApprovalRequired: true }
+    );
+
+    const results = await Promise.allSettled([
+      orgService.acceptInvite({ password, token }),
+      orgService.acceptInvite({ password, token }),
+    ]);
+
+    expect(
+      results
+        .map((result) =>
+          result.status === "fulfilled" ? 202 : result.reason.status
+        )
+        .sort()
+    ).toEqual([202, 409]);
+  });
+
+  test("a team waits for approval when its parent requires it", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+
+    const acme = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-team-approval",
+    });
+
+    const now = new Date().toISOString();
+
+    await orgService.updateOrganization(acme.organization.id, {
+      memberApprovalRequired: true,
+    });
+    await databaseAdapter.upsertOrganization({
+      createdAt: now,
+      id: "org_design",
+      name: "Design",
+      parentOrgId: acme.organization.id,
+      slug: "design",
+      updatedAt: now,
+    });
+
+    const accepted = await orgService.acceptInvite({
+      password: "team-approval-pass",
+      token: (
+        await orgService.createInvite({
+          email: "out@acme.com",
+          invitedByUserId: "user_platform",
+          orgId: "org_design",
+          role: "member",
+        })
+      ).token!,
+    });
+
+    expect(accepted.pending).toBe(true);
   });
 
   test("lists and revokes pending invites only within their org", async () => {
@@ -1590,7 +2132,7 @@ describe("OrgService", () => {
   });
 
   test("permanent deletion removes tool secrets from the global config", async () => {
-    const { orgService, authService } = createOrgService();
+    const { authService, databaseAdapter: db, orgService } = createOrgService();
 
     const bootstrapped = await orgService.bootstrapInitialSetup({
       admin: {
@@ -1648,6 +2190,31 @@ describe("OrgService", () => {
       sessionId: "session_kept_org",
     });
 
+    for (const [orgId, automationId] of [
+      [bootstrapped.organization.id, "auto_deleted"],
+      [kept.organization.id, "auto_kept"],
+    ] as const) {
+      const now = new Date().toISOString();
+
+      await db.upsertAutomation({
+        createdAt: now,
+        definition: { trigger: { type: "webhook" } },
+        enabled: true,
+        id: automationId,
+        name: "Webhook",
+        orgId,
+        profileId: "profile_webhook",
+        updatedAt: now,
+        version: 1,
+      });
+      await db.putAutomationWebhookSecret({
+        automationId,
+        createdAt: now,
+        createdByUserId: bootstrapped.user.id,
+        encryptedValue: "enc",
+      });
+    }
+
     await orgService.archiveOrganization(
       bootstrapped.organization.id,
       bootstrapped.user.id
@@ -1656,6 +2223,11 @@ describe("OrgService", () => {
       bootstrapped.organization.id
     );
 
+    expect(
+      (await db.listAutomationWebhookSecrets()).map(
+        (secret) => secret.automationId
+      )
+    ).toEqual(["auto_kept"]);
     expect(
       await loadToolApiKey(bootstrapped.organization.id, "tool_deleted_org")
     ).toBeUndefined();

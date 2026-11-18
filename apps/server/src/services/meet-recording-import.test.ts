@@ -9,9 +9,10 @@ import { importMeetRecording } from "./meet-recording-import";
 
 test("recorded video becomes a Whisper transcript and temporary media is removed", async () => {
   const directory = await mkdtemp(join(tmpdir(), "meet-import-test-"));
+  const importPrefix = `nakama-meet-${process.pid}-`;
 
   const before = (await readdir(tmpdir())).filter((name) =>
-    name.startsWith("nakama-meet-")
+    name.startsWith(importPrefix)
   );
 
   const originalFetch = globalThis.fetch;
@@ -76,7 +77,7 @@ test("recorded video becomes a Whisper transcript and temporary media is removed
     expect(requests).toBe(1);
 
     const after = (await readdir(tmpdir())).filter((name) =>
-      name.startsWith("nakama-meet-")
+      name.startsWith(importPrefix)
     );
 
     expect(after).toEqual(before);
@@ -150,9 +151,7 @@ test("recorded video becomes a Whisper transcript and temporary media is removed
       new Response("{}", { status: 500 })) as typeof fetch;
     await expect(importRecording()).rejects.toThrow();
     expect(
-      (await readdir(tmpdir())).filter((name) =>
-        name.startsWith("nakama-meet-")
-      )
+      (await readdir(tmpdir())).filter((name) => name.startsWith(importPrefix))
     ).toEqual(before);
   } finally {
     globalThis.fetch = originalFetch;

@@ -1,4 +1,5 @@
 import type { ProviderModelOption } from "@nakama/core/contract";
+import { isDiscoveryModelProvider } from "@nakama/core/discovery-providers";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
 import {
@@ -40,8 +41,7 @@ export function setupCustomModels({
           name: entry.name,
           supportsVision: entry.supportsVision !== false,
         }))
-      : selectedProvider === "openai_compatible" ||
-          selectedProvider === "netra" ||
+      : isDiscoveryModelProvider(selectedProvider) ||
           selectedProvider === "ollama"
         ? normalizeModelListRows(customModels).map((entry) => ({
             ...entry,

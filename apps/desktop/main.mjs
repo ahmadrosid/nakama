@@ -13,11 +13,19 @@ import {
   app,
   BrowserWindow,
   dialog,
+  ipcMain,
   Menu,
   nativeTheme,
   safeStorage,
   shell,
 } from "electron";
+import {
+  clearDesktopConfig,
+  createLocalSignIn,
+  ensureDesktopChoice,
+  runFirstRun,
+  watchCloudSignOut,
+} from "./first-run.mjs";
 
 async function loadDesktopSecretsKey() {
   if (
@@ -571,6 +579,7 @@ if (!process.argv.includes("--smoke-test")) {
   let localServer;
   let quitting = false;
   let recovery = null;
+  let started = false;
   app.setName("Nakama");
   app.setPath(
     "userData",
@@ -635,9 +644,66 @@ if (!process.argv.includes("--smoke-test")) {
           }
         });
 
-        return createWindow(`${localServer.url}/chat`);
+        const userDataDir = app.getPath("userData");
+
+        const chatUrl = `${localServer.url}/chat`;
+
+        const firstRun = () =>
+          runFirstRun({
+            BrowserWindow,
+            ipcMain,
+            openExternal: (url) => shell.openExternal(url),
+            preload: join(import.meta.dirname, "preload.cjs"),
+            signIn: createLocalSignIn({
+              dataDir,
+              serverUrl: localServer.url,
+            }),
+            userDataDir,
+          });
+
+        await ensureDesktopChoice({
+          dataDir,
+          firstRun,
+          serverUrl: localServer.url,
+          userDataDir,
+        });
+
+        const window = await createWindow(chatUrl);
+        let asking = false;
+
+        const askAgain = async () => {
+          if (asking || window.isDestroyed()) {
+            return;
+          }
+
+          asking = true;
+          window.hide();
+
+          try {
+            await clearDesktopConfig(userDataDir);
+            await firstRun();
+            await window.loadURL(chatUrl);
+            window.show();
+          } catch (error) {
+            if (error.message !== "first-run-closed") {
+              dialog.showErrorBox("Cannot open Nakama", error.message);
+            }
+
+            app.quit();
+          } finally {
+            asking = false;
+          }
+        };
+
+        // After Sign out, ask again on the first launch page.
+        watchCloudSignOut(window.webContents.session, localServer.url, () => {
+          void askAgain();
+        });
+
+        return window;
       })
       .then(async () => {
+        started = true;
         installDesktopMenu(null, recovery);
 
         if (app.isPackaged && !process.windowsStore && !quitting) {
@@ -661,10 +727,19 @@ if (!process.argv.includes("--smoke-test")) {
         }
       })
       .catch((error) => {
-        dialog.showErrorBox("Cannot open Nakama", error.message);
+        // Closing the first launch page is a quit, not an error.
+        if (error.message !== "first-run-closed") {
+          dialog.showErrorBox("Cannot open Nakama", error.message);
+        }
+
         app.quit();
       });
-    app.on("window-all-closed", () => app.quit());
+    app.on("window-all-closed", () => {
+      // The first launch page closes before the app window opens.
+      if (started) {
+        app.quit();
+      }
+    });
     app.on("before-quit", (event) => {
       quitting = true;
 

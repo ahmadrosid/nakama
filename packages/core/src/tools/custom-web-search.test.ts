@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
+import { NakamaApiError } from "../api-error";
+import { asTestFetch } from "../channel-test-helpers";
 import type { WebSearchConfigFile } from "../web-search-config";
 import {
   createCustomWebSearchTool,
@@ -147,6 +149,45 @@ describe("createCustomWebSearchTool", () => {
     await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
       "Exa returned 402"
     );
+  });
+
+  test("stops reading a runaway response instead of buffering it", async () => {
+    const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
+    const totalChunks = 64;
+    let pulled = 0;
+
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled === 0) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              '{"results":[{"url":"https://a.example","title":"'
+            )
+          );
+        }
+
+        if (pulled === totalChunks) {
+          controller.enqueue(new TextEncoder().encode('"}]}'));
+          controller.close();
+
+          return;
+        }
+
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+    });
+
+    globalThis.fetch = asTestFetch(() =>
+      Promise.resolve(new Response(body, { status: 200 }))
+    );
+
+    const tool = createCustomWebSearchTool(config({}));
+
+    await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
+      NakamaApiError
+    );
+    expect(pulled).toBeLessThan(totalChunks);
   });
 
   test("sends the Serply query in the URL of a GET", async () => {

@@ -34,12 +34,19 @@ describe("audit event coverage", () => {
       ["POST", "/v1/auth/mfa/passkey/disable", "auth.passkey_disable"],
       ["POST", "/v1/auth/mfa/backup-codes", "auth.backup_codes_regenerate"],
       ["POST", "/v1/auth/local-token/rotate", "auth.token_rotate"],
+      [
+        "POST",
+        "/v1/automations/automation_1/webhook-secret",
+        "automation.webhook_secret_rotate",
+      ],
       ["POST", "/v1/auth/active-org", "auth.active_org"],
       ["POST", "/v1/auth/setup/import/restore", "data.import"],
       ["POST", "/v1/orgs/org_1/invites", "invite.create"],
       ["DELETE", "/v1/orgs/org_1/invites/invite_1", "invite.revoke"],
       ["POST", "/v1/auth/accept-invite", "invite.accept"],
       ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
+      ["POST", "/v1/orgs/org_1/join-requests/user_1/approve", "member.approve"],
+      ["DELETE", "/v1/orgs/org_1/join-requests/user_1", "member.reject"],
       ["PUT", "/v1/settings/email", "settings.update"],
       ["PATCH", "/v1/providers/provider_1", "provider.update"],
       ["DELETE", "/v1/platform/orgs/org_1/permanent", "organization.delete"],
@@ -73,6 +80,17 @@ describe("audit event coverage", () => {
       ],
       ["DELETE", "/v1/sessions/session_1", "session.delete"],
       ["DELETE", "/v1/auth/sessions/session_1", "session.revoke"],
+      [
+        "POST",
+        "/v1/sessions/session_1/browser/takeover",
+        "session.browser_takeover",
+      ],
+      [
+        "POST",
+        "/v1/sessions/session_1/browser/handoff",
+        "session.browser_handoff",
+      ],
+      ["POST", "/v1/sessions/session_1/browser/login", "session.browser_login"],
       ["DELETE", "/v1/auth/users/user_1/sessions", "session.revoke_all"],
     ] as const) {
       expect(describeAuditEvent(method, path)?.action).toBe(action);
@@ -153,6 +171,11 @@ describe("audit event coverage", () => {
       ["POST", "/v1/auth/mfa/backup-codes", "/v1/auth/mfa/backup-codes"],
       ["DELETE", "/v1/auth/sessions/:sessionId", "/v1/auth/sessions/session_1"],
       ["DELETE", "/v1/sessions/:sessionId", "/v1/sessions/session_1"],
+      [
+        "POST",
+        "/v1/sessions/:sessionId/browser/:control{takeover|handoff|login}",
+        "/v1/sessions/session_1/browser/login",
+      ],
       [
         "DELETE",
         "/v1/auth/users/:userId/sessions",

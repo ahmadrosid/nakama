@@ -11,6 +11,7 @@ import {
   type WebSearchConfigFile,
 } from "../web-search-config";
 import { jsonSchemaFromZod } from "./schema";
+import { readBoundedBody } from "./web-fetch";
 import {
   WEB_SEARCH_TOOL_NAME,
   type WebSearchInput,
@@ -26,6 +27,11 @@ const MAX_RESULTS = 5;
 const MAX_SNIPPET_CHARS = 800;
 
 const MAX_ERROR_BODY_CHARS = 300;
+
+/** Five hits with snippets fit in a few KB; this only stops a runaway endpoint. */
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+const MAX_ERROR_BODY_BYTES = 64 * 1024;
 
 const JsonObjectSchema = z.record(z.string(), z.json());
 
@@ -248,7 +254,12 @@ export async function runCustomWebSearch(
 
   if (!response.ok) {
     const detail = truncate(
-      (await response.text().catch(() => "")).trim(),
+      (
+        await readBoundedBody(response, MAX_ERROR_BODY_BYTES).then(
+          (bytes) => bytes.toString("utf8"),
+          () => ""
+        )
+      ).trim(),
       MAX_ERROR_BODY_CHARS
     );
 
@@ -257,10 +268,11 @@ export async function runCustomWebSearch(
     );
   }
 
+  const responseBody = await readBoundedBody(response, MAX_RESPONSE_BYTES);
   let payload: JsonValue;
 
   try {
-    payload = JsonValueSchema.parse(await response.json());
+    payload = JsonValueSchema.parse(JSON.parse(responseBody.toString("utf8")));
   } catch {
     throw new Error("web_search: search endpoint returned invalid JSON.");
   }

@@ -53,7 +53,6 @@ import {
   type LocalFileCitation,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
-import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
 import { ThinkingReasoning } from "@/components/chat/ThinkingReasoning";
 import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
@@ -976,11 +975,8 @@ function DedicatedToolRow({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
+  // The image itself shows in the reply, so the activity list keeps one row.
   if (isGenerateImageTool(message.tool)) {
-    if (shouldRenderGenerateImageToolRow(message)) {
-      return <ImageGenerationToolRow message={message} profileId={profileId} />;
-    }
-
     return <ToolTimelineItem message={message} />;
   }
 

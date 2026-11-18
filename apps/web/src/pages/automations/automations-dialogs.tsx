@@ -17,9 +17,10 @@ import type { AutomationsPageState } from "@/pages/automations/use-automations-p
 
 type AutomationsDialogsProps = Pick<
   AutomationsPageState,
+  | "automations"
   | "busy"
   | "editDraft"
-  | "setEditDraft"
+  | "closeEdit"
   | "deleteTarget"
   | "setDeleteTarget"
   | "handleSaveEdit"
@@ -31,9 +32,10 @@ type AutomationsDialogsProps = Pick<
 >;
 
 export function AutomationsDialogs({
+  automations,
   busy,
   editDraft,
-  setEditDraft,
+  closeEdit,
   deleteTarget,
   setDeleteTarget,
   handleSaveEdit,
@@ -48,7 +50,7 @@ export function AutomationsDialogs({
       <Dialog
         onOpenChange={(open) => {
           if (!(open || busy)) {
-            setEditDraft(null);
+            closeEdit();
           }
         }}
         open={editDraft !== null}
@@ -78,6 +80,10 @@ export function AutomationsDialogs({
                     busy={busy}
                     onChange={updateEditDraft}
                     profiles={profiles}
+                    savedTrigger={
+                      automations.find((item) => item.id === editDraft.id)
+                        ?.trigger
+                    }
                     toolOptions={toolOptions}
                   />
                 </div>
@@ -97,7 +103,7 @@ export function AutomationsDialogs({
                   <Button
                     className="min-h-11 rounded-xl px-4 sm:min-h-10"
                     disabled={busy}
-                    onClick={() => setEditDraft(null)}
+                    onClick={() => closeEdit()}
                     type="button"
                     variant="outline"
                   >

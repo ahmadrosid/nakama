@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "START_CAPTURE") {
-    start(message.streamId, message.captureUrl)
+    start(message)
       .then(() => sendResponse({ ok: true }))
       .catch(async (error) => {
         await fail(error);
@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function start(streamId, captureUrl) {
+async function start({ captureUrl, meetingId, streamId, ticket }) {
   stopping = undefined;
 
   const tab = await navigator.mediaDevices.getUserMedia({
@@ -110,6 +110,8 @@ async function start(streamId, captureUrl) {
   // Offscreen documents only expose chrome.runtime, not chrome.storage.
   socket = new WebSocket(captureUrl);
   socket.binaryType = "arraybuffer";
+  // The ticket goes in the first message, never in the URL. Audio waits for
+  // the server's "ready", which it sends only after it accepts the ticket.
   await new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error("Nakama capture connection timed out")),
@@ -117,8 +119,14 @@ async function start(streamId, captureUrl) {
     );
 
     socket.onopen = () => {
-      clearTimeout(timer);
-      resolve();
+      socket.send(JSON.stringify({ meetingId, ticket, type: "auth" }));
+    };
+
+    socket.onmessage = (event) => {
+      if (readMessage(event.data)?.type === "ready") {
+        clearTimeout(timer);
+        resolve();
+      }
     };
 
     socket.onerror = socket.onclose = () => {
@@ -132,13 +140,13 @@ async function start(streamId, captureUrl) {
   }
 
   socket.onmessage = (event) => {
-    const message = JSON.parse(event.data);
+    const message = readMessage(event.data);
 
-    if (message.type === "capture-finalized") {
+    if (message?.type === "capture-finalized") {
       finalized?.();
     }
 
-    if (message.type === "stop-requested") {
+    if (message?.type === "stop-requested") {
       void stop();
     }
   };
@@ -217,7 +225,7 @@ function stop(failure = "") {
             resolve();
           };
 
-          socket.send(JSON.stringify({ protocol: 2, type: "stop" }));
+          socket.send(JSON.stringify({ protocol: 3, type: "stop" }));
         });
       }
     } catch (reason) {
@@ -251,6 +259,19 @@ function stop(failure = "") {
   })();
 
   return stopping;
+}
+
+function readMessage(data) {
+  // Text frames only; the server sends no binary frames.
+  if (data instanceof ArrayBuffer) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
 }
 
 function fail(error) {

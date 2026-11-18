@@ -72,6 +72,7 @@ export async function createBot(
   });
 
   bot.on("message", handleMessage);
+  bot.on("callback_query:data", handleMessage);
   bot.catch((error) => {
     console.error(
       "Telegram bot error:",

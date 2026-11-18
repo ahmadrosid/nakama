@@ -84,62 +84,66 @@ describe("regression cases", () => {
     expect(second.map((item) => item.id)).toEqual(["regcase_old"]);
   });
 
-  test("reads only the last user message", async () => {
+  test("stores a rerun and saves its mark within the org", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const now = "2026-11-03T09:00:00.000Z";
 
-    await db.upsertSession({
-      agentQuestionnaire: null,
-      agentTodos: [],
-      channel: "web",
-      createdAt: now,
-      id: "session_1",
-      model: null,
-      profileId: "agent_1",
-      title: null,
+    await db.createRegressionCase(record());
+
+    const run = {
+      caseId: "regcase_1",
+      createdAt: "2026-11-11T09:00:00.000Z",
+      createdByUserId: "user_1",
+      error: null,
+      id: "regrun_1",
+      orgId: "org_1",
+      output: "Run `deploy rollback`.",
+      status: "completed" as const,
+      verdict: null,
+      verdictAt: null,
+      verdictByUserId: null,
+    };
+
+    await db.createRegressionCaseRun(run);
+
+    expect(
+      await db.getRegressionCaseRun("org_1", "regcase_1", "regrun_1")
+    ).toEqual(run);
+    expect(
+      await db.getRegressionCaseRun("org_2", "regcase_1", "regrun_1")
+    ).toBeNull();
+
+    const mark = {
+      at: "2026-11-11T09:05:00.000Z",
       userId: "user_1",
-    });
+      verdict: "pass" as const,
+    };
 
-    await db.appendMessagesForSession("session_1", [
-      {
-        createdAt: now,
-        id: "msg_1",
-        payload: { content: "First question", role: "user" },
-        seq: 0,
-        sessionId: "session_1",
-      },
-      {
-        createdAt: now,
-        id: "msg_2",
-        payload: { content: "First answer", role: "assistant" },
-        seq: 1,
-        sessionId: "session_1",
-      },
-      {
-        createdAt: now,
-        id: "msg_3",
-        payload: {
-          content: [
-            { data: "base64", mediaType: "audio/wav", type: "audio" },
-            { text: "Second question", type: "text" },
-          ],
-          role: "user",
-        },
-        seq: 2,
-        sessionId: "session_1",
-      },
-      {
-        createdAt: now,
-        id: "msg_4",
-        payload: { content: "Second answer", role: "assistant" },
-        seq: 3,
-        sessionId: "session_1",
-      },
-    ]);
+    expect(
+      await db.setRegressionCaseRunVerdict(
+        "org_2",
+        "regcase_1",
+        "regrun_1",
+        mark
+      )
+    ).toBeNull();
 
-    const message = await db.getLastUserMessageForSession("session_1");
+    const marked = {
+      ...run,
+      verdict: "pass",
+      verdictAt: mark.at,
+      verdictByUserId: "user_1",
+    };
 
-    expect(message?.seq).toBe(2);
-    expect(await db.getLastUserMessageForSession("missing")).toBeNull();
+    expect(
+      await db.setRegressionCaseRunVerdict(
+        "org_1",
+        "regcase_1",
+        "regrun_1",
+        mark
+      )
+    ).toEqual(marked);
+    expect(
+      await db.getRegressionCaseRun("org_1", "regcase_1", "regrun_1")
+    ).toEqual(marked);
   });
 });

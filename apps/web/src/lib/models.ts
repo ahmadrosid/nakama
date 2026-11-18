@@ -87,58 +87,110 @@ export function formatProviderLabel(
   return provider ?? "Provider";
 }
 
-export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
-  [
-    { id: "openai", label: "OpenAI" },
-    { id: "chatgpt", label: "ChatGPT (Plus/Pro)" },
-    { id: "xai_oauth", label: "Grok (SuperGrok / Premium+)" },
-    { id: "anthropic", label: "Anthropic" },
-    { id: "openrouter", label: "OpenRouter" },
-    { id: "gemini", label: "Gemini" },
-    { id: "deepseek", label: "DeepSeek" },
-    { id: "netra", label: "Netra Runtime" },
-    { id: "doubao", label: "Doubao (Volcengine)" },
-    { id: "together", label: "Together AI" },
-    { id: "xiaomi", label: "Xiaomi MiMo" },
-    { id: "meta", label: "Meta Model API" },
-    { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
-    { id: "mistral", label: "Mistral" },
-    { id: "qwen", label: "Qwen (DashScope)" },
-    { id: "qwen_cn", label: "Qwen (DashScope CN)" },
-    { id: "perplexity", label: "Perplexity Sonar" },
-    { id: "cerebras", label: "Cerebras" },
-    { id: "cloudflare", label: "Cloudflare Worker AI" },
-    { id: "fireworks", label: "Fireworks" },
-    { id: "ollama", label: "Ollama" },
-    { id: "opencode_go", label: "OpenCode Go" },
-    { id: "command_code", label: "Command Code" },
-    { id: "minimax", label: "MiniMax" },
-    { id: "xai", label: "xAI Grok" },
-    { id: "groq", label: "Groq" },
-    { id: "cheaper_inference", label: "Cheaper Inference" },
-    { id: "standardcompute", label: "Standard Compute" },
-    { id: "minimax_cn", label: "MiniMax (CN)" },
-    { id: "moonshot", label: "Moonshot Kimi" },
-    { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },
-    { id: "zhipu", label: "GLM (Z.ai)" },
-    { id: "zhipu_cn", label: "GLM (CN)" },
-    { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
-  ];
+/**
+ * One entry in the provider picker. A preset is another name for an existing
+ * provider type: it has its own place in the list and saves its label as the
+ * provider's display name (AI Club is Netra Runtime's DeepSeek under AI Club's
+ * name).
+ */
+export interface ProviderOption {
+  id: SelectedProvider;
+  label: string;
+  preset?: "aiclub";
+}
+
+/** What tells picker entries apart: the preset, or else the provider type. */
+export function providerOptionKey(option: ProviderOption): string {
+  return option.preset ?? option.id;
+}
+
+/** The name setup fills in: Netra uses the picked entry's label (AI Club). */
+export function defaultProviderDisplayName(
+  provider: SelectedProvider,
+  option?: ProviderOption
+): string {
+  if (provider !== "netra") {
+    return "";
+  }
+
+  return option?.label ?? "Netra Runtime";
+}
+
+export const PROVIDER_OPTIONS: ProviderOption[] = [
+  { id: "openai", label: "OpenAI" },
+  { id: "chatgpt", label: "ChatGPT (Plus/Pro)" },
+  { id: "xai_oauth", label: "Grok (SuperGrok / Premium+)" },
+  { id: "anthropic", label: "Anthropic" },
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "gemini", label: "Gemini" },
+  { id: "deepseek", label: "DeepSeek" },
+  { id: "netra", label: "Netra Runtime" },
+  { id: "netra", label: "AI Club", preset: "aiclub" },
+  { id: "doubao", label: "Doubao (Volcengine)" },
+  { id: "together", label: "Together AI" },
+  { id: "xiaomi", label: "Xiaomi MiMo" },
+  { id: "meta", label: "Meta Model API" },
+  { id: "vercel_ai_gateway", label: "Vercel AI Gateway" },
+  { id: "mistral", label: "Mistral" },
+  { id: "qwen", label: "Qwen (DashScope)" },
+  { id: "qwen_cn", label: "Qwen (DashScope CN)" },
+  { id: "perplexity", label: "Perplexity Sonar" },
+  { id: "cerebras", label: "Cerebras" },
+  { id: "cloudflare", label: "Cloudflare Worker AI" },
+  { id: "fireworks", label: "Fireworks" },
+  { id: "ollama", label: "Ollama" },
+  { id: "opencode_go", label: "OpenCode Go" },
+  { id: "command_code", label: "Command Code" },
+  { id: "minimax", label: "MiniMax" },
+  { id: "xai", label: "xAI Grok" },
+  { id: "groq", label: "Groq" },
+  { id: "cheaper_inference", label: "Cheaper Inference" },
+  { id: "standardcompute", label: "Standard Compute" },
+  { id: "minimax_cn", label: "MiniMax (CN)" },
+  { id: "moonshot", label: "Moonshot Kimi" },
+  { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },
+  { id: "zhipu", label: "GLM (Z.ai)" },
+  { id: "zhipu_cn", label: "GLM (CN)" },
+  { id: "openai_compatible", label: "Custom (OpenAI-compatible)" },
+];
 
 /** Custom OpenAI-compatible endpoints can be added more than once; builtins are one instance each. */
 function allowsMultipleProviderInstances(provider: SelectedProvider): boolean {
   return provider === "openai_compatible" || provider === "ollama";
 }
 
+/**
+ * The picker entries the saved providers take. A preset has no type of its own,
+ * so its saved name tells it from the plain entry (AI Club from Netra Runtime).
+ */
+export function configuredProviderOptionKeys(
+  providers: ReadonlyArray<{ label: string; type: string }> = []
+): Set<string> {
+  return new Set(
+    providers.map((provider) => {
+      const preset = PROVIDER_OPTIONS.find(
+        (option) =>
+          option.preset &&
+          option.id === provider.type &&
+          option.label === provider.label.trim()
+      );
+
+      return preset ? providerOptionKey(preset) : provider.type;
+    })
+  );
+}
+
+/** `configured` holds picker entry keys, see `configuredProviderOptionKeys`. */
 export function isProviderTypeAlreadyConfigured(
   provider: SelectedProvider,
-  configuredTypes: ReadonlySet<string>
+  configured: ReadonlySet<string>,
+  option?: ProviderOption
 ): boolean {
   if (allowsMultipleProviderInstances(provider)) {
     return false;
   }
 
-  return configuredTypes.has(provider);
+  return configured.has(option ? providerOptionKey(option) : provider);
 }
 
 export function firstAvailableProviderOption(
@@ -149,8 +201,13 @@ export function firstAvailableProviderOption(
     return preferred;
   }
 
+  // A preset is picked by hand only: the type alone does not name it.
   const next = PROVIDER_OPTIONS.find(
-    (option) => !isProviderTypeAlreadyConfigured(option.id, configuredTypes)
+    (option) =>
+      !(
+        option.preset ||
+        isProviderTypeAlreadyConfigured(option.id, configuredTypes)
+      )
   );
 
   return next?.id ?? "openai_compatible";
@@ -565,8 +622,7 @@ export function buildCreateProviderRequest(options: {
   xaiOAuth?: CreateProviderRequest["xaiOAuth"];
 }): CreateProviderRequest {
   const customModels =
-    options.provider === "openai_compatible" ||
-    options.provider === "netra" ||
+    isDiscoveryModelProvider(options.provider) ||
     ([
       "openrouter",
       "xai_oauth",
@@ -965,6 +1021,12 @@ export const TRANSCRIPTION_MODEL_OPTIONS = [
 /** Sole v1 image-generation model option (matches server allowlist). */
 export const IMAGE_GENERATION_MODEL_OPTIONS = [
   { id: "gpt-image-2", name: "GPT Image 2" },
+] as const;
+
+/** MiniMax image models (match server allowlist). */
+export const MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS = [
+  { id: "MiniMax-H3-Image", name: "MiniMax H3 Image" },
+  { id: "MiniMax-H3-Image-Highspeed", name: "MiniMax H3 Image Highspeed" },
 ] as const;
 
 /** Workspace selection string accepted by `/v1/settings/image-generation`. */

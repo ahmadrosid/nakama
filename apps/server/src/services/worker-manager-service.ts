@@ -264,6 +264,9 @@ interface RegisteredPluginWorker {
   script: string;
 }
 
+/** A daemon launch takes ~2.5s on Windows; this leaves room for a slow host. */
+const PM2_CONNECT_TIMEOUT_MS = 30_000;
+
 function promisifyPm2<T>(
   fn: (cb: (err: Error | null, result?: T) => void) => void
 ): Promise<T> {
@@ -738,7 +741,29 @@ export class WorkerManagerService {
       .catch(() => {})
       .then(async () => {
         const pm2 = await this.ensurePm2();
-        await promisifyPm2<void>((cb) => pm2.connect(cb));
+
+        // PM2 waits for its daemon with no deadline. A daemon that dies while
+        // it boots would hold server startup, which connects before it listens.
+        await new Promise<void>((resolve, reject) => {
+          const deadline = setTimeout(() => {
+            pm2.disconnect();
+            reject(
+              new Error(
+                `PM2 daemon did not answer within ${PM2_CONNECT_TIMEOUT_MS / 1000}s`
+              )
+            );
+          }, PM2_CONNECT_TIMEOUT_MS);
+
+          pm2.connect((error) => {
+            clearTimeout(deadline);
+
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          });
+        });
 
         try {
           return await action(pm2);

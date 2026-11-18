@@ -49,6 +49,24 @@ describe("isPublicRouteRequest", () => {
     expect(isPublicRouteRequest("PATCH", "/v1/auth/me")).toBe(false);
   });
 
+  test("allows only the automation webhook POST without a login", () => {
+    expect(
+      isPublicRouteRequest("POST", "/v1/automations/automation_1/webhook")
+    ).toBe(true);
+    expect(
+      isPublicRouteRequest("GET", "/v1/automations/automation_1/webhook")
+    ).toBe(false);
+    expect(
+      isPublicRouteRequest(
+        "POST",
+        "/v1/automations/automation_1/webhook-secret"
+      )
+    ).toBe(false);
+    expect(
+      isPublicRouteRequest("POST", "/v1/automations/automation_1/run")
+    ).toBe(false);
+  });
+
   test("allows the ACP MCP bridge POST without a login, but not other ACP routes", () => {
     expect(isPublicRouteRequest("POST", "/v1/acp-mcp/abc123token")).toBe(true);
     expect(isPublicRouteRequest("GET", "/v1/acp-mcp/abc123token")).toBe(false);

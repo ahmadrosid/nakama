@@ -217,33 +217,48 @@ test("group switches keep their save callbacks", () => {
   expect(props.onAllowUnpairedGroupMembersChange).toHaveBeenCalledWith(true);
 });
 
-for (const method of ["qr", "code"]) {
-  test(`relink ${method} requires confirmation and permits cancellation`, async () => {
-    const { container, props } = renderCard();
+test("relink with a QR code requires confirmation and permits cancellation", async () => {
+  const { container, props } = renderCard();
 
-    const trigger = method === "qr" ? "Scan a new QR code" : "New code";
+  act(() => button(container, "Scan a new QR code").click());
+  const dialog = document.querySelector<HTMLElement>("[role='dialog']");
+  expect(dialog).not.toBeNull();
+  expect(props.onReconnect).not.toHaveBeenCalled();
+  act(() => button(dialog!, "Cancel").click());
+  expect(props.onReconnect).not.toHaveBeenCalled();
+  act(() => button(container, "Scan a new QR code").click());
+  await act(async () =>
+    button(
+      document.querySelector<HTMLElement>("[role='dialog']")!,
+      "Relink WhatsApp"
+    ).click()
+  );
+  expect(props.onReconnect).toHaveBeenCalledTimes(1);
+});
 
-    act(() => button(container, trigger).click());
-    const dialog = document.querySelector<HTMLElement>("[role='dialog']");
-    expect(dialog).not.toBeNull();
-    expect(props.onReconnect).not.toHaveBeenCalled();
-    expect(props.onRegeneratePairingCode).not.toHaveBeenCalled();
-    act(() => button(dialog!, "Cancel").click());
-    expect(props.onReconnect).not.toHaveBeenCalled();
-    expect(props.onRegeneratePairingCode).not.toHaveBeenCalled();
-    act(() => button(container, trigger).click());
-    await act(async () =>
-      button(
-        document.querySelector<HTMLElement>("[role='dialog']")!,
-        "Relink WhatsApp"
-      ).click()
-    );
-    expect(props.onReconnect).toHaveBeenCalledTimes(method === "qr" ? 1 : 0);
-    expect(props.onRegeneratePairingCode).toHaveBeenCalledTimes(
-      method === "code" ? 1 : 0
-    );
-  });
-}
+test("linked account can pair another phone without opening settings or relinking", () => {
+  const { container, props } = renderCard();
+  const getCode = button(container, "Get pairing code");
+
+  expect(getCode.closest("details")).toBeNull();
+  expect(container.querySelector("ol")).toBeNull();
+  act(() => getCode.click());
+  expect(props.onRegeneratePairingCode).toHaveBeenCalledTimes(1);
+  expect(document.querySelector("[role='dialog']")).toBeNull();
+  expect(props.onReconnect).not.toHaveBeenCalled();
+});
+
+test("pairing code shows its steps and a new code needs no relink", () => {
+  const { container, props } = renderCard({ pairingCode: "12345678" });
+  const code = container.querySelector("code");
+
+  expect(code?.textContent).toBe("12345678");
+  expect(code?.closest("details")).toBeNull();
+  expect(container.querySelectorAll("ol li")).toHaveLength(3);
+  act(() => button(container, "New code").click());
+  expect(props.onRegeneratePairingCode).toHaveBeenCalledTimes(1);
+  expect(document.querySelector("[role='dialog']")).toBeNull();
+});
 
 test("card Edit opens allowed numbers for the selected profile", () => {
   const queryClient = new QueryClient({

@@ -16,7 +16,19 @@ import {
 
 export type { Meeting } from "@nakama/core/google-meet";
 
-import type { Meeting, MeetingState } from "@nakama/core/google-meet";
+import type {
+  MeetExtensionKey,
+  Meeting,
+  MeetingState,
+} from "@nakama/core/google-meet";
+
+/** A paired browser stops working after this long without use. */
+const EXTENSION_KEY_TTL_MS = 90 * 24 * 60 * 60_000;
+
+/** Live keys one member can hold in one organization. */
+const MAX_EXTENSION_KEYS = 20;
+
+const EXTENSION_KEY_COLUMNS = "id,label,createdAt,lastUsedAt,expiresAt";
 
 export class MeetingStore {
   private readonly db: Database;
@@ -40,7 +52,11 @@ export class MeetingStore {
       CREATE TABLE IF NOT EXISTS segments (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT, meetingId TEXT NOT NULL,
         id TEXT NOT NULL, text TEXT NOT NULL, receivedAt INTEGER NOT NULL,
-        speakerId TEXT, speakerName TEXT, startMs INTEGER, endMs INTEGER, UNIQUE(meetingId,id));`);
+        speakerId TEXT, speakerName TEXT, startMs INTEGER, endMs INTEGER, UNIQUE(meetingId,id));
+      CREATE TABLE IF NOT EXISTS extension_keys (
+        id TEXT PRIMARY KEY, userId TEXT NOT NULL, keyHash TEXT NOT NULL UNIQUE, label TEXT NOT NULL,
+        createdAt INTEGER NOT NULL, lastUsedAt INTEGER, expiresAt INTEGER NOT NULL, revokedAt INTEGER);
+      CREATE INDEX IF NOT EXISTS extension_keys_user ON extension_keys (userId);`);
     this.db.query("INSERT OR IGNORE INTO tenant VALUES (1, ?)").run(orgId);
 
     if (
@@ -333,6 +349,74 @@ export class MeetingStore {
     });
 
     return end > 0 ? rows.slice(0, end) : rows;
+  }
+  /** Stores only the SHA-256 hash of the key. */
+  createExtensionKey(userId: string, keyHash: string, label: string) {
+    const id = randomUUID();
+    const now = Date.now();
+
+    this.db
+      .transaction(() => {
+        const live = this.db
+          .query<{ count: number }, [string, number]>(
+            "SELECT count(*) AS count FROM extension_keys WHERE userId=? AND revokedAt IS NULL AND expiresAt>?"
+          )
+          .get(userId, now);
+
+        if ((live?.count ?? 0) >= MAX_EXTENSION_KEYS) {
+          throw new Error("Remove a connected browser before adding another");
+        }
+
+        this.db
+          .query(
+            "INSERT INTO extension_keys (id,userId,keyHash,label,createdAt,expiresAt) VALUES (?,?,?,?,?,?)"
+          )
+          .run(id, userId, keyHash, label, now, now + EXTENSION_KEY_TTL_MS);
+      })
+      .immediate();
+
+    return this.db
+      .query<MeetExtensionKey, [string]>(
+        `SELECT ${EXTENSION_KEY_COLUMNS} FROM extension_keys WHERE id=?`
+      )
+      .get(id)!;
+  }
+  findExtensionKey(keyHash: string) {
+    return this.db
+      .query<
+        { id: string; lastUsedAt: number | null; userId: string },
+        [string, number]
+      >(
+        "SELECT id,userId,lastUsedAt FROM extension_keys WHERE keyHash=? AND revokedAt IS NULL AND expiresAt>?"
+      )
+      .get(keyHash, Date.now());
+  }
+  /** Moves the expiry 90 days past this use. */
+  renewExtensionKey(id: string) {
+    const now = Date.now();
+
+    this.db
+      .query(
+        "UPDATE extension_keys SET lastUsedAt=?,expiresAt=? WHERE id=? AND revokedAt IS NULL"
+      )
+      .run(now, now + EXTENSION_KEY_TTL_MS, id);
+  }
+  listExtensionKeys(userId: string) {
+    return this.db
+      .query<MeetExtensionKey, [string, number]>(
+        `SELECT ${EXTENSION_KEY_COLUMNS} FROM extension_keys WHERE userId=? AND revokedAt IS NULL AND expiresAt>? ORDER BY createdAt DESC LIMIT ${MAX_EXTENSION_KEYS}`
+      )
+      .all(userId, Date.now());
+  }
+  /** Revokes one key, or every key of the user when `id` is null. */
+  revokeExtensionKeys(userId: string, id: string | null = null) {
+    return (
+      this.db
+        .query(
+          "UPDATE extension_keys SET revokedAt=? WHERE userId=? AND (? IS NULL OR id=?) AND revokedAt IS NULL"
+        )
+        .run(Date.now(), userId, id, id).changes > 0
+    );
   }
   close() {
     this.db.close();

@@ -142,6 +142,16 @@ export class ChatClient extends ProfileFilesClient {
     );
   }
 
+  async recordSessionBrowserControl(
+    sessionId: string,
+    control: "handoff" | "login" | "takeover"
+  ): Promise<void> {
+    await this.request<void>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/browser/${control}`,
+      { method: "POST" }
+    );
+  }
+
   async getSessionAcpSettings(
     sessionId: string
   ): Promise<AcpSessionSettingsResponse> {

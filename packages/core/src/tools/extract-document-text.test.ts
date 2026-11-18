@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { LEGACY_DOC_UNSUPPORTED_MESSAGE } from "../artifact-mime";
 import { type EmailConfigFile, toMailboxConfig } from "../email-config";
 import {
   createAttachmentReference,
@@ -18,6 +19,11 @@ process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??=
 const FIXTURES = join(import.meta.dir, "..", "__fixtures__");
 
 const SAMPLE_PDF = readFileSync(join(FIXTURES, "sample.pdf"));
+
+// A minimal BIFF8 workbook in an OLE container, one text cell.
+const SAMPLE_XLS = readFileSync(join(FIXTURES, "sample.xls"));
+
+const SAMPLE_XLS_CELL = "nakama xls cell";
 
 const completeConfig: EmailConfigFile = {
   from: "user@example.com",
@@ -152,6 +158,50 @@ describe("extract_document_text tool", () => {
 
     expect(body.length).toBe(MAX_EMAIL_BODY_BYTES);
     expect(file.toString("utf8").startsWith(body)).toBe(true);
+  });
+
+  test("reads a stored legacy .xls", async () => {
+    const result = await runExtractDocumentText(
+      { documentRef: "att_sheet" },
+      {
+        ...context,
+        loadAttachment: async () => ({
+          bytes: SAMPLE_XLS,
+          filename: "sheet.xls",
+          mediaType: "application/vnd.ms-excel",
+        }),
+      },
+      {
+        // SAFETY: This test loader uses only the configuration values checked by the tool.
+        loadConfig: async () => ({}) as typeof completeConfig,
+      }
+    );
+
+    expect(result).toMatchObject({
+      mediaType: "application/vnd.ms-excel",
+      untrustedContent: true,
+    });
+    expect("text" in result ? result.text : "").toContain(SAMPLE_XLS_CELL);
+  });
+
+  test("still refuses a legacy .doc", async () => {
+    const result = await runExtractDocumentText(
+      { documentRef: "att_doc" },
+      {
+        ...context,
+        loadAttachment: async () => ({
+          bytes: SAMPLE_XLS,
+          filename: "report.doc",
+          mediaType: "application/msword",
+        }),
+      },
+      {
+        // SAFETY: This test loader uses only the configuration values checked by the tool.
+        loadConfig: async () => ({}) as typeof completeConfig,
+      }
+    );
+
+    expect(result).toEqual({ error: LEGACY_DOC_UNSUPPORTED_MESSAGE });
   });
 
   test("rejects unsupported document bytes", async () => {

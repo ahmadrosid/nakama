@@ -123,14 +123,16 @@ export function truncateMailBody(
     return { text: value, truncated: false };
   }
 
-  let end = value.length;
-
-  while (end > 0 && Buffer.byteLength(value.slice(0, end), "utf8") > maxBytes) {
-    end -= 1;
-  }
+  // One linear pass: encodeInto writes only whole characters, so `read` ends
+  // on a character boundary. A per-character loop here blocked the event loop
+  // for seconds on a 1 MiB email body.
+  const { read } = new TextEncoder().encodeInto(
+    value,
+    new Uint8Array(Math.max(0, maxBytes))
+  );
 
   return {
-    text: `${value.slice(0, end)}…`,
+    text: `${value.slice(0, read)}…`,
     truncated: true,
   };
 }

@@ -1,12 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ChannelIdentityInUseError } from "./channel-config-shared";
+import {
+  ChannelIdentityInUseError,
+  withPairingConfigLock,
+} from "./channel-config-shared";
 import { withTempHomedir } from "./testing/channel-config-fixtures";
 import {
+  getWhatsAppConfigDir,
   loadWhatsAppConfigFile,
+  regenerateWhatsAppPairingCode,
   saveWhatsAppConfig,
   syncWhatsAppOwnerPairing,
+  verifyAndPairWhatsAppUser,
 } from "./whatsapp-config";
 
 describe("syncWhatsAppOwnerPairing", () => {
@@ -69,6 +75,58 @@ describe("syncWhatsAppOwnerPairing", () => {
       expect(saved?.pairedJid).toBe("6281379292556@s.whatsapp.net");
       expect(saved?.pairedLid).toBe("236283431522503@lid");
       expect(saved?.pairingCode).toBeNull();
+    });
+  });
+
+  test("a live code survives a reconnect and pairs another phone", async () => {
+    await withTempHomedir("nakama-core-wa-sync-", async () => {
+      await saveWhatsAppConfig({ profileId: "default" });
+      await syncWhatsAppOwnerPairing({
+        ownerJid: "6281379292556:12@s.whatsapp.net",
+      });
+      const { pairingCode } = await regenerateWhatsAppPairingCode();
+
+      // A network reconnect syncs the owner again.
+      await syncWhatsAppOwnerPairing({
+        ownerJid: "6281379292556:13@s.whatsapp.net",
+      });
+
+      expect(pairingCode).not.toBeNull();
+
+      const paired = await verifyAndPairWhatsAppUser(
+        pairingCode ?? "",
+        "6289876543210@s.whatsapp.net"
+      );
+
+      expect(paired.ok).toBe(true);
+      const saved = await loadWhatsAppConfigFile();
+      expect(saved?.pairedJid).toBe("6289876543210@s.whatsapp.net");
+      expect(saved?.pairingCode).toBeNull();
+    });
+  });
+
+  test("a new code waits while the worker holds the config lock", async () => {
+    await withTempHomedir("nakama-core-wa-sync-", async () => {
+      await saveWhatsAppConfig({ profileId: "default" });
+      const before = (await loadWhatsAppConfigFile())?.pairingCode;
+
+      const regenerated: ReturnType<typeof regenerateWhatsAppPairingCode>[] =
+        [];
+
+      // The worker is in the middle of a pairing.
+      await withPairingConfigLock(getWhatsAppConfigDir(), async () => {
+        regenerated.push(regenerateWhatsAppPairingCode());
+        await Bun.sleep(100);
+
+        expect((await loadWhatsAppConfigFile())?.pairingCode).toBe(before);
+      });
+
+      const [settings] = await Promise.all(regenerated);
+
+      expect(settings?.pairingCode).not.toBe(before);
+      expect((await loadWhatsAppConfigFile())?.pairingCode).toBe(
+        settings?.pairingCode ?? ""
+      );
     });
   });
 

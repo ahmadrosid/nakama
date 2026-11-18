@@ -51,6 +51,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.lockfiles == 'true'
     runs-on: ubuntu-latest
+    env:
+      # GHSA-fc5q-39xc-vjpf: picomatch ReDoS, every version up to 4.0.7 and no
+      # patched release yet. Our globs are hardcoded, not user input.
+      # Drop this once picomatch ships a fix.
+      AUDIT_IGNORE: --ignore=GHSA-fc5q-39xc-vjpf
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -60,17 +65,13 @@ jobs:
         with:
           bun-version: 1.4.4
 
-      # basic-ftp is blocked by get-uri's ^5 range, not accepted silently.
-      # Remove the ignore as soon as get-uri accepts the fixed version.
       - name: Audit root lockfile
-        run: >-
-          bun audit --production --audit-level=high
-          --ignore=GHSA-c475-qrg2-pj4r
+        run: bun audit --production --audit-level=high $AUDIT_IGNORE
 
       - name: Audit shipped image lockfile
         working-directory: .docker/runtime-deps
-        run: bun audit --audit-level=high --ignore=GHSA-c475-qrg2-pj4r
+        run: bun audit --audit-level=high $AUDIT_IGNORE
 
       - name: Audit docs website lockfile
         working-directory: docs/website
-        run: bun audit --audit-level=high
+        run: bun audit --audit-level=high $AUDIT_IGNORE

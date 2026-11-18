@@ -56,10 +56,18 @@ export function disableBunIdleTimeoutForLongHeldRequest(
     request.method === "POST" &&
     /^\/v1\/acp-mcp\/[^/]+\/?$/.test(new URL(request.url).pathname);
 
+  // A rerun answers in its POST, after the whole tool loop.
+  const regressionRerunRequest =
+    request.method === "POST" &&
+    /^\/v1\/profiles\/[^/]+\/regression-cases\/[^/]+\/runs\/?$/.test(
+      new URL(request.url).pathname
+    );
+
   if (
     isLongHeldAutomationRunRequest(request) ||
     pluginRequest ||
-    acpMcpRequest
+    acpMcpRequest ||
+    regressionRerunRequest
   ) {
     server.timeout(request, 0);
   }

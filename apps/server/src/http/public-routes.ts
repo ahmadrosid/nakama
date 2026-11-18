@@ -14,6 +14,12 @@ const PUBLIC_ROUTES = new Set([
   "/v1/auth/password-reset/request",
   "/v1/auth/password-reset/complete",
   "/v1/composio/oauth/callback",
+  // Nakama Desktop: each route checks its own device signature or pass.
+  "/v1/llm/token",
+  "/v1/llm/models",
+  "/v1/llm/chat",
+  "/v1/llm/text",
+  "/v1/llm/computer",
 ]);
 
 export function isPublicRouteRequest(
@@ -30,10 +36,25 @@ export function isPublicRouteRequest(
     // The stdio bridge an ACP agent starts has no login. The token in the path
     // is the credential, and it reaches only that chat's Nakama tools.
     (method === "POST" && /^\/v1\/acp-mcp\/[^/]+$/.test(pathname)) ||
+    // GitHub-style signed webhook; the route verifies X-Hub-Signature-256.
+    (method === "POST" &&
+      /^\/v1\/automations\/[^/]+\/webhook$/.test(pathname)) ||
     // OAuth provider redirect: it carries a single-use code and state, and the
     // browser arriving here has no Nakama session.
     (method === "GET" &&
       /^\/v1\/mcp\/oauth\/callback\/[^/]+$/.test(pathname)) ||
+    // The Meet extension pairs without a login, then sends its Meet key; the
+    // route itself checks that key and accepts no other credential.
+    (method === "POST" &&
+      /^\/v1\/meet\/extension\/(?:pair|start|leave|disconnect)$/.test(
+        pathname
+      )) ||
+    (method === "GET" &&
+      /^\/v1\/meet\/extension\/(?:pair\/[^/]+|status|transcript)$/.test(
+        pathname
+      )) ||
+    // The capture socket sends a one-time ticket as its first message.
+    (method === "GET" && pathname === "/v1/meet/capture") ||
     (method === "GET" &&
       /^\/v1\/public\/artifact-shares\/[^/]+$/.test(pathname)) ||
     // Microsoft posts Teams activities with its own service token; the worker's

@@ -176,6 +176,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       ? explainGroupMessageHandling({
           me: inbound.me,
           mentionedJids: inbound.mentionedJids,
+          quotedMessageId: inbound.quotedMessageId,
           quotedParticipant: inbound.quotedParticipant,
           requireMention: requireGroupMention,
           text: trimmed || (inbound.media ? "[attachment]" : ""),
@@ -1000,6 +1001,7 @@ function normalizeInboundChat(
     media: data.media,
     mentionedJids: data.mentionedJids ?? [],
     messageId: data.messageId ?? null,
+    quotedMessageId: data.quotedMessageId ?? null,
     quotedParticipant: data.quotedParticipant ?? null,
     quotedText: data.quotedText ?? null,
     senderJid: data.senderJid ?? data.jid,

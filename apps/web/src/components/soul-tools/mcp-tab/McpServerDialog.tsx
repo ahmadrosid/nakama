@@ -26,7 +26,10 @@ import {
 } from "@/components/soul-tools/mcp-tab/mcp-connect-app-views";
 import { McpImportConfigDialog } from "@/components/soul-tools/mcp-tab/mcp-import-config-dialog";
 import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-dialog-form";
-import { unregisteredPopularServers } from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
+import {
+  composioToolkitFor,
+  unregisteredPopularServers,
+} from "@/components/soul-tools/mcp-tab/popular-mcp-servers";
 import { emptyHeaderRow } from "@/components/soul-tools/mcp-tab/shared";
 import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 import { useAuth } from "@/context/use-auth";
@@ -237,7 +240,9 @@ function McpCreateBody({
       : [];
 
   async function connectApp(item: PopularServer) {
-    if (!offered.some((toolkit) => toolkit.slug === item.toolkit)) {
+    const toolkitSlug = composioToolkitFor(item, offered);
+
+    if (!toolkitSlug) {
       // No Composio for this app here: sign in to its own MCP server.
       if ("url" in item) {
         state.selectKind("signin");
@@ -260,7 +265,7 @@ function McpCreateBody({
         isOrgAdmin,
         profileId,
         returnTo: `${window.location.pathname}${window.location.search}`,
-        toolkitSlug: item.toolkit,
+        toolkitSlug,
         toolkits: composio,
       });
 

@@ -127,9 +127,10 @@ import { readToolSource } from "./tool-source";
 
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
-const MAX_KNOWLEDGE_ZIP_ENTRIES = 100;
+const MAX_ZIP_ENTRIES = 100;
 
-const MAX_KNOWLEDGE_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+/** A ZIP may unpack to this many times its size; more is a ZIP bomb. */
+const MAX_ZIP_EXPANSION = 5;
 
 const KNOWLEDGE_ZIP_EXTENSIONS = new Set([
   ".txt",
@@ -139,19 +140,29 @@ const KNOWLEDGE_ZIP_EXTENSIONS = new Set([
   ".docx",
 ]);
 
-function readKnowledgeZip(zipBase64: string): Record<string, Uint8Array> {
+/**
+ * Unpacks an uploaded ZIP in memory, so it holds up to `maxBytes` times
+ * MAX_ZIP_EXPANSION at its peak. Rejects unsafe paths and returns only the
+ * files, without folders or macOS metadata.
+ */
+export function readZipUpload(
+  zipBase64: string,
+  maxBytes: number
+): [name: string, bytes: Uint8Array][] {
+  const tooLarge = `ZIP file exceeds the ${maxBytes / (1024 * 1024)} MiB limit.`;
+
   if (!isString(zipBase64) || zipBase64.length === 0) {
     throw new NakamaApiError("ZIP data is required.", 400);
   }
 
-  if (zipBase64.length > Math.ceil(MAX_KNOWLEDGE_ZIP_BYTES / 3) * 4) {
-    throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
+  if (zipBase64.length > Math.ceil(maxBytes / 3) * 4) {
+    throw new NakamaApiError(tooLarge, 413);
   }
 
   const archive = Buffer.from(zipBase64, "base64");
 
-  if (archive.length > MAX_KNOWLEDGE_ZIP_BYTES) {
-    throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
+  if (archive.length > maxBytes) {
+    throw new NakamaApiError(tooLarge, 413);
   }
 
   // The canonical round-trip rejects invalid characters and padding without
@@ -163,19 +174,20 @@ function readKnowledgeZip(zipBase64: string): Record<string, Uint8Array> {
   let count = 0;
   let totalBytes = 0;
   const names = new Set<string>();
+  let entries: Record<string, Uint8Array>;
 
   try {
-    return unzipSync(archive, {
+    entries = unzipSync(archive, {
       filter: ({ name, originalSize }) => {
         count += 1;
         totalBytes += originalSize;
 
         if (
-          count > MAX_KNOWLEDGE_ZIP_ENTRIES ||
+          count > MAX_ZIP_ENTRIES ||
           !Number.isSafeInteger(originalSize) ||
           originalSize < 0 ||
           originalSize > MAX_KNOWLEDGE_DOCUMENT_BYTES ||
-          totalBytes > MAX_KNOWLEDGE_ZIP_UNCOMPRESSED_BYTES
+          totalBytes > maxBytes * MAX_ZIP_EXPANSION
         ) {
           throw new NakamaApiError("ZIP file exceeds the entry limits.", 413);
         }
@@ -215,6 +227,12 @@ function readKnowledgeZip(zipBase64: string): Record<string, Uint8Array> {
 
     throw new NakamaApiError("Invalid ZIP file.", 400);
   }
+
+  return Object.entries(entries).filter(
+    ([name]) =>
+      !(name.endsWith("/") || name.startsWith("__MACOSX/")) &&
+      name.split("/").at(-1) !== ".DS_Store"
+  );
 }
 
 const BASIC_PROFILE_TOOL_IDS = [
@@ -721,6 +739,13 @@ export class ProfileService {
     ];
 
     const moved: [string, string][] = [];
+    const automationIds = await this.listProfileAutomationIds(orgId, profileId);
+
+    // Moved automations are disabled; the owner makes a new secret in the new org.
+    // Delete first so a failure leaves no valid secret on a moved automation.
+    for (const id of automationIds) {
+      await this.db.deleteAutomationWebhookSecret(id);
+    }
 
     try {
       for (const [source, targetPath] of paths) {
@@ -750,6 +775,15 @@ export class ProfileService {
     }
 
     return this.getProfile(destination, profileId);
+  }
+
+  private async listProfileAutomationIds(
+    orgId: string,
+    profileId: string
+  ): Promise<string[]> {
+    return (await this.db.listAutomationsForOrg(orgId))
+      .filter((automation) => automation.profileId === profileId)
+      .map((automation) => automation.id);
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
@@ -786,6 +820,7 @@ export class ProfileService {
 
     await this.beforeChannelOwnerDelete?.(orgId, profileId);
 
+    // Webhook secrets go with the profile's automations (FK cascade).
     const deleted = await deleteProfileWithHistoryArchives(
       this.db,
       orgId,
@@ -1340,13 +1375,7 @@ export class ProfileService {
     zipBase64: string
   ): Promise<ImportKnowledgeBaseZipResponse> {
     await this.requireProfile(orgId, profileId);
-    const archive = readKnowledgeZip(zipBase64);
-
-    const files = Object.entries(archive).filter(
-      ([name]) =>
-        !(name.endsWith("/") || name.startsWith("__MACOSX/")) &&
-        name.split("/").at(-1) !== ".DS_Store"
-    );
+    const files = readZipUpload(zipBase64, MAX_KNOWLEDGE_ZIP_BYTES);
 
     if (
       !files.some(([name]) =>

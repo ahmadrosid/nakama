@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import type { ProviderJsonRecord } from "../shared";
 import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createOpenRouterProvider } from "./index";
@@ -481,6 +482,29 @@ describe("createOpenRouterProvider", () => {
       ).rejects.toThrow("503");
       expect(fetchMock).toHaveBeenCalledTimes(afterStreamError ? 2 : 1);
     }
+  });
+
+  test("an empty credit balance is an API error with a client status", async () => {
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: asTestFetch(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: { code: 402, message: "Insufficient credits" },
+            }),
+            { headers: { "Content-Type": "application/json" }, status: 402 }
+          )
+      ),
+    });
+
+    const refused = provider.streamChat(
+      { messages: [{ content: "hi", role: "user" }], system: "test" },
+      { onChunk() {} }
+    );
+
+    await expect(refused).rejects.toBeInstanceOf(NakamaApiError);
+    await expect(refused).rejects.toMatchObject({ status: 400 });
   });
 
   test("rejects an error alongside a tool delta before notifying handlers", async () => {

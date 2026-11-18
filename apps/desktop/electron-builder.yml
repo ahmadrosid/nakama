@@ -6,6 +6,8 @@ directories:
   output: dist/electron
 files:
   - main.mjs
+  - first-run.mjs
+  - first-run.html
   - preload.cjs
   - package.json
 publish:

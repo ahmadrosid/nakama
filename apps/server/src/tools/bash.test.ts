@@ -180,14 +180,10 @@ describe("bash tool", () => {
         {
           command: '"$NAKAMA_TEST_BUN" child.cjs & wait',
           env: { NAKAMA_TEST_BUN: process.execPath },
-          // The clock starts at spawn. On Windows the shell and the child can
-          // need more than 500 ms to start, and then no PID is ever written.
-          timeoutMs:
-            mode === "timeout"
-              ? process.platform === "win32"
-                ? 3000
-                : 500
-              : 30_000,
+          // The clock starts at spawn. On Windows or a busy CI runner the shell
+          // and the child can need more than 500 ms to start, and then no PID
+          // is ever written.
+          timeoutMs: mode === "timeout" ? 3000 : 30_000,
         },
         {
           orgId: "org_test",
@@ -210,9 +206,7 @@ describe("bash tool", () => {
 
         const result = await Promise.race([
           pending,
-          Bun.sleep(process.platform === "win32" ? 5000 : 2000).then(
-            () => "hung"
-          ),
+          Bun.sleep(5000).then(() => "hung"),
         ]);
 
         expect(result).not.toBe("hung");

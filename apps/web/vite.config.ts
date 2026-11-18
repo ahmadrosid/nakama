@@ -78,7 +78,8 @@ export default defineConfig({
     proxy: {
       "/artifact-frame": serverUrl,
       "/health": serverUrl,
-      "/v1": serverUrl,
+      // ws: the Meet extension's capture socket is /v1/meet/capture.
+      "/v1": { target: serverUrl, ws: true },
     },
   },
 });

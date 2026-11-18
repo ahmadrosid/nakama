@@ -42,6 +42,36 @@ function tokenWithAccount(): string {
   return `h.${claims}.s`;
 }
 
+function tokenWithPlan(plan: string): string {
+  const claims = Buffer.from(
+    JSON.stringify({
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct-1",
+        chatgpt_plan_type: plan,
+      },
+    })
+  ).toString("base64url");
+
+  return `h.${claims}.s`;
+}
+
+/** Two connected accounts: the default one on `defaultPlan`, then a Plus one. */
+function twoAccountConfig(defaultPlan: string): UserConfig {
+  const [chatgpt] = chatgptConfig().providers;
+
+  return {
+    defaultProviderId: "p-chatgpt",
+    providers: [
+      { ...chatgpt!, chatgptAccessToken: tokenWithPlan(defaultPlan) },
+      {
+        ...chatgpt!,
+        chatgptAccessToken: tokenWithPlan("plus"),
+        id: "p-chatgpt-plus",
+      },
+    ],
+  };
+}
+
 function sseBody(events: unknown[]): string {
   return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
 }
@@ -84,6 +114,29 @@ describe("resolveImageGenerationSelection on a ChatGPT subscription", () => {
     expect(selection?.instance.id).toBe("p-chatgpt");
     expect(selection?.chatgptOAuth).toEqual(chatgptOAuth);
     expect(selection?.selection).toBe(`p-chatgpt::${selection?.model}`);
+  });
+
+  test("skips a Free default account when a paid one is connected", () => {
+    expect(
+      resolveImageGenerationSelection(twoAccountConfig("free"))?.instance.id
+    ).toBe("p-chatgpt-plus");
+    expect(
+      resolveImageGenerationSelection(twoAccountConfig("pro"))?.instance.id
+    ).toBe("p-chatgpt");
+  });
+
+  test("still uses a Free account when it is the only one", () => {
+    const config = chatgptConfig();
+
+    const selection = resolveImageGenerationSelection({
+      ...config,
+      providers: config.providers.map((provider) => ({
+        ...provider,
+        chatgptAccessToken: tokenWithPlan("free"),
+      })),
+    });
+
+    expect(selection?.instance.id).toBe("p-chatgpt");
   });
 
   test("turns image generation off when the saved model is off", () => {
@@ -295,6 +348,39 @@ describe("generateImageWithOpenAI on a ChatGPT subscription", () => {
           prompt: "a cat",
         })
       ).rejects.toMatchObject({ status: 400 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("does not pass the raw upstream 400 through for a Free account", async () => {
+    const upstream =
+      "Tool choice 'image_generation' not found in 'tools' parameter.";
+
+    const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
+    globalThis.fetch = (async (_input: RequestInfo | URL) =>
+      Response.json(
+        { error: { message: upstream } },
+        { status: 400 }
+      )) as typeof fetch;
+
+    const run = (plan: string) => {
+      const accessToken = tokenWithPlan(plan);
+
+      return generateImageWithOpenAI({
+        apiKey: accessToken,
+        chatgpt: { oauth: { ...chatgptOAuth, accessToken } },
+        model: "gpt-6-sol",
+        prompt: "a cat",
+      });
+    };
+
+    try {
+      await expect(run("free")).rejects.toBeInstanceOf(NakamaApiError);
+      await expect(run("free")).rejects.toMatchObject({ status: 400 });
+      await expect(run("free")).rejects.not.toThrow(upstream);
+      await expect(run("plus")).rejects.toThrow(upstream);
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -29,16 +29,16 @@ import type {
   WhatsAppSettingsResponse,
 } from "@nakama/core/contract";
 import type {
-  MeetAction,
   MeetActionInput,
   MeetActionResults,
+  MeetSessionAction,
 } from "@nakama/core/google-meet";
 import { readBrowserOrigin } from "./browser";
 import { AutomationsClient } from "./client-automations";
 
 /** Channels and connectors: Telegram, Discord, Slack, WhatsApp, Composio, notifications, Google Meet. */
 export class ChannelsClient extends AutomationsClient {
-  invokeGoogleMeet<Action extends MeetAction>(
+  invokeGoogleMeet<Action extends MeetSessionAction>(
     action: Action,
     input: MeetActionInput | undefined,
     orgId: string,

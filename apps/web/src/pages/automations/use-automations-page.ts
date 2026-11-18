@@ -1,5 +1,8 @@
 import uFuzzy from "@leeoniya/ufuzzy";
-import type { StoredAutomation } from "@nakama/core/contract";
+import type {
+  StoredAutomation,
+  UpdateAutomationRequest,
+} from "@nakama/core/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
@@ -80,7 +83,13 @@ export function useAutomationsPage() {
     null
   );
 
-  const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
+  // `opened` is the automation as the dialog loaded it.
+  const [edit, setEdit] = useState<{
+    draft: StoredAutomation;
+    opened: StoredAutomation;
+  } | null>(null);
+
+  const editDraft = edit?.draft ?? null;
   const editProfileId = editDraft?.profileId ?? null;
 
   const { data: editProfile } = useProfileQuery(editProfileId);
@@ -205,28 +214,71 @@ export function useAutomationsPage() {
     markReadMutation.mutateAsync,
   ]);
 
+  // The automation list polls fast and carries the last run, so a run that
+  // starts, ends or records its delivery refetches the run list, which polls
+  // slowly when idle.
+  const lastRun = selected
+    ? [
+        selected.lastRunAt,
+        selected.lastRunStatus,
+        selected.lastRunDeliveryStatus,
+      ].join("|")
+    : null;
+
+  const seenLastRun = useRef({ automationId: selectedId, lastRun });
+
+  useEffect(() => {
+    const seen = seenLastRun.current;
+    seenLastRun.current = { automationId: selectedId, lastRun };
+
+    if (
+      seen.automationId === selectedId &&
+      seen.lastRun !== null &&
+      seen.lastRun !== lastRun
+    ) {
+      void refetchRuns();
+    }
+  }, [selectedId, lastRun, refetchRuns]);
+
   async function handleSaveEdit() {
-    if (!editDraft || busy) {
+    if (!edit || busy) {
       return;
     }
 
     setError(null);
+    const { draft, opened } = edit;
+
+    const changed = (key: keyof StoredAutomation) =>
+      JSON.stringify(draft[key]) !== JSON.stringify(opened[key]);
+
+    // Only what this dialog changed. The server refuses the save when the
+    // automation changed after the dialog opened.
+    const input: UpdateAutomationRequest = {
+      ...(changed("delivery") && { delivery: draft.delivery ?? null }),
+      ...(changed("description") && { description: draft.description }),
+      ...(changed("enabled") && { enabled: draft.enabled }),
+      ...(changed("name") && { name: draft.name }),
+      ...(changed("profileId") && { profileId: draft.profileId }),
+      ...(changed("prompt") && { prompt: draft.prompt }),
+      // A limit holds the old agent's ids, so an agent change always sends it.
+      ...((changed("toolLimit") || changed("profileId")) && {
+        toolLimit: draft.toolLimit ?? null,
+      }),
+      ...(changed("trigger") && { trigger: draft.trigger }),
+    };
+
+    if (Object.keys(input).length === 0) {
+      setEdit(null);
+
+      return;
+    }
 
     try {
       await updateMutation.mutateAsync({
-        automationId: editDraft.id,
-        input: {
-          delivery: editDraft.delivery ?? null,
-          description: editDraft.description,
-          enabled: editDraft.enabled,
-          name: editDraft.name,
-          profileId: editDraft.profileId,
-          prompt: editDraft.prompt,
-          toolLimit: editDraft.toolLimit ?? null,
-          trigger: editDraft.trigger,
-        },
+        automationId: draft.id,
+        input: { ...input, version: opened.version },
       });
-      setEditDraft(null);
+      setEdit(null);
     } catch (err) {
       setError(formatError(err));
     }
@@ -245,15 +297,7 @@ export function useAutomationsPage() {
     try {
       await updateMutation.mutateAsync({
         automationId: automation.id,
-        input: {
-          delivery: automation.delivery ?? null,
-          description: automation.description,
-          enabled,
-          name: automation.name,
-          profileId: automation.profileId,
-          prompt: automation.prompt,
-          trigger: automation.trigger,
-        },
+        input: { enabled },
       });
     } catch (err) {
       setError(formatError(err));
@@ -272,7 +316,7 @@ export function useAutomationsPage() {
       setDeleteTarget(null);
 
       if (editDraft?.id === deleteTarget.id) {
-        setEditDraft(null);
+        setEdit(null);
       }
     } catch (err) {
       setError(formatError(err));
@@ -297,14 +341,15 @@ export function useAutomationsPage() {
   }
 
   function openEdit(automation: StoredAutomation) {
-    setEditDraft({ ...automation });
+    setEdit({ draft: { ...automation }, opened: automation });
   }
 
   function updateEditDraft(patch: Partial<StoredAutomation>) {
-    if (!editDraft) {
+    if (!edit) {
       return;
     }
 
+    const editDraft = edit.draft;
     const next = { ...editDraft, ...patch };
 
     // A limit holds the old agent's ids, so a new agent starts with all tools.
@@ -312,7 +357,7 @@ export function useAutomationsPage() {
       delete next.toolLimit;
     }
 
-    setEditDraft(next);
+    setEdit({ draft: next, opened: edit.opened });
   }
 
   async function refresh() {
@@ -356,6 +401,7 @@ export function useAutomationsPage() {
     automations,
     automationsRefreshing,
     busy,
+    closeEdit: () => setEdit(null),
     deleteTarget,
     editDraft,
     error: error ?? (automationsError ? formatError(automationsError) : null),
@@ -382,7 +428,6 @@ export function useAutomationsPage() {
     selectedProfileName,
     selectedRunSummary,
     setDeleteTarget,
-    setEditDraft,
     setSearchQuery,
     setSelectedId,
     toolOptions,

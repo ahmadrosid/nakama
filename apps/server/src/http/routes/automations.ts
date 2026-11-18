@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type {
   AutomationResponse,
   DraftAutomationResponse,
+  GetAutomationRunResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
   MarkAutomationRunsReadResponse,
@@ -21,6 +22,7 @@ import {
   readJson,
 } from "../shared";
 import type { HonoApp } from "../types";
+import { registerAutomationWebhookRoutes } from "./automation-webhooks";
 
 export function registerAutomationRoutes(
   app: HonoApp,
@@ -88,6 +90,7 @@ export function registerAutomationRoutes(
           timezone: z.string().optional(),
           type: z.literal("runAt"),
         }),
+        z.object({ type: z.literal("webhook") }),
       ]),
     })
     .passthrough()
@@ -129,8 +132,10 @@ export function registerAutomationRoutes(
             timezone: z.string().optional(),
             type: z.literal("runAt"),
           }),
+          z.object({ type: z.literal("webhook") }),
         ])
         .optional(),
+      version: z.number().optional(),
     })
     .passthrough()
     .openapi("UpdateAutomationRequest");
@@ -144,6 +149,11 @@ export function registerAutomationRoutes(
     .object({})
     .passthrough()
     .openapi("ListAutomationRunsResponse");
+
+  const getAutomationRunSchema = z
+    .object({})
+    .passthrough()
+    .openapi("GetAutomationRunResponse");
 
   const markAutomationRunsReadSchema = z
     .object({})
@@ -350,6 +360,34 @@ export function registerAutomationRoutes(
   );
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "get",
+      operationId: "getAutomationRun",
+      path: "/v1/automations/{automationId}/runs/{runId}",
+      request: {
+        params: automationIdParam.extend({
+          runId: z.string().openapi({ param: { in: "path", name: "runId" } }),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: getAutomationRunSchema } },
+          description: "Automation run with its transcript",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get one automation run",
+      tags: ["Automations"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "post",
       operationId: "markAutomationRunsRead",
       path: "/v1/automations/{automationId}/runs/mark-read",
@@ -525,7 +563,12 @@ export function registerAutomationRoutes(
       return errorResponse("Automation run record not found.", 500);
     }
 
-    return json<RunAutomationResponse>({ run });
+    // The list leaves out a finished transcript. This reply keeps it.
+    const saved = await automationService.getRun(automationId, orgId, run.id);
+
+    return json<RunAutomationResponse>({
+      run: { ...run, progress: saved?.progress },
+    });
   });
 
   app.get("/v1/automations/:automationId/runs", async (c) => {
@@ -561,6 +604,31 @@ export function registerAutomationRoutes(
     }
   });
 
+  app.get("/v1/automations/:automationId/runs/:runId", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const auth = getRequestAuth(c);
+    const automationId = decodeURIComponent(c.req.param("automationId"));
+    const runId = decodeURIComponent(c.req.param("runId"));
+    const automation = await automationService.get(automationId, orgId);
+
+    if (!automation) {
+      return errorResponse("Automation not found.", 404);
+    }
+
+    await automationService.assertCanAutomateMailbox(automation.profileId, {
+      isPlatformAdmin: auth.isPlatformAdmin,
+      orgRole: auth.orgRole,
+    });
+
+    const run = await automationService.getRun(automationId, orgId, runId);
+
+    if (!run) {
+      return errorResponse("Automation run not found.", 404);
+    }
+
+    return json<GetAutomationRunResponse>({ run });
+  });
+
   app.post("/v1/automations/:automationId/runs/mark-read", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
     const auth = getRequestAuth(c);
@@ -581,5 +649,10 @@ export function registerAutomationRoutes(
 
       throw error;
     }
+  });
+
+  registerAutomationWebhookRoutes(app, options, {
+    automationIdParam,
+    errorSchema,
   });
 }

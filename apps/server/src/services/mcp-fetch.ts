@@ -1,5 +1,8 @@
+import type { LookupAddress } from "node:dns";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+
+const DNS_TIMEOUT_MS = 5000;
 
 /**
  * 169.254.0.0/16 and fe80::/10 hold the cloud metadata endpoints, which no MCP
@@ -16,12 +19,39 @@ function isLinkLocal(address: string): boolean {
   return /^fe[89ab][0-9a-f]:/i.test(address);
 }
 
-export async function assertNotLinkLocal(hostname: string): Promise<void> {
+export async function assertNotLinkLocal(
+  hostname: string,
+  signal?: AbortSignal
+): Promise<void> {
+  signal?.throwIfAborted();
   const bare = hostname.replace(/^\[|\]$/g, "");
+  let addresses: string[];
 
-  const addresses = isIP(bare)
-    ? [bare]
-    : (await lookup(bare, { all: true })).map((record) => record.address);
+  if (isIP(bare)) {
+    addresses = [bare];
+  } else {
+    const deadline = AbortSignal.timeout(DNS_TIMEOUT_MS);
+    const stop = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    stop.throwIfAborted();
+    const result = Promise.withResolvers<LookupAddress[]>();
+    const onAbort = () => result.reject(stop.reason);
+    stop.addEventListener("abort", onAbort, { once: true });
+
+    try {
+      // The OS lookup can finish later; only this wait is cancellable.
+      lookup(bare, { all: true }).then(result.resolve, result.reject);
+      addresses = (await result.promise).map((record) => record.address);
+    } catch (error) {
+      // A caller's abort keeps its own reason; a bare timeout names no cause.
+      if (deadline.aborted && !signal?.aborted) {
+        throw new Error(`DNS lookup for ${bare} timed out.`, { cause: error });
+      }
+
+      throw error;
+    } finally {
+      stop.removeEventListener("abort", onAbort);
+    }
+  }
 
   if (addresses.some(isLinkLocal)) {
     throw new Error(
@@ -36,7 +66,14 @@ export async function fetchMcpRemote(
   init?: RequestInit
 ): Promise<Response> {
   const url = new URL(input instanceof Request ? input.url : input);
-  await assertNotLinkLocal(url.hostname);
+
+  const signal =
+    init?.signal === undefined && input instanceof Request
+      ? input.signal
+      : (init?.signal ?? undefined);
+
+  await assertNotLinkLocal(url.hostname, signal);
+  signal?.throwIfAborted();
 
   return fetch(input, init);
 }

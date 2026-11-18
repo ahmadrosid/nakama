@@ -25,14 +25,18 @@ function groupContext(
     ? { id: botInfo.id, is_bot: true as const }
     : undefined;
 
+  const message = {
+    entities: options.entities,
+    message_thread_id: options.messageThreadId,
+    reply_to_message: replyFrom ? { from: replyFrom } : undefined,
+    text,
+  };
+
+  // Real grammy contexts expose the message as both `message` and `msg`.
   const context = {
     chat: { id: -100_123, type: options.chatType ?? "supergroup" },
-    message: {
-      entities: options.entities,
-      message_thread_id: options.messageThreadId,
-      reply_to_message: replyFrom ? { from: replyFrom } : undefined,
-      text,
-    },
+    message,
+    msg: message,
   };
 
   // SAFETY: The fixture supplies the chat and message fields used by these helpers.

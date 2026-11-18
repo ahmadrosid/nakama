@@ -4,6 +4,7 @@ import type {
   AutomationRunRecord,
   AutomationRunStatus,
   AutomationToolLimit,
+  AutomationTrigger,
   ProfileSummary,
   StoredAutomation,
 } from "@nakama/core/contract";
@@ -39,19 +40,25 @@ import {
   Delete02Icon,
   Loading03Icon,
   Search01Icon,
+  TestTube01Icon,
 } from "hugeicons-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useContext, useMemo, useState } from "react";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { SaveRegressionCaseDialog } from "@/components/regression-cases";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { AuthContext } from "@/context/auth-context-shared";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import { useAutomationRunTranscriptQuery } from "@/hooks/use-automations";
 import { useUserTimezone } from "@/hooks/use-timezones";
 import {
   formatFutureRelativeTime,
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
+import { formatError } from "@/lib/client";
+import { canAccessIntegrationsPage } from "@/lib/navigation";
 import {
   automationRunMessages,
   formatRunDuration,
@@ -250,12 +257,14 @@ export function AutomationEditorForm({
   busy,
   onChange,
   profiles,
+  savedTrigger,
   toolOptions,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
   profiles: ProfileSummary[];
+  savedTrigger?: AutomationTrigger;
   toolOptions?: AutomationToolOptions;
 }) {
   const scheduleTrigger =
@@ -317,6 +326,7 @@ export function AutomationEditorForm({
         automation={automation}
         busy={busy}
         onChange={onChange}
+        savedTrigger={savedTrigger}
       />
       <DeliverySettingsFields
         busy={busy}
@@ -429,10 +439,12 @@ function AutomationScheduleFields({
   automation,
   busy,
   onChange,
+  savedTrigger,
 }: {
   automation: StoredAutomation;
   busy: boolean;
   onChange: (patch: Partial<StoredAutomation>) => void;
+  savedTrigger?: AutomationTrigger;
 }) {
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
@@ -440,8 +452,9 @@ function AutomationScheduleFields({
   const preset = readSchedulePreset(automation.trigger);
 
   const frequency =
-    automation.trigger.type === "manual"
-      ? "manual"
+    automation.trigger.type === "manual" ||
+    automation.trigger.type === "webhook"
+      ? automation.trigger.type
       : (preset?.frequency ?? "custom");
 
   return (
@@ -457,6 +470,7 @@ function AutomationScheduleFields({
               ["weekdays", "Weekdays"],
               ["weekly", "Weekly"],
               ["monthly", "Monthly"],
+              ["webhook", "On webhook"],
             ] as const
           ).map(([value, label]) => (
             <Button
@@ -584,6 +598,15 @@ function AutomationScheduleFields({
             </Select>
           </Field>
         ) : null}
+        {savedTrigger?.type === "webhook" &&
+        automation.trigger.type !== "webhook" ? (
+          <p
+            className="text-pretty text-amber-700 text-xs dark:text-amber-400"
+            role="alert"
+          >
+            Saving deletes the webhook secret. Webhook calls stop working.
+          </p>
+        ) : null}
         {frequency === "custom" ? (
           <p className="text-muted-foreground text-sm">
             {automation.trigger.type === "runAt"
@@ -605,7 +628,10 @@ function AutomationScheduleFields({
 function AutomationNextRun({ automation }: { automation: StoredAutomation }) {
   const { data: userTimezone, isError } = useUserTimezone();
 
-  if (automation.trigger.type === "manual") {
+  if (
+    automation.trigger.type === "manual" ||
+    automation.trigger.type === "webhook"
+  ) {
     return null;
   }
 
@@ -909,6 +935,11 @@ function RunHistoryRow({
             className="size-1.5 shrink-0 rounded-full bg-primary"
           />
         ) : null}
+        {run.source === "webhook" ? (
+          <span className="shrink-0 rounded bg-muted px-1.5 text-muted-foreground text-xs">
+            Webhook
+          </span>
+        ) : null}
         <span
           className={cn(
             "line-clamp-1 min-w-0 flex-1 text-sm",
@@ -990,7 +1021,16 @@ function RunDetailPopup({
   profileId: string;
   onRerun: () => void;
 }) {
-  const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
+  // Tied to the run it came from, so switching runs closes it
+  const [caseRunId, setCaseRunId] = useState<string | null>(null);
+
+  // Read without useAuth: the drawer also renders where no auth provider is mounted.
+  const orgRole = useContext(AuthContext)?.activeOrg?.role;
+
+  const canSaveCase =
+    canAccessIntegrationsPage(orgRole) &&
+    selectedRun?.status === "completed" &&
+    Boolean(selectedRun.output?.trim());
 
   return (
     <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out has-[[data-slot=attachment-detail-panel]]:max-w-full data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none md:has-[[data-slot=attachment-detail-panel]:not([data-fullscreen])]:w-fit">
@@ -1002,27 +1042,18 @@ function RunDetailPopup({
             : "Run conversation"}
         </DialogTitle>
         {selectedRun ? (
+          <CopyRunIdButton key={selectedRun.id} runId={selectedRun.id} />
+        ) : null}
+        {canSaveCase ? (
           <Button
-            aria-label={
-              copiedRunId === selectedRun.id ? "Copied run ID" : "Copy run ID"
-            }
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(selectedRun.id);
-                setCopiedRunId(selectedRun.id);
-              } catch {
-                // Clipboard may be unavailable outside a secure context.
-              }
-            }}
+            aria-label="Save as test case"
+            onClick={() => setCaseRunId(selectedRun?.id ?? null)}
             size="icon-sm"
+            title="Save as test case"
             type="button"
             variant="ghost"
           >
-            {copiedRunId === selectedRun.id ? (
-              <CheckmarkCircle01Icon aria-hidden className="size-4" />
-            ) : (
-              <Copy01Icon aria-hidden className="size-4" />
-            )}
+            <TestTube01Icon aria-hidden className="size-4" />
           </Button>
         ) : null}
         {selectedRun?.status === "failed" ? (
@@ -1047,17 +1078,90 @@ function RunDetailPopup({
           <Cancel01Icon aria-hidden className="size-4" />
         </DialogPrimitive.Close>
       </div>
-      {selectedRun?.deliveryError ? (
-        <p className="px-4 py-2 text-destructive text-sm" role="alert">
-          {selectedRun.deliveryError}
-        </p>
-      ) : null}
       {selectedRun ? (
-        <ChatAttachmentPanelProvider key={selectedRun.id}>
-          <RunConversation profileId={profileId} run={selectedRun} />
-        </ChatAttachmentPanelProvider>
+        <RunDetailBody profileId={profileId} run={selectedRun} />
+      ) : null}
+      {canSaveCase && selectedRun ? (
+        <SaveRegressionCaseDialog
+          expectedResult={selectedRun.output ?? ""}
+          onOpenChange={(open) => setCaseRunId(open ? selectedRun.id : null)}
+          open={caseRunId === selectedRun.id}
+          profileId={profileId}
+          source={{
+            automationId: selectedRun.automationId,
+            sourceId: selectedRun.id,
+            sourceType: "automation_run",
+          }}
+        />
       ) : null}
     </DialogPrimitive.Popup>
+  );
+}
+
+function CopyRunIdButton({ runId }: { runId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <Button
+      aria-label={copied ? "Copied run ID" : "Copy run ID"}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(runId);
+          setCopied(true);
+        } catch {
+          // Clipboard may be unavailable outside a secure context.
+        }
+      }}
+      size="icon-sm"
+      type="button"
+      variant="ghost"
+    >
+      {copied ? (
+        <CheckmarkCircle01Icon aria-hidden className="size-4" />
+      ) : (
+        <Copy01Icon aria-hidden className="size-4" />
+      )}
+    </Button>
+  );
+}
+
+function RunDetailBody({
+  run,
+  profileId,
+}: {
+  run: AutomationRunRecord;
+  profileId: string;
+}) {
+  // The run list leaves out a finished run's transcript.
+  const needsTranscript = run.status !== "running" && !run.progress?.length;
+
+  const transcript = useAutomationRunTranscriptQuery(
+    run.automationId,
+    run.id,
+    needsTranscript
+  );
+
+  return (
+    <>
+      {run.deliveryError ? (
+        <p className="px-4 py-2 text-destructive text-sm" role="alert">
+          {run.deliveryError}
+        </p>
+      ) : null}
+      {needsTranscript && transcript.error ? (
+        <p className="px-4 py-2 text-destructive text-sm" role="alert">
+          {formatError(transcript.error)}
+        </p>
+      ) : null}
+      <ChatAttachmentPanelProvider key={run.id}>
+        <RunConversation
+          loading={needsTranscript && transcript.isPending}
+          profileId={profileId}
+          run={run}
+          saved={needsTranscript ? transcript.data : undefined}
+        />
+      </ChatAttachmentPanelProvider>
+    </>
   );
 }
 
@@ -1067,12 +1171,27 @@ function RunDetailPopup({
  */
 function RunConversation({
   run,
+  saved,
+  loading,
   profileId,
 }: {
   run: AutomationRunRecord;
+  /** The saved run with its transcript, once loaded. */
+  saved: AutomationRunRecord | undefined;
+  loading: boolean;
   profileId: string;
 }) {
   const { isFullscreen, isOpen } = useChatAttachmentPanel();
+  // A run that finishes while open keeps its streamed transcript on screen.
+  const [streamed, setStreamed] = useState(run.progress);
+
+  if (run.progress?.length && run.progress !== streamed) {
+    setStreamed(run.progress);
+  }
+
+  // Until the saved transcript loads, or if it fails, show what is in hand.
+  const shownRun =
+    saved ?? (run.progress?.length ? run : { ...run, progress: streamed });
 
   return (
     <ChatMessageList
@@ -1088,9 +1207,13 @@ function RunConversation({
           "max-md:pointer-events-none max-md:w-0 max-md:flex-none max-md:overflow-hidden max-md:opacity-0"
       )}
       emptyMessage={
-        run.status === "running" ? "Waiting for output…" : "No output returned."
+        run.status === "running"
+          ? "Waiting for output…"
+          : loading
+            ? "Loading…"
+            : "No output returned."
       }
-      messages={automationRunMessages(run)}
+      messages={automationRunMessages(shownRun)}
       profileId={profileId}
       readOnly
       streamActive={run.status === "running"}

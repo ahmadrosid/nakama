@@ -41,6 +41,7 @@ import type {
   CreateOrganizationResponse,
   CreateTeamRequest,
   ListOrgInvitesResponse,
+  ListOrgJoinRequestsResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   ListUserOrgsResponse,
@@ -1184,6 +1185,10 @@ export class OrgService {
         request.allowedInviteDomains === undefined
           ? (org.allowedInviteDomains ?? [])
           : normalizeAllowedInviteDomains(request.allowedInviteDomains),
+      desktopModelsEnabled:
+        request.desktopModelsEnabled ?? org.desktopModelsEnabled !== false,
+      memberApprovalRequired:
+        request.memberApprovalRequired ?? org.memberApprovalRequired ?? false,
       monthlyLlmTokenLimit,
       monthlyLlmTurnLimit,
       monthlyLlmWarningPercent,
@@ -1828,6 +1833,13 @@ export class OrgService {
     await this.requireActiveOrganization(orgId);
     await this.assertCanChangeAdminMembership(orgId, userId);
 
+    // A webhook secret lets its maker start runs, so it ends with their access.
+    // Revoke first: a failed revoke keeps the member row, so a retry still works.
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(
+      userId,
+      orgId
+    );
+
     const deleted = await this.databaseAdapter.deleteOrgMember(orgId, userId);
 
     if (!deleted) {
@@ -1921,6 +1933,8 @@ export class OrgService {
     // The checks above are read-then-write; the statement re-checks both rules
     // so a concurrent disable, remove or demote cannot leave no usable admin.
     const now = new Date().toISOString();
+
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(userId);
 
     const disabled = await this.databaseAdapter.disableUserUnlessLastAdmin(
       userId,
@@ -2027,6 +2041,14 @@ export class OrgService {
     }
 
     if (member.role !== role) {
+      // Only admins may hold secrets for email-capable profiles, so demotion revokes all of this user's secrets in the org.
+      if (role !== "admin") {
+        await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(
+          userId,
+          orgId
+        );
+      }
+
       const updated = await this.databaseAdapter.updateOrgMemberRole(
         orgId,
         userId,
@@ -2176,6 +2198,7 @@ export class OrgService {
   async acceptInvite(request: AcceptOrgInviteRequest): Promise<{
     user: StoredUserRecord;
     orgId: string;
+    pending: boolean;
     role: OrgRole;
   }> {
     const token = request.token?.trim();
@@ -2252,19 +2275,122 @@ export class OrgService {
       );
     }
 
-    await this.databaseAdapter.upsertOrgMember({
-      createdAt: now,
-      orgId: invite.orgId,
-      role: invite.role,
-      userId: user.id,
-    });
+    // A team follows its parent's setting, as it does the domain allowlist
+    const parent = organization.parentOrgId
+      ? await this.databaseAdapter.getOrganizationById(organization.parentOrgId)
+      : null;
+
+    const pending =
+      organization.memberApprovalRequired === true ||
+      parent?.memberApprovalRequired === true;
+
+    // Pending users stay out of org_members, so they count nowhere until approved
+    if (pending) {
+      const created = await this.databaseAdapter.createOrgJoinRequest({
+        createdAt: now,
+        orgId: invite.orgId,
+        role: invite.role,
+        userId: user.id,
+      });
+
+      if (!created) {
+        throw new NakamaApiError(
+          "This invite is already waiting for an admin to approve it.",
+          409
+        );
+      }
+    } else {
+      await this.databaseAdapter.upsertOrgMember({
+        createdAt: now,
+        orgId: invite.orgId,
+        role: invite.role,
+        userId: user.id,
+      });
+    }
+
     await this.databaseAdapter.markOrgInviteAccepted(invite.id, now);
 
     return {
       orgId: invite.orgId,
+      pending,
       role: invite.role,
       user,
     };
+  }
+
+  async listJoinRequests(orgId: string): Promise<ListOrgJoinRequestsResponse> {
+    await this.requireActiveOrganization(orgId);
+
+    const requests = await this.databaseAdapter.listOrgJoinRequests(orgId);
+
+    // The API shape, without the adapter's orgId
+    return {
+      requests: requests.map(({ createdAt, email, role, userId }) => ({
+        createdAt,
+        email,
+        role,
+        userId,
+      })),
+    };
+  }
+
+  async approveJoinRequest(
+    orgId: string,
+    userId: string,
+    /** Platform admins may approve an address outside the allowlist (#2075). */
+    bypassDomainAllowlist = false
+  ): Promise<void> {
+    const organization = await this.requireActiveOrganization(orgId);
+    const user = await this.databaseAdapter.getUserById(userId);
+
+    if (
+      !(user && (await this.databaseAdapter.getOrgJoinRequest(orgId, userId)))
+    ) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    // The allowlist may have changed since the invite was accepted
+    if (!bypassDomainAllowlist) {
+      await this.assertMemberDomainAllowed(user.email, organization, userId);
+    }
+
+    const member = await this.databaseAdapter.approveOrgJoinRequest(
+      orgId,
+      userId,
+      new Date().toISOString()
+    );
+
+    if (!member) {
+      throw new NakamaApiError("Not found", 404);
+    }
+
+    const webPublicUrl = this.getWebPublicUrl();
+
+    // Delivery errors stay in the adapter; the approval already happened
+    void Promise.resolve()
+      .then(() =>
+        this.email.send({
+          orgId,
+          subject: `You can now sign in to ${organization.name}`,
+          text: [
+            `An admin approved your access to ${organization.name}.`,
+            "",
+            webPublicUrl
+              ? `Sign in: ${webPublicUrl}/login`
+              : "You can sign in now.",
+          ].join("\n"),
+          to: user.email,
+        })
+      )
+      .catch(() => undefined);
+  }
+
+  async rejectJoinRequest(orgId: string, userId: string): Promise<void> {
+    await this.requireActiveOrganization(orgId);
+
+    if (!(await this.databaseAdapter.rejectOrgJoinRequest(orgId, userId))) {
+      throw new NakamaApiError("Not found", 404);
+    }
   }
 
   async requestPasswordReset(
@@ -2387,6 +2513,7 @@ export class OrgService {
     }
 
     const now = new Date().toISOString();
+    await this.databaseAdapter.deleteAutomationWebhookSecretsForUser(user.id);
     await this.databaseAdapter.updateUserPassword(
       user.id,
       await this.authService.hashPassword(newPassword),
@@ -2661,7 +2788,9 @@ function toOrganizationSummary(
     allowedInviteDomains: record.allowedInviteDomains ?? [],
     archivedAt: record.archivedAt ?? null,
     createdAt: record.createdAt,
+    desktopModelsEnabled: record.desktopModelsEnabled !== false,
     id: record.id,
+    memberApprovalRequired: record.memberApprovalRequired ?? false,
     monthlyLlmTurnLimit: record.monthlyLlmTurnLimit ?? 0,
     name: record.name,
     parentOrgId: record.parentOrgId ?? null,

@@ -23,7 +23,9 @@ export type CreateMinimalHonoAppOverrides = {
   authService?: AuthService;
   automationService?: ServerOptions["automationService"] | object;
   composioService?: ServerOptions["composioService"];
+  computerAuth?: ServerOptions["computerAuth"];
   databaseAdapter?: DatabaseAdapter;
+  googleMeetService?: ServerOptions["googleMeetService"];
   mcpService?: ServerOptions["mcpService"] | object;
   onBeforeDataRestore?: ServerOptions["onBeforeDataRestore"];
   onDataRestored?: ServerOptions["onDataRestored"];
@@ -74,7 +76,9 @@ export function createMinimalHonoApp(
     automationService: (overrides.automationService ??
       {}) as ServerOptions["automationService"],
     composioService: overrides.composioService,
+    computerAuth: overrides.computerAuth,
     databaseAdapter,
+    googleMeetService: overrides.googleMeetService,
     mcpService: (overrides.mcpService ?? {}) as ServerOptions["mcpService"],
     onBeforeDataRestore: overrides.onBeforeDataRestore,
     onDataRestored: overrides.onDataRestored,

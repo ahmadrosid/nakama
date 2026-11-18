@@ -73,6 +73,8 @@ interface SessionRow {
 /** A document the user attached, as the text the agents read. */
 export interface GroupDocument {
   filename: string;
+  /** Where a ZIP's files are in the group's shared folder, like uploads/ab12cd34. */
+  folder?: string;
   /** An image's place in the group's shared folder, like uploads/ab12cd34.png. */
   path?: string;
   text: string;
@@ -524,8 +526,8 @@ export function deleteGroupSession(
   );
 }
 
-/** The shared-folder paths of the images posted in a session. */
-export function listGroupSessionImages(
+/** The shared-folder paths of the images and ZIP folders posted in a session. */
+export function listGroupSessionUploads(
   orgId: string,
   sessionId: string
 ): string[] {
@@ -538,7 +540,11 @@ export function listGroupSessionImages(
   );
 
   return rows.flatMap((row) =>
-    parseDocuments(row.documents).flatMap((d) => (d.path ? [d.path] : []))
+    parseDocuments(row.documents).flatMap((d) => {
+      const upload = d.path ?? d.folder;
+
+      return upload ? [upload] : [];
+    })
   );
 }
 

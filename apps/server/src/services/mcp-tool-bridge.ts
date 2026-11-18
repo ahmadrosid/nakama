@@ -62,6 +62,7 @@ export function buildMcpToolDefinitions(
         parameters: hasCurrentChatContext
           ? withoutNakamaContext(inputSchema)
           : inputSchema,
+        readOnly: cachedTool.readOnlyHint === true,
         async run(input, context) {
           try {
             if (canDiscover && !(await canDiscover(context))) {

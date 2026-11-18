@@ -8,7 +8,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
-import { ProviderStreamInterruptedError } from "@nakama/core";
+import { NakamaApiError, ProviderStreamInterruptedError } from "@nakama/core";
 import { createAgentChatSession } from "./index";
 
 function createCountingProvider(responses: ChatCompletionResult[]) {
@@ -208,7 +208,10 @@ describe("agent chat cancellation", () => {
 });
 
 describe("agent chat stream interruption", () => {
-  function breakingProvider(breaks: number) {
+  function breakingProvider(
+    breaks: number,
+    failure: () => Error = () => new ProviderStreamInterruptedError("broke")
+  ) {
     let calls = 0;
 
     const provider: ProviderClient = {
@@ -226,7 +229,7 @@ describe("agent chat stream interruption", () => {
             toolCallId: `c${calls}`,
           });
 
-          return Promise.reject(new ProviderStreamInterruptedError("broke"));
+          return Promise.reject(failure());
         }
 
         handlers.onChunk(" Final");
@@ -244,6 +247,34 @@ describe("agent chat stream interruption", () => {
 
   test("retries once and keeps the partial reply", async () => {
     const { calls, provider } = breakingProvider(1);
+    const ended: string[] = [];
+    const session = createAgentChatSession({ provider }, {});
+
+    const reply = await session.sendStream("go", {
+      onChunk() {},
+      onToolEnd: (event) => ended.push(event.toolCallId),
+    });
+
+    expect(reply.trim()).toBe("Final");
+    expect(calls()).toBe(2);
+    expect(ended).toEqual(["c1"]);
+    expect(
+      session
+        .getHistory()
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.content)
+    ).toEqual(["Part", " Final"]);
+  });
+
+  test("a provider failure after output keeps the partial reply instead of a fresh retry", async () => {
+    // A step can send more than one request (Anthropic pause_turn), so a
+    // later request can fail after the first one streamed text.
+    const { calls, provider } = breakingProvider(
+      1,
+      () =>
+        new NakamaApiError("Anthropic request failed (529): Overloaded", 502)
+    );
+
     const ended: string[] = [];
     const session = createAgentChatSession({ provider }, {});
 
