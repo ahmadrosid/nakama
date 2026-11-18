@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  type AutomationResponse,
   type GetAutomationRunResponse,
   getDiscordConfigDir,
   getDiscordConfigPath,
@@ -10,6 +11,7 @@ import {
   getTelegramConfigPath,
   type ListAutomationRunsResponse,
   type RunAutomationResponse,
+  type UpdateAutomationRequest,
 } from "@nakama/core";
 import { setupTestConfigDir } from "../../test-config-dir";
 import {
@@ -19,6 +21,165 @@ import {
 } from "./automation-route-test-fixtures";
 
 setupTestConfigDir("nakama-automation-routes-");
+
+async function createUpdateFixture() {
+  const fixture = createFixture();
+  const { orgId, session } = await loginMember(fixture);
+
+  const automation = await fixture.automationService.create(
+    orgId,
+    {
+      name: "Daily report",
+      prompt: "Summarize yesterday",
+      trigger: { type: "manual" },
+    },
+    PROFILE_ID
+  );
+
+  const update = (body: UpdateAutomationRequest) =>
+    fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+        body: JSON.stringify(body),
+        headers: {
+          ...session.headers(),
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        },
+        method: "PUT",
+      })
+    );
+
+  return { automation, fixture, orgId, update };
+}
+
+describe("concurrent partial automation updates", () => {
+  test("service updates preserve both fields and advance each version", async () => {
+    const { automation, fixture, orgId } = await createUpdateFixture();
+    const service = fixture.automationService;
+    const access = { orgRole: "member" as const, userId: "user_route_member" };
+
+    const responses = await Promise.all([
+      service.update(
+        automation.id,
+        orgId,
+        { prompt: "Summarize today" },
+        access
+      ),
+      service.update(automation.id, orgId, { enabled: false }, access),
+    ]);
+
+    expect(await service.get(automation.id, orgId)).toMatchObject({
+      enabled: false,
+      prompt: "Summarize today",
+      version: 3,
+    });
+    expect(responses.map(({ version }) => version)).toEqual([2, 3]);
+    expect(
+      await fixture.databaseAdapter.getAutomation(automation.id)
+    ).toMatchObject({
+      definition: { prompt: "Summarize today", version: 3 },
+      enabled: false,
+      version: 3,
+    });
+  });
+
+  for (const promptFirst of [true, false]) {
+    test(`HTTP updates preserve both fields with ${promptFirst ? "prompt" : "pause"} first`, async () => {
+      const { automation, fixture, orgId, update } =
+        await createUpdateFixture();
+
+      const firstRead = Promise.withResolvers<void>();
+      const releaseRead = Promise.withResolvers<void>();
+      const secondEntered = Promise.withResolvers<void>();
+      const db = fixture.databaseAdapter;
+      const service = fixture.automationService;
+      const originalRead = db.getAutomation.bind(db);
+      const originalUpdate = service.update.bind(service);
+      let reads = 0;
+      let updates = 0;
+
+      db.getAutomation = async (id) => {
+        const row = await originalRead(id);
+
+        if (id === automation.id && ++reads === 1) {
+          firstRead.resolve();
+          await releaseRead.promise;
+        }
+
+        return row;
+      };
+
+      service.update = (...args) => {
+        const pending = originalUpdate(...args);
+
+        if (++updates === 2) {
+          secondEntered.resolve();
+        }
+
+        return pending;
+      };
+
+      let responses: Response[];
+
+      try {
+        const first = update(
+          promptFirst ? { prompt: "Summarize today" } : { enabled: false }
+        );
+
+        await firstRead.promise;
+
+        const second = update(
+          promptFirst ? { enabled: false } : { prompt: "Summarize today" }
+        );
+
+        await secondEntered.promise;
+        releaseRead.resolve();
+        responses = await Promise.all([first, second]);
+      } finally {
+        releaseRead.resolve();
+        db.getAutomation = originalRead;
+        service.update = originalUpdate;
+      }
+
+      expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+
+      // SAFETY: Both responses are HTTP 200 from the registered automation route.
+      const bodies = await Promise.all(
+        responses.map(
+          async (response) => (await response.json()) as AutomationResponse
+        )
+      );
+
+      expect(await service.get(automation.id, orgId)).toMatchObject({
+        enabled: false,
+        prompt: "Summarize today",
+        version: 3,
+      });
+      expect(bodies.map(({ automation: saved }) => saved.version)).toEqual([
+        2, 3,
+      ]);
+    });
+  }
+
+  test("a rejected update leaves the version unchanged and permits the next update", async () => {
+    const { automation, fixture, orgId, update } = await createUpdateFixture();
+
+    const responses = await Promise.all([
+      update({ profileId: "missing_profile" }),
+      update({ prompt: "Summarize today" }),
+    ]);
+
+    expect(responses.map(({ status }) => status)).toEqual([400, 200]);
+    expect(
+      await fixture.automationService.get(automation.id, orgId)
+    ).toMatchObject({
+      enabled: true,
+      profileId: PROFILE_ID,
+      prompt: "Summarize today",
+      version: 2,
+    });
+  });
+});
 
 async function writeChannelConfigs(orgId: string): Promise<string> {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-route-"));
