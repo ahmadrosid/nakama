@@ -52,6 +52,156 @@ function automationBody<T>(delivery: T): string {
   });
 }
 
+describe("automation cron range validation over HTTP", () => {
+  test("creates and lists an automation with a valid schedule", async () => {
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+
+    const response = await fixture.app.fetch(
+      new Request("http://localhost:4310/v1/automations", {
+        body: JSON.stringify({
+          description: "Schedule control",
+          name: "Daily report",
+          profileId: PROFILE_ID,
+          prompt: "Summarize the week",
+          trigger: { cron: "0 9 * * *", type: "schedule" },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+          ...session.headers(),
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(
+      await fixture.databaseAdapter.listAutomationsForOrg(orgId)
+    ).toHaveLength(1);
+
+    const listed = await fixture.app.fetch(
+      new Request("http://localhost:4310/v1/automations", {
+        headers: session.headers(),
+      })
+    );
+
+    expect(listed.status).toBe(200);
+  });
+
+  test.each([
+    { cron: "60 * * * *", enabled: true },
+    { cron: "60 * * * *", enabled: false },
+    { cron: "every morning", enabled: true },
+  ])(
+    "rejects an invalid schedule before creation: %j",
+    async ({ cron, enabled }) => {
+      const fixture = createFixture();
+      const { orgId, session } = await loginMember(fixture);
+
+      const response = await fixture.app.fetch(
+        new Request("http://localhost:4310/v1/automations", {
+          body: JSON.stringify({
+            description: "Invalid schedule",
+            enabled,
+            name: "Invalid minute",
+            profileId: PROFILE_ID,
+            prompt: "Summarize the week",
+            trigger: { cron, type: "schedule" },
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+            ...session.headers(),
+          },
+          method: "POST",
+        })
+      );
+
+      const rows = await fixture.databaseAdapter.listAutomationsForOrg(orgId);
+
+      const listed = await fixture.app.fetch(
+        new Request("http://localhost:4310/v1/automations", {
+          headers: session.headers(),
+        })
+      );
+
+      expect(rows).toHaveLength(0);
+      expect(response.status).toBe(400);
+      expect(listed.status).toBe(200);
+    }
+  );
+
+  test("rejects an invalid cron update without changing the stored automation", async () => {
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+
+    const healthy = await fixture.automationService.create(
+      orgId,
+      {
+        description: "Unaffected automation",
+        name: "Manual control",
+        prompt: "Summarize the week",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const automation = await fixture.automationService.create(
+      orgId,
+      {
+        description: "Valid schedule",
+        name: "Daily report",
+        prompt: "Summarize the week",
+        trigger: { cron: "0 9 * * *", type: "schedule" },
+      },
+      PROFILE_ID
+    );
+
+    const before = await fixture.databaseAdapter.getAutomation(automation.id);
+
+    const response = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+        body: JSON.stringify({
+          trigger: { cron: "0 24 * * *", type: "schedule" },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+          ...session.headers(),
+        },
+        method: "PUT",
+      })
+    );
+
+    const after = await fixture.databaseAdapter.getAutomation(automation.id);
+
+    const listed = await fixture.app.fetch(
+      new Request("http://localhost:4310/v1/automations", {
+        headers: session.headers(),
+      })
+    );
+
+    const loaded = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+        headers: session.headers(),
+      })
+    );
+
+    const healthyResponse = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${healthy.id}`, {
+        headers: session.headers(),
+      })
+    );
+
+    expect(healthyResponse.status).toBe(200);
+    expect(after).toEqual(before);
+    expect(response.status).toBe(400);
+    expect(listed.status).toBe(200);
+    expect(loaded.status).toBe(200);
+  });
+});
+
 describe("automation destination authorization over HTTP", () => {
   test("a member cannot create an automation aimed at a foreign destination", async () => {
     const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
