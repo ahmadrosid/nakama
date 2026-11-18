@@ -327,6 +327,10 @@ export function registerRegressionCaseRoutes(
     let privateToUserId: string | null = null;
     let sourceAutomationId: string | null = null;
 
+    // Before the session check: it skips a session from another org, and the
+    // lookup below is not org-scoped, so the profile must be this org's.
+    await options.agent.assertProfileChatAccess(orgId, profileId, auth);
+
     if (body.sourceType === "session") {
       await options.agent.assertSessionProfileAccess(
         body.sourceId,
@@ -371,8 +375,6 @@ export function registerRegressionCaseRoutes(
         ? (privacy.ownerUserId ?? auth.user.id)
         : null;
     } else {
-      await options.agent.assertProfileChatAccess(orgId, profileId, auth);
-
       const automation = await automationStore.get(body.automationId);
 
       if (
