@@ -25,6 +25,9 @@ import type {
   ProfileResponse,
   RegressionCase,
   RegressionCaseResponse,
+  RegressionCaseRun,
+  RegressionCaseRunResponse,
+  RegressionCaseVerdict,
   RunToolRequest,
   RunToolResponse,
   SkillFileResponse,
@@ -82,27 +85,6 @@ export class ProfilesClient extends SettingsClient {
 
     return this.request<ListProfileChangeHistoryResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/history${suffix}`
-    );
-  }
-
-  async rerunRegressionCase(
-    profileId: string,
-    caseId: string
-  ): Promise<RegressionCaseResponse> {
-    return this.request<RegressionCaseResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/regression-cases/${encodeURIComponent(caseId)}/rerun`,
-      { method: "POST" }
-    );
-  }
-
-  async markRegressionCase(
-    profileId: string,
-    caseId: string,
-    mark: "pass" | "fail"
-  ): Promise<RegressionCaseResponse> {
-    return this.request<RegressionCaseResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/regression-cases/${encodeURIComponent(caseId)}/mark`,
-      { body: JSON.stringify({ mark }), method: "POST" }
     );
   }
 
@@ -596,5 +578,31 @@ export class ProfilesClient extends SettingsClient {
     return this.request<ListRegressionCasesResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/regression-cases?offset=${offset}`
     );
+  }
+
+  async rerunRegressionCase(
+    profileId: string,
+    caseId: string
+  ): Promise<RegressionCaseRun> {
+    const response = await this.request<RegressionCaseRunResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/regression-cases/${encodeURIComponent(caseId)}/runs`,
+      { method: "POST" }
+    );
+
+    return response.run;
+  }
+
+  async markRegressionCaseRun(
+    profileId: string,
+    caseId: string,
+    runId: string,
+    verdict: RegressionCaseVerdict
+  ): Promise<RegressionCaseRun> {
+    const response = await this.request<RegressionCaseRunResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/regression-cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(runId)}`,
+      { body: JSON.stringify({ verdict }), method: "PATCH" }
+    );
+
+    return response.run;
   }
 }

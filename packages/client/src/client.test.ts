@@ -1606,3 +1606,34 @@ test("tool detail scope overrides one request and preserves the client default",
   ]);
   expect(requests.map((request) => request.method)).toEqual(["GET", "GET"]);
 });
+
+test("a case rerun and its mark go to the run routes", async () => {
+  const requests: Request[] = [];
+  const run = { id: "run/a?", verdict: null };
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+
+      return Response.json({ run });
+    },
+    orgId: "team-a",
+  });
+
+  expect(await client.rerunRegressionCase("agent/a?", "case/a?")).toEqual(run);
+  expect(
+    await client.markRegressionCaseRun("agent/a?", "case/a?", "run/a?", "pass")
+  ).toEqual(run);
+
+  const [rerun, mark] = requests;
+
+  const runsPath =
+    "/v1/profiles/agent%2Fa%3F/regression-cases/case%2Fa%3F/runs";
+
+  expect(rerun?.method).toBe("POST");
+  expect(new URL(rerun!.url).pathname).toBe(runsPath);
+  expect(mark?.method).toBe("PATCH");
+  expect(new URL(mark!.url).pathname).toBe(`${runsPath}/run%2Fa%3F`);
+  expect(await mark?.json()).toEqual({ verdict: "pass" });
+});
