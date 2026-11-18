@@ -449,6 +449,11 @@ test("a finished run loads its transcript when opened", async () => {
     await openFirstRun(container);
 
     expect(getRun).toHaveBeenCalledWith("automation", "run");
+    await waitUntil(
+      () =>
+        runConversation()?.querySelectorAll(".is-user").length === 1 &&
+        runConversation()?.querySelectorAll(".is-assistant").length === 1
+    );
     const conversation = runConversation();
     // Both transcript messages render, not only the output.
     expect(conversation?.querySelectorAll(".is-user")).toHaveLength(1);
