@@ -7,6 +7,7 @@ import type {
 import { isAutomationRunUnread, NakamaApiError } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
+import type { AutomationServiceOptions } from "./automation-options";
 
 const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
 
@@ -206,4 +207,28 @@ export async function updatedToolLimit(
       !same(normalizeToolLimit(requested)),
     toolLimit,
   };
+}
+
+/** Encrypts a new webhook secret; an unset key is a 400 with the fix. */
+export function encryptWebhookSecret(
+  secrets: NonNullable<AutomationServiceOptions["secrets"]>,
+  id: string,
+  secret: string
+): string {
+  try {
+    return secrets.encryptWebhookSecret(id, secret);
+  } catch (error) {
+    // ManagedSecrets throws this exact copy when the key is unset.
+    if (
+      error instanceof Error &&
+      error.message.includes("NAKAMA_SECRETS_KEY")
+    ) {
+      throw new NakamaApiError(
+        `${error.message} Create a key with \`openssl rand -base64 32\`.`,
+        400
+      );
+    }
+
+    throw error;
+  }
 }

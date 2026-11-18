@@ -266,6 +266,66 @@ describe("automation deletion", () => {
     });
   }
 
+  test("an update that waits for a deletion gets 404 and leaves no row", async () => {
+    const { automation, fixture, session, update } =
+      await createUpdateFixture();
+
+    const db = fixture.databaseAdapter;
+    const deleteHeld = Promise.withResolvers<void>();
+    const releaseDelete = Promise.withResolvers<void>();
+    const updateRead = Promise.withResolvers<void>();
+    const originalRead = db.getAutomation.bind(db);
+    const originalDelete = db.deleteAutomation.bind(db);
+    let holding = false;
+
+    db.deleteAutomation = async (id) => {
+      holding = true;
+      deleteHeld.resolve();
+      await releaseDelete.promise;
+
+      return originalDelete(id);
+    };
+
+    db.getAutomation = async (id) => {
+      const row = await originalRead(id);
+
+      if (holding && id === automation.id) {
+        updateRead.resolve();
+      }
+
+      return row;
+    };
+
+    let responses: Response[];
+
+    try {
+      const deleting = fixture.app.fetch(
+        new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+          headers: session.headers({
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "DELETE",
+        })
+      );
+
+      await deleteHeld.promise;
+
+      const updating = update({ prompt: "Summarize today" });
+
+      // An unserialized update reads the row here; a serialized one waits.
+      await Promise.race([updateRead.promise, Bun.sleep(50)]);
+      releaseDelete.resolve();
+      responses = await Promise.all([deleting, updating]);
+    } finally {
+      releaseDelete.resolve();
+      db.getAutomation = originalRead;
+      db.deleteAutomation = originalDelete;
+    }
+
+    expect(responses.map(({ status }) => status)).toEqual([204, 404]);
+    expect(await db.getAutomation(automation.id)).toBeNull();
+  });
+
   test("foreign and missing rows do not notify or prevent a later deletion", async () => {
     const { automation, fixture, orgId } = await createUpdateFixture();
     const service = fixture.automationService;

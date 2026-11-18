@@ -910,6 +910,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updated_at = excluded.updated_at
   `);
 
+  const updateAutomationStmt = db.prepare(`
+    UPDATE automations SET
+      name = ?,
+      version = ?,
+      definition = ?,
+      profile_id = ?,
+      org_id = ?,
+      enabled = ?,
+      updated_at = ?
+    WHERE id = ?
+  `);
+
   const deleteAutomationStmt = db.prepare(
     "DELETE FROM automations WHERE id = ?"
   );
@@ -6931,6 +6943,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         snapshot.storagePath,
         id
       );
+    },
+
+    async updateAutomation(record) {
+      const result = updateAutomationStmt.run(
+        record.name,
+        record.version,
+        JSON.stringify(record.definition),
+        record.profileId,
+        record.orgId ?? null,
+        record.enabled ? 1 : 0,
+        record.updatedAt,
+        record.id
+      );
+
+      return result.changes > 0;
     },
 
     async updateAutomationRun(record) {

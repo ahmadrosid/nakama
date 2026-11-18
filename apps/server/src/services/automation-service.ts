@@ -32,6 +32,7 @@ import {
 import {
   assertAutomationVersion,
   automationBelongsToOrg,
+  encryptWebhookSecret,
   scopeToolLimit,
   toRunRecord,
   updatedToolLimit,
@@ -40,7 +41,8 @@ import {
 } from "./automation-records";
 
 export class AutomationService {
-  private readonly updateLock = createChatLock();
+  /** One writer per id; a waiter goes ahead after the budget. */
+  private readonly writeLock = createChatLock({ waitMs: 30_000 });
   private readonly runProgress = new Map<
     string,
     Pick<AutomationRunRecord, "output" | "progress">
@@ -215,7 +217,7 @@ export class AutomationService {
     input: UpdateAutomationRequest,
     access?: ProfileAccess
   ): Promise<StoredAutomation> {
-    return this.updateLock.withLock(id, async () => {
+    return this.writeLock.withLock(id, async () => {
       const existing = await this.get(id, orgId);
 
       if (!existing) {
@@ -319,7 +321,10 @@ export class AutomationService {
         await this.db.deleteAutomationWebhookSecret(id);
       }
 
-      await this.store.save(updated);
+      // Update only, so a deleted row stays deleted.
+      if (!(await this.store.update(updated))) {
+        throw new Error("Automation not found.");
+      }
 
       // After the save: a failed save keeps the secret.
       // Runs after the row change, so it only logs. The next switch to webhook deletes a leftover.
@@ -346,62 +351,50 @@ export class AutomationService {
     orgId: string,
     userId: string
   ): Promise<string> {
-    const automation = await this.get(id, orgId);
+    return this.writeLock.withLock(id, async () => {
+      const automation = await this.get(id, orgId);
 
-    if (!automation) {
-      throw new NakamaApiError("Automation not found.", 404);
-    }
+      if (!automation) {
+        throw new NakamaApiError("Automation not found.", 404);
+      }
 
-    if (automation.trigger.type !== "webhook") {
-      throw new NakamaApiError("Set the trigger to webhook first.", 400);
-    }
+      if (automation.trigger.type !== "webhook") {
+        throw new NakamaApiError("Set the trigger to webhook first.", 400);
+      }
 
-    if (!this.secrets) {
-      throw new NakamaApiError(
-        "Set NAKAMA_SECRETS_KEY before saving secrets.",
-        400
-      );
-    }
-
-    const secret = randomBytes(32).toString("base64url");
-    let encryptedValue: string;
-
-    try {
-      encryptedValue = this.secrets.encryptWebhookSecret(id, secret);
-    } catch (error) {
-      // ManagedSecrets throws this exact copy when the key is unset.
-      if (
-        error instanceof Error &&
-        error.message.includes("NAKAMA_SECRETS_KEY")
-      ) {
+      if (!this.secrets) {
         throw new NakamaApiError(
-          `${error.message} Create a key with \`openssl rand -base64 32\`.`,
+          "Set NAKAMA_SECRETS_KEY before saving secrets.",
           400
         );
       }
 
-      throw error;
-    }
+      const secret = randomBytes(32).toString("base64url");
+      const encryptedValue = encryptWebhookSecret(this.secrets, id, secret);
 
-    // The maker holds the secret, so revoking their access deletes it.
-    await this.db.putAutomationWebhookSecret({
-      automationId: id,
-      createdAt: new Date().toISOString(),
-      createdByUserId: userId,
-      encryptedValue,
-    });
-
-    // Last, so a failed encrypt or put leaves the old maker bound to the old secret.
-    if (automation.runAsUserId !== userId) {
-      await this.store.save({
-        ...automation,
-        runAsUserId: userId,
-        updatedAt: new Date().toISOString(),
-        version: automation.version + 1,
+      // The maker holds the secret, so revoking their access deletes it.
+      await this.db.putAutomationWebhookSecret({
+        automationId: id,
+        createdAt: new Date().toISOString(),
+        createdByUserId: userId,
+        encryptedValue,
       });
-    }
 
-    return secret;
+      // Last, so a failed encrypt or put leaves the old maker bound to the old secret.
+      if (
+        automation.runAsUserId !== userId &&
+        !(await this.store.update({
+          ...automation,
+          runAsUserId: userId,
+          updatedAt: new Date().toISOString(),
+          version: automation.version + 1,
+        }))
+      ) {
+        throw new NakamaApiError("Automation not found.", 404);
+      }
+
+      return secret;
+    });
   }
 
   /** Checks a GitHub-style `X-Hub-Signature-256` header against the raw body. */
@@ -455,22 +448,23 @@ export class AutomationService {
   }
 
   async delete(id: string, orgId: string): Promise<boolean> {
-    return this.updateLock.withLock(id, async () => {
+    const deleted = await this.writeLock.withLock(id, async () => {
       const existing = await this.get(id, orgId);
 
       if (!existing) {
         return false;
       }
 
-      const deleted = await this.store.delete(id);
-
       // The secret row goes with the automation (FK cascade).
-      if (deleted) {
-        await this.notifyChange();
-      }
-
-      return deleted;
+      return this.store.delete(id);
     });
+
+    // Outside the lock, so a slow hook does not hold the id.
+    if (deleted) {
+      await this.notifyChange();
+    }
+
+    return deleted;
   }
 
   async listRuns(

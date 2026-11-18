@@ -29,6 +29,11 @@ export class DatabaseAutomationStore {
     await this.db.upsertAutomation(toRecord(definition));
   }
 
+  /** False when the row is gone; never inserts. */
+  async update(definition: StoredAutomation): Promise<boolean> {
+    return this.db.updateAutomation(toRecord(definition));
+  }
+
   async delete(id: string): Promise<boolean> {
     return this.db.deleteAutomation(id);
   }

@@ -2625,7 +2625,7 @@ describe("webhook automations", () => {
       "user_a"
     );
 
-    const save = spyOn(db, "upsertAutomation").mockRejectedValueOnce(
+    const save = spyOn(db, "updateAutomation").mockRejectedValueOnce(
       new Error("db down")
     );
 
