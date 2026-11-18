@@ -530,7 +530,7 @@ describe("createProviderForInstance routing", () => {
         instance,
         "opencode-go/kimi-k2.7-code",
         process.env,
-        { sessionId: "org_1:session_456" }
+        { sessionId: "session_456" }
       );
 
       await client!.generateChat({
@@ -540,7 +540,7 @@ describe("createProviderForInstance routing", () => {
 
       expect(client?.name).toBe("opencode_go");
       expect(seenUrl).toBe("https://opencode.ai/zen/go/v1/chat/completions");
-      expect(seenSession).toBe("ses_org_1_session_456");
+      expect(seenSession).toBe("ses_session_456");
     } finally {
       globalThis.fetch = originalFetch;
     }

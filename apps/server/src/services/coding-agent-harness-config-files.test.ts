@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   writeCodexConfigToml,
   writeOpenCodeConfig,
+  writePiModelsJson,
 } from "./coding-agent-harness-config-files";
 
 const CodexConfigSchema = z.object({
@@ -30,6 +31,10 @@ const OpenCodeConfigSchema = z.object({
       }),
     })
   ),
+});
+
+const PiModelsSchema = z.object({
+  providers: z.record(z.object({ headers: z.record(z.string()).optional() })),
 });
 
 function routingFor(providerType: "opencode_go" | "openrouter") {
@@ -160,5 +165,41 @@ describe("OpenCode Go session header for CLI harnesses", () => {
     );
 
     expect(parsed.provider.openrouter?.options.headers).toBeUndefined();
+  });
+
+  test("pi config sends x-opencode-session for an opencode_go provider", async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-pi-session-"));
+
+    const configPath = await writePiModelsJson(
+      configDir,
+      routingFor("opencode_go"),
+      "opencode_go"
+    );
+
+    const parsed = PiModelsSchema.parse(
+      JSON.parse(await readFile(configPath, "utf8"))
+    );
+
+    expect(parsed.providers.nakama?.headers?.["x-opencode-session"]).toMatch(
+      /^ses_[a-f0-9]{32}$/
+    );
+  });
+
+  test("pi config sends no session header for another provider", async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), "nakama-pi-nosession-"));
+
+    const configPath = await writePiModelsJson(
+      configDir,
+      routingFor("openrouter"),
+      "openrouter"
+    );
+
+    const parsed = PiModelsSchema.parse(
+      JSON.parse(await readFile(configPath, "utf8"))
+    );
+
+    for (const provider of Object.values(parsed.providers)) {
+      expect(provider.headers).toBeUndefined();
+    }
   });
 });

@@ -22,6 +22,7 @@ interface PiProviderConfig {
   api?: string;
   apiKey: string;
   baseUrl: string;
+  headers?: Record<string, string>;
   models?: Array<{
     contextWindow: number;
     id: string;
@@ -297,6 +298,13 @@ export async function writePiModelsJson(
       ],
       name: "Nakama",
     };
+
+    // pi calls OpenCode Go directly, so it sends the routing header itself.
+    if (providerType === "opencode_go") {
+      providers["nakama"].headers = {
+        "x-opencode-session": formatOpenCodeSessionId(),
+      };
+    }
   }
 
   const config = { providers };

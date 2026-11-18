@@ -30,28 +30,45 @@ describe("formatOpenCodeSessionId", () => {
     expect(formatOpenCodeSessionId("ses_abc123")).toBe("ses_abc123");
   });
 
-  test("sanitizes an id that already starts with ses_", () => {
-    expect(formatOpenCodeSessionId("ses_x:y")).toBe("ses_x_y");
-    expect(formatOpenCodeSessionId("ses_a\r\nb")).toBe("ses_a__b");
-    expect(formatOpenCodeSessionId("ses_é")).toBe("ses__");
+  test("makes an id that already starts with ses_ safe for a header", () => {
+    for (const id of ["ses_x:y", "ses_a\r\nb", "ses_é", "org_1:session_123"]) {
+      const formatted = formatOpenCodeSessionId(id);
+
+      expect(formatted).toMatch(/^ses_[a-zA-Z0-9_-]+$/);
+      expect(
+        () => new Headers({ "x-opencode-session": formatted })
+      ).not.toThrow();
+    }
+
     expect(formatOpenCodeSessionId("ses_")).toMatch(/^ses_[a-f0-9]{32}$/);
   });
 
   test("bounds the id length", () => {
-    expect(formatOpenCodeSessionId("a".repeat(200))).toBe(
-      `ses_${"a".repeat(64)}`
-    );
-    expect(formatOpenCodeSessionId(`ses_${"b".repeat(200)}`)).toBe(
-      `ses_${"b".repeat(64)}`
+    expect(formatOpenCodeSessionId("a".repeat(200)).length).toBe(68);
+    expect(formatOpenCodeSessionId(`ses_${"b".repeat(200)}`).length).toBe(68);
+    expect(formatOpenCodeSessionId("c".repeat(64))).toBe(
+      `ses_${"c".repeat(64)}`
     );
   });
 
-  test("prefixes with ses_ and sanitizes special characters", () => {
-    expect(formatOpenCodeSessionId("org_1:session_123")).toBe(
-      "ses_org_1_session_123"
-    );
+  test("keeps a safe id unchanged and stable", () => {
     expect(formatOpenCodeSessionId("dc7784c29b4f9b69")).toBe(
       "ses_dc7784c29b4f9b69"
+    );
+    expect(formatOpenCodeSessionId("org_1:session_123")).toBe(
+      formatOpenCodeSessionId("org_1:session_123")
+    );
+  });
+
+  test("gives different ids different values after cleaning", () => {
+    expect(formatOpenCodeSessionId("a:b")).not.toBe(
+      formatOpenCodeSessionId("a_b")
+    );
+    expect(formatOpenCodeSessionId("a:b")).not.toBe(
+      formatOpenCodeSessionId("a;b")
+    );
+    expect(formatOpenCodeSessionId(`${"a".repeat(100)}1`)).not.toBe(
+      formatOpenCodeSessionId(`${"a".repeat(100)}2`)
     );
   });
 });
