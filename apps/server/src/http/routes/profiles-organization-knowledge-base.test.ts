@@ -949,6 +949,108 @@ describe("published parent knowledge reads", () => {
     expect((await read("org_other", "publication_root")).status).toBe(404);
   });
 
+  test("a root org member cannot attach or read its shared documents through a profile", async () => {
+    const { app, db, profileService, session } =
+      await setupPublishedKnowledge();
+
+    const { document } =
+      await profileService.uploadOrganizationKnowledgeBaseDocument(
+        "org_other",
+        textDocument("Root-only shared bytes")
+      );
+
+    const profile = await profileService.createProfile(
+      "org_other",
+      { name: "Member agent" },
+      { ownerUserId: "user_reader", sharedWithTeam: false }
+    );
+
+    const call = (method: string, path: string, activeOrg: string) =>
+      app.fetch(
+        new Request(`${BASE}${path}`, {
+          headers: session.headers(
+            { "X-CSRF-Token": session.csrfToken },
+            activeOrg
+          ),
+          method,
+        })
+      );
+
+    const attachPath = `/v1/profiles/${profile.profile.id}/knowledge-base/shared/${document.id}`;
+
+    expect((await call("PUT", attachPath, "org_other")).status).toBe(404);
+
+    // An attachment made before the guard still cannot be read through the
+    // profile content route.
+    await attachSharedKnowledgeBaseDocument(
+      "org_other",
+      profile.profile.id,
+      document.id
+    );
+
+    expect(
+      (
+        await call(
+          "GET",
+          `/v1/profiles/${profile.profile.id}/knowledge-base/${document.id}/content?render=text`,
+          "org_other"
+        )
+      ).status
+    ).toBe(404);
+
+    expect((await call("DELETE", attachPath, "org_other")).status).toBe(404);
+
+    // The child-org flow is unchanged: a member attaches their own org's
+    // shared document.
+    const childDocument =
+      await profileService.uploadOrganizationKnowledgeBaseDocument(
+        "org_team_a",
+        textDocument("Child org shared bytes")
+      );
+
+    const childProfile = await profileService.createProfile(
+      "org_team_a",
+      { name: "Child member agent" },
+      { ownerUserId: "user_reader", sharedWithTeam: false }
+    );
+
+    const childAttach = await call(
+      "PUT",
+      `/v1/profiles/${childProfile.profile.id}/knowledge-base/shared/${childDocument.document.id}`,
+      "org_team_a"
+    );
+
+    expect(childAttach.status).toBe(200);
+
+    const childRead = await call(
+      "GET",
+      `/v1/profiles/${childProfile.profile.id}/knowledge-base/${childDocument.document.id}/content?render=text`,
+      "org_team_a"
+    );
+
+    expect(childRead.status).toBe(200);
+    expect(await childRead.text()).toContain("Child org shared bytes");
+
+    // A root org admin keeps the full flow.
+    await db.upsertOrgMember({
+      createdAt: new Date().toISOString(),
+      orgId: "org_other",
+      role: "admin",
+      userId: "user_reader",
+    });
+
+    expect((await call("PUT", attachPath, "org_other")).status).toBe(200);
+
+    const adminRead = await call(
+      "GET",
+      `/v1/profiles/${profile.profile.id}/knowledge-base/${document.id}/content?render=text`,
+      "org_other"
+    );
+
+    expect(adminRead.status).toBe(200);
+    expect(await adminRead.text()).toContain("Root-only shared bytes");
+  });
+
   test("parent admins read published documents in parent context with live publication checks", async () => {
     const { db, document, privateDocument, publication, read } =
       await setupPublishedKnowledge();
