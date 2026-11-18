@@ -10,12 +10,108 @@ import {
   getModelsForProviderInstance,
   inferRemoteModelVision,
 } from "./compatible-models";
-import { getModelsForProvider } from "./models";
+import { getDefaultModel, getModelsForProvider } from "./models";
 import { asTestFetch } from "./test-helpers";
 
 let mockServer: ReturnType<typeof serve> | undefined;
 
 const originalFetch = globalThis.fetch;
+
+test("a saved default replaces inherited catalog defaults", () => {
+  for (const type of [
+    "fireworks",
+    "openai",
+    "anthropic",
+    "gemini",
+    "cloudflare",
+  ] as const) {
+    const builtin = getModelsForProvider(type).find((model) => model.default)!;
+
+    const models = getModelsForProviderInstance({
+      apiKey: "",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      customModels: [
+        { id: builtin.id },
+        { default: true, id: "selected-model" },
+      ],
+      id: "instance-default",
+      label: "Saved selection",
+      type,
+    });
+
+    expect(
+      models.filter((model) => model.default).map((model) => model.id)
+    ).toEqual(["selected-model"]);
+  }
+});
+
+test("changing a shortlist default preserves static and saved model metadata", () => {
+  const [kimi, glm, custom] = getModelsForProviderInstance({
+    apiKey: "",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    customModels: [
+      { id: "accounts/fireworks/models/kimi-k2p6" },
+      {
+        contextWindow: 64_000,
+        default: true,
+        id: "accounts/fireworks/models/glm-5p2",
+        inputPerMillionUsd: 0,
+        maxOutputTokens: 2048,
+        name: "Saved GLM",
+        outputPerMillionUsd: 0,
+        supportsThinking: false,
+        supportsVision: true,
+      },
+      { id: "private-model" },
+    ],
+    id: "fireworks-metadata",
+    label: "Fireworks metadata",
+    type: "fireworks",
+  });
+
+  expect(kimi).toMatchObject({
+    contextWindow: 262_144,
+    inputPerMillionUsd: 0.6,
+    maxOutputTokens: 65_536,
+    name: "Kimi K2.6",
+    outputPerMillionUsd: 2.5,
+    providerId: "fireworks-metadata",
+    supportsThinking: true,
+    supportsVision: false,
+  });
+  expect(glm).toMatchObject({
+    contextWindow: 64_000,
+    default: true,
+    inputPerMillionUsd: 0,
+    maxOutputTokens: 2048,
+    name: "Saved GLM",
+    outputPerMillionUsd: 0,
+    providerLabel: "Fireworks metadata",
+    supportsThinking: false,
+    supportsVision: true,
+  });
+  expect(custom).toMatchObject({
+    contextWindow: 128_000,
+    maxOutputTokens: 8192,
+  });
+});
+
+test("Fireworks keeps its fallback when no saved default is selected", () => {
+  const shortlist = [
+    { id: "accounts/fireworks/models/glm-5p2" },
+    { id: "accounts/fireworks/models/kimi-k2p6" },
+  ];
+
+  expect(getDefaultModel("fireworks")).toBe(
+    "accounts/fireworks/models/kimi-k2p6"
+  );
+  expect(getDefaultModel("fireworks", shortlist)).toBe(
+    "accounts/fireworks/models/kimi-k2p6"
+  );
+  expect(getDefaultModel("fireworks", [{ id: "private-model" }])).toBe(
+    "private-model"
+  );
+});
 
 afterEach(() => {
   mockServer?.stop(true);
