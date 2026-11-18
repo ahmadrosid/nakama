@@ -28,6 +28,7 @@ describe("web search config", () => {
     delete process.env.EXA_API_KEY;
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.SERPLY_API_KEY;
+    delete process.env.KEENABLE_API_KEY;
   });
 
   async function useTempConfigDir(): Promise<void> {
@@ -148,5 +149,18 @@ describe("web search config", () => {
     expect(WEB_SEARCH_PROVIDER_LABELS.serply).toBe("Serply");
     expect(saved.endpoint).toBe("https://api.serply.io/v1/search");
     expect(saved.apiKeyMasked?.endsWith("9876")).toBe(true);
+  });
+
+  test("uses Keenable without a key and still needs one for the others", async () => {
+    await useTempConfigDir();
+
+    const saved = await saveWebSearchConfig({ provider: "keenable" });
+
+    expect(saved.configured).toBe(true);
+    expect(saved.endpoint).toBe("https://api.keenable.ai/v1/search");
+    expect(WEB_SEARCH_PROVIDER_LABELS.keenable).toBe("Keenable");
+    expect((await saveWebSearchConfig({ provider: "exa" })).configured).toBe(
+      false
+    );
   });
 });
