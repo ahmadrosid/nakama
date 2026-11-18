@@ -1,19 +1,54 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type {
   AutomationRunRecord,
   AutomationToolLimit,
   StoredAutomation,
 } from "@nakama/core";
-import { isAutomationRunUnread } from "@nakama/core";
+import { isAutomationRunUnread, NakamaApiError } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 
 const DeliveryStatusSchema = z.enum(["sent", "failed", "skipped"]).nullish();
+
+const WEBHOOK_SIGNATURE_PATTERN = /^sha256=([0-9a-f]{64})$/;
+
+/** The hex digest of a GitHub-style `X-Hub-Signature-256` header. */
+export function webhookSignatureHex(
+  header: string | undefined
+): string | undefined {
+  return WEBHOOK_SIGNATURE_PATTERN.exec(header ?? "")?.[1];
+}
+
+export function webhookSignatureMatches(
+  secret: string,
+  body: Uint8Array,
+  hex: string
+): boolean {
+  const expected = createHmac("sha256", secret).update(body).digest();
+  const received = Buffer.from(hex, "hex");
+
+  // The pattern fixes the length, so timingSafeEqual cannot throw here.
+  return timingSafeEqual(expected, received);
+}
 
 export function automationBelongsToOrg(
   automation: StoredAutomation,
   orgId: string
 ): boolean {
   return automation.orgId === orgId;
+}
+
+/** Refuses a save made from an older copy; no version skips the check. */
+export function assertAutomationVersion(
+  automation: StoredAutomation,
+  version?: number
+): void {
+  if (version !== undefined && version !== automation.version) {
+    throw new NakamaApiError(
+      "This automation changed after you opened it. Open it again to edit.",
+      409
+    );
+  }
 }
 
 export function toRunRecord(

@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as core from "@nakama/core";
 import { loadUserConfig, saveUserConfig } from "@nakama/core";
 import type {
   CreateProviderRequest,
@@ -37,8 +38,14 @@ describe("saving models for discovery providers", () => {
   async function setup() {
     const databaseAdapter = createInMemoryDatabaseAdapter();
 
+    const agent = new AgentService(
+      await loadUserConfig(),
+      null,
+      databaseAdapter
+    );
+
     const { app } = createMinimalHonoApp({
-      agent: new AgentService(await loadUserConfig(), null, databaseAdapter),
+      agent,
       databaseAdapter,
     });
 
@@ -91,8 +98,182 @@ describe("saving models for discovery providers", () => {
       (await loadUserConfig())?.providers.find((provider) => provider.id === id)
         ?.customModels;
 
-    return { create, listed, modelIds, savedModels, send };
+    return {
+      agent,
+      create,
+      databaseAdapter,
+      listed,
+      modelIds,
+      savedModels,
+      send,
+    };
   }
+
+  // Holds the first config save, so the next request arrives mid-create.
+  function pauseCreate() {
+    const entered = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const laterSave = Promise.withResolvers<void>();
+    const save = core.saveUserConfig;
+    let first = true;
+    let released = false;
+
+    const spy = spyOn(core, "saveUserConfig").mockImplementation(
+      async (config) => {
+        if (first) {
+          first = false;
+          entered.resolve();
+          await gate.promise;
+
+          return save(config);
+        }
+
+        await save(config);
+        laterSave.resolve();
+      }
+    );
+
+    return {
+      entered: entered.promise,
+      // An unserialized request saves in this window; a serialized one waits.
+      release: async () => {
+        if (released) {
+          return;
+        }
+
+        released = true;
+        await Promise.race([laterSave.promise, Bun.sleep(50)]);
+        gate.resolve();
+        spy.mockRestore();
+      },
+    };
+  }
+
+  test.each([false, true])(
+    "keeps both concurrent creates with an existing provider: %s",
+    async (hasProvider) => {
+      const { agent, create, databaseAdapter } = await setup();
+
+      const initial = hasProvider
+        ? await create({ customModels: picked, type: "groq" })
+        : null;
+
+      const pause = pauseCreate();
+      const dispatched = Promise.withResolvers<void>();
+      const originalCreate = agent.createProvider.bind(agent);
+
+      using createSpy = spyOn(agent, "createProvider").mockImplementation(
+        (request) => {
+          if (request.label === "Second") {
+            dispatched.resolve();
+          }
+
+          return originalCreate(request);
+        }
+      );
+
+      try {
+        const first = create({
+          customModels: picked,
+          label: "First",
+          type: "groq",
+        });
+
+        await pause.entered;
+
+        const second = create({
+          customModels: picked,
+          label: "Second",
+          type: "groq",
+        });
+
+        await dispatched.promise;
+        await pause.release();
+        const responses = await Promise.all([first, second]);
+        const ids = responses.map((response) => response.provider.id);
+
+        if (initial) {
+          ids.push(initial.provider.id);
+        }
+
+        expect(new Set(ids).size).toBe(ids.length);
+        const saved = await loadUserConfig();
+        expect(saved?.providers.map((provider) => provider.id).sort()).toEqual(
+          ids.sort()
+        );
+        const defaultId = initial?.provider.id ?? responses[0].provider.id;
+        expect(responses.map((response) => response.defaultProviderId)).toEqual(
+          [defaultId, defaultId]
+        );
+        expect(saved?.defaultProviderId).toBe(defaultId);
+        const reloaded = new AgentService(saved, null, databaseAdapter);
+        const listed = await reloaded.listProviders();
+        expect(listed.providers.map((provider) => provider.id).sort()).toEqual(
+          ids.sort()
+        );
+        expect(listed.defaultProviderId).toBe(defaultId);
+        expect(createSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        await pause.release();
+      }
+    }
+  );
+
+  test("keeps an update made during provider creation", async () => {
+    const { agent, create, databaseAdapter, send } = await setup();
+    const initial = await create({ customModels: picked, type: "groq" });
+    const pause = pauseCreate();
+    const dispatched = Promise.withResolvers<void>();
+    const originalUpdate = agent.updateProvider.bind(agent);
+
+    using updateSpy = spyOn(agent, "updateProvider").mockImplementation(
+      (id, request) => {
+        dispatched.resolve();
+
+        return originalUpdate(id, request);
+      }
+    );
+
+    try {
+      const created = create({ customModels: picked, type: "groq" });
+      await pause.entered;
+
+      const updated = send("PATCH", `/v1/providers/${initial.provider.id}`, {
+        label: "Renamed",
+      });
+
+      await dispatched.promise;
+      await pause.release();
+
+      const [createdBody, updatedResponse] = await Promise.all([
+        created,
+        updated,
+      ]);
+
+      expect(updatedResponse.status).toBe(200);
+      const saved = await loadUserConfig();
+      const ids = [initial.provider.id, createdBody.provider.id].sort();
+      expect(saved?.providers.map((provider) => provider.id).sort()).toEqual(
+        ids
+      );
+      expect(
+        saved?.providers.find((provider) => provider.id === initial.provider.id)
+          ?.label
+      ).toBe("Renamed");
+      const reloaded = new AgentService(saved, null, databaseAdapter);
+      const listed = await reloaded.listProviders();
+      expect(listed.providers.map((provider) => provider.id).sort()).toEqual(
+        ids
+      );
+      expect(
+        listed.providers.find((provider) => provider.id === initial.provider.id)
+          ?.label
+      ).toBe("Renamed");
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      await pause.release();
+    }
+  });
 
   test.each<ProviderName>(["command_code", "groq"])(
     "keeps the models picked on update for %s",

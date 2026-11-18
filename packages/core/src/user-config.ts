@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
 
 import { NakamaApiError } from "./api-error";
+import { createChatLock } from "./channel-chat-lock";
 import {
   isValidBaseUrl,
   normalizeBaseUrl,
@@ -49,6 +50,15 @@ export {
   resolveProvider,
 } from "./provider-resolution";
 
+/** The Nakama Cloud account this computer signed in with. */
+export interface NakamaCloudAccount {
+  /** The person's email, shown as "Signed in as …". */
+  account: string;
+  computerId: string;
+  orgId: string;
+  orgName: string;
+}
+
 export interface ProviderInstance {
   apiKey: string;
   baseUrl?: string;
@@ -61,6 +71,7 @@ export interface ProviderInstance {
   hostMode?: import("./contract").OllamaHostMode;
   id: string;
   label: string;
+  nakamaCloud?: NakamaCloudAccount;
   openRouterRouting?: OpenRouterRoutingSettings;
   type: UserProviderName;
   wireApi?: import("./contract").WireApi;
@@ -120,6 +131,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   mistral: "Mistral",
   moonshot: "Moonshot Kimi",
   moonshot_cn: "Moonshot Kimi (CN)",
+  nakama_cloud: "Nakama Cloud",
   netra: "Netra Runtime",
   ollama: "Ollama",
   openai: "OpenAI",
@@ -511,30 +523,33 @@ export async function saveUserThinkingSettings(
 ): Promise<void> {
   const effort = validateThinkingEffort(settings.effort);
   const enabled = settings.enabled;
-  const existing = await loadUserConfig();
 
-  if (existing) {
-    await saveUserConfig({
-      ...existing,
-      thinkingEffort: effort,
-      thinkingEnabled: enabled,
+  await userConfigSaveLock.withLock(getUserConfigPath(), async () => {
+    const existing = await loadUserConfig();
+
+    if (existing) {
+      await writeUserConfig({
+        ...existing,
+        thinkingEffort: effort,
+        thinkingEnabled: enabled,
+      });
+
+      return;
+    }
+
+    const raw = await readTextOrNull(getUserConfigPath());
+
+    const parsed =
+      raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
+    const lines = buildConfigIniLines(parsed.global, parsed.sections, {
+      thinking: enabled ? "on" : "off",
+      thinking_effort: effort,
     });
 
-    return;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    thinking: enabled ? "on" : "off",
-    thinking_effort: effort,
-  });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
+    await writeTextFile(getUserConfigPath(), lines.join("\n"), {
+      ensureDir: getUserConfigDir(),
+    });
   });
 }
 
@@ -568,28 +583,30 @@ export async function saveUserTimezone(
     throw new NakamaApiError(`Invalid timezone: ${trimmed}`, 400);
   }
 
-  const existing = await loadUserConfig();
+  return userConfigSaveLock.withLock(getUserConfigPath(), async () => {
+    const existing = await loadUserConfig();
 
-  if (existing) {
-    await saveUserConfig({ ...existing, timezone: trimmed });
+    if (existing) {
+      await writeUserConfig({ ...existing, timezone: trimmed });
+
+      return trimmed;
+    }
+
+    const raw = await readTextOrNull(getUserConfigPath());
+
+    const parsed =
+      raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
+    const lines = buildConfigIniLines(parsed.global, parsed.sections, {
+      timezone: trimmed,
+    });
+
+    await writeTextFile(getUserConfigPath(), lines.join("\n"), {
+      ensureDir: getUserConfigDir(),
+    });
 
     return trimmed;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    timezone: trimmed,
   });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
-  });
-
-  return trimmed;
 }
 
 function readWebPublicUrl(values: Record<string, string>): string | undefined {
@@ -630,38 +647,52 @@ export async function saveUserWebPublicUrl(
   }
 
   const normalized = normalizeBaseUrl(trimmed);
-  const existing = await loadUserConfig();
 
-  if (existing) {
+  return userConfigSaveLock.withLock(getUserConfigPath(), async () => {
+    const existing = await loadUserConfig();
+
+    if (existing) {
+      const raw = await readTextOrNull(getUserConfigPath());
+
+      const parsed =
+        raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
+      await writeParsedConfigIni(parsed.global, parsed.sections, {
+        web_public_url: normalized,
+      });
+
+      return normalized;
+    }
+
     const raw = await readTextOrNull(getUserConfigPath());
 
     const parsed =
       raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
 
-    await writeParsedConfigIni(parsed.global, parsed.sections, {
+    const lines = buildConfigIniLines(parsed.global, parsed.sections, {
       web_public_url: normalized,
     });
 
+    await writeTextFile(getUserConfigPath(), lines.join("\n"), {
+      ensureDir: getUserConfigDir(),
+    });
+
     return normalized;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    web_public_url: normalized,
   });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
-  });
-
-  return normalized;
 }
 
-export async function saveUserConfig(config: UserConfig): Promise<void> {
+// Each save reads the whole file and writes it back. Without this, a save
+// that started from an older read erases a provider saved after that read.
+// shortcut: One process only, same as providerPublicationLock.
+const userConfigSaveLock = createChatLock();
+
+export function saveUserConfig(config: UserConfig): Promise<void> {
+  return userConfigSaveLock.withLock(getUserConfigPath(), () =>
+    writeUserConfig(config)
+  );
+}
+
+async function writeUserConfig(config: UserConfig): Promise<void> {
   const raw = await readTextOrNull(getUserConfigPath());
 
   const existingParsed =
@@ -891,6 +922,15 @@ function loadProvidersFromSections(
       provider.chatgptTokenExpiresAt = values.chatgpt_token_expires_at.trim();
     }
 
+    if (type === "nakama_cloud" && values.nakama_computer_id?.trim()) {
+      provider.nakamaCloud = {
+        account: values.nakama_account?.trim() ?? "",
+        computerId: values.nakama_computer_id.trim(),
+        orgId: values.nakama_org_id?.trim() ?? "",
+        orgName: values.nakama_org_name?.trim() ?? "",
+      };
+    }
+
     if (baseUrl) {
       provider.baseUrl = baseUrl;
     }
@@ -980,6 +1020,13 @@ function buildProviderSectionValues(
     values.chatgpt_token_expires_at = provider.chatgptTokenExpiresAt.trim();
   }
 
+  if (provider.nakamaCloud) {
+    values.nakama_account = provider.nakamaCloud.account;
+    values.nakama_computer_id = provider.nakamaCloud.computerId;
+    values.nakama_org_id = provider.nakamaCloud.orgId;
+    values.nakama_org_name = provider.nakamaCloud.orgName;
+  }
+
   return values;
 }
 
@@ -1039,16 +1086,24 @@ function buildConfigIniLines(
   lines.push("");
 
   for (const [sectionName, values] of Object.entries(sections)) {
-    lines.push(`[${sectionName}]`);
+    lines.push(`[${oneIniLine(sectionName)}]`);
 
     for (const [key, value] of Object.entries(values)) {
-      lines.push(`${key}=${value}`);
+      lines.push(`${oneIniLine(key)}=${oneIniLine(value)}`);
     }
 
     lines.push("");
   }
 
   return lines;
+}
+
+/**
+ * Section values can come from outside, such as an org name from Nakama
+ * Cloud. A line break in one would start a new key or section in the file.
+ */
+function oneIniLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
 }
 
 function readThinkingSettings(

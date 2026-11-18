@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type {
   AutomationDeliveryStatus,
   AutomationRunRecord,
@@ -28,13 +28,14 @@ import {
   resolveProfileId,
 } from "./automation-profile-access";
 import {
+  assertAutomationVersion,
   automationBelongsToOrg,
   scopeToolLimit,
   toRunRecord,
+  webhookSignatureHex,
+  webhookSignatureMatches,
 } from "./automation-records";
 import type { ManagedSecrets } from "./managed-secrets";
-
-const WEBHOOK_SIGNATURE_PATTERN = /^sha256=([0-9a-f]{64})$/;
 
 export interface AutomationServiceOptions {
   canSendEmail?: (profileId: string, orgId: string) => Promise<boolean>;
@@ -226,6 +227,8 @@ export class AutomationService {
       throw new Error("Automation not found.");
     }
 
+    assertAutomationVersion(existing, input.version);
+
     const userTimezone = await this.getUserTimezone();
 
     const trigger = input.trigger
@@ -412,9 +415,9 @@ export class AutomationService {
     body: Uint8Array,
     header: string | undefined
   ): Promise<boolean> {
-    const match = WEBHOOK_SIGNATURE_PATTERN.exec(header ?? "");
+    const hex = webhookSignatureHex(header);
 
-    if (!(match?.[1] && this.secrets)) {
+    if (!(hex && this.secrets)) {
       return false;
     }
 
@@ -435,11 +438,7 @@ export class AutomationService {
       return false;
     }
 
-    const expected = createHmac("sha256", secret).update(body).digest();
-    const received = Buffer.from(match[1], "hex");
-
-    // The pattern fixes the length, so timingSafeEqual cannot throw here.
-    return timingSafeEqual(expected, received);
+    return webhookSignatureMatches(secret, body, hex);
   }
 
   claimWebhookDelivery(

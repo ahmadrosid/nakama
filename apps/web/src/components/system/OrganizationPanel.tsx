@@ -22,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import { Switch } from "@nakama/ui/switch";
+import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AiBrain01Icon,
@@ -1333,6 +1335,47 @@ export function OrganizationOverview() {
   );
 }
 
+/** Admin switch: may Nakama Desktop use this organization's models. */
+function DesktopModelsOrgCard() {
+  const { activeOrg, updateOrg } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  if (!activeOrg || activeOrg.role !== "admin") {
+    return null;
+  }
+
+  const orgId = activeOrg.id;
+
+  async function handleToggle(checked: boolean) {
+    setBusy(true);
+
+    try {
+      await updateOrg(orgId, { desktopModelsEnabled: checked });
+    } catch (error) {
+      toast(formatError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="w-full shadow-none">
+      <div className="flex items-center justify-between gap-4 px-4 py-3">
+        <p className="font-medium text-foreground text-sm">
+          Allow Nakama Desktop to use this organization's models
+        </p>
+        <Switch
+          aria-label="Allow Nakama Desktop to use this organization's models"
+          checked={activeOrg.desktopModelsEnabled !== false}
+          disabled={busy}
+          onCheckedChange={(checked) => void handleToggle(checked)}
+          size="sm"
+        />
+      </div>
+    </Card>
+  );
+}
+
 export function OrganizationPanel() {
   const { activeOrg, user } = useAuth();
 
@@ -1348,6 +1391,7 @@ export function OrganizationPanel() {
           </h2>
           <OrgMembersCard />
           <SkillsLearningOrgCard />
+          <DesktopModelsOrgCard />
           <OrgMemoryCard />
           <OrgArchiveCard />
         </>
