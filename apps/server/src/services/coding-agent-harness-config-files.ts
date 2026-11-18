@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { normalizeBaseUrl, type ProviderName } from "@nakama/core";
 import type { StoredCodingAgentHarnessKind } from "@nakama/db";
+import { formatOpenCodeSessionId } from "../providers/opencode-go/index";
 import type { CodingAgentProviderRouting } from "./coding-agent-provider-routing";
 import { formatModelForHarness } from "./coding-agent-spawn-env";
 
@@ -11,10 +12,17 @@ export interface HarnessConfigDir {
   dir: string;
 }
 
+interface OpenCodeProviderOptions {
+  apiKey: string;
+  baseURL: string | null;
+  headers?: Record<string, string>;
+}
+
 interface PiProviderConfig {
   api?: string;
   apiKey: string;
   baseUrl: string;
+  headers?: Record<string, string>;
   models?: Array<{
     contextWindow: number;
     id: string;
@@ -65,6 +73,15 @@ export async function writeCodexConfigToml(
 
   const baseUrl = routing.baseUrl ?? "";
 
+  // The provider routes by session, so a CLI run needs the header too: it
+  // calls OpenCode Go directly, not through the Nakama provider adapters.
+  const sessionHeaders =
+    providerType === "opencode_go"
+      ? [
+          `http_headers = { "x-opencode-session" = ${toTomlString(formatOpenCodeSessionId())} }`,
+        ]
+      : [];
+
   const contents = [
     'model_provider = "nakama"',
     "",
@@ -74,6 +91,7 @@ export async function writeCodexConfigToml(
     `wire_api = "responses"`,
     "",
     'env_key = "NAKAMA_HARNESS_API_KEY"',
+    ...sessionHeaders,
     "",
     "[profiles.nakama]",
     'model_provider = "nakama"',
@@ -103,16 +121,26 @@ export async function writeOpenCodeConfig(
 
   const providerKey = resolveOpenCodeProviderKey(providerType);
 
+  const providerOptions: OpenCodeProviderOptions = {
+    apiKey: "{env:NAKAMA_HARNESS_API_KEY}",
+    baseURL: routing.baseUrl,
+  };
+
+  // The CLI calls OpenCode Go directly, so it sends the routing header
+  // itself. One run is one conversation.
+  if (providerType === "opencode_go") {
+    providerOptions.headers = {
+      "x-opencode-session": formatOpenCodeSessionId(),
+    };
+  }
+
   const config = {
     $schema: "https://opencode.ai/config.json",
     model: model ? `${providerKey}/${model}` : undefined,
     provider: {
       [providerKey]: {
         models: model ? { [model]: { name: model } } : undefined,
-        options: {
-          apiKey: "{env:NAKAMA_HARNESS_API_KEY}",
-          baseURL: routing.baseUrl,
-        },
+        options: providerOptions,
       },
     },
   };
@@ -270,6 +298,13 @@ export async function writePiModelsJson(
       ],
       name: "Nakama",
     };
+
+    // pi calls OpenCode Go directly, so it sends the routing header itself.
+    if (providerType === "opencode_go") {
+      providers["nakama"].headers = {
+        "x-opencode-session": formatOpenCodeSessionId(),
+      };
+    }
   }
 
   const config = { providers };
