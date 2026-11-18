@@ -38,9 +38,9 @@ function openRouterCustomModelsToCatalog(
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      contextWindow: entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       id: entry.id,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      maxOutputTokens: entry.maxOutputTokens ?? DEFAULT_MAX_OUTPUT,
       name: entry.name?.trim() || entry.id,
       provider: "openrouter",
       supportsThinking: resolveOpenRouterCatalogThinking(entry),
@@ -79,9 +79,9 @@ function cerebrasCustomModelsToCatalog(
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      contextWindow: entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       id: entry.id,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      maxOutputTokens: entry.maxOutputTokens ?? DEFAULT_MAX_OUTPUT,
       name: entry.name?.trim() || entry.id,
       provider: "cerebras",
       supportsThinking: resolveCerebrasCatalogThinking(entry),
@@ -212,9 +212,9 @@ function customModelsToCatalog(
 ): ProviderModelOption[] {
   return entries.map((entry) => {
     const model: ProviderModelOption = {
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      contextWindow: entry.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       id: entry.id,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      maxOutputTokens: entry.maxOutputTokens ?? DEFAULT_MAX_OUTPUT,
       name: entry.name?.trim() || entry.id,
       provider,
     };
