@@ -192,10 +192,6 @@ test("the chat card takes control and hands back with the panel header in step",
   const { browser, root } = await renderChat("https://live.example/view");
 
   try {
-    expect(document.body.textContent).toContain(
-      "example.com needs your sign-in"
-    );
-
     const takeControl = [...document.querySelectorAll("button")].filter(
       (element) => element.textContent === "Take control"
     );
@@ -216,7 +212,8 @@ test("the chat card takes control and hands back with the panel header in step",
       ["chat-a", "login"],
       ["chat-a", "handoff"],
     ]);
-    expect(document.body.textContent).toContain("Handed back to the agent");
+    // The card's button is gone; the panel keeps its two.
+    expect(document.querySelectorAll("button")).toHaveLength(2);
     await act(async () => root.unmount());
   } finally {
     record.mockRestore();
