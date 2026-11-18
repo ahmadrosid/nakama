@@ -1456,6 +1456,11 @@ export interface DatabaseAdapter {
     userId: string,
     profileId: string
   ): Promise<string[]>;
+  /** The newest run of each case that has one. Org-scoped. */
+  listLatestRegressionCaseRuns(
+    orgId: string,
+    caseIds: string[]
+  ): Promise<StoredRegressionCaseRunRecord[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
   /** Rows from `sinceDay` (inclusive, `YYYY-MM-DD`) onward. */
   listLlmUsageDailyStats(

@@ -137,6 +137,8 @@ export interface RegressionCase {
   expectedResult: string;
   id: string;
   input: string;
+  /** The newest rerun; null until the case is rerun. */
+  latestRun: RegressionCaseRun | null;
   profileId: string;
   source: RegressionCaseSource;
 }

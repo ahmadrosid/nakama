@@ -3965,6 +3965,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
 
+  const listLatestRegressionCaseRunsStmt = db.prepare<
+    RegressionCaseRunRow,
+    SQLQueryBindings[]
+  >(`
+    SELECT run.* FROM regression_case_runs run
+    WHERE run.org_id = ?1
+      AND run.case_id IN (SELECT value FROM json_each(?2))
+      AND run.id = (
+        SELECT newest.id FROM regression_case_runs newest
+        WHERE newest.org_id = ?1 AND newest.case_id = run.case_id
+        ORDER BY newest.created_at DESC, newest.id DESC
+        LIMIT 1
+      )
+  `);
+
   const setRegressionCaseRunVerdictStmt = db.prepare<
     RegressionCaseRunRow,
     SQLQueryBindings[]
@@ -6333,6 +6348,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         )
         .all(orgId, userId, profileId)
         .map((row) => row.path);
+    },
+
+    async listLatestRegressionCaseRuns(orgId, caseIds) {
+      return listLatestRegressionCaseRunsStmt
+        .all(orgId, JSON.stringify(caseIds))
+        .map((row) => toRegressionCaseRunRecord(row));
     },
 
     async listLlmTurnUsage(orgId) {

@@ -271,4 +271,34 @@ describe("regression case run routes", () => {
       await databaseAdapter.getRegressionCaseRun(orgA.orgId, caseId, run.id)
     ).toMatchObject({ verdict: null });
   });
+
+  test("the case list carries the newest run and its mark", async () => {
+    const { app, databaseAdapter } = createApp();
+    const admin = await seedOrgAdmin(databaseAdapter, { profileId: "agent_1" });
+    const caseId = await seedCase(databaseAdapter, admin.orgId, "agent_1");
+    const call = await signIn(app, admin);
+    const runs = `agent_1/regression-cases/${caseId}/runs`;
+
+    const latestRun = async () =>
+      (await (await call("agent_1/regression-cases", "GET")).json()).cases[0]
+        .latestRun;
+
+    expect(await latestRun()).toBeNull();
+
+    const first = (await (await call(runs, "POST")).json()).run;
+
+    await call(`${runs}/${first.id}`, "PATCH", { verdict: "fail" });
+    expect(await latestRun()).toMatchObject({ id: first.id, verdict: "fail" });
+
+    // Runs order by their time, so the second needs a later one.
+    await Bun.sleep(5);
+
+    const second = (await (await call(runs, "POST")).json()).run;
+
+    expect(await latestRun()).toMatchObject({ id: second.id, verdict: null });
+
+    const single = await call(`agent_1/regression-cases/${caseId}`, "GET");
+
+    expect((await single.json()).case.latestRun.id).toBe(second.id);
+  });
 });

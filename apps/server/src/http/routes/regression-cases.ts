@@ -6,8 +6,13 @@ import {
   MAX_REGRESSION_EXPECTED_RESULT_LENGTH,
   type RegressionCase,
   type RegressionCaseResponse,
+  type RegressionCaseRun,
 } from "@nakama/core/contract";
-import type { StoredRegressionCaseRecord } from "@nakama/db";
+import type {
+  DatabaseAdapter,
+  StoredRegressionCaseRecord,
+  StoredRegressionCaseRunRecord,
+} from "@nakama/db";
 import { DatabaseAutomationStore } from "@nakama/db";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
@@ -72,6 +77,19 @@ const createRegressionCaseSchema = z
   ])
   .openapi("CreateRegressionCaseRequest");
 
+export const regressionCaseRunSchema = z.object({
+  caseId: z.string(),
+  createdAt: z.string(),
+  createdByUserId: z.string().nullable(),
+  error: z.string().nullable(),
+  id: z.string(),
+  output: z.string().nullable(),
+  status: z.enum(["completed", "failed"]),
+  verdict: z.enum(["pass", "fail"]).nullable(),
+  verdictAt: z.string().nullable(),
+  verdictByUserId: z.string().nullable(),
+});
+
 const regressionCaseSchema = z
   .object({
     createdAt: z.string(),
@@ -79,6 +97,7 @@ const regressionCaseSchema = z
     expectedResult: z.string(),
     id: z.string(),
     input: z.string(),
+    latestRun: regressionCaseRunSchema.nullable(),
     profileId: z.string(),
     source: z.object({
       automationId: z.string().nullable(),
@@ -127,13 +146,24 @@ function sourcePath(record: StoredRegressionCaseRecord): string {
   return "/automations";
 }
 
-function toRegressionCase(record: StoredRegressionCaseRecord): RegressionCase {
+export function toRegressionCaseRun({
+  orgId: _orgId,
+  ...run
+}: StoredRegressionCaseRunRecord): RegressionCaseRun {
+  return run;
+}
+
+function toRegressionCase(
+  record: StoredRegressionCaseRecord,
+  latestRun: StoredRegressionCaseRunRecord | null
+): RegressionCase {
   return {
     createdAt: record.createdAt,
     createdByUserId: record.createdByUserId,
     expectedResult: record.expectedResult,
     id: record.id,
     input: record.input,
+    latestRun: latestRun && toRegressionCaseRun(latestRun),
     profileId: record.profileId,
     source: {
       automationId: record.sourceAutomationId,
@@ -142,6 +172,24 @@ function toRegressionCase(record: StoredRegressionCaseRecord): RegressionCase {
       type: record.sourceType,
     },
   };
+}
+
+/** The cases with the newest run of each, read in one query. */
+async function withLatestRuns(
+  databaseAdapter: DatabaseAdapter,
+  orgId: string,
+  records: StoredRegressionCaseRecord[]
+): Promise<RegressionCase[]> {
+  const runs = await databaseAdapter.listLatestRegressionCaseRuns(
+    orgId,
+    records.map((record) => record.id)
+  );
+
+  const runByCase = new Map(runs.map((run) => [run.caseId, run]));
+
+  return records.map((record) =>
+    toRegressionCase(record, runByCase.get(record.id) ?? null)
+  );
 }
 
 /** Copied input from a private chat stays with that chat's owner. */
@@ -424,7 +472,7 @@ export function registerRegressionCaseRoutes(
     await databaseAdapter.createRegressionCase(record);
 
     return json<RegressionCaseResponse>(
-      { case: toRegressionCase(record) },
+      { case: toRegressionCase(record, null) },
       201
     );
   });
@@ -457,9 +505,11 @@ export function registerRegressionCaseRoutes(
     );
 
     return json<ListRegressionCasesResponse>({
-      cases: records
-        .filter((record) => canReadRegressionCase(record, auth))
-        .map(toRegressionCase),
+      cases: await withLatestRuns(
+        databaseAdapter,
+        orgId,
+        records.filter((record) => canReadRegressionCase(record, auth))
+      ),
       nextOffset: records.length === limit ? offset + records.length : null,
     });
   });
@@ -482,6 +532,8 @@ export function registerRegressionCaseRoutes(
       return errorResponse("Regression case not found", 404);
     }
 
-    return json<RegressionCaseResponse>({ case: toRegressionCase(record) });
+    const [found] = await withLatestRuns(databaseAdapter, orgId, [record]);
+
+    return json<RegressionCaseResponse>({ case: found });
   });
 }
