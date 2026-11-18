@@ -249,13 +249,17 @@ export function BrowserSignInCard({
   }
 
   return (
-    <div className="flex w-fit max-w-full items-center gap-3 rounded-xl bg-muted/40 p-3">
-      <LockIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-      <p className="min-w-0 font-medium text-foreground text-sm">
-        {held
-          ? `Sign in to ${host} in the Browser panel`
-          : `${host} needs your sign-in`}
-      </p>
+    <div className="flex w-fit max-w-full flex-wrap items-center gap-3 rounded-xl bg-muted/40 p-3">
+      {/* In a narrow chat column the button goes below, so the text keeps one line. */}
+      <div className="flex min-w-48 flex-1 items-center gap-3">
+        <LockIcon
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+        <p className="min-w-0 font-medium text-foreground text-sm">
+          {held ? `Sign in to ${host}` : `${host} needs your sign-in`}
+        </p>
+      </div>
       <Button
         className="min-h-10 shrink-0 rounded-lg"
         disabled={pending || (heldSessionId !== null && !held)}
