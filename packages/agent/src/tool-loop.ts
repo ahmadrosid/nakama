@@ -36,23 +36,54 @@ export async function executeToolCall(
   context: ToolContext = {}
 ): Promise<ToolResult> {
   const tool = tools.find((item) => item.name === call.name);
-
-  if (!tool) {
-    return { error: `Unknown tool: ${call.name}` };
-  }
+  const startedAt = new Date().toISOString();
+  let outcome: "success" | "error" | "cancelled" = "error";
 
   try {
+    if (!tool) {
+      return { error: `Unknown tool: ${call.name}` };
+    }
+
     // Check what the model and the transcript receive: the JSON-serialized
     // value, so optional fields left undefined are dropped, not rejected.
-    return ToolResultSchema.parse(
+    const result = ToolResultSchema.parse(
       JSON.parse(JSON.stringify(await tool.run(call.arguments, context)))
     );
+
+    const failed =
+      result instanceof Object &&
+      !Array.isArray(result) &&
+      (("error" in result && result.error != null) ||
+        ("isError" in result && result.isError === true));
+
+    if (context.signal?.aborted) {
+      outcome = "cancelled";
+    } else if (!failed) {
+      outcome = "success";
+    }
+
+    return result;
   } catch (error) {
-    context.signal?.throwIfAborted();
+    if (context.signal?.aborted) {
+      outcome = "cancelled";
+      context.signal.throwIfAborted();
+    }
 
     return {
       error: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    // A failed record must not replace the tool result or the abort.
+    try {
+      await context.recordSessionToolStep?.({
+        completedAt: new Date().toISOString(),
+        outcome,
+        startedAt,
+        toolName: tool?.name ?? "unknown_tool",
+      });
+    } catch (error) {
+      console.warn("Could not save a session tool step:", error);
+    }
   }
 }
 

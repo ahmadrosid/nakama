@@ -75,6 +75,44 @@ CREATE TABLE IF NOT EXISTS sessions (
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS session_steps (
+  id INTEGER PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  session_id TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL,
+  actor TEXT NOT NULL CHECK (actor IN ('agent', 'user')),
+  tool_name TEXT NOT NULL CHECK (length(tool_name) BETWEEN 1 AND 128),
+  started_at TEXT NOT NULL,
+  completed_at TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('success', 'error', 'cancelled'))
+);
+
+CREATE INDEX IF NOT EXISTS session_steps_session_order
+  ON session_steps (session_id, id);
+
+CREATE TRIGGER IF NOT EXISTS session_steps_no_replace
+BEFORE INSERT ON session_steps
+WHEN EXISTS (SELECT 1 FROM session_steps WHERE id = NEW.id)
+BEGIN
+  SELECT RAISE(ABORT, 'session_steps are append-only');
+END;
+
+-- profile_id may still follow a legacy profile id rename.
+CREATE TRIGGER IF NOT EXISTS session_steps_no_update
+BEFORE UPDATE OF id, org_id, session_id, actor, tool_name, started_at,
+  completed_at, outcome ON session_steps
+BEGIN
+  SELECT RAISE(ABORT, 'session_steps are append-only');
+END;
+
+-- Steps leave only with their session, through the foreign key cascade.
+CREATE TRIGGER IF NOT EXISTS session_steps_no_delete
+BEFORE DELETE ON session_steps
+WHEN EXISTS (SELECT 1 FROM sessions WHERE id = OLD.session_id)
+BEGIN
+  SELECT RAISE(ABORT, 'session_steps are append-only');
+END;
+
 CREATE TABLE IF NOT EXISTS session_user_order (
   session_id TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
