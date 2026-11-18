@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type {
   AutomationDeliveryStatus,
   AutomationRunRecord,
@@ -30,12 +30,13 @@ import {
 import {
   assertAutomationVersion,
   automationBelongsToOrg,
-  normalizeToolLimit,
+  scopeToolLimit,
   toRunRecord,
+  updatedToolLimit,
+  webhookSignatureHex,
+  webhookSignatureMatches,
 } from "./automation-records";
 import type { ManagedSecrets } from "./managed-secrets";
-
-const WEBHOOK_SIGNATURE_PATTERN = /^sha256=([0-9a-f]{64})$/;
 
 export interface AutomationServiceOptions {
   canSendEmail?: (profileId: string, orgId: string) => Promise<boolean>;
@@ -186,7 +187,12 @@ export class AutomationService {
     }
 
     if (input.toolLimit) {
-      automation.toolLimit = normalizeToolLimit(input.toolLimit);
+      automation.toolLimit = await scopeToolLimit(
+        this.db,
+        orgId,
+        profileId,
+        input.toolLimit
+      );
     }
 
     const profile = await this.db.getProfile(profileId);
@@ -279,13 +285,13 @@ export class AutomationService {
       profileId,
     });
 
-    let toolLimit = existing.toolLimit;
-
-    if (input.toolLimit === null) {
-      toolLimit = undefined;
-    } else if (input.toolLimit !== undefined) {
-      toolLimit = normalizeToolLimit(input.toolLimit);
-    }
+    const { changed: limitChanged, toolLimit } = await updatedToolLimit(
+      this.db,
+      orgId,
+      profileId,
+      existing,
+      input.toolLimit
+    );
 
     const prompt = input.prompt?.trim() || existing.prompt;
 
@@ -296,7 +302,7 @@ export class AutomationService {
       prompt !== existing.prompt ||
       profileId !== existing.profileId ||
       JSON.stringify(delivery) !== JSON.stringify(existing.delivery) ||
-      JSON.stringify(toolLimit) !== JSON.stringify(existing.toolLimit) ||
+      limitChanged ||
       (trigger.type === "webhook" && existing.trigger.type !== "webhook");
 
     const updated: StoredAutomation = {
@@ -407,9 +413,9 @@ export class AutomationService {
     body: Uint8Array,
     header: string | undefined
   ): Promise<boolean> {
-    const match = WEBHOOK_SIGNATURE_PATTERN.exec(header ?? "");
+    const hex = webhookSignatureHex(header);
 
-    if (!(match?.[1] && this.secrets)) {
+    if (!(hex && this.secrets)) {
       return false;
     }
 
@@ -430,11 +436,7 @@ export class AutomationService {
       return false;
     }
 
-    const expected = createHmac("sha256", secret).update(body).digest();
-    const received = Buffer.from(match[1], "hex");
-
-    // The pattern fixes the length, so timingSafeEqual cannot throw here.
-    return timingSafeEqual(expected, received);
+    return webhookSignatureMatches(secret, body, hex);
   }
 
   claimWebhookDelivery(
