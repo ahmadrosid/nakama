@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  type AutomationResponse,
   type GetAutomationRunResponse,
   getDiscordConfigDir,
   getDiscordConfigPath,
@@ -10,6 +11,7 @@ import {
   getTelegramConfigPath,
   type ListAutomationRunsResponse,
   type RunAutomationResponse,
+  type UpdateAutomationRequest,
 } from "@nakama/core";
 import { setupTestConfigDir } from "../../test-config-dir";
 import {
@@ -19,6 +21,165 @@ import {
 } from "./automation-route-test-fixtures";
 
 setupTestConfigDir("nakama-automation-routes-");
+
+async function createUpdateFixture() {
+  const fixture = createFixture();
+  const { orgId, session } = await loginMember(fixture);
+
+  const automation = await fixture.automationService.create(
+    orgId,
+    {
+      name: "Daily report",
+      prompt: "Summarize yesterday",
+      trigger: { type: "manual" },
+    },
+    PROFILE_ID
+  );
+
+  const update = (body: UpdateAutomationRequest) =>
+    fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+        body: JSON.stringify(body),
+        headers: {
+          ...session.headers(),
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        },
+        method: "PUT",
+      })
+    );
+
+  return { automation, fixture, orgId, update };
+}
+
+describe("concurrent partial automation updates", () => {
+  test("service updates preserve both fields and advance each version", async () => {
+    const { automation, fixture, orgId } = await createUpdateFixture();
+    const service = fixture.automationService;
+    const access = { orgRole: "member" as const, userId: "user_route_member" };
+
+    const responses = await Promise.all([
+      service.update(
+        automation.id,
+        orgId,
+        { prompt: "Summarize today" },
+        access
+      ),
+      service.update(automation.id, orgId, { enabled: false }, access),
+    ]);
+
+    expect(await service.get(automation.id, orgId)).toMatchObject({
+      enabled: false,
+      prompt: "Summarize today",
+      version: 3,
+    });
+    expect(responses.map(({ version }) => version)).toEqual([2, 3]);
+    expect(
+      await fixture.databaseAdapter.getAutomation(automation.id)
+    ).toMatchObject({
+      definition: { prompt: "Summarize today", version: 3 },
+      enabled: false,
+      version: 3,
+    });
+  });
+
+  for (const promptFirst of [true, false]) {
+    test(`HTTP updates preserve both fields with ${promptFirst ? "prompt" : "pause"} first`, async () => {
+      const { automation, fixture, orgId, update } =
+        await createUpdateFixture();
+
+      const firstRead = Promise.withResolvers<void>();
+      const releaseRead = Promise.withResolvers<void>();
+      const secondEntered = Promise.withResolvers<void>();
+      const db = fixture.databaseAdapter;
+      const service = fixture.automationService;
+      const originalRead = db.getAutomation.bind(db);
+      const originalUpdate = service.update.bind(service);
+      let reads = 0;
+      let updates = 0;
+
+      db.getAutomation = async (id) => {
+        const row = await originalRead(id);
+
+        if (id === automation.id && ++reads === 1) {
+          firstRead.resolve();
+          await releaseRead.promise;
+        }
+
+        return row;
+      };
+
+      service.update = (...args) => {
+        const pending = originalUpdate(...args);
+
+        if (++updates === 2) {
+          secondEntered.resolve();
+        }
+
+        return pending;
+      };
+
+      let responses: Response[];
+
+      try {
+        const first = update(
+          promptFirst ? { prompt: "Summarize today" } : { enabled: false }
+        );
+
+        await firstRead.promise;
+
+        const second = update(
+          promptFirst ? { enabled: false } : { prompt: "Summarize today" }
+        );
+
+        await secondEntered.promise;
+        releaseRead.resolve();
+        responses = await Promise.all([first, second]);
+      } finally {
+        releaseRead.resolve();
+        db.getAutomation = originalRead;
+        service.update = originalUpdate;
+      }
+
+      expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+
+      // SAFETY: Both responses are HTTP 200 from the registered automation route.
+      const bodies = await Promise.all(
+        responses.map(
+          async (response) => (await response.json()) as AutomationResponse
+        )
+      );
+
+      expect(await service.get(automation.id, orgId)).toMatchObject({
+        enabled: false,
+        prompt: "Summarize today",
+        version: 3,
+      });
+      expect(bodies.map(({ automation: saved }) => saved.version)).toEqual([
+        2, 3,
+      ]);
+    });
+  }
+
+  test("a rejected update leaves the version unchanged and permits the next update", async () => {
+    const { automation, fixture, orgId, update } = await createUpdateFixture();
+
+    const responses = await Promise.all([
+      update({ profileId: "missing_profile" }),
+      update({ prompt: "Summarize today" }),
+    ]);
+
+    expect(responses.map(({ status }) => status)).toEqual([400, 200]);
+    expect(
+      await fixture.automationService.get(automation.id, orgId)
+    ).toMatchObject({
+      enabled: true,
+      profileId: PROFILE_ID,
+      prompt: "Summarize today",
+      version: 2,
+    });
+  });
+});
 
 async function writeChannelConfigs(orgId: string): Promise<string> {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-automation-route-"));
@@ -51,6 +212,156 @@ function automationBody<T>(delivery: T): string {
     trigger: { type: "manual" },
   });
 }
+
+describe("automation cron range validation over HTTP", () => {
+  test("creates and lists an automation with a valid schedule", async () => {
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+
+    const response = await fixture.app.fetch(
+      new Request("http://localhost:4310/v1/automations", {
+        body: JSON.stringify({
+          description: "Schedule control",
+          name: "Daily report",
+          profileId: PROFILE_ID,
+          prompt: "Summarize the week",
+          trigger: { cron: "0 9 * * *", type: "schedule" },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+          ...session.headers(),
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(
+      await fixture.databaseAdapter.listAutomationsForOrg(orgId)
+    ).toHaveLength(1);
+
+    const listed = await fixture.app.fetch(
+      new Request("http://localhost:4310/v1/automations", {
+        headers: session.headers(),
+      })
+    );
+
+    expect(listed.status).toBe(200);
+  });
+
+  test.each([
+    { cron: "60 * * * *", enabled: true },
+    { cron: "60 * * * *", enabled: false },
+    { cron: "every morning", enabled: true },
+  ])(
+    "rejects an invalid schedule before creation: %j",
+    async ({ cron, enabled }) => {
+      const fixture = createFixture();
+      const { orgId, session } = await loginMember(fixture);
+
+      const response = await fixture.app.fetch(
+        new Request("http://localhost:4310/v1/automations", {
+          body: JSON.stringify({
+            description: "Invalid schedule",
+            enabled,
+            name: "Invalid minute",
+            profileId: PROFILE_ID,
+            prompt: "Summarize the week",
+            trigger: { cron, type: "schedule" },
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+            ...session.headers(),
+          },
+          method: "POST",
+        })
+      );
+
+      const rows = await fixture.databaseAdapter.listAutomationsForOrg(orgId);
+
+      const listed = await fixture.app.fetch(
+        new Request("http://localhost:4310/v1/automations", {
+          headers: session.headers(),
+        })
+      );
+
+      expect(rows).toHaveLength(0);
+      expect(response.status).toBe(400);
+      expect(listed.status).toBe(200);
+    }
+  );
+
+  test("rejects an invalid cron update without changing the stored automation", async () => {
+    const fixture = createFixture();
+    const { orgId, session } = await loginMember(fixture);
+
+    const healthy = await fixture.automationService.create(
+      orgId,
+      {
+        description: "Unaffected automation",
+        name: "Manual control",
+        prompt: "Summarize the week",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const automation = await fixture.automationService.create(
+      orgId,
+      {
+        description: "Valid schedule",
+        name: "Daily report",
+        prompt: "Summarize the week",
+        trigger: { cron: "0 9 * * *", type: "schedule" },
+      },
+      PROFILE_ID
+    );
+
+    const before = await fixture.databaseAdapter.getAutomation(automation.id);
+
+    const response = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+        body: JSON.stringify({
+          trigger: { cron: "0 24 * * *", type: "schedule" },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+          ...session.headers(),
+        },
+        method: "PUT",
+      })
+    );
+
+    const after = await fixture.databaseAdapter.getAutomation(automation.id);
+
+    const listed = await fixture.app.fetch(
+      new Request("http://localhost:4310/v1/automations", {
+        headers: session.headers(),
+      })
+    );
+
+    const loaded = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+        headers: session.headers(),
+      })
+    );
+
+    const healthyResponse = await fixture.app.fetch(
+      new Request(`http://localhost:4310/v1/automations/${healthy.id}`, {
+        headers: session.headers(),
+      })
+    );
+
+    expect(healthyResponse.status).toBe(200);
+    expect(after).toEqual(before);
+    expect(response.status).toBe(400);
+    expect(listed.status).toBe(200);
+    expect(loaded.status).toBe(200);
+  });
+});
 
 describe("automation destination authorization over HTTP", () => {
   test("a member cannot create an automation aimed at a foreign destination", async () => {

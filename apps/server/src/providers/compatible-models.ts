@@ -141,6 +141,7 @@ export function catalogCustomModelsToCatalog(
   provider: ProviderName
 ): ProviderModelOption[] {
   const staticById = new Map(staticModels.map((model) => [model.id, model]));
+  const hasSavedDefault = entries.some((entry) => entry.default === true);
 
   return entries.map((entry) => {
     const existing = staticById.get(entry.id);
@@ -157,8 +158,8 @@ export function catalogCustomModelsToCatalog(
       provider,
     };
 
-    if (entry.default) {
-      model.default = true;
+    if (hasSavedDefault) {
+      model.default = entry.default === true;
     }
 
     if (entry.contextWindow !== undefined) {

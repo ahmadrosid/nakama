@@ -15,6 +15,7 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
   requireProfileManageFromContext,
+  requireRootOrgSharedSetAccess,
 } from "../org-guards";
 import { getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -103,13 +104,7 @@ export function registerSkillRoutes(
       const organization =
         await options.databaseAdapter?.getOrganizationById(orgId);
 
-      if (
-        !organization?.parentOrgId &&
-        auth.orgRole !== "admin" &&
-        !auth.isPlatformAdmin
-      ) {
-        throw new NakamaApiError("Not found", 404);
-      }
+      requireRootOrgSharedSetAccess(auth, organization);
 
       return json<PublishedSkillResponse>(
         await agent.getPublishedSkill(
@@ -192,13 +187,7 @@ export function registerSkillRoutes(
         const organization =
           await options.databaseAdapter?.getOrganizationById(orgId);
 
-        if (
-          !organization?.parentOrgId &&
-          auth.orgRole !== "admin" &&
-          !auth.isPlatformAdmin
-        ) {
-          throw new NakamaApiError("Not found", 404);
-        }
+        requireRootOrgSharedSetAccess(auth, organization);
 
         const publicationId = decodeURIComponent(c.req.param("publicationId"));
 

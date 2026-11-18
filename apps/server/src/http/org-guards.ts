@@ -30,6 +30,24 @@ export function requireOrgAdminFromContext(
   return auth;
 }
 
+/**
+ * A root org's published set is admin-only; child orgs consume their parent's
+ * set as members (#2431). A 404 keeps org membership opaque, like the sibling
+ * publication routes.
+ */
+export function requireRootOrgSharedSetAccess(
+  auth: RequestAuthContext,
+  organization: { parentOrgId?: string | null } | null | undefined
+): void {
+  if (
+    !organization?.parentOrgId &&
+    auth.orgRole !== "admin" &&
+    !auth.isPlatformAdmin
+  ) {
+    throw new NakamaApiError("Not found", 404);
+  }
+}
+
 export function isOrgAdminOrPlatformAdmin(auth: RequestAuthContext): boolean {
   return auth.orgRole === "admin" || auth.isPlatformAdmin;
 }
