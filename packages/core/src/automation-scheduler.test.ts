@@ -81,6 +81,107 @@ describe("AutomationScheduler", () => {
     expect(scheduler.getStatus()).toEqual({ running: false, scheduledJobs: 0 });
   });
 
+  test("stop discards a pending schedule load before it can dispatch", async () => {
+    const now = Date.parse("2026-11-18T00:00:00Z");
+    const pending = Promise.withResolvers<AutomationSchedule[]>();
+    const runs: string[] = [];
+    let loading = false;
+
+    const scheduler = new AutomationScheduler(
+      createDelegate({
+        listScheduledAutomations: () =>
+          loading ? pending.promise : Promise.resolve([]),
+        runAutomation: async (id) => {
+          runs.push(id);
+
+          return { ok: true };
+        },
+      }),
+      () => now
+    );
+
+    try {
+      await scheduler.start();
+      loading = true;
+      const reload = scheduler.reload();
+      scheduler.stop();
+      pending.resolve([
+        schedule({ cron: undefined, runAt: new Date(now).toISOString() }),
+        schedule({ id: "cron-job" }),
+      ]);
+      await reload;
+
+      expect(scheduler.getStatus()).toEqual({
+        running: false,
+        scheduledJobs: 0,
+      });
+      expect(runs).toEqual([]);
+    } finally {
+      scheduler.stop();
+    }
+  });
+
+  test("stop discards a startup waiting for timezone", async () => {
+    const pending = Promise.withResolvers<string>();
+    const loading = Promise.withResolvers<void>();
+
+    const scheduler = new AutomationScheduler(
+      createDelegate({
+        getDefaultTimezone: () => {
+          loading.resolve();
+
+          return pending.promise;
+        },
+        listScheduledAutomations: async () => [schedule()],
+      })
+    );
+
+    try {
+      const start = scheduler.start();
+      await loading.promise;
+      scheduler.stop();
+      pending.resolve("UTC");
+      await start;
+
+      expect(scheduler.getStatus()).toEqual({
+        running: false,
+        scheduledJobs: 0,
+      });
+    } finally {
+      scheduler.stop();
+    }
+  });
+
+  test("a refresh from before stop cannot replace restarted schedules", async () => {
+    const pending = Promise.withResolvers<AutomationSchedule[]>();
+    let loading = false;
+
+    const scheduler = new AutomationScheduler(
+      createDelegate({
+        listScheduledAutomations: () =>
+          loading ? pending.promise : Promise.resolve([schedule()]),
+      })
+    );
+
+    try {
+      await scheduler.start();
+      loading = true;
+      const reload = scheduler.reload();
+      scheduler.stop();
+      loading = false;
+      await scheduler.start();
+      pending.resolve([]);
+      await reload;
+
+      expect(scheduler.getStatus()).toEqual({
+        running: true,
+        scheduledJobs: 1,
+      });
+    } finally {
+      scheduler.stop();
+    }
+  });
+
   test("registers runAt schedules as timers", async () => {
     const at = new Date(Date.now() + 60_000).toISOString();
 
