@@ -29,6 +29,7 @@ async function createUpdateFixture() {
   const automation = await fixture.automationService.create(
     orgId,
     {
+      description: "Daily report",
       name: "Daily report",
       prompt: "Summarize yesterday",
       trigger: { type: "manual" },
@@ -49,7 +50,7 @@ async function createUpdateFixture() {
       })
     );
 
-  return { automation, fixture, orgId, update };
+  return { automation, fixture, orgId, session, update };
 }
 
 describe("concurrent partial automation updates", () => {
@@ -178,6 +179,224 @@ describe("concurrent partial automation updates", () => {
       prompt: "Summarize today",
       version: 2,
     });
+  });
+});
+
+describe("automation deletion", () => {
+  for (const versioned of [false, true]) {
+    test(`an overlapping update cannot restore a deleted row, versioned=${versioned}`, async () => {
+      const { automation, fixture, orgId, session, update } =
+        await createUpdateFixture();
+
+      const service = fixture.automationService;
+      const db = fixture.databaseAdapter;
+      const firstRead = Promise.withResolvers<void>();
+      const releaseRead = Promise.withResolvers<void>();
+      const deleteEntered = Promise.withResolvers<void>();
+      const originalRead = db.getAutomation.bind(db);
+      const originalDelete = service.delete.bind(service);
+      let reads = 0;
+      let changes = 0;
+
+      service.setOnChange(() => {
+        changes += 1;
+      });
+
+      db.getAutomation = async (id) => {
+        const row = await originalRead(id);
+
+        if (id === automation.id && ++reads === 1) {
+          firstRead.resolve();
+          await releaseRead.promise;
+        }
+
+        return row;
+      };
+
+      service.delete = (...args) => {
+        const pending = originalDelete(...args);
+        deleteEntered.resolve();
+
+        return pending;
+      };
+
+      let responses: Response[];
+
+      try {
+        const updating = update({
+          prompt: "Summarize today",
+          version: versioned ? automation.version : undefined,
+        });
+
+        await firstRead.promise;
+
+        const deleting = fixture.app.fetch(
+          new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+            headers: session.headers({
+              "X-CSRF-Token": session.csrfToken,
+            }),
+            method: "DELETE",
+          })
+        );
+
+        await deleteEntered.promise;
+        releaseRead.resolve();
+        responses = await Promise.all([updating, deleting]);
+      } finally {
+        releaseRead.resolve();
+        db.getAutomation = originalRead;
+        service.delete = originalDelete;
+      }
+
+      expect(responses.map(({ status }) => status)).toEqual([200, 204]);
+      expect(await db.getAutomation(automation.id)).toBeNull();
+      expect(await service.get(automation.id, orgId)).toBeNull();
+      expect(
+        (await service.listAll()).some((row) => row.id === automation.id)
+      ).toBe(false);
+      expect(changes).toBe(2);
+
+      const found = await fixture.app.fetch(
+        new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+          headers: session.headers(),
+        })
+      );
+
+      expect(found.status).toBe(404);
+    });
+  }
+
+  test("an update that waits for a deletion gets 404 and leaves no row", async () => {
+    const { automation, fixture, session, update } =
+      await createUpdateFixture();
+
+    const db = fixture.databaseAdapter;
+    const deleteHeld = Promise.withResolvers<void>();
+    const releaseDelete = Promise.withResolvers<void>();
+    const updateRead = Promise.withResolvers<void>();
+    const originalRead = db.getAutomation.bind(db);
+    const originalDelete = db.deleteAutomation.bind(db);
+    let holding = false;
+
+    db.deleteAutomation = async (id) => {
+      holding = true;
+      deleteHeld.resolve();
+      await releaseDelete.promise;
+
+      return originalDelete(id);
+    };
+
+    db.getAutomation = async (id) => {
+      const row = await originalRead(id);
+
+      if (holding && id === automation.id) {
+        updateRead.resolve();
+      }
+
+      return row;
+    };
+
+    let responses: Response[];
+
+    try {
+      const deleting = fixture.app.fetch(
+        new Request(`http://localhost:4310/v1/automations/${automation.id}`, {
+          headers: session.headers({
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "DELETE",
+        })
+      );
+
+      await deleteHeld.promise;
+
+      const updating = update({ prompt: "Summarize today" });
+
+      // An unserialized update reads the row here; a serialized one waits.
+      await Promise.race([updateRead.promise, Bun.sleep(50)]);
+      releaseDelete.resolve();
+      responses = await Promise.all([deleting, updating]);
+    } finally {
+      releaseDelete.resolve();
+      db.getAutomation = originalRead;
+      db.deleteAutomation = originalDelete;
+    }
+
+    expect(responses.map(({ status }) => status)).toEqual([204, 404]);
+    expect(await db.getAutomation(automation.id)).toBeNull();
+  });
+
+  test("foreign and missing rows do not notify or prevent a later deletion", async () => {
+    const { automation, fixture, orgId } = await createUpdateFixture();
+    const service = fixture.automationService;
+    let changes = 0;
+
+    service.setOnChange(() => {
+      changes += 1;
+    });
+
+    expect(await service.delete(automation.id, "foreign_org")).toBe(false);
+    expect(await service.get(automation.id, orgId)).not.toBeNull();
+    expect(changes).toBe(0);
+    expect(await service.delete("missing_automation", orgId)).toBe(false);
+    expect(changes).toBe(0);
+    expect(await service.delete(automation.id, orgId)).toBe(true);
+    expect(changes).toBe(1);
+    expect(await service.delete(automation.id, orgId)).toBe(false);
+    expect(changes).toBe(1);
+    expect(
+      await fixture.databaseAdapter.getAutomation(automation.id)
+    ).toBeNull();
+  });
+
+  test("an update on one ID does not block deletion of another ID", async () => {
+    const { automation, fixture, orgId, update } = await createUpdateFixture();
+    const service = fixture.automationService;
+
+    const other = await service.create(
+      orgId,
+      {
+        description: "Other report",
+        name: "Other report",
+        prompt: "Summarize another day",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+
+    const db = fixture.databaseAdapter;
+    const firstRead = Promise.withResolvers<void>();
+    const releaseRead = Promise.withResolvers<void>();
+    const originalRead = db.getAutomation.bind(db);
+    let held = false;
+
+    db.getAutomation = async (id) => {
+      const row = await originalRead(id);
+
+      if (id === automation.id && !held) {
+        held = true;
+        firstRead.resolve();
+        await releaseRead.promise;
+      }
+
+      return row;
+    };
+
+    try {
+      const updating = update({ prompt: "Summarize today" });
+
+      await firstRead.promise;
+      expect(await service.delete(other.id, orgId)).toBe(true);
+      expect(await db.getAutomation(other.id)).toBeNull();
+      releaseRead.resolve();
+      expect((await updating).status).toBe(200);
+      expect(await service.get(automation.id, orgId)).toMatchObject({
+        prompt: "Summarize today",
+      });
+    } finally {
+      releaseRead.resolve();
+      db.getAutomation = originalRead;
+    }
   });
 });
 

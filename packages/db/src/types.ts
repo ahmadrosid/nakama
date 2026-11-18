@@ -1777,6 +1777,8 @@ export interface DatabaseAdapter {
       "filename" | "mimeType" | "sizeBytes" | "storagePath"
     >
   ): Promise<void>;
+  /** Changes an existing row only. False when the row is gone. */
+  updateAutomation(record: StoredAutomationRecord): Promise<boolean>;
   updateAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   updateBrowserSessionActiveOrgId(
     id: string,
