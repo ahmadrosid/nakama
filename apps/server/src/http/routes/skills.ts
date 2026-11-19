@@ -616,7 +616,7 @@ export function registerSkillRoutes(
     const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const skillId = decodeURIComponent(c.req.param("skillId"));
-    const existing = await agent.getSkill(skillId);
+    const existing = await agent.getSkill(skillId, orgId);
 
     if (existing.skill.pluginId) {
       throw new NakamaApiError("Plugin-owned skills cannot be edited.", 409);
@@ -635,14 +635,10 @@ export function registerSkillRoutes(
 
   app.delete("/v1/skills/:skillId", async (c) => {
     requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
     const skillId = decodeURIComponent(c.req.param("skillId"));
-    const existing = await agent.getSkill(skillId);
 
-    if (existing.skill.pluginId) {
-      throw new NakamaApiError("Plugin-owned skills cannot be deleted.", 409);
-    }
-
-    await agent.deleteSkill(skillId);
+    await agent.deleteSkill(skillId, orgId);
 
     return new Response(null, { status: 204 });
   });

@@ -540,7 +540,7 @@ export class SkillsService {
       throw new Error("No skill changes provided.");
     }
 
-    const record = await this.requireSkill(skillId);
+    const record = await this.requireSkill(skillId, orgId);
     assertEditableSkill(record);
 
     const skillFilePath = path.join(record.sourcePath, SKILL_FILE_NAME);
@@ -1092,11 +1092,15 @@ export class SkillsService {
     }
   }
 
-  async deleteSkill(skillId: string): Promise<void> {
-    const record = await this.requireSkill(skillId);
+  async deleteSkill(skillId: string, orgId: string): Promise<void> {
+    if (!orgId) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
+
+    const record = await this.requireSkill(skillId, orgId);
 
     if (isPluginOwnedSkill(record)) {
-      throw new Error("Plugin-owned skills cannot be deleted.");
+      throw new NakamaApiError("Plugin-owned skills cannot be deleted.", 409);
     }
 
     if (bundledSkillNames.has(record.name)) {
@@ -1115,11 +1119,7 @@ export class SkillsService {
   }
 
   async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
-    const record = await this.requireSkill(skillId);
-
-    if (orgId && record.orgId && record.orgId !== orgId) {
-      throw new NakamaApiError("Skill not found.", 404);
-    }
+    const record = await this.requireSkill(skillId, orgId);
 
     const directory = await this.resolveSkillDirectory(record);
 
@@ -2795,11 +2795,14 @@ export class SkillsService {
     });
   }
 
-  private async requireSkill(skillId: string): Promise<StoredSkillRecord> {
+  private async requireSkill(
+    skillId: string,
+    orgId?: string
+  ): Promise<StoredSkillRecord> {
     const skill = await this.db.getSkill(skillId);
 
-    if (!skill) {
-      throw new Error("Skill not found.");
+    if (!skill || (orgId && skill.orgId && skill.orgId !== orgId)) {
+      throw new NakamaApiError("Skill not found.", 404);
     }
 
     return skill;
