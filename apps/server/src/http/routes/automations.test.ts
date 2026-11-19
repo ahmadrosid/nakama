@@ -590,17 +590,20 @@ describe("one-time automation calendar dates over HTTP", () => {
     type: "runAt",
   } as const;
 
+  // Not null: a valid date in the past saves with nextRunAt null.
+  const REJECTED = "rejected";
+
   test.each([
     ["2032-02-29T09:00:00.000Z", "2032-02-29T09:00:00.000Z"],
     ["0000-02-29T10:00:00Z", null],
     ["2032-02-029 10:00 UTC", "2032-02-29T10:00:00.000Z"],
     ["2032-02-29 (24:0) 18:00 UTC", "2032-02-29T18:00:00.000Z"],
-    ["2032-02-030 10:00 UTC", undefined],
-    ["2032-02-030", undefined],
-    ["2032-02-29 24:0 UTC", undefined],
-    ["2032-02-29 024:0 UTC", undefined],
-    ["2032-02-29 24: 0 UTC", undefined],
-    ["2032-02-29 24:(time)0 UTC", undefined],
+    ["2032-02-030 10:00 UTC", REJECTED],
+    ["2032-02-030", REJECTED],
+    ["2032-02-29 24:0 UTC", REJECTED],
+    ["2032-02-29 024:0 UTC", REJECTED],
+    ["2032-02-29 24: 0 UTC", REJECTED],
+    ["2032-02-29 24:(time)0 UTC", REJECTED],
     ["2032-02-29 10: 24:0 UTC", "2032-02-29T10:24:00.000Z"],
     ["2032-02-29T16:00:00+07:00", "2032-02-29T09:00:00.000Z"],
     ["2032-02T10:00+07:00", "2032-02-01T03:00:00.000Z"],
@@ -611,15 +614,21 @@ describe("one-time automation calendar dates over HTTP", () => {
     ["February 29, 2032 10:00 UTC", "2032-02-29T10:00:00.000Z"],
     ["Sun, 29 Feb 2032 10:00:00 GMT", "2032-02-29T10:00:00.000Z"],
     ["2032-03-31T10:30:29.031Z", "2032-03-31T10:30:29.031Z"],
-    ["2032-02-29T24:00:00Z", undefined],
-    ["2032-04-31T09:00:00+07:00", undefined],
-    ["29 Feb 2033 10:00:00 GMT", undefined],
-    [invalidTrigger.at, undefined],
-    ["2032-02-30Z", undefined],
-    ["02/30/2032 10:00 UTC", undefined],
-    ["2032/02/30 10:00 UTC", undefined],
-    ["February 30, 2032 10:00 UTC", undefined],
-    ["-000000-02-29 GMT", undefined],
+    ["2032-02-29T24:00:00Z", REJECTED],
+    ["2032-04-31T09:00:00+07:00", REJECTED],
+    ["29 Feb 2033 10:00:00 GMT", REJECTED],
+    [invalidTrigger.at, REJECTED],
+    ["2032-02-30Z", REJECTED],
+    ["02/30/2032 10:00 UTC", REJECTED],
+    ["2032/02/30 10:00 UTC", REJECTED],
+    ["February 30, 2032 10:00 UTC", REJECTED],
+    ["-000000-02-29 GMT", REJECTED],
+    ["2032-02-28 10:00 -24:00", REJECTED],
+    ["2032-02-29 10:00 UTC+24:00", REJECTED],
+    ["2032-02-30:10:00 UTC", REJECTED],
+    ["2033-02-29:00:00 UTC", REJECTED],
+    ["2032-02-24:10:00 UTC", "2032-02-24T10:00:00.000Z"],
+    ["2032-02-29:10:00 UTC", "2032-02-29T10:00:00.000Z"],
   ] as const)(
     "validates the calendar date on create: %s",
     async (at, nextRunAt) => {
@@ -644,7 +653,7 @@ describe("one-time automation calendar dates over HTTP", () => {
         })
       );
 
-      const valid = nextRunAt !== undefined;
+      const valid = nextRunAt !== REJECTED;
 
       expect(
         await fixture.databaseAdapter.listAutomationsForOrg(orgId)
@@ -668,6 +677,8 @@ describe("one-time automation calendar dates over HTTP", () => {
     "2032/02/30 10:00 UTC",
     "2032-02-030 10:00 UTC",
     "2032-02-29 24:0 UTC",
+    "2032-02-28 10:00 -24:00",
+    "2032-02-30:10:00 UTC",
   ])("rejects %s on update without changing the saved row", async (at) => {
     const { automation, fixture, update } = await createUpdateFixture();
     const before = await fixture.databaseAdapter.getAutomation(automation.id);

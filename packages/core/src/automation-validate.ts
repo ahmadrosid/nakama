@@ -6,8 +6,9 @@ import { DEFAULT_TIMEZONE, validateTimezone } from "./user-config";
 const CRON_FIELD_PATTERN =
   /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?|\*\/[0-9]+|[0-9]+(,[0-9]+)*)$/;
 
-// A day of 29 to 31 that is not part of a time, a fraction or a longer number.
-const RUN_AT_LONG_DAY = /(?<![\d:]|:\d\d\.)0*(29|30|31)(?![\d:])/g;
+// A day of 29 to 31 that is not a minute, a second, a fraction or a longer
+// number. A colon can follow the day: "2032-02-30:10:00".
+const RUN_AT_LONG_DAY = /(?<![\d:]|:\d\d\.)0*(29|30|31)(?!\d)/g;
 
 const RUN_AT_HOUR_24 = /(?<![\d:])0*24(?=:)/g;
 
@@ -43,14 +44,18 @@ export function isValidRunAt(at: string): boolean {
     return false;
   }
 
-  // Hour 25 fails to parse. Minute values and ignored comments can still parse.
-  const hourProbe = trimmed.replace(
-    RUN_AT_HOUR_24,
-    (candidate) => `${candidate.slice(0, -2)}25`
-  );
+  // Change each 24 to 25. An hour then fails to parse and an offset moves the
+  // time by one hour. A minute, a day or an ignored comment does neither.
+  for (const match of trimmed.matchAll(RUN_AT_HOUR_24)) {
+    const end = match.index + match[0].length;
 
-  if (hourProbe !== trimmed && !Number.isFinite(Date.parse(hourProbe))) {
-    return false;
+    const probe = Date.parse(
+      `${trimmed.slice(0, end - 2)}25${trimmed.slice(end)}`
+    );
+
+    if (!Number.isFinite(probe) || Math.abs(probe - parsed) === 3_600_000) {
+      return false;
+    }
   }
 
   // Date.parse also moves February 30 to March 1. Parse the same text with
@@ -73,11 +78,13 @@ export function isValidRunAt(at: string): boolean {
 
     const month = new Date(midMonth);
 
-    // The 400-year cycle avoids Date.UTC interpreting year zero as 1900.
-    const leapCycleYear = 2000 + (month.getUTCFullYear() % 400);
-
+    // Date.UTC reads year zero as 1900. setUTCFullYear does not.
     const lastDay = new Date(
-      Date.UTC(leapCycleYear, month.getUTCMonth() + 1, 0)
+      new Date(0).setUTCFullYear(
+        month.getUTCFullYear(),
+        month.getUTCMonth() + 1,
+        0
+      )
     ).getUTCDate();
 
     if (day > lastDay) {
