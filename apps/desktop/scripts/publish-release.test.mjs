@@ -160,22 +160,33 @@ async function releaseFixture() {
     }
 
     if (kind === "api") {
-      const release = releases.get(action.split("/").at(-1));
+      const view = (tagName, release) => ({
+        assets: [...release.assets].map(([filename, content]) => ({
+          digest: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+          name: filename,
+          size: content.length,
+        })),
+        draft: release.draft,
+        tag_name: tagName,
+      });
 
-      if (!release) {
+      if (action.endsWith("/releases?per_page=100")) {
+        return {
+          stdout: JSON.stringify(
+            [...releases].map(([tagName, release]) => view(tagName, release))
+          ),
+        };
+      }
+
+      const tagName = action.split("/").at(-1);
+      const release = releases.get(tagName);
+
+      // As on GitHub, the tag endpoint does not return a draft.
+      if (!release || release.draft) {
         throw Object.assign(new Error("Not found"), { stderr: "HTTP 404" });
       }
 
-      return {
-        stdout: JSON.stringify({
-          assets: [...release.assets].map(([filename, content]) => ({
-            digest: `sha256:${createHash("sha256").update(content).digest("hex")}`,
-            name: filename,
-            size: content.length,
-          })),
-          draft: release.draft,
-        }),
-      };
+      return { stdout: JSON.stringify(view(tagName, release)) };
     }
 
     if (action === "create") {
