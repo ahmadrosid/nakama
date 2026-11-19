@@ -69,13 +69,15 @@ export class OrgsClient extends AuthClient {
 
   async runSkillCuratorInternal(
     orgId: string,
-    request: RunSkillCuratorInternalRequest
+    request: RunSkillCuratorInternalRequest,
+    signal?: AbortSignal
   ): Promise<SkillCuratorRunResponse> {
     return this.request<SkillCuratorRunResponse>(
       `/v1/internal/curator/orgs/${encodeURIComponent(orgId)}/run`,
       {
         body: JSON.stringify(request),
         method: "POST",
+        signal,
       }
     );
   }

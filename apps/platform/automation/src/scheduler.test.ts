@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { NakamaClient } from "@nakama/client";
+import { NakamaClient } from "@nakama/client";
 import type { AutomationSchedule } from "@nakama/core";
+import type { ListSkillCuratorOrgsResponse } from "@nakama/core/contract";
 import { AutomationWorkerScheduler } from "./scheduler";
 
 function createMockClient(
@@ -9,7 +10,8 @@ function createMockClient(
     runAutomationInternal: (id: string, orgId: string) => Promise<void>;
     getAutomationWorkerSettings: () => Promise<{ pollIntervalMinutes: number }>;
     getTimezone: () => Promise<string>;
-    listSkillCuratorOrgs: () => Promise<{ orgs: [] }>;
+    listSkillCuratorOrgs: () => Promise<ListSkillCuratorOrgsResponse>;
+    runSkillCuratorInternal: (orgId: string) => Promise<never>;
   }> = {}
 ): NakamaClient {
   const mockClient = {
@@ -45,6 +47,127 @@ describe("AutomationWorkerScheduler", () => {
 
     expect(scheduler.getStatus()).toEqual({ running: true, scheduledJobs: 1 });
     scheduler.stop();
+  });
+
+  test("isolates a failed Curator run and holds its retry", async () => {
+    const curatorPath = "/v1/internal/curator/orgs";
+    const requests: Array<{ body: unknown; method: string; path: string }> = [];
+
+    const client = new NakamaClient({
+      baseUrl: "http://nakama.test",
+      async fetch(input, init) {
+        const request = new Request(input, init);
+        const { pathname } = new URL(request.url);
+
+        if (pathname === "/v1/settings/timezone") {
+          return Response.json({ timezone: "UTC" });
+        }
+
+        if (pathname === "/v1/internal/automations/schedules") {
+          return Response.json([]);
+        }
+
+        if (pathname === curatorPath) {
+          return Response.json({
+            orgs: [
+              {
+                id: "failing-org",
+                skillsCuratorEnabled: true,
+                skillsCuratorLastRunAt: null,
+              },
+              {
+                id: "recent-org",
+                skillsCuratorEnabled: true,
+                skillsCuratorLastRunAt: new Date().toISOString(),
+              },
+              {
+                id: "due-org",
+                skillsCuratorEnabled: true,
+                skillsCuratorLastRunAt: "2000-01-01T00:00:00.000Z",
+              },
+            ],
+          });
+        }
+
+        const body: unknown = await request.json();
+        requests.push({ body, method: request.method, path: pathname });
+
+        if (pathname === `${curatorPath}/failing-org/run`) {
+          return Response.json({ error: "Curator failed" }, { status: 500 });
+        }
+
+        return Response.json({ result: { status: "completed" } });
+      },
+    });
+
+    const callbacks: Array<() => Promise<void>> = [];
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    // SAFETY: The mock uses a numeric sentinel only as an opaque timer handle.
+    globalThis.setInterval = ((callback: () => Promise<void>) => {
+      callbacks.push(callback);
+
+      // SAFETY: The scheduler stores and clears this opaque mocked timer handle.
+      return 1 as ReturnType<typeof setInterval>;
+    }) as typeof setInterval;
+    // SAFETY: The mock accepts and ignores the opaque timer handle.
+    globalThis.clearInterval = (() => undefined) as typeof clearInterval;
+
+    const scheduler = new AutomationWorkerScheduler(client);
+
+    try {
+      await scheduler.start();
+
+      const firstPass = [
+        {
+          body: { trigger: "seed" },
+          method: "POST",
+          path: `${curatorPath}/failing-org/run`,
+        },
+        {
+          body: { trigger: "schedule" },
+          method: "POST",
+          path: `${curatorPath}/due-org/run`,
+        },
+      ];
+
+      expect(requests).toEqual(firstPass);
+
+      scheduler.beginPolling(5 * 60 * 1000);
+      await callbacks[0]!();
+
+      // The list still shows due-org as due; failing-org waits for its retry.
+      expect(requests).toEqual([...firstPass, firstPass[1]!]);
+    } finally {
+      scheduler.stop();
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    }
+  });
+
+  test("stops a Curator pass after three failures in a row", async () => {
+    const runs: string[] = [];
+
+    const client = createMockClient({
+      listSkillCuratorOrgs: async () => ({
+        orgs: ["o1", "o2", "o3", "o4"].map((id) => ({
+          id,
+          skillsCuratorEnabled: true,
+          skillsCuratorLastRunAt: null,
+        })),
+      }),
+      runSkillCuratorInternal: async (orgId: string) => {
+        runs.push(orgId);
+
+        throw new Error("Server is down");
+      },
+    });
+
+    const scheduler = new AutomationWorkerScheduler(client);
+    await scheduler.start();
+    scheduler.stop();
+
+    expect(runs).toEqual(["o1", "o2", "o3"]);
   });
 
   test("reschedules polling when the workspace-global interval changes", async () => {
