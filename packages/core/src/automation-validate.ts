@@ -6,10 +6,11 @@ import { DEFAULT_TIMEZONE, validateTimezone } from "./user-config";
 const CRON_FIELD_PATTERN =
   /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?|\*\/[0-9]+|[0-9]+(,[0-9]+)*)$/;
 
-// A day of 29 to 31 that is not part of a time, a fraction or a longer number.
-const RUN_AT_LONG_DAY = /(?<![\d:]|:\d\d\.)(29|30|31)(?![\d:])/g;
+// A day of 29 to 31 that is not a minute, a second, a fraction or a longer
+// number. A colon can follow the day: "2032-02-30:10:00".
+const RUN_AT_LONG_DAY = /(?<![\d:]|:\d\d\.)0*(29|30|31)(?!\d)/g;
 
-const RUN_AT_HOUR_24 = /(?<![\d:])24:\d\d/;
+const RUN_AT_HOUR_24 = /(?<![\d:])0*24(?=:)/g;
 
 const DAY_MS = 86_400_000;
 
@@ -39,18 +40,35 @@ export function isValidRunAt(at: string): boolean {
   const trimmed = at.trim();
   const parsed = Date.parse(trimmed);
 
-  // Date.parse moves hour 24 to the next day.
-  if (!Number.isFinite(parsed) || RUN_AT_HOUR_24.test(trimmed)) {
+  if (!Number.isFinite(parsed)) {
     return false;
+  }
+
+  // Change each 24 to 25. An hour then fails to parse and an offset moves the
+  // time by one hour. A minute, a day or an ignored comment does neither.
+  for (const match of trimmed.matchAll(RUN_AT_HOUR_24)) {
+    const end = match.index + match[0].length;
+
+    const probe = Date.parse(
+      `${trimmed.slice(0, end - 2)}25${trimmed.slice(end)}`
+    );
+
+    if (!Number.isFinite(probe) || Math.abs(probe - parsed) === 3_600_000) {
+      return false;
+    }
   }
 
   // Date.parse also moves February 30 to March 1. Parse the same text with
   // day 15: the month is then sure, in each format and time zone.
   for (const match of trimmed.matchAll(RUN_AT_LONG_DAY)) {
     const day = Number(match[1]);
+    const dayToken = match[0];
+
+    // Keep the width so a legacy date does not switch to the ISO parser.
+    const middleDay = "15".padStart(dayToken.length, "0");
 
     const midMonth = Date.parse(
-      `${trimmed.slice(0, match.index)}15${trimmed.slice(match.index + 2)}`
+      `${trimmed.slice(0, match.index)}${middleDay}${trimmed.slice(match.index + dayToken.length)}`
     );
 
     // More than one hour (DST) of difference: the number is not the day.
@@ -60,8 +78,13 @@ export function isValidRunAt(at: string): boolean {
 
     const month = new Date(midMonth);
 
+    // Date.UTC reads year zero as 1900. setUTCFullYear does not.
     const lastDay = new Date(
-      Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)
+      new Date(0).setUTCFullYear(
+        month.getUTCFullYear(),
+        month.getUTCMonth() + 1,
+        0
+      )
     ).getUTCDate();
 
     if (day > lastDay) {
