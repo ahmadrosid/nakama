@@ -13,6 +13,7 @@ import {
   type RunAutomationResponse,
   type UpdateAutomationRequest,
 } from "@nakama/core";
+import { DatabaseAutomationStore } from "@nakama/db";
 import { setupTestConfigDir } from "../../test-config-dir";
 import {
   createFixture,
@@ -579,6 +580,134 @@ describe("automation cron range validation over HTTP", () => {
     expect(response.status).toBe(400);
     expect(listed.status).toBe(200);
     expect(loaded.status).toBe(200);
+  });
+});
+
+describe("one-time automation calendar dates over HTTP", () => {
+  const invalidTrigger = {
+    at: "2032-02-30T09:00:00.000Z",
+    timezone: "UTC",
+    type: "runAt",
+  } as const;
+
+  test.each([
+    ["2032-02-29T09:00:00.000Z", "2032-02-29T09:00:00.000Z"],
+    ["2032-02-29T16:00:00+07:00", "2032-02-29T09:00:00.000Z"],
+    ["2032-02T10:00+07:00", "2032-02-01T03:00:00.000Z"],
+    ["2032-02-29 GMT", "2032-02-29T00:00:00.000Z"],
+    ["02/29/2032 10:00 UTC", "2032-02-29T10:00:00.000Z"],
+    ["02/29/2032 10:00 PM UTC", "2032-02-29T22:00:00.000Z"],
+    ["2032/02/29 10:00 UTC", "2032-02-29T10:00:00.000Z"],
+    ["February 29, 2032 10:00 UTC", "2032-02-29T10:00:00.000Z"],
+    ["Sun, 29 Feb 2032 10:00:00 GMT", "2032-02-29T10:00:00.000Z"],
+    ["2032-03-31T10:30:29.031Z", "2032-03-31T10:30:29.031Z"],
+    ["2032-02-29T24:00:00Z", null],
+    ["2032-04-31T09:00:00+07:00", null],
+    ["29 Feb 2033 10:00:00 GMT", null],
+    [invalidTrigger.at, null],
+    ["2032-02-30Z", null],
+    ["02/30/2032 10:00 UTC", null],
+    ["2032/02/30 10:00 UTC", null],
+    ["February 30, 2032 10:00 UTC", null],
+    ["-000000-02-29 GMT", null],
+  ] as const)(
+    "validates the calendar date on create: %s",
+    async (at, nextRunAt) => {
+      const fixture = createFixture();
+      const { orgId, session } = await loginMember(fixture);
+
+      const response = await fixture.app.fetch(
+        new Request("http://localhost:4310/v1/automations", {
+          body: JSON.stringify({
+            description: "Morning report",
+            name: "Morning report",
+            profileId: PROFILE_ID,
+            prompt: "Summarize the week",
+            trigger: { ...invalidTrigger, at },
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+            ...session.headers(),
+          },
+          method: "POST",
+        })
+      );
+
+      expect(
+        await fixture.databaseAdapter.listAutomationsForOrg(orgId)
+      ).toHaveLength(nextRunAt ? 1 : 0);
+      expect(response.status).toBe(nextRunAt ? 201 : 400);
+
+      if (nextRunAt) {
+        expect(await response.json()).toMatchObject({
+          automation: {
+            nextRunAt,
+            trigger: { ...invalidTrigger, at },
+          },
+        });
+      }
+    }
+  );
+
+  test.each([
+    invalidTrigger.at,
+    "02/30/2032 10:00 UTC",
+    "2032/02/30 10:00 UTC",
+  ])("rejects %s on update without changing the saved row", async (at) => {
+    const { automation, fixture, update } = await createUpdateFixture();
+    const before = await fixture.databaseAdapter.getAutomation(automation.id);
+    expect(before).not.toBeNull();
+
+    const response = await update({
+      trigger: { ...invalidTrigger, at },
+      version: automation.version,
+    });
+
+    expect(await fixture.databaseAdapter.getAutomation(automation.id)).toEqual(
+      before
+    );
+    expect(response.status).toBe(400);
+  });
+
+  test.each([
+    ["2032-02-29T16:00:00+07:00", "2032-02-29T09:00:00.000Z"],
+    ["02/29/2032 10:00 UTC", "2032-02-29T10:00:00.000Z"],
+  ])("accepts a valid leap day on update: %s", async (at, nextRunAt) => {
+    const { automation, fixture, update } = await createUpdateFixture();
+    const trigger = { ...invalidTrigger, at };
+
+    const response = await update({ trigger, version: automation.version });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      automation: { nextRunAt, trigger },
+    });
+    expect(
+      await fixture.databaseAdapter.getAutomation(automation.id)
+    ).toMatchObject({
+      definition: { trigger },
+      version: automation.version + 1,
+    });
+  });
+
+  test("can pause an existing automation with a legacy invalid date", async () => {
+    const { automation, fixture, update } = await createUpdateFixture();
+    const store = new DatabaseAutomationStore(fixture.databaseAdapter);
+    await store.save({ ...automation, trigger: invalidTrigger });
+
+    const response = await update({
+      enabled: false,
+      version: automation.version,
+    });
+
+    expect(response.status).toBe(200);
+    expect(
+      await fixture.databaseAdapter.getAutomation(automation.id)
+    ).toMatchObject({
+      definition: { trigger: invalidTrigger },
+      enabled: false,
+    });
   });
 });
 
