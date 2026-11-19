@@ -223,7 +223,8 @@ async function releaseFixture() {
   return {
     events,
     output,
-    publish: () => publishRelease({ output, run, sha: "commit", tag, version }),
+    publish: (targets) =>
+      publishRelease({ output, run, sha: "commit", tag, targets, version }),
     releases,
     setFailure: (fn) => {
       fail = fn;
@@ -248,6 +249,32 @@ test("publishes all installers before independently promoting both feeds", async
   );
 
   expect(published).toBeLessThan(promoted);
+});
+
+test("publishes macOS alone when Windows is not a target", async () => {
+  const f = await releaseFixture();
+  await rm(join(f.output, "windows"), { recursive: true });
+  await f.publish(["mac"]);
+  expect(f.releases.get(f.tag).draft).toBe(false);
+  expect(f.releases.get(f.tag).assets.size).toBe(5);
+  expect([...f.releases.get("desktop-updates").assets.keys()]).toEqual([
+    "latest-mac.yml",
+  ]);
+
+  // A retry of the public release stays macOS only.
+  await f.publish(["mac"]);
+  expect(f.releases.get(f.tag).assets.size).toBe(5);
+
+  // The public release cannot get an EXE later.
+  await expect(f.publish()).rejects.toThrow();
+  expect(f.releases.get(f.tag).assets.size).toBe(5);
+});
+
+test("rejects a release without macOS or with an unknown platform", async () => {
+  const f = await releaseFixture();
+  await expect(f.publish(["windows"])).rejects.toThrow();
+  await expect(f.publish(["mac", "linux"])).rejects.toThrow();
+  expect(f.releases.size).toBe(0);
 });
 
 for (const change of ["missing", "checksum"]) {

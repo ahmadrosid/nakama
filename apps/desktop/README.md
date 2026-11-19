@@ -83,7 +83,7 @@ Use the same signing identity for subsequent releases. The workflow requires sig
 
 1. Bump `apps/desktop/package.json` to a stable version, run `bun install`, and commit the changes.
 2. Push the commit and a matching tag, for example `git tag desktop-v0.2.0` followed by `git push origin desktop-v0.2.0`.
-3. The **Desktop Release** workflow builds macOS ARM64 and Windows x64 in parallel, tests the bundled server, signs the installers, notarizes macOS, and publishes the DMG, ZIP, and EXE together. Either installer build failing prevents publication.
+3. The **Desktop Release** workflow builds macOS ARM64 and Windows x64 in parallel, tests the bundled server, signs the installers, notarizes macOS, and publishes the DMG, ZIP, and EXE together. Either installer build failing prevents publication. When the Windows signing values below are not all set, the workflow skips the EXE and publishes macOS alone; that version cannot get an EXE later.
 
 After all installers are published, the workflow promotes `latest-mac.yml` and Windows `latest.yml` independently in the separate `desktop-updates` release. Metadata points to immutable versioned downloads. Retries use published bytes and cannot move either channel backward. If one promotion fails, rerun the publisher to finish it. Do not replace published installers or add an EXE to an incomplete old release; use a new version.
 
@@ -97,7 +97,7 @@ The NSIS job uses electron-builder v26 certificate signing. Configure the **code
 | Secret `WINDOWS_CSC_KEY_PASSWORD` | Certificate password |
 | Variable `WINDOWS_PUBLISHER_NAME` | Exact certificate publisher common name |
 
-Store identity settings do not sign an EXE. If your signing key is hardware-backed or uses Azure Artifact Signing, integrate that provider's v26 signing configuration before enabling releases; do not export a non-exportable key or disable signature verification. Missing credentials prevent release publication, including macOS publication in the combined release.
+Store identity settings do not sign an EXE. If your signing key is hardware-backed or uses Azure Artifact Signing, integrate that provider's v26 signing configuration before enabling releases; do not export a non-exportable key or disable signature verification. With only some of the three values set, the tag also publishes macOS alone.
 
 1. Select **Actions → Desktop Release → Run workflow → Windows artifact: installer**, using the candidate branch and leaving the tag blank. Manual runs only upload an artifact; they never publish releases or update feeds.
 2. Download `nakama-windows-installer`. Once, on disposable standard-user Windows 10 19041+ and Windows 11 accounts, install the EXE and check setup, restart, shutdown, uninstall/reinstall, and saved data. Check the installed uninstaller's Authenticode signature. Record the commit, artifact checksum, OS build, and results.
