@@ -238,13 +238,12 @@ describe("ACP agent launch", () => {
   test("says Codex can't run when its binary was stripped", () => {
     const agent = codexInstall({ binary: false });
 
-    // Windows: its search path has no fixed folders such as /opt/homebrew/bin,
-    // where the test machine can have the CLI.
+    // Not the desktop app: a CLI on PATH is not used.
     expect(() =>
       resolveAcpAgentLaunch(agent, {
         arch: "x64",
-        env: { PATH: "", USERPROFILE: cleanEnv().HOME },
-        platform: "win32",
+        env: cleanEnv({ PATH: binFolder("codex") }),
+        platform: "linux",
       })
     ).toThrow(CODEX_NOT_INSTALLED_MESSAGE);
   });
@@ -281,28 +280,26 @@ describe("ACP agent launch", () => {
 
       const launch = resolveAcpAgentLaunch(agent, {
         arch: "x64",
-        env: cleanEnv({ PATH: bin }),
+        env: cleanEnv({ NAKAMA_DESKTOP: "1", PATH: bin }),
         platform: "linux",
       });
 
-      expect(launch).toEqual({
-        ...agent,
-        env: { CODEX_PATH: join(bin, "codex") },
-        shell: false,
-      });
+      expect(launch.command).toBe(agent.command);
+      expect(launch.env?.CODEX_PATH).toBe(join(bin, "codex"));
+      // The CLI can be a Node script, so it gets the folders it was found in.
+      expect(launch.env?.PATH?.split(":")).toContain(bin);
     }
   );
 
   test("says Claude can't run when its binary was stripped", () => {
     const agent = claudeInstall({ binary: false });
 
-    // Windows: its search path has no fixed folders such as /opt/homebrew/bin,
-    // where the test machine can have the CLI.
+    // Not the desktop app: a CLI on PATH is not used.
     expect(() =>
       resolveAcpAgentLaunch(agent, {
         arch: "x64",
-        env: { PATH: "", USERPROFILE: cleanEnv().HOME },
-        platform: "win32",
+        env: cleanEnv({ PATH: binFolder("claude") }),
+        platform: "linux",
       })
     ).toThrow(CLAUDE_NOT_INSTALLED_MESSAGE);
   });
@@ -324,7 +321,7 @@ describe("ACP agent launch", () => {
     "uses Claude Code from ~/.local/bin when the bundled binary was stripped",
     () => {
       const agent = claudeInstall({ binary: false });
-      const env = cleanEnv();
+      const env = cleanEnv({ NAKAMA_DESKTOP: "1" });
       const bin = join(env.HOME ?? "", ".local", "bin");
 
       mkdirSync(bin, { recursive: true });
@@ -337,9 +334,7 @@ describe("ACP agent launch", () => {
         platform: "linux",
       });
 
-      expect(launch.env).toEqual({
-        CLAUDE_CODE_EXECUTABLE: join(bin, "claude"),
-      });
+      expect(launch.env?.CLAUDE_CODE_EXECUTABLE).toBe(join(bin, "claude"));
     }
   );
 
