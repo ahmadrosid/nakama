@@ -3464,6 +3464,8 @@ export interface ToolContext {
   ) => Promise<() => Promise<void>>;
   automationId?: string;
   automationRunId?: string;
+  /** Checks live access to organization documents attached to this profile. */
+  canReadOrganizationKnowledge?: () => Promise<boolean>;
   /** Session channel when known (used for interactive-only tool gates). */
   channel?: AgentChannel;
   /** Browser origin for OAuth callbacks during this tool run. */

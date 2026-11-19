@@ -45,6 +45,26 @@ describe("sub_agent tool", () => {
     expect(result).toMatchObject({ status: "success", summary: "Done" });
   });
 
+  test("passes the current shared knowledge check to an in-memory sub-agent", async () => {
+    const canReadOrganizationKnowledge = async () => false;
+
+    const agent = createMockAgentService(async (input) => {
+      expect(input.canReadOrganizationKnowledge).toBe(
+        canReadOrganizationKnowledge
+      );
+
+      return { output: "Done", status: "success", summary: "Done" };
+    });
+
+    const result = await runSubAgentTool(
+      { task: "Find the checklist" },
+      { ...TOOL_CONTEXT, canReadOrganizationKnowledge },
+      agent
+    );
+
+    expect(result.status).toBe("success");
+  });
+
   test("rejects nested sub-agent calls", async () => {
     const agent = createMockAgentService(async () => ({
       output: "nope",

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +8,7 @@ import {
   getKnowledgeBaseExtractedPath,
   getOrgKnowledgeBaseDir,
 } from "../knowledge-base/paths";
+import * as knowledgeStore from "../knowledge-base/store";
 import { runWriteFile } from "./builtin";
 import { runKnowledgeBaseSearch } from "./knowledge-base-search";
 
@@ -32,6 +33,12 @@ interface DocumentFixture {
 describe("knowledge_base_search tool", () => {
   let tempConfigDir = "";
   const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
+  const sharedContext = {
+    canReadOrganizationKnowledge: async () => true,
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  };
 
   afterEach(async () => {
     if (previousConfigDir === undefined) {
@@ -520,12 +527,43 @@ describe("knowledge_base_search tool", () => {
     ).toBe(1);
   });
 
+  test("checks organization access before reading the shared manifest", async () => {
+    await setupKnowledgeBase({
+      attachments: ["kb_missing"],
+      profile: {
+        body: "local onboarding checklist",
+        filename: "local.txt",
+        id: PRIVATE_DOCUMENT_ID,
+      },
+    });
+
+    using listShared = spyOn(
+      knowledgeStore,
+      "listOrganizationKnowledgeBaseDocuments"
+    ).mockResolvedValue([]);
+
+    for (const canRead of [undefined, async () => false]) {
+      const result = await runKnowledgeBaseSearch(
+        { query: "onboarding checklist" },
+        {
+          canReadOrganizationKnowledge: canRead,
+          orgId: ORG_ID,
+          profileId: PROFILE_ID,
+        }
+      );
+
+      expect(result.matches.map((match) => match.scope)).toEqual(["profile"]);
+    }
+
+    expect(listShared).not.toHaveBeenCalled();
+  });
+
   test("includes only shared organization documents attached to the profile", async () => {
     await setupTwoScopes();
 
     const shared = await runKnowledgeBaseSearch(
       { query: "shared alpha" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(shared.matchCount).toBe(1);
@@ -533,14 +571,14 @@ describe("knowledge_base_search tool", () => {
 
     const unattached = await runKnowledgeBaseSearch(
       { query: "secret-unattached-token" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(unattached.matchCount).toBe(0);
 
     const filteredBySharedFilename = await runKnowledgeBaseSearch(
       { filename: "shared.txt", query: "alpha" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(filteredBySharedFilename.matchCount).toBe(1);
@@ -548,7 +586,7 @@ describe("knowledge_base_search tool", () => {
 
     const filteredByUnattachedFilename = await runKnowledgeBaseSearch(
       { filename: "unshared.txt", query: "alpha" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(filteredByUnattachedFilename.matchCount).toBe(0);
@@ -593,10 +631,7 @@ describe("knowledge_base_search tool", () => {
     const results = await Promise.all(
       ["private.txt", "shared.txt", "private.txt", "shared.txt"].map(
         (filename) =>
-          runKnowledgeBaseSearch(
-            { filename, query: "alpha" },
-            { orgId: ORG_ID, profileId: PROFILE_ID }
-          )
+          runKnowledgeBaseSearch({ filename, query: "alpha" }, sharedContext)
       )
     );
 
@@ -647,7 +682,7 @@ describe("knowledge_base_search tool", () => {
 
     const result = await runKnowledgeBaseSearch(
       { query: "alpha" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(result.matchCount).toBe(2);
@@ -677,8 +712,7 @@ describe("knowledge_base_search tool", () => {
     const withBackend = await runKnowledgeBaseSearch(
       { query: "alpha" },
       {
-        orgId: ORG_ID,
-        profileId: PROFILE_ID,
+        ...sharedContext,
         searchKnowledge: async () => ({
           matches: backendMatches,
           truncated: false,
@@ -696,8 +730,7 @@ describe("knowledge_base_search tool", () => {
     const unattachedWithBackend = await runKnowledgeBaseSearch(
       { query: "secret-unattached-token" },
       {
-        orgId: ORG_ID,
-        profileId: PROFILE_ID,
+        ...sharedContext,
         searchKnowledge: async () => ({
           matches: [],
           truncated: false,
@@ -713,7 +746,7 @@ describe("knowledge_base_search tool", () => {
 
     const result = await runKnowledgeBaseSearch(
       { query: "shared alpha" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(result.matches.map((match) => match.scope)).not.toContain(
@@ -750,7 +783,7 @@ describe("knowledge_base_search tool", () => {
 
     const result = await runKnowledgeBaseSearch(
       { query: "shared alpha" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(result.matches[0]?.scope).toBe("organization");
@@ -779,7 +812,7 @@ describe("knowledge_base_search tool", () => {
 
     const result = await runKnowledgeBaseSearch(
       { maxResults: 2, query: "budget marker" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(result.matchCount).toBe(2);
@@ -875,7 +908,7 @@ describe("knowledge_base_search tool", () => {
 
     const result = await runKnowledgeBaseSearch(
       { maxResults: 2, query: "alpha" },
-      { orgId: ORG_ID, profileId: PROFILE_ID }
+      sharedContext
     );
 
     expect(result.matchCount).toBe(2);
