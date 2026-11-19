@@ -6,7 +6,13 @@ import { DEFAULT_TIMEZONE, validateTimezone } from "./user-config";
 const CRON_FIELD_PATTERN =
   /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?|\*\/[0-9]+|[0-9]+(,[0-9]+)*)$/;
 
-const RUN_AT_CALENDAR_DATE = /^([+-]\d{6}|\d{4})-(\d{2})-(\d{2})(?!\d)/;
+const RUN_AT_MONTH_FIRST = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/;
+
+const RUN_AT_CALENDAR_DATE =
+  /^([+-]\d{6}|\d{4})(?:[-/]([0-9]{1,2})(?:[-/]([0-9]{1,2}))?)?/;
+
+const RUN_AT_TIME_SUFFIX =
+  /^(?:(?:T| +)\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?: +[AP]M)?)?(?: *Z| *[+-]\d{2}:?\d{2}| +(?:GMT|UTC)(?:[+-]\d{2}:?\d{2})?)?$/i;
 
 // A short response or reload may cross a one-shot's due time after it was listed.
 export const AUTOMATION_RUN_AT_GRACE_MS = 60_000;
@@ -141,22 +147,30 @@ export function resolveScheduleTimezone(
 
   if (trigger.type === "runAt") {
     const at = trigger.at.trim();
-    const calendarDate = RUN_AT_CALENDAR_DATE.exec(at);
 
     // Validate new dates here so an update can still pause a legacy job.
-    if (calendarDate) {
-      const year = Number(calendarDate[1]);
-      const month = Number(calendarDate[2]);
-      const day = Number(calendarDate[3]);
+    const yearFirst = at.replace(RUN_AT_MONTH_FIRST, "$3-$1-$2");
+    const calendarDate = RUN_AT_CALENDAR_DATE.exec(yearFirst);
 
-      // The 400-year cycle preserves leap years and avoids Date's year limits.
-      const lastDay = new Date(
-        Date.UTC(2000 + (year % 400), month, 0)
-      ).getUTCDate();
+    if (
+      !calendarDate ||
+      calendarDate[1] === "-000000" ||
+      !RUN_AT_TIME_SUFFIX.test(yearFirst.slice(calendarDate[0].length))
+    ) {
+      throw new NakamaApiError(`Invalid runAt datetime: ${at}`, 400);
+    }
 
-      if (month < 1 || month > 12 || day < 1 || day > lastDay) {
-        throw new NakamaApiError(`Invalid runAt datetime: ${at}`, 400);
-      }
+    const year = Number(calendarDate[1]);
+    const month = Number(calendarDate[2] ?? 1);
+    const day = Number(calendarDate[3] ?? 1);
+
+    // The 400-year cycle preserves leap years and avoids Date's year limits.
+    const lastDay = new Date(
+      Date.UTC(2000 + (year % 400), month, 0)
+    ).getUTCDate();
+
+    if (month < 1 || month > 12 || day < 1 || day > lastDay) {
+      throw new NakamaApiError(`Invalid runAt datetime: ${at}`, 400);
     }
 
     return {

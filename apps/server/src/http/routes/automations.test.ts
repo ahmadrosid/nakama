@@ -593,9 +593,17 @@ describe("one-time automation calendar dates over HTTP", () => {
   test.each([
     ["2032-02-29T09:00:00.000Z", "2032-02-29T09:00:00.000Z"],
     ["2032-02-29T16:00:00+07:00", "2032-02-29T09:00:00.000Z"],
+    ["2032-02T10:00+07:00", "2032-02-01T03:00:00.000Z"],
     ["2032-02-29 GMT", "2032-02-29T00:00:00.000Z"],
+    ["02/29/2032 10:00 UTC", "2032-02-29T10:00:00.000Z"],
+    ["02/29/2032 10:00 PM UTC", "2032-02-29T22:00:00.000Z"],
+    ["2032/02/29 10:00 UTC", "2032-02-29T10:00:00.000Z"],
     [invalidTrigger.at, null],
     ["2032-02-30Z", null],
+    ["02/30/2032 10:00 UTC", null],
+    ["2032/02/30 10:00 UTC", null],
+    ["February 30, 2032 10:00 UTC", null],
+    ["-000000-02-29 GMT", null],
   ] as const)(
     "validates the calendar date on create: %s",
     async (at, nextRunAt) => {
@@ -636,13 +644,17 @@ describe("one-time automation calendar dates over HTTP", () => {
     }
   );
 
-  test("rejects February 30 on update without changing the saved row", async () => {
+  test.each([
+    invalidTrigger.at,
+    "02/30/2032 10:00 UTC",
+    "2032/02/30 10:00 UTC",
+  ])("rejects %s on update without changing the saved row", async (at) => {
     const { automation, fixture, update } = await createUpdateFixture();
     const before = await fixture.databaseAdapter.getAutomation(automation.id);
     expect(before).not.toBeNull();
 
     const response = await update({
-      trigger: invalidTrigger,
+      trigger: { ...invalidTrigger, at },
       version: automation.version,
     });
 
@@ -652,15 +664,18 @@ describe("one-time automation calendar dates over HTTP", () => {
     expect(response.status).toBe(400);
   });
 
-  test("accepts a valid leap day on update", async () => {
+  test.each([
+    ["2032-02-29T16:00:00+07:00", "2032-02-29T09:00:00.000Z"],
+    ["02/29/2032 10:00 UTC", "2032-02-29T10:00:00.000Z"],
+  ])("accepts a valid leap day on update: %s", async (at, nextRunAt) => {
     const { automation, fixture, update } = await createUpdateFixture();
-    const trigger = { ...invalidTrigger, at: "2032-02-29T16:00:00+07:00" };
+    const trigger = { ...invalidTrigger, at };
 
     const response = await update({ trigger, version: automation.version });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      automation: { nextRunAt: "2032-02-29T09:00:00.000Z", trigger },
+      automation: { nextRunAt, trigger },
     });
     expect(
       await fixture.databaseAdapter.getAutomation(automation.id)
