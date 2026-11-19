@@ -24,7 +24,6 @@
       <img src="assets/netra-logo.svg" alt="Netra" height="28" />
     </picture>
   </a><br />
-  <sub>Thanks for supporting Nakama and the open source community.</sub>
 </p>
 
 # Nakama
