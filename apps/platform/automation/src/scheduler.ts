@@ -1,21 +1,35 @@
 import type { NakamaClient } from "@nakama/client";
-import { resolveCuratorScheduleAction } from "@nakama/core";
+import { log, resolveCuratorScheduleAction } from "@nakama/core";
 import {
   AutomationScheduler,
   type AutomationSchedulerStatus,
 } from "@nakama/core/automation-scheduler";
 import type { AutomationSchedule } from "@nakama/core/contract";
 
+const CURATOR_RUN_TIMEOUT_MS = 10 * 60 * 1000;
+
+const CURATOR_RETRY_DELAY_MS = 60 * 60 * 1000;
+
+const CURATOR_MAX_CONSECUTIVE_FAILURES = 3;
+
 async function tickSkillCurator(
   client: Pick<
     NakamaClient,
     "listSkillCuratorOrgs" | "runSkillCuratorInternal"
   >,
+  retryAt: Map<string, number>,
   now = new Date()
-): Promise<{ ran: number; skipped: number }> {
+): Promise<void> {
   const { orgs } = await client.listSkillCuratorOrgs();
-  let ran = 0;
-  let skipped = 0;
+  const orgIds = new Set(orgs.map((org) => org.id));
+
+  for (const orgId of retryAt.keys()) {
+    if (!orgIds.has(orgId)) {
+      retryAt.delete(orgId);
+    }
+  }
+
+  let consecutiveFailures = 0;
 
   for (const org of orgs) {
     const action = resolveCuratorScheduleAction({
@@ -24,24 +38,39 @@ async function tickSkillCurator(
       now,
     });
 
-    if (action === "skip") {
-      skipped += 1;
+    if (action === "skip" || (retryAt.get(org.id) ?? 0) > now.getTime()) {
       continue;
     }
 
     try {
-      await client.runSkillCuratorInternal(org.id, { trigger: action });
-      ran += 1;
+      await client.runSkillCuratorInternal(
+        org.id,
+        { trigger: action },
+        AbortSignal.timeout(CURATOR_RUN_TIMEOUT_MS)
+      );
+
+      retryAt.delete(org.id);
+      consecutiveFailures = 0;
     } catch (error) {
-      console.error(`Failed to run skill curator for ${org.id}:`, error);
+      retryAt.set(org.id, now.getTime() + CURATOR_RETRY_DELAY_MS);
+      consecutiveFailures += 1;
+
+      log("error", "curator.run_failed", {
+        error: error instanceof Error ? error.message : String(error),
+        orgId: org.id,
+      });
+
+      // A run of failures points at the server, not at one organization.
+      if (consecutiveFailures >= CURATOR_MAX_CONSECUTIVE_FAILURES) {
+        return;
+      }
     }
   }
-
-  return { ran, skipped };
 }
 
 export class AutomationWorkerScheduler {
   private readonly scheduler: AutomationScheduler;
+  private readonly curatorRetryAt = new Map<string, number>();
   private pollIntervalMs: number | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -114,7 +143,7 @@ export class AutomationWorkerScheduler {
 
   private async tickCurator(): Promise<void> {
     try {
-      await tickSkillCurator(this.client);
+      await tickSkillCurator(this.client, this.curatorRetryAt);
     } catch (error) {
       console.error("Failed to tick skill curator:", error);
     }
