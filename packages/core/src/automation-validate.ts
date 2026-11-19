@@ -7,9 +7,9 @@ const CRON_FIELD_PATTERN =
   /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?|\*\/[0-9]+|[0-9]+(,[0-9]+)*)$/;
 
 // A day of 29 to 31 that is not part of a time, a fraction or a longer number.
-const RUN_AT_LONG_DAY = /(?<![\d:]|:\d\d\.)(29|30|31)(?![\d:])/g;
+const RUN_AT_LONG_DAY = /(?<![\d:]|:\d\d\.)0*(29|30|31)(?![\d:])/g;
 
-const RUN_AT_HOUR_24 = /(?<![\d:])24:\d\d/;
+const RUN_AT_HOUR_24 = /(?<![\d:])0*24(?=:)/g;
 
 const DAY_MS = 86_400_000;
 
@@ -39,8 +39,17 @@ export function isValidRunAt(at: string): boolean {
   const trimmed = at.trim();
   const parsed = Date.parse(trimmed);
 
-  // Date.parse moves hour 24 to the next day.
-  if (!Number.isFinite(parsed) || RUN_AT_HOUR_24.test(trimmed)) {
+  if (!Number.isFinite(parsed)) {
+    return false;
+  }
+
+  // Hour 25 fails to parse. Minute values and ignored comments can still parse.
+  const hourProbe = trimmed.replace(
+    RUN_AT_HOUR_24,
+    (candidate) => `${candidate.slice(0, -2)}25`
+  );
+
+  if (hourProbe !== trimmed && !Number.isFinite(Date.parse(hourProbe))) {
     return false;
   }
 
@@ -48,9 +57,13 @@ export function isValidRunAt(at: string): boolean {
   // day 15: the month is then sure, in each format and time zone.
   for (const match of trimmed.matchAll(RUN_AT_LONG_DAY)) {
     const day = Number(match[1]);
+    const dayToken = match[0];
+
+    // Keep the width so a legacy date does not switch to the ISO parser.
+    const middleDay = "15".padStart(dayToken.length, "0");
 
     const midMonth = Date.parse(
-      `${trimmed.slice(0, match.index)}15${trimmed.slice(match.index + 2)}`
+      `${trimmed.slice(0, match.index)}${middleDay}${trimmed.slice(match.index + dayToken.length)}`
     );
 
     // More than one hour (DST) of difference: the number is not the day.
@@ -60,8 +73,11 @@ export function isValidRunAt(at: string): boolean {
 
     const month = new Date(midMonth);
 
+    // The 400-year cycle avoids Date.UTC interpreting year zero as 1900.
+    const leapCycleYear = 2000 + (month.getUTCFullYear() % 400);
+
     const lastDay = new Date(
-      Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)
+      Date.UTC(leapCycleYear, month.getUTCMonth() + 1, 0)
     ).getUTCDate();
 
     if (day > lastDay) {
