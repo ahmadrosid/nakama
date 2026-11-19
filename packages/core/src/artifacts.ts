@@ -364,7 +364,7 @@ export async function readArtifactFile(input: {
 }
 
 /**
- * Hand edits are markdown-only for now: the other artifact types either round-trip
+ * Hand edits are markdown-only: the other artifact types either round-trip
  * through a converter (docx) or have no editor, so writing raw text back would
  * corrupt the file the agent saved.
  */

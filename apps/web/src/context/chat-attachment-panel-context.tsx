@@ -286,7 +286,7 @@ export function ChatAttachmentPanelProvider({
   );
 
   // Only a drag the user finished is kept; fitting the panel to a smaller
-  // window changes the width for now and saves nothing.
+  // window changes the shown width and saves nothing.
   const commitWidth = useCallback((next: number) => {
     rememberedWidth = next;
     setWidth(next);
