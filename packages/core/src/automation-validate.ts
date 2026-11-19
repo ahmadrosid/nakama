@@ -6,13 +6,12 @@ import { DEFAULT_TIMEZONE, validateTimezone } from "./user-config";
 const CRON_FIELD_PATTERN =
   /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?|\*\/[0-9]+|[0-9]+(,[0-9]+)*)$/;
 
-const RUN_AT_MONTH_FIRST = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/;
+// A day of 29 to 31 that is not part of a time, a fraction or a longer number.
+const RUN_AT_LONG_DAY = /(?<![\d:]|:\d\d\.)(29|30|31)(?![\d:])/g;
 
-const RUN_AT_CALENDAR_DATE =
-  /^([+-]\d{6}|\d{4})(?:[-/]([0-9]{1,2})(?:[-/]([0-9]{1,2}))?)?/;
+const RUN_AT_HOUR_24 = /(?<![\d:])24:\d\d/;
 
-const RUN_AT_TIME_SUFFIX =
-  /^(?:(?:T| +)\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?: +[AP]M)?)?(?: *Z| *[+-]\d{2}:?\d{2}| +(?:GMT|UTC)(?:[+-]\d{2}:?\d{2})?)?$/i;
+const DAY_MS = 86_400_000;
 
 // A short response or reload may cross a one-shot's due time after it was listed.
 export const AUTOMATION_RUN_AT_GRACE_MS = 60_000;
@@ -38,12 +37,39 @@ export function isValidCronExpression(cron: string): boolean {
 
 export function isValidRunAt(at: string): boolean {
   const trimmed = at.trim();
+  const parsed = Date.parse(trimmed);
 
-  if (!trimmed) {
+  // Date.parse moves hour 24 to the next day.
+  if (!Number.isFinite(parsed) || RUN_AT_HOUR_24.test(trimmed)) {
     return false;
   }
 
-  return Number.isFinite(Date.parse(trimmed));
+  // Date.parse also moves February 30 to March 1. Parse the same text with
+  // day 15: the month is then sure, in each format and time zone.
+  for (const match of trimmed.matchAll(RUN_AT_LONG_DAY)) {
+    const day = Number(match[1]);
+
+    const midMonth = Date.parse(
+      `${trimmed.slice(0, match.index)}15${trimmed.slice(match.index + 2)}`
+    );
+
+    // More than one hour (DST) of difference: the number is not the day.
+    if (Math.abs(parsed - midMonth - (day - 15) * DAY_MS) > 3_600_000) {
+      continue;
+    }
+
+    const month = new Date(midMonth);
+
+    const lastDay = new Date(
+      Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)
+    ).getUTCDate();
+
+    if (day > lastDay) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function isWorkerSchedulable(
@@ -101,7 +127,8 @@ export function validateAutomationInput(input: {
   // absent field has to name itself here rather than throw a TypeError.
   name: string | undefined;
   prompt: string | undefined;
-  trigger: AutomationTrigger;
+  // Absent on an update that keeps its trigger: a legacy job can still pause.
+  trigger: AutomationTrigger | undefined;
 }): void {
   const name = input.name?.trim() ?? "";
   const prompt = input.prompt?.trim() ?? "";
@@ -114,7 +141,7 @@ export function validateAutomationInput(input: {
     throw new Error("Automation prompt is required.");
   }
 
-  if (input.trigger.type === "schedule") {
+  if (input.trigger?.type === "schedule") {
     if (!isValidCronExpression(input.trigger.cron)) {
       throw new NakamaApiError(
         `Invalid cron expression: ${input.trigger.cron}`,
@@ -125,9 +152,12 @@ export function validateAutomationInput(input: {
     validateTimezone(input.trigger.timezone);
   }
 
-  if (input.trigger.type === "runAt") {
+  if (input.trigger?.type === "runAt") {
     if (!isValidRunAt(input.trigger.at)) {
-      throw new Error(`Invalid runAt datetime: ${input.trigger.at}`);
+      throw new NakamaApiError(
+        `Invalid runAt datetime: ${input.trigger.at}`,
+        400
+      );
     }
 
     validateTimezone(input.trigger.timezone);
@@ -146,36 +176,9 @@ export function resolveScheduleTimezone(
   }
 
   if (trigger.type === "runAt") {
-    const at = trigger.at.trim();
-
-    // Validate new dates here so an update can still pause a legacy job.
-    const yearFirst = at.replace(RUN_AT_MONTH_FIRST, "$3-$1-$2");
-    const calendarDate = RUN_AT_CALENDAR_DATE.exec(yearFirst);
-
-    if (
-      !calendarDate ||
-      calendarDate[1] === "-000000" ||
-      !RUN_AT_TIME_SUFFIX.test(yearFirst.slice(calendarDate[0].length))
-    ) {
-      throw new NakamaApiError(`Invalid runAt datetime: ${at}`, 400);
-    }
-
-    const year = Number(calendarDate[1]);
-    const month = Number(calendarDate[2] ?? 1);
-    const day = Number(calendarDate[3] ?? 1);
-
-    // The 400-year cycle preserves leap years and avoids Date's year limits.
-    const lastDay = new Date(
-      Date.UTC(2000 + (year % 400), month, 0)
-    ).getUTCDate();
-
-    if (month < 1 || month > 12 || day < 1 || day > lastDay) {
-      throw new NakamaApiError(`Invalid runAt datetime: ${at}`, 400);
-    }
-
     return {
       ...trigger,
-      at,
+      at: trigger.at.trim(),
       timezone: validateTimezone(trigger.timezone ?? userTimezone),
     };
   }

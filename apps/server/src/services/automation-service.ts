@@ -235,7 +235,7 @@ export class AutomationService {
       validateAutomationInput({
         name: input.name?.trim() || existing.name,
         prompt: input.prompt?.trim() || existing.prompt,
-        trigger,
+        trigger: input.trigger && trigger,
       });
 
       let profileId = existing.profileId;
