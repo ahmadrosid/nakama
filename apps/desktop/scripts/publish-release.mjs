@@ -55,11 +55,11 @@ export function updateManifest(manifest, tag, platform = "mac") {
   };
 }
 
-async function inspectArtifacts(directory, version, tag) {
+async function inspectArtifacts(directory, version, tag, selected) {
   const assets = [];
   const manifests = [];
 
-  for (const [platform, config] of Object.entries(platforms)) {
+  for (const [platform, config] of selected) {
     const folder = join(directory, platform);
 
     const manifest = Bun.YAML.parse(
@@ -125,10 +125,23 @@ export async function publishRelease({
   output,
   sha,
   run = execute,
+  // Windows joins the release only when its signed installer was built.
+  targets = Object.keys(platforms),
 }) {
   if (!/^\d+\.\d+\.\d+$/.test(version) || tag !== `desktop-v${version}`) {
     throw new Error("Unexpected release tag");
   }
+
+  if (
+    !targets.includes("mac") ||
+    targets.some((target) => !Object.hasOwn(platforms, target))
+  ) {
+    throw new Error("Unexpected release platforms");
+  }
+
+  const selected = Object.entries(platforms).filter(([platform]) =>
+    targets.includes(platform)
+  );
 
   const gh = async (...args) =>
     (await run("gh", [...args, "--repo", repository])).stdout;
@@ -158,7 +171,7 @@ export async function publishRelease({
       // Never compare rebuilt bytes with public assets: signing changes checksums.
       directory = join(temp, "published");
 
-      for (const [platform, config] of Object.entries(platforms)) {
+      for (const [platform, config] of selected) {
         const names = config.suffixes.map(
           (suffix) => `Nakama-${version}-${suffix}`
         );
@@ -192,7 +205,8 @@ export async function publishRelease({
     const { assets, manifests } = await inspectArtifacts(
       directory,
       version,
-      tag
+      tag,
+      selected
     );
 
     if (!existing) {
@@ -205,7 +219,9 @@ export async function publishRelease({
         "--title",
         `Nakama Desktop ${version}`,
         "--notes",
-        "Self-contained desktop installers: macOS 15+ Apple Silicon (DMG) and Windows 10 19041+ / Windows 11 x64 (Setup.exe).\n\nDownload the installer for your operating system below. The unsigned MSIX is a workflow artifact for Microsoft Store submission only, not an installer download.",
+        targets.includes("windows")
+          ? "Self-contained desktop installers: macOS 15+ Apple Silicon (DMG) and Windows 10 19041+ / Windows 11 x64 (Setup.exe).\n\nDownload the installer for your operating system below. The unsigned MSIX is a workflow artifact for Microsoft Store submission only, not an installer download."
+          : "Self-contained desktop installer: macOS 15+ Apple Silicon (DMG).\n\nThis release has no Windows installer. The unsigned MSIX is a workflow artifact for Microsoft Store submission only, not an installer download.",
         "--latest=false"
       );
       existing = await release(tag);
@@ -320,6 +336,7 @@ if (import.meta.main) {
     output: "apps/desktop/dist/release",
     sha: process.env.GITHUB_SHA,
     tag: process.env.RELEASE_TAG,
+    targets: process.env.RELEASE_PLATFORMS?.split(","),
     version: (await Bun.file("apps/desktop/package.json").json()).version,
   });
 }
