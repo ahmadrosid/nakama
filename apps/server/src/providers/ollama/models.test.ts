@@ -102,16 +102,12 @@ describe("fetchOllamaModels", () => {
   });
 
   test.each([
-    { compatible: false, prefix: "", suffix: "" },
-    { compatible: false, prefix: "", suffix: "/" },
-    { compatible: false, prefix: "/ollama", suffix: "" },
-    { compatible: false, prefix: "/ollama", suffix: "/" },
-    { compatible: true, prefix: "/ollama", suffix: "" },
-    { compatible: false, prefix: "/proxy/v1/ollama", suffix: "" },
-    { compatible: false, prefix: "/ollama", suffix: "", version: "" },
+    { prefix: "/ollama", suffix: "" },
+    { prefix: "/ollama", suffix: "/" },
+    { prefix: "/proxy/v1/ollama", suffix: "" },
   ])(
-    "discovers models through a local endpoint: %j",
-    async ({ prefix, suffix, compatible, version = "/v1" }) => {
+    "discovers models through a prefixed endpoint: %j",
+    async ({ prefix, suffix }) => {
       const paths: string[] = [];
       const nativeAuthorization: Array<string | null> = [];
 
@@ -119,10 +115,6 @@ describe("fetchOllamaModels", () => {
         fetch(request) {
           const path = new URL(request.url).pathname;
           paths.push(path);
-
-          if (compatible && path === `${prefix}/v1/models`) {
-            return Response.json({ data: [{ id: "local-model" }] });
-          }
 
           if (path === `${prefix}/api/tags`) {
             nativeAuthorization.push(request.headers.get("Authorization"));
@@ -138,55 +130,83 @@ describe("fetchOllamaModels", () => {
 
       try {
         const models = await fetchOllamaModels(
-          `${server.url.origin}${prefix}${version}${suffix}`
+          `${server.url.origin}${prefix}/v1${suffix}`
         );
 
         expect(models).toEqual([{ id: "local-model", name: "local-model" }]);
-        expect(paths).toContain(
-          compatible ? `${prefix}/v1/models` : `${prefix}/api/tags`
-        );
+        expect(paths).toContain(`${prefix}/api/tags`);
+        expect(nativeAuthorization).toEqual([null]);
+      } finally {
+        server.stop(true);
+      }
+    }
+  );
 
-        if (!compatible) {
-          expect(nativeAuthorization).toEqual([null]);
+  test("uses the root /api/tags when the path does not end in /v1", async () => {
+    const seen: string[] = [];
+
+    using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch(async (input) => {
+        const url = String(input);
+
+        if (url.endsWith("/api/tags")) {
+          seen.push(url);
+
+          return new Response(JSON.stringify({ models: [{ name: "llama3" }] }));
         }
-      } finally {
-        server.stop(true);
-      }
+
+        return new Response("Not found", { status: 404 });
+      })
+    );
+
+    await fetchOllamaModels("http://localhost:11434/api");
+
+    expect(seen).toEqual(["http://localhost:11434/api/tags"]);
+  });
+
+  test("rejects a base URL without http(s) as a 400", async () => {
+    using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+      asTestFetch(async () => {
+        throw new TypeError("Unable to connect.");
+      })
+    );
+
+    await expect(fetchOllamaModels("localhost:11434/v1")).rejects.toMatchObject(
+      { status: 400 }
+    );
+  });
+
+  test("keeps Authorization on the native fallback behind a prefix", async () => {
+    const prefix = "/ollama";
+
+    const authorization: Array<string | null> = [];
+
+    const server = Bun.serve({
+      fetch(request) {
+        if (new URL(request.url).pathname !== `${prefix}/api/tags`) {
+          return new Response("Not found", { status: 404 });
+        }
+
+        authorization.push(request.headers.get("Authorization"));
+
+        return request.headers.get("Authorization") === "Bearer fixture-key"
+          ? Response.json({ models: [{ name: "local-model" }] })
+          : new Response("Unauthorized", { status: 401 });
+      },
+      hostname: "127.0.0.1",
+      port: 0,
+    });
+
+    try {
+      const models = await fetchOllamaModels(
+        `${server.url.origin}${prefix}/v1`,
+        "  fixture-key  "
+      );
+
+      expect(models).toEqual([{ id: "local-model", name: "local-model" }]);
+      expect(authorization).toEqual(["Bearer fixture-key"]);
+    } finally {
+      server.stop(true);
     }
-  );
-
-  test.each(["", "/ollama"])(
-    "keeps Authorization on the native fallback behind prefix %s",
-    async (prefix) => {
-      const authorization: Array<string | null> = [];
-
-      const server = Bun.serve({
-        fetch(request) {
-          if (new URL(request.url).pathname !== `${prefix}/api/tags`) {
-            return new Response("Not found", { status: 404 });
-          }
-
-          authorization.push(request.headers.get("Authorization"));
-
-          return request.headers.get("Authorization") === "Bearer fixture-key"
-            ? Response.json({ models: [{ name: "local-model" }] })
-            : new Response("Unauthorized", { status: 401 });
-        },
-        hostname: "127.0.0.1",
-        port: 0,
-      });
-
-      try {
-        const models = await fetchOllamaModels(
-          `${server.url.origin}${prefix}/v1`,
-          "  fixture-key  "
-        );
-
-        expect(models).toEqual([{ id: "local-model", name: "local-model" }]);
-        expect(authorization).toEqual(["Bearer fixture-key"]);
-      } finally {
-        server.stop(true);
-      }
-    }
-  );
+  });
 });

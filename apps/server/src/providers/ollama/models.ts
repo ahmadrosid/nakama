@@ -1,5 +1,6 @@
 import {
   type CustomModelEntry,
+  isValidBaseUrl,
   NakamaApiError,
   normalizeBaseUrl,
 } from "@nakama/core";
@@ -12,15 +13,19 @@ interface OllamaTagsResponse {
 function ollamaTagsUrl(baseUrl: string): string {
   const normalized = normalizeBaseUrl(baseUrl);
 
-  try {
-    const url = new URL(normalized);
-
-    const prefix = url.pathname.replace(/\/v1\/?$/, "").replace(/\/$/, "");
-
-    return `${url.origin}${prefix}/api/tags`;
-  } catch {
-    return `${normalized.replace(/\/v1\/?$/, "")}/api/tags`;
+  if (!isValidBaseUrl(normalized)) {
+    throw new NakamaApiError(
+      "Ollama base URL must start with http:// or https://.",
+      400
+    );
   }
+
+  const url = new URL(normalized);
+
+  // Keep a reverse-proxy prefix only before a final /v1. Other paths use the root.
+  const prefix = url.pathname.endsWith("/v1") ? url.pathname.slice(0, -3) : "";
+
+  return `${url.origin}${prefix}/api/tags`;
 }
 
 async function fetchOllamaTagsModels(
@@ -49,8 +54,10 @@ async function fetchOllamaTagsModels(
   }
 
   if (!response.ok) {
+    await response.body?.cancel();
+
     throw new Error(
-      `Could not fetch Ollama models from /api/tags (${response.status}): ${await response.text()}`
+      `Could not fetch Ollama models from ${new URL(tagsUrl).pathname} (${response.status}).`
     );
   }
 
