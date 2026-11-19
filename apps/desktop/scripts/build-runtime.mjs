@@ -1,4 +1,5 @@
 import { cp, mkdir, readdir, realpath, rename, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -110,6 +111,31 @@ const install = Bun.spawn(
 if ((await install.exited) !== 0) {
   throw new Error("Runtime dependency installation failed");
 }
+
+// The Codex and Claude Code binaries are more than half of the installer.
+// Drop them: the server uses the CLI installed on the machine, or CODEX_PATH /
+// CLAUDE_CODE_EXECUTABLE. The packages stay, so no dependency link breaks.
+const target = `${process.platform}-${process.arch}`;
+
+const server = createRequire(join(output, "apps/server/package.json"));
+
+const codex = createRequire(
+  createRequire(
+    server.resolve("@agentclientprotocol/codex-acp/package.json")
+  ).resolve("@openai/codex/package.json")
+).resolve(`@openai/codex-${target}/package.json`);
+
+const claude = createRequire(
+  createRequire(
+    server.resolve("@agentclientprotocol/claude-agent-acp/package.json")
+  ).resolve("@anthropic-ai/claude-agent-sdk")
+).resolve(`@anthropic-ai/claude-agent-sdk-${target}/package.json`);
+
+await rm(join(dirname(codex), "vendor"), { recursive: true });
+
+await rm(
+  join(dirname(claude), process.platform === "win32" ? "claude.exe" : "claude")
+);
 
 if (process.platform === "win32") {
   // Hoisting removes dependency links, but workspace packages remain junctions.

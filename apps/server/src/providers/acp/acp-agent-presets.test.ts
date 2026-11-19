@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  CLAUDE_NOT_INSTALLED_MESSAGE,
   CODEX_NOT_INSTALLED_MESSAGE,
   listAcpAgentPresets,
   resolveAcpAgentLaunch,
@@ -57,6 +58,44 @@ function codexInstall({ binary }: { binary: boolean }) {
     mkdirSync(bin, { recursive: true });
     writeFileSync(join(pkg, "package.json"), "{}");
     writeFileSync(join(bin, "codex"), "");
+  }
+
+  return { args: [entry], command: "/usr/bin/bun" };
+}
+
+/**
+ * A node_modules tree with claude-agent-acp, the Claude Agent SDK, and the
+ * linux-x64 platform package. The package stays when the binary is stripped,
+ * as in the desktop runtime.
+ */
+function claudeInstall({ binary }: { binary: boolean }) {
+  const modules = join(
+    mkdtempSync(join(tmpdir(), "acp-claude-")),
+    "node_modules"
+  );
+
+  const entry = join(
+    modules,
+    "@agentclientprotocol",
+    "claude-agent-acp",
+    "dist",
+    "index.js"
+  );
+
+  const sdk = join(modules, "@anthropic-ai", "claude-agent-sdk");
+  const pkg = join(modules, "@anthropic-ai", "claude-agent-sdk-linux-x64");
+
+  for (const dir of [dirname(entry), sdk, pkg]) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  writeFileSync(entry, "");
+  writeFileSync(join(sdk, "package.json"), '{"main":"sdk.mjs"}');
+  writeFileSync(join(sdk, "sdk.mjs"), "");
+  writeFileSync(join(pkg, "package.json"), "{}");
+
+  if (binary) {
+    writeFileSync(join(pkg, "claude"), "");
   }
 
   return { args: [entry], command: "/usr/bin/bun" };
@@ -199,10 +238,11 @@ describe("ACP agent launch", () => {
   test("says Codex can't run when its binary was stripped", () => {
     const agent = codexInstall({ binary: false });
 
+    // Not the desktop app: a CLI on PATH is not used.
     expect(() =>
       resolveAcpAgentLaunch(agent, {
         arch: "x64",
-        env: cleanEnv(),
+        env: cleanEnv({ PATH: binFolder("codex") }),
         platform: "linux",
       })
     ).toThrow(CODEX_NOT_INSTALLED_MESSAGE);
@@ -230,6 +270,84 @@ describe("ACP agent launch", () => {
         platform: "linux",
       })
     ).not.toThrow();
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "uses the installed Codex CLI when the bundled binary was stripped",
+    () => {
+      const agent = codexInstall({ binary: false });
+      const bin = binFolder("codex");
+
+      const launch = resolveAcpAgentLaunch(agent, {
+        arch: "x64",
+        env: cleanEnv({ NAKAMA_DESKTOP: "1", PATH: bin }),
+        platform: "linux",
+      });
+
+      expect(launch.command).toBe(agent.command);
+      expect(launch.env?.CODEX_PATH).toBe(join(bin, "codex"));
+      // The CLI can be a Node script, so it gets the folders it was found in.
+      expect(launch.env?.PATH?.split(":")).toContain(bin);
+    }
+  );
+
+  test("says Claude can't run when its binary was stripped", () => {
+    const agent = claudeInstall({ binary: false });
+
+    // Not the desktop app: a CLI on PATH is not used.
+    expect(() =>
+      resolveAcpAgentLaunch(agent, {
+        arch: "x64",
+        env: cleanEnv({ PATH: binFolder("claude") }),
+        platform: "linux",
+      })
+    ).toThrow(CLAUDE_NOT_INSTALLED_MESSAGE);
+  });
+
+  test("starts Claude with its bundled binary and no override", () => {
+    const agent = claudeInstall({ binary: true });
+
+    const launch = resolveAcpAgentLaunch(agent, {
+      arch: "x64",
+      env: cleanEnv({ PATH: binFolder("claude") }),
+      platform: "linux",
+    });
+
+    expect(launch.env).toBeUndefined();
+    expect(launch.command).toBe(agent.command);
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "uses Claude Code from ~/.local/bin when the bundled binary was stripped",
+    () => {
+      const agent = claudeInstall({ binary: false });
+      const env = cleanEnv({ NAKAMA_DESKTOP: "1" });
+      const bin = join(env.HOME ?? "", ".local", "bin");
+
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(bin, "claude"), "#!/bin/sh\n");
+      chmodSync(join(bin, "claude"), 0o755);
+
+      const launch = resolveAcpAgentLaunch(agent, {
+        arch: "x64",
+        env,
+        platform: "linux",
+      });
+
+      expect(launch.env?.CLAUDE_CODE_EXECUTABLE).toBe(join(bin, "claude"));
+    }
+  );
+
+  test("CLAUDE_CODE_EXECUTABLE skips the bundled binary check", () => {
+    const agent = claudeInstall({ binary: false });
+
+    const launch = resolveAcpAgentLaunch(agent, {
+      arch: "x64",
+      env: cleanEnv({ CLAUDE_CODE_EXECUTABLE: "/usr/local/bin/claude" }),
+      platform: "linux",
+    });
+
+    expect(launch.env).toBeUndefined();
   });
 
   test.skipIf(process.platform === "win32")(

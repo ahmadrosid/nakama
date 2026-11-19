@@ -97,6 +97,8 @@ function resolveBundledAgent(packageName: string): AcpAgentConfig {
 export interface AcpAgentLaunchCommand {
   args: string[];
   command: string;
+  /** Set when the agent's own binary is not bundled and one was found on the host. */
+  env?: Record<string, string>;
   /** Windows `.cmd` / `.bat` shims only run through a shell. */
   shell: boolean;
 }
@@ -175,6 +177,8 @@ function agentSearchPath(host: Required<AcpAgentLaunchOptions>): string {
     readEnv(host, "BUN_INSTALL_BIN"),
     join(home, ".bun", "bin"),
     join(home, ".opencode", "bin"),
+    // Where the Claude Code native installer puts `claude`.
+    join(home, ".local", "bin"),
     // npm's global bin on Windows, where `npm i -g` puts `.cmd` shims.
     ...(host.platform === "win32"
       ? [appData ? join(appData, "npm") : undefined]
@@ -187,7 +191,10 @@ function agentSearchPath(host: Required<AcpAgentLaunchOptions>): string {
 }
 
 export const CODEX_NOT_INSTALLED_MESSAGE =
-  "Codex can't run on this Nakama server yet: its program isn't installed here, and Nakama Cloud doesn't include it at the moment. Pick Claude or OpenCode as this profile's chat agent instead. Self-hosting? Use the -full image, or set CODEX_PATH to a codex binary.";
+  "Codex can't run here yet: the Codex CLI isn't installed on this machine. Install the Codex CLI, or pick another chat agent for this profile. On Docker, use the -full image, or set CODEX_PATH to a codex binary.";
+
+export const CLAUDE_NOT_INSTALLED_MESSAGE =
+  "Claude can't run here yet: Claude Code isn't installed on this machine. Install Claude Code, or pick another chat agent for this profile. On Docker, use the -full image, or set CLAUDE_CODE_EXECUTABLE to a claude binary.";
 
 const CODEX_TARGETS = new Map([
   ["darwin-arm64", "aarch64-apple-darwin"],
@@ -246,6 +253,111 @@ function hasCodexBinary(
   return existsSync(join(vendorRoot, target, "bin", binary));
 }
 
+/**
+ * Whether the native Claude binary that claude-agent-acp spawns is on this
+ * server. The desktop app and the slim Docker image drop it. This follows the
+ * adapter's own lookup: the platform package of the Claude Agent SDK, with
+ * both libc builds on Linux.
+ */
+function hasClaudeBinary(
+  claudeAcpEntry: string,
+  host: Required<AcpAgentLaunchOptions>
+): boolean {
+  let sdk: string;
+
+  try {
+    sdk = createRequire(claudeAcpEntry).resolve(
+      "@anthropic-ai/claude-agent-sdk"
+    );
+  } catch {
+    return false;
+  }
+
+  const base = `@anthropic-ai/claude-agent-sdk-${host.platform}-${host.arch}`;
+  const binary = host.platform === "win32" ? "claude.exe" : "claude";
+  const require = createRequire(sdk);
+
+  return (host.platform === "linux" ? [base, `${base}-musl`] : [base]).some(
+    (name) => {
+      try {
+        return existsSync(
+          join(dirname(require.resolve(`${name}/package.json`)), binary)
+        );
+      } catch {
+        return false;
+      }
+    }
+  );
+}
+
+/**
+ * A saved Claude or Codex agent runs the bundled adapter entry, and the
+ * adapter spawns a native binary. Its env variable replaces the bundled binary.
+ */
+const ADAPTER_BINARIES = [
+  {
+    command: "codex",
+    envName: "CODEX_PATH",
+    has: hasCodexBinary,
+    message: CODEX_NOT_INSTALLED_MESSAGE,
+    pattern: /[\\/]@agentclientprotocol[\\/]codex-acp[\\/]/,
+    // codex-acp starts a `.cmd` shim through cross-spawn.
+    windowsCommand: "codex",
+  },
+  {
+    command: "claude",
+    envName: "CLAUDE_CODE_EXECUTABLE",
+    has: hasClaudeBinary,
+    message: CLAUDE_NOT_INSTALLED_MESSAGE,
+    pattern: /[\\/]@agentclientprotocol[\\/]claude-agent-acp[\\/]/,
+    // The Claude SDK starts the binary without a shell, so a `.cmd` shim fails.
+    windowsCommand: "claude.exe",
+  },
+];
+
+/**
+ * The env that points the adapter to the CLI installed on this machine, when
+ * the adapter's binary is not bundled and no env variable names one.
+ */
+function hostBinaryEnv(
+  agent: AcpAgentConfig,
+  host: Required<AcpAgentLaunchOptions>
+): Record<string, string> | undefined {
+  for (const bundled of ADAPTER_BINARIES) {
+    const entry = agent.args.find((arg) => bundled.pattern.test(arg));
+
+    if (!entry || readEnv(host, bundled.envName) || bundled.has(entry, host)) {
+      continue;
+    }
+
+    const path = agentSearchPath(host);
+
+    // Only the desktop app drops the binaries for the user's own CLI. On a
+    // server, a folder that members can write to must not supply the binary.
+    const installed =
+      readEnv(host, "NAKAMA_DESKTOP") === "1"
+        ? Bun.which(
+            host.platform === "win32"
+              ? bundled.windowsCommand
+              : bundled.command,
+            { PATH: path }
+          )
+        : null;
+
+    if (!installed) {
+      throw new Error(bundled.message);
+    }
+
+    // An npm-installed CLI is a Node script: it needs `node` from the same
+    // folders. Windows keeps its own `Path`, which GUI apps get in full.
+    if (host.platform === "win32") {
+      return { [bundled.envName]: installed };
+    }
+
+    return { [bundled.envName]: installed, PATH: path };
+  }
+}
+
 function isBareCommand(command: string): boolean {
   return !/[\\/]/.test(command);
 }
@@ -266,19 +378,8 @@ export function resolveAcpAgentLaunch(
     platform: options.platform ?? process.platform,
   };
 
-  // A saved Codex agent runs the bundled codex-acp entry. CODEX_PATH replaces
-  // the bundled binary, so only check without it.
-  const codexAcpEntry = agent.args.find((arg) =>
-    /[\\/]@agentclientprotocol[\\/]codex-acp[\\/]/.test(arg)
-  );
-
-  if (
-    codexAcpEntry &&
-    !readEnv(host, "CODEX_PATH") &&
-    !hasCodexBinary(codexAcpEntry, host)
-  ) {
-    throw new Error(CODEX_NOT_INSTALLED_MESSAGE);
-  }
+  const env = hostBinaryEnv(agent, host);
+  const hostBinary = env ? { env } : {};
 
   const isOpencode = agent.command === OPENCODE_AGENT.agent.command;
 
@@ -308,8 +409,9 @@ export function resolveAcpAgentLaunch(
       args: [],
       command: [`"${found}"`, ...agent.args].join(" "),
       shell: true,
+      ...hostBinary,
     };
   }
 
-  return { args: agent.args, command: found, shell: false };
+  return { args: agent.args, command: found, shell: false, ...hostBinary };
 }
