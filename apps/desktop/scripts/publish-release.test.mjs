@@ -323,7 +323,7 @@ test("retry repairs partial promotion using public bytes even when local artifac
     (args) =>
       args[1] === "upload" &&
       args[2] === "desktop-updates" &&
-      args[3].endsWith("/latest.yml")
+      basename(args[3]) === "latest.yml"
   );
   await expect(f.publish()).rejects.toThrow();
   expect(f.releases.get("desktop-updates").assets.has("latest-mac.yml")).toBe(
