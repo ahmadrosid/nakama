@@ -153,12 +153,18 @@ export async function publishRelease({
           .stdout
       );
     } catch (error) {
-      if (error.stderr?.includes("HTTP 404")) {
-        return null;
+      if (!error.stderr?.includes("HTTP 404")) {
+        throw error;
       }
-
-      throw error;
     }
+
+    // The tag endpoint does not return a draft. The list does.
+    const list = JSON.parse(
+      (await run("gh", ["api", `repos/${repository}/releases?per_page=100`]))
+        .stdout
+    );
+
+    return list.find((entry) => entry.draft && entry.tag_name === name) ?? null;
   };
 
   const temp = await mkdtemp(join(tmpdir(), "nakama-release-"));
