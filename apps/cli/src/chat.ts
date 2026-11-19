@@ -322,10 +322,6 @@ async function runStickyChat(
     // Keep chat available if the organization list cannot be loaded.
   }
 
-  function currentOrgSummary() {
-    return orgsCache.find((entry) => entry.id === currentOrgId) ?? null;
-  }
-
   let abortController: AbortController | null = null;
   let lastUserMessage: string | null = null;
   let modelsCache: ModelsResponse | null = null;
@@ -716,8 +712,7 @@ async function runStickyChat(
           options.client,
           writeOutput,
           currentProfile,
-          modelsCache,
-          currentOrgSummary()
+          modelsCache
         );
       } catch (error) {
         writeError(error);
@@ -1266,22 +1261,6 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
   let busyDrops = 0;
   let modelsCache: ModelsResponse | null = null;
   let profilesCache: ProfileSummary[] = [];
-  let currentOrgId = await loadSavedCliOrgId();
-  let orgsCache: ListUserOrgsResponse["orgs"] | null = null;
-
-  // Loaded on first /status rather than at startup, so a user who never asks
-  // pays no request for it.
-  async function currentOrgSummary() {
-    if (!orgsCache) {
-      try {
-        orgsCache = (await options.client.listUserOrgs()).orgs;
-      } catch {
-        return null;
-      }
-    }
-
-    return orgsCache.find((entry) => entry.id === currentOrgId) ?? null;
-  }
 
   async function refreshModelsCache() {
     try {
@@ -1441,8 +1420,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
             options.client,
             printLine,
             currentProfile,
-            modelsCache,
-            await currentOrgSummary()
+            modelsCache
           );
         } catch (error) {
           printError(error);
@@ -1464,7 +1442,6 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
           if (next) {
             options.client = next.client;
             options.offline = next.offline;
-            currentOrgId = next.orgId;
             currentProfileId = next.profile.id;
             session = next.session;
             context.onSessionChange(session);
@@ -1585,10 +1562,26 @@ async function printStatus(
   client: NakamaClient,
   write: (text: string) => void,
   profile: ProfileSummary | null,
-  cachedModels: ModelsResponse | null,
-  org?: { name: string; slug: string } | null
+  cachedModels: ModelsResponse | null
 ): Promise<void> {
   const health = await client.health();
+
+  // Read from the client and a fresh list on each call: the client holds the
+  // org this session sends to, and a cached list goes stale after a switch.
+  const orgId = client.getOrgId();
+  let org: { name: string; slug: string } | null = null;
+
+  if (orgId) {
+    // An org that cannot be named still shows, so a failed lookup is visible.
+    org = { name: "unknown", slug: orgId };
+
+    try {
+      const { orgs } = await client.listUserOrgs();
+      org = orgs.find((entry) => entry.id === orgId) ?? org;
+    } catch {
+      // Keep the "unknown" line; /status must still print the other lines.
+    }
+  }
 
   const models = health.providerConfigured
     ? (cachedModels ?? (await client.getModels()))

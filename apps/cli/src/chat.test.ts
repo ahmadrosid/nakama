@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { NakamaClient } from "@nakama/client";
-import type { HealthResponse } from "@nakama/core";
+import type { HealthResponse, ListUserOrgsResponse } from "@nakama/core";
 import {
   createChatExitController,
   createDebouncedEscAbortHandler,
@@ -258,8 +258,12 @@ describe("non-TTY slash commands and EOF", () => {
     name: "Test",
   } as ProfileSummary;
 
-  async function runBlockingInput(input: string | null) {
+  async function runBlockingInput(
+    input: string | null,
+    prepare?: (client: NakamaClient) => void
+  ) {
     const client = new NakamaClient();
+    prepare?.(client);
     const session = client.createChatSession("test", "cli");
     const output: string[] = [];
     const clear = spyOn(session, "clear").mockResolvedValue(undefined);
@@ -319,6 +323,41 @@ describe("non-TTY slash commands and EOF", () => {
       )
     ).toBe(true);
     expect(result.sendCalls).toBe(0);
+  });
+
+  // SAFETY: /status reads only ok and providerConfigured from health.
+  const health = { ok: true, providerConfigured: false } as HealthResponse;
+
+  test("/status names the organization the client talks to", async () => {
+    const result = await runBlockingInput("/status", (client) => {
+      client.setOrgId("org_team");
+      spyOn(client, "health").mockResolvedValue(health);
+      spyOn(client, "listUserOrgs").mockResolvedValue({
+        // SAFETY: /status reads only id, name and slug from an organization.
+        orgs: [
+          { id: "org_team", name: "Team", slug: "team" },
+        ] as ListUserOrgsResponse["orgs"],
+      });
+    });
+
+    expect(
+      result.output.some((line) => line.includes("Organization: Team (team)"))
+    ).toBe(true);
+  });
+
+  test("/status keeps the organization line when the lookup fails", async () => {
+    const result = await runBlockingInput("/status", (client) => {
+      client.setOrgId("org_team");
+      spyOn(client, "health").mockResolvedValue(health);
+      spyOn(client, "listUserOrgs").mockRejectedValue(new Error("down"));
+    });
+
+    expect(
+      result.output.some((line) => line.includes("Organization: unknown"))
+    ).toBe(true);
+    expect(result.output.some((line) => line.includes("Server: ok"))).toBe(
+      true
+    );
   });
 
   test("treats EOF as clean cancellation", async () => {
