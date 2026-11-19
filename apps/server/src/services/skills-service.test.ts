@@ -2243,7 +2243,7 @@ if __name__ == "__main__":
       profileId: PROFILE_ID,
     });
 
-    await service.deleteSkill(created.skill.id);
+    await service.deleteSkill(created.skill.id, ORG_ID);
 
     const listed = await service.listSkills();
     expect(listed.skills.some((skill) => skill.name === "notes")).toBe(false);
@@ -2263,7 +2263,9 @@ if __name__ == "__main__":
 
     expect(agentBrowser).toBeTruthy();
 
-    await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow();
+    await expect(
+      service.deleteSkill(agentBrowser!.id, ORG_ID)
+    ).rejects.toThrow();
 
     const after = await service.listSkills();
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureBundledSkillFiles } from "@nakama/core";
@@ -228,10 +228,45 @@ describe("skills are scoped per org", () => {
 
     const orgARow = await db.getSkillByName("deploy-notes", "org_a");
 
-    await expect(service.deleteSkill(orgARow!.id, "org_b")).rejects.toThrow(
-      "Skill not found."
-    );
+    await expect(
+      service.deleteSkill(orgARow!.id, "org_b")
+    ).rejects.toMatchObject({ status: 404 });
+    expect((await stat(orgARow!.sourcePath)).isDirectory()).toBe(true);
     expect(await db.getSkillByName("deploy-notes", "org_a")).not.toBeNull();
+  });
+
+  test("an install-wide skill deletes from any org", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+
+    const created = await service.createSkill("org_a", {
+      description: "Shared notes for every org.",
+      name: "shared-notes",
+    });
+
+    await service.deleteSkill(created.skill.id, "org_b");
+
+    expect(await db.getSkill(created.skill.id)).toBeNull();
+  });
+
+  test("org B cannot patch org A's skill by id", async () => {
+    const db = await openDb();
+    const service = new SkillsService(db);
+
+    await service.createAndAssignRawSkillToProfile(
+      "org_a",
+      "profile_a",
+      ORG_A_SKILL
+    );
+
+    const orgARow = await db.getSkillByName("deploy-notes", "org_a");
+
+    await expect(
+      service.patchSkill("org_b", orgARow!.id, { body: "Org B was here." })
+    ).rejects.toMatchObject({ status: 404 });
+    expect((await service.getSkill(orgARow!.id, "org_a")).skill.body).toContain(
+      "Org A steps."
+    );
   });
 
   test("org A deletes its own skill by id and keeps org B's copy", async () => {

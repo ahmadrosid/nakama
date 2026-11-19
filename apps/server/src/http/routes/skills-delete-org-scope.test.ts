@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { stat } from "node:fs/promises";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { SkillsService } from "../../services/skills-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -10,71 +11,56 @@ setupTestConfigDir("nakama-skills-delete-org-scope-test-");
 
 const BASE = "http://localhost:4310";
 
-const SKILL = `---
-name: deploy-notes
-description: Deploy notes for the owning org.
+const VALID_SKILL = `---
+name: github-weather
+description: Get weather from a public GitHub skill.
 ---
 
-Run the deploy steps.
+Call the weather tool.
 `;
 
-async function createApp() {
+function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const skillsService = new SkillsService(databaseAdapter);
 
-  const { app, authService } = createMinimalHonoApp({
-    agent: {
-      deleteSkill: (skillId: string, orgId?: string) =>
-        skillsService.deleteSkill(skillId, orgId),
-      getSkill: (skillId: string, orgId?: string) =>
-        skillsService.getSkill(skillId, orgId),
-    },
+  return {
+    ...createMinimalHonoApp({
+      agent: {
+        deleteSkill: (skillId: string, orgId: string) =>
+          skillsService.deleteSkill(skillId, orgId),
+      },
+      databaseAdapter,
+    }),
     databaseAdapter,
-  });
-
-  const now = new Date().toISOString();
-
-  for (const orgId of ["org_a", "org_b"]) {
-    await databaseAdapter.upsertOrganization({
-      createdAt: now,
-      id: orgId,
-      name: orgId,
-      slug: orgId,
-      updatedAt: now,
-    });
-  }
-
-  await createPlatformAdminUser(databaseAdapter, authService);
-
-  return { app, databaseAdapter, skillsService };
-}
-
-async function deleteSkill(
-  app: Awaited<ReturnType<typeof createApp>>["app"],
-  session: Awaited<ReturnType<typeof loginUserSession>>,
-  skillId: string,
-  orgId: string
-) {
-  return app.fetch(
-    new Request(`${BASE}/v1/skills/${encodeURIComponent(skillId)}`, {
-      headers: session.headers({ "X-CSRF-Token": session.csrfToken }, orgId),
-      method: "DELETE",
-    })
-  );
+    skillsService,
+  };
 }
 
 describe("DELETE /v1/skills/:skillId", () => {
-  test("a platform admin in another org gets 404 and the skill stays", async () => {
-    const { app, databaseAdapter, skillsService } = await createApp();
+  async function seedOrgASkill() {
+    const { app, authService, databaseAdapter, skillsService } = createApp();
+    const now = new Date().toISOString();
+
+    for (const orgId of ["org_a", "org_b"]) {
+      await databaseAdapter.upsertOrganization({
+        createdAt: now,
+        id: orgId,
+        name: orgId,
+        slug: orgId,
+        updatedAt: now,
+      });
+    }
+
+    await createPlatformAdminUser(databaseAdapter, authService);
 
     await skillsService.createAndAssignRawSkillToProfile(
       "org_a",
       "profile_a",
-      SKILL
+      VALID_SKILL
     );
 
-    const orgARow = await databaseAdapter.getSkillByName(
-      "deploy-notes",
+    const skill = await databaseAdapter.getSkillByName(
+      "github-weather",
       "org_a"
     );
 
@@ -84,39 +70,40 @@ describe("DELETE /v1/skills/:skillId", () => {
       "password123"
     );
 
-    const response = await deleteSkill(app, session, orgARow!.id, "org_b");
+    const deleteAs = (orgId: string) =>
+      app.fetch(
+        new Request(`${BASE}/v1/skills/${encodeURIComponent(skill!.id)}`, {
+          headers: session.headers(
+            { "X-CSRF-Token": session.csrfToken },
+            orgId
+          ),
+          method: "DELETE",
+        })
+      );
+
+    return { databaseAdapter, deleteAs, sourcePath: skill!.sourcePath };
+  }
+
+  test("a platform admin in another org gets 404 and the skill stays", async () => {
+    const { databaseAdapter, deleteAs, sourcePath } = await seedOrgASkill();
+
+    const response = await deleteAs("org_b");
 
     expect(response.status).toBe(404);
     expect(
-      await databaseAdapter.getSkillByName("deploy-notes", "org_a")
+      await databaseAdapter.getSkillByName("github-weather", "org_a")
     ).not.toBeNull();
+    expect((await stat(sourcePath)).isDirectory()).toBe(true);
   });
 
   test("the owning org deletes its skill", async () => {
-    const { app, databaseAdapter, skillsService } = await createApp();
+    const { databaseAdapter, deleteAs } = await seedOrgASkill();
 
-    await skillsService.createAndAssignRawSkillToProfile(
-      "org_a",
-      "profile_a",
-      SKILL
-    );
-
-    const orgARow = await databaseAdapter.getSkillByName(
-      "deploy-notes",
-      "org_a"
-    );
-
-    const session = await loginUserSession(
-      app,
-      "platform@example.com",
-      "password123"
-    );
-
-    const response = await deleteSkill(app, session, orgARow!.id, "org_a");
+    const response = await deleteAs("org_a");
 
     expect(response.status).toBe(204);
     expect(
-      await databaseAdapter.getSkillByName("deploy-notes", "org_a")
+      await databaseAdapter.getSkillByName("github-weather", "org_a")
     ).toBeNull();
   });
 });

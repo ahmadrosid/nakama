@@ -715,7 +715,7 @@ Standalone body.
     await expect(
       skills.patchSkill(ORG_ID, skill!.id, { body: "nope" })
     ).rejects.toThrow();
-    await expect(skills.deleteSkill(skill!.id)).rejects.toThrow();
+    await expect(skills.deleteSkill(skill!.id, ORG_ID)).rejects.toThrow();
     await expect(
       skills.writeAssignedProfileSkillSupportingFile(
         ORG_ID,

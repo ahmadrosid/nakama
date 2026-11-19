@@ -5657,7 +5657,7 @@ export class AgentService {
     );
   }
 
-  async deleteSkill(skillId: string, orgId?: string): Promise<void> {
+  async deleteSkill(skillId: string, orgId: string): Promise<void> {
     return this.requireSkillsService().deleteSkill(skillId, orgId);
   }
 
