@@ -1523,15 +1523,20 @@ async function printCurrentModel(
   write(`Model: ${active.modelId}`);
 }
 
-function formatStatusLines(
+export function formatStatusLines(
   health: HealthResponse,
   models: ModelsResponse | null,
-  profile: ProfileSummary | null
+  profile: ProfileSummary | null,
+  org?: { name: string; slug: string } | null
 ): string[] {
   const lines = [
     `Server: ${health.ok ? "ok" : "degraded"}`,
     `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
   ];
+
+  if (org) {
+    lines.push(`Organization: ${org.name} (${org.slug})`);
+  }
 
   if (!health.providerConfigured) {
     lines.push("Chat runs in offline mode without an API key.");
@@ -1561,11 +1566,28 @@ async function printStatus(
 ): Promise<void> {
   const health = await client.health();
 
+  // Read from the client and a fresh list on each call: the client holds the
+  // org this session sends to, and a cached list goes stale after a switch.
+  const orgId = client.getOrgId();
+  let org: { name: string; slug: string } | null = null;
+
+  if (orgId) {
+    // An org that cannot be named still shows, so a failed lookup is visible.
+    org = { name: "unknown", slug: orgId };
+
+    try {
+      const { orgs } = await client.listUserOrgs();
+      org = orgs.find((entry) => entry.id === orgId) ?? org;
+    } catch {
+      // Keep the "unknown" line; /status must still print the other lines.
+    }
+  }
+
   const models = health.providerConfigured
     ? (cachedModels ?? (await client.getModels()))
     : null;
 
-  for (const line of formatStatusLines(health, models, profile)) {
+  for (const line of formatStatusLines(health, models, profile, org)) {
     write(line);
   }
 }

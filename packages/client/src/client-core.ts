@@ -38,6 +38,10 @@ export class NakamaClientCore {
     this.authToken = token;
   }
 
+  getOrgId(): string | null {
+    return this.orgId;
+  }
+
   setOrgId(orgId: string | null): void {
     this.orgScopeRevision += 1;
     this.orgId = orgId?.trim() || null;

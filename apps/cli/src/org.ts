@@ -15,9 +15,13 @@ export async function switchChatOrg(
 ) {
   if (!orgRef) {
     const { orgs } = await client.listUserOrgs();
+    // The client holds the org this session sends to; cli.ini is shared.
+    const activeOrgId = client.getOrgId();
 
     for (const org of orgs) {
-      write(`${org.slug}  ${org.name}`);
+      write(
+        `${org.slug}  ${org.name}${org.id === activeOrgId ? " (current)" : ""}`
+      );
     }
 
     write("Use /org <slug> to switch.");

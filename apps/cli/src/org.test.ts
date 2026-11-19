@@ -115,3 +115,27 @@ describe("parseCliOrgArgs", () => {
     );
   });
 });
+
+test("the org list marks the organization the client talks to", async () => {
+  const client = new NakamaClient({
+    baseUrl: "https://example.com",
+    // SAFETY: This fetch stub answers the organization list only.
+    fetch: (async () =>
+      Response.json({
+        orgs: [
+          { id: "org_team", name: "Team", slug: "team" },
+          { id: "org_other", name: "Other", slug: "other" },
+        ],
+      })) as typeof fetch,
+    orgId: "org_other",
+  });
+
+  const lines: string[] = [];
+  await switchChatOrg(client, "", "cli", (line) => lines.push(line));
+
+  expect(lines.map((line) => line.endsWith("(current)"))).toEqual([
+    false,
+    true,
+    false,
+  ]);
+});
