@@ -44,8 +44,10 @@ export interface GeminiProviderOptions {
 function createGeminiClient(apiKey: string, baseUrl?: string): GoogleGenAI {
   const trimmed = baseUrl?.trim();
 
+  // SDK 3.x defaults to v1; thought signatures and tool turns use v1beta.
   const options: ConstructorParameters<typeof GoogleGenAI>[0] = {
     apiKey,
+    apiVersion: "v1beta",
   };
 
   if (trimmed) {
