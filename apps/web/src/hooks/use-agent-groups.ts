@@ -11,7 +11,7 @@ import type {
 } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { client, formatError } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -229,11 +229,22 @@ export function useRailPinsQuery() {
 
 /** The user's chat count and last use per agent; asked for only when a sort needs it. */
 export function useRailUsageQuery(enabled: boolean) {
-  return useQuery({
+  const query = useQuery({
     enabled,
     queryFn: async () => (await client.listRailUsage()).agents,
     queryKey: queryKeys.railUsage,
   });
+
+  const { error } = query;
+
+  // Without the counts the rail keeps the name order, so say why.
+  useEffect(() => {
+    if (error) {
+      toast(formatError(error));
+    }
+  }, [error]);
+
+  return query;
 }
 
 export function useToggleRailPin() {
