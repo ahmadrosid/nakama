@@ -28,7 +28,7 @@
     },
     "apps/desktop": {
       "name": "@nakama/desktop",
-      "version": "0.1.9",
+      "version": "0.1.10",
       "dependencies": {
         "electron-updater": "^6.8.11",
       },
@@ -93,7 +93,7 @@
         "@agentclientprotocol/codex-acp": "2.5.0",
         "@agentclientprotocol/sdk": "2.0.2",
         "@anthropic-ai/sdk": "^0.135.0",
-        "@composio/core": "^0.28.0",
+        "@composio/core": "^0.29.0",
         "@google/genai": "^2.7.0",
         "@hono/zod-openapi": "^1.6.3",
         "@modelcontextprotocol/sdk": "^1.32.2",
@@ -367,9 +367,9 @@
 
     "@clack/prompts": ["@clack/prompts@1.7.0", "", { "dependencies": { "@clack/core": "1.4.3", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-y7/yvZ2TPAnR9+jnc00klvNNLkJiXFFrQA/hlLCcxA9a2A4zQIOimyFQ9XfwYKiGD1fb5GY8vbKIIgO8d5Tb2A=="],
 
-    "@composio/client": ["@composio/client@2.0.1", "", { "peerDependencies": { "effect": "*" }, "optionalPeers": ["effect"] }, "sha512-1+Azl8W/grinmXVt6KhDKy5UlvTiv7MCMgjqBDxd8TqndjM92/HotxLabnB63A285bvo5Lcu4kbOz413uaPmEQ=="],
+    "@composio/client": ["@composio/client@2.1.0", "", { "peerDependencies": { "effect": "*" }, "optionalPeers": ["effect"] }, "sha512-tAHMxlv4rfeWBCuyNbs9g7eUJ8eCwpJ+Hdv7MSGVvT1LTbIu/O9reUaL7XC5Oqa84UO/+SPJZhqx4YKK10UKGg=="],
 
-    "@composio/core": ["@composio/core@0.28.0", "", { "dependencies": { "@composio/client": "2.0.1", "@composio/json-schema-to-zod": "0.4.0", "@types/json-schema": "^7.0.15", "is-fs-case-sensitive": "^2.0.0", "openai": "^7.39.0", "picocolors": "^1.1.1", "pusher-js": "^8.6.0", "semver": "^7.8.5", "undici": "^7.30.1", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "zod": ">=3.25.76 <5" } }, "sha512-OF2vC9Bc3uBmTPQKeq43QNWqmsVHHu0AKQJfNaQqM3h8fE8bvG3mUrisJ285mCkVSyY7tAr/dC+ONothQtQRDQ=="],
+    "@composio/core": ["@composio/core@0.29.0", "", { "dependencies": { "@composio/client": "2.1.0", "@composio/json-schema-to-zod": "0.4.0", "@types/json-schema": "^7.0.15", "is-fs-case-sensitive": "^2.0.0", "openai": "^7.39.0", "picocolors": "^1.1.1", "pusher-js": "^8.6.0", "semver": "^7.8.5", "undici": "^7.30.1", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "zod": ">=3.25.76 <5" } }, "sha512-AihaXem2Evh/elvoJ6FqKaspUS9WZeGcBirY8Dj+L+0j5cTncm5FfLSOy1n3oqcQQetW0A6s5IzzbDT+7UfF7Q=="],
 
     "@composio/json-schema-to-zod": ["@composio/json-schema-to-zod@0.4.0", "", { "dependencies": { "@cfworker/json-schema": "^4.1.1", "dequal": "^2.0.3", "re2js": "^2.8.6" }, "peerDependencies": { "zod": ">=3.25.76 <5" } }, "sha512-BwZXcGpiBFNStECzka7nyF8RogVIzK5kRrDGI5p9P9nlLbQqpCF6H/ILozQE5NoT3HDjbJF26aang+2hDduSNQ=="],
 
