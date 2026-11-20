@@ -7,7 +7,11 @@ import { AutomationWorkerScheduler } from "./scheduler";
 function createMockClient(
   overrides: Partial<{
     listAutomationSchedules: () => Promise<AutomationSchedule[]>;
-    runAutomationInternal: (id: string, orgId: string) => Promise<void>;
+    runAutomationInternal: (
+      id: string,
+      orgId: string,
+      runAt?: string
+    ) => Promise<void>;
     getAutomationWorkerSettings: () => Promise<{ pollIntervalMinutes: number }>;
     getTimezone: () => Promise<string>;
     listSkillCuratorOrgs: () => Promise<ListSkillCuratorOrgsResponse>;
@@ -209,8 +213,9 @@ describe("AutomationWorkerScheduler", () => {
     }
   });
 
-  test("passes the automation orgId to the internal run endpoint", async () => {
-    const calls: Array<[string, string]> = [];
+  test("passes the org and one-time schedule to the internal run endpoint", async () => {
+    const calls: Array<[string, string, string | undefined]> = [];
+    const runAt = new Date(Date.now() + 50).toISOString();
 
     const client = createMockClient({
       listAutomationSchedules: async () => [
@@ -218,12 +223,12 @@ describe("AutomationWorkerScheduler", () => {
           id: "a1",
           orgId: "o1",
           profileId: "p1",
-          runAt: new Date(Date.now() + 50).toISOString(),
+          runAt,
           timezone: "UTC",
         },
       ],
-      runAutomationInternal: async (id: string, orgId: string) => {
-        calls.push([id, orgId]);
+      runAutomationInternal: async (id, orgId, at) => {
+        calls.push([id, orgId, at]);
       },
     });
 
@@ -232,6 +237,6 @@ describe("AutomationWorkerScheduler", () => {
     await Bun.sleep(150);
     scheduler.stop();
 
-    expect(calls).toEqual([["a1", "o1"]]);
+    expect(calls).toEqual([["a1", "o1", runAt]]);
   });
 });

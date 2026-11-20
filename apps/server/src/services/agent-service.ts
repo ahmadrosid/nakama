@@ -2749,12 +2749,12 @@ export class AgentService {
     return buildSubAgentResult("success", reply);
   }
 
-  async runAutomation(automationId: string) {
+  async runAutomation(...args: Parameters<AutomationRunner["run"]>) {
     if (!this.automationRunner) {
       throw new Error("Automation runner is not configured.");
     }
 
-    return this.automationRunner.run(automationId);
+    return this.automationRunner.run(...args);
   }
 
   startAutomationFromWebhook(

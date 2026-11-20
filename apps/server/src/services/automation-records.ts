@@ -4,7 +4,14 @@ import type {
   AutomationToolLimit,
   StoredAutomation,
 } from "@nakama/core";
-import { isAutomationRunUnread, NakamaApiError } from "@nakama/core";
+import {
+  AUTOMATION_RUN_AT_GRACE_MS,
+  computeAutomationNextRunAt,
+  isAutomationRunUnread,
+  isWorkerSchedulable,
+  NakamaApiError,
+  resolveWebPublicUrl,
+} from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import type { AutomationServiceOptions } from "./automation-options";
@@ -90,6 +97,41 @@ export function toRunRecord(
   }
 
   return record;
+}
+
+/**
+ * A worker dispatch must match the saved time. An older worker sends no
+ * time, so the job must be due; its clock can be ahead of this one.
+ */
+export function isRunAtDue(at: string, dispatchedAt?: string): boolean {
+  return dispatchedAt === undefined
+    ? Date.parse(at) <= Date.now() + AUTOMATION_RUN_AT_GRACE_MS
+    : at === dispatchedAt;
+}
+
+export async function enrichAutomation(
+  db: DatabaseAdapter,
+  automation: StoredAutomation,
+  userTimezone: string
+): Promise<StoredAutomation> {
+  const [stored] = await db.listAutomationRuns(automation.id, 1);
+  const lastRun = stored ? toRunRecord(stored) : null;
+
+  const publicUrl =
+    automation.trigger.type === "webhook" ? resolveWebPublicUrl() : undefined;
+
+  return {
+    ...automation,
+    lastRunAt: lastRun?.startedAt ?? null,
+    lastRunDeliveryStatus: lastRun?.deliveryStatus ?? null,
+    lastRunStatus: lastRun?.status ?? null,
+    nextRunAt: isWorkerSchedulable(automation)
+      ? computeAutomationNextRunAt(automation.trigger, userTimezone)
+      : null,
+    ...(publicUrl && {
+      webhookUrl: `${publicUrl}/v1/automations/${encodeURIComponent(automation.id)}/webhook`,
+    }),
+  };
 }
 
 function normalizeToolLimit(limit: AutomationToolLimit): AutomationToolLimit {

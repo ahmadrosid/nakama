@@ -1,4 +1,5 @@
 import {
+  type AutomationSchedule,
   type ChatMessage,
   formatAutomationRunError,
   type StoredAutomation,
@@ -41,9 +42,10 @@ export class AutomationRunner {
   ) {}
 
   async run(
-    automationId: string
+    automationId: string,
+    schedule?: Pick<AutomationSchedule, "runAt">
   ): Promise<{ output?: string; error?: string; skipped?: boolean }> {
-    const begun = await this.begin(automationId);
+    const begun = await this.begin(automationId, { schedule });
 
     return "skipped" in begun ? begun : this.finish(begun);
   }
@@ -53,7 +55,10 @@ export class AutomationRunner {
     automation: StoredAutomation,
     webhook: WebhookDelivery
   ): Promise<{ runId: string } | RunSkipped> {
-    const begun = await this.begin(automation.id, webhook, automation);
+    const begun = await this.begin(automation.id, {
+      loaded: automation,
+      webhook,
+    });
 
     if ("skipped" in begun) {
       return begun;
@@ -69,8 +74,15 @@ export class AutomationRunner {
   /** Takes the run lock and records the run; the caller must `finish` a begun run. */
   private async begin(
     automationId: string,
-    webhook?: WebhookDelivery,
-    loaded?: StoredAutomation
+    {
+      loaded,
+      schedule,
+      webhook,
+    }: {
+      loaded?: StoredAutomation;
+      schedule?: Pick<AutomationSchedule, "runAt">;
+      webhook?: WebhookDelivery;
+    }
   ): Promise<BegunRun | RunSkipped> {
     if (this.running.has(automationId)) {
       return { error: "Automation is already running.", skipped: true };
@@ -80,7 +92,7 @@ export class AutomationRunner {
     let begun = false;
 
     try {
-      const automation =
+      let automation =
         loaded ?? (await this.automationService.get(automationId));
 
       if (!automation) {
@@ -90,6 +102,10 @@ export class AutomationRunner {
       if (!automation.enabled) {
         return { error: "Automation is disabled.", skipped: true };
       }
+
+      const scheduledRunAt =
+        schedule &&
+        (schedule.runAt !== undefined || automation.trigger.type === "runAt");
 
       if (
         !(await this.automationService.isProfileAutomationEnabled(
@@ -121,12 +137,25 @@ export class AutomationRunner {
 
       const input = webhook?.payload;
       let run: Awaited<ReturnType<AutomationService["createRun"]>>;
+      let consumed = false;
 
       try {
-        if (automation.trigger.type === "runAt") {
-          await this.automationService.update(automationId, orgId, {
-            enabled: false,
-          });
+        if (scheduledRunAt || automation.trigger.type === "runAt") {
+          const current = await this.automationService.consumeRunAt(
+            automationId,
+            orgId,
+            scheduledRunAt ? schedule : undefined
+          );
+
+          if (!current) {
+            return {
+              error: "One-time automation changed or is no longer due.",
+              skipped: true,
+            };
+          }
+
+          automation = current;
+          consumed = true;
         }
 
         run = await this.automationService.createRun(
@@ -134,6 +163,20 @@ export class AutomationRunner {
           input === undefined ? undefined : { input }
         );
       } catch (error) {
+        // No run was recorded, so the one-time automation must stay on.
+        if (consumed) {
+          try {
+            await this.automationService.update(automationId, orgId, {
+              enabled: true,
+            });
+          } catch (restoreError) {
+            console.error(
+              "One-time automation could not be re-enabled:",
+              restoreError
+            );
+          }
+        }
+
         // Free the claim so a redelivery is not refused for the replay window.
         if (webhook) {
           await this.automationService.releaseWebhookDelivery(

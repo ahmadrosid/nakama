@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { NakamaClient } from "@nakama/client";
 import {
   loadLocalAuthToken,
   readEnvValue,
@@ -6,6 +7,7 @@ import {
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../../services/auth-service";
+import { AutomationRunner } from "../../services/automation-runner";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -224,6 +226,176 @@ describe("internal automation routes", () => {
     );
 
     expect(response.status).toBe(204);
+  });
+
+  test.each([
+    "legacy worker",
+    "legacy worker after edit",
+    "worker clock ahead",
+    "before dispatch",
+    "during dispatch",
+    "stale cron timer",
+    "profile automations off",
+  ])("starts a one-time schedule from the last poll (%s)", async (scenario) => {
+    const options = createServerOptions();
+    const service = options.automationService;
+    let promptCalls = 0;
+
+    // SAFETY: The runner calls only runAutomationPrompt on this fixture.
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => {
+        promptCalls += 1;
+
+        return "Reminder sent";
+      },
+    } as never);
+
+    await seedOrgAndProfile(options.databaseAdapter);
+    await seedLocalClientUser(options.databaseAdapter);
+
+    const oldTime = Date.now() + 60_000;
+    const oldAt = new Date(oldTime).toISOString();
+    const newAt = new Date(oldTime + 60 * 60_000).toISOString();
+
+    const { id } = await service.create(
+      ORG_ID,
+      {
+        description: "One-time reminder",
+        name: "Reminder",
+        prompt: "Send reminder",
+        trigger:
+          scenario === "stale cron timer"
+            ? { cron: "0 * * * *", timezone: "UTC", type: "schedule" }
+            : { at: oldAt, type: "runAt" },
+      },
+      PROFILE_ID
+    );
+
+    const app = createHonoApp({
+      ...options,
+      agent: {
+        ...options.agent,
+        runAutomation: (...args: Parameters<AutomationRunner["run"]>) =>
+          runner.run(...args),
+      },
+    });
+
+    const client = new NakamaClient({
+      authToken: await loadLocalAuthToken(),
+      baseUrl: "http://localhost:4310",
+      fetch: async (input, init) => app.fetch(new Request(input, init)),
+    });
+
+    const [schedule] = await client.listAutomationSchedules();
+    expect(schedule).toMatchObject({
+      id,
+      orgId: ORG_ID,
+      ...(scenario === "stale cron timer"
+        ? { cron: "0 * * * *" }
+        : { runAt: oldAt }),
+    });
+
+    const profileOff = scenario === "profile automations off";
+
+    const setProfileAutomations = async (automationsEnabled: boolean) => {
+      const profile = await options.databaseAdapter.getProfile(PROFILE_ID);
+
+      await options.databaseAdapter.upsertProfile({
+        ...profile!,
+        automationsEnabled,
+      });
+    };
+
+    const reschedule = () =>
+      service.update(id, ORG_ID, {
+        trigger: { at: newAt, type: "runAt" },
+      });
+
+    if (
+      scenario === "before dispatch" ||
+      scenario === "legacy worker after edit" ||
+      scenario === "stale cron timer"
+    ) {
+      await reschedule();
+    }
+
+    if (profileOff) {
+      await setProfileAutomations(false);
+    }
+
+    const get = service.get.bind(service);
+    let editPending = scenario === "during dispatch";
+
+    const read = spyOn(service, "get").mockImplementation(
+      async (automationId, orgId) => {
+        const current = await get(automationId, orgId);
+
+        if (editPending && orgId === undefined) {
+          editPending = false;
+          await reschedule();
+        }
+
+        return current;
+      }
+    );
+
+    const clock = spyOn(Date, "now").mockReturnValue(
+      scenario === "worker clock ahead" ? oldTime - 5000 : oldTime
+    );
+
+    try {
+      const dispatch = (at: string | undefined) =>
+        client.runAutomationInternal(
+          schedule!.id,
+          schedule!.orgId,
+          scenario.startsWith("legacy worker") ? undefined : at
+        );
+
+      const first = await dispatch(schedule!.runAt).then(
+        () => "started",
+        (error: Error) => error
+      );
+
+      if (scenario === "legacy worker" || scenario === "worker clock ahead") {
+        expect(first).toBe("started");
+      } else {
+        const current = await service.get(id, ORG_ID);
+        const runs = await service.listRuns(id, ORG_ID);
+
+        expect({
+          enabled: current?.enabled,
+          nextRunAt: current?.nextRunAt,
+          promptCalls,
+          runCount: runs.length,
+        }).toEqual({
+          enabled: true,
+          // A job that is due now has no next run.
+          nextRunAt: profileOff ? null : newAt,
+          promptCalls: 0,
+          runCount: 0,
+        });
+        expect(first).toMatchObject({ status: 409 });
+
+        if (profileOff) {
+          await setProfileAutomations(true);
+        } else {
+          clock.mockReturnValue(Date.parse(newAt));
+        }
+
+        const [reloaded] = await client.listAutomationSchedules();
+        expect(reloaded?.runAt).toBe(profileOff ? oldAt : newAt);
+        await dispatch(reloaded?.runAt);
+      }
+
+      expect((await service.get(id, ORG_ID))?.enabled).toBe(false);
+      expect(promptCalls).toBe(1);
+      expect(
+        (await service.listRuns(id, ORG_ID)).map((run) => run.status)
+      ).toEqual(["completed"]);
+    } finally {
+      clock.mockRestore();
+      read.mockRestore();
+    }
   });
 
   test("rejects a run without an orgId assertion", async () => {
