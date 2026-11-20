@@ -115,10 +115,17 @@ export class AutomationsClient extends PluginsClient {
 
   async runAutomationInternal(
     automationId: string,
-    orgId: string
+    orgId: string,
+    runAt?: string
   ): Promise<void> {
+    const query = new URLSearchParams({ orgId });
+
+    if (runAt !== undefined) {
+      query.set("runAt", runAt);
+    }
+
     await this.request(
-      `/v1/internal/automations/${encodeURIComponent(automationId)}/run?orgId=${encodeURIComponent(orgId)}`,
+      `/v1/internal/automations/${encodeURIComponent(automationId)}/run?${query}`,
       withDisabledFetchIdle({
         method: "POST",
       })

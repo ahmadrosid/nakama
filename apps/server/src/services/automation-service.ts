@@ -343,7 +343,8 @@ export class AutomationService {
 
   async consumeDueRunAt(
     id: string,
-    orgId: string
+    orgId: string,
+    runAt?: string
   ): Promise<StoredAutomation | null> {
     const due = await this.writeLock.withLock(id, async () => {
       const current = await this.store.get(id);
@@ -351,7 +352,9 @@ export class AutomationService {
       if (
         !(current?.enabled && automationBelongsToOrg(current, orgId)) ||
         current.trigger.type !== "runAt" ||
-        !(Date.parse(current.trigger.at) <= Date.now()) ||
+        !(runAt === undefined
+          ? Date.parse(current.trigger.at) <= Date.now()
+          : current.trigger.at === runAt) ||
         !(await this.isProfileAutomationEnabled(current.profileId))
       ) {
         return null;
@@ -360,7 +363,6 @@ export class AutomationService {
       const disabled = await this.store.update({
         ...current,
         enabled: false,
-        updatedAt: new Date().toISOString(),
         version: current.version + 1,
       });
 

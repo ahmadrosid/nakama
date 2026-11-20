@@ -1,4 +1,5 @@
 import {
+  type AutomationSchedule,
   type ChatMessage,
   formatAutomationRunError,
   type StoredAutomation,
@@ -42,9 +43,9 @@ export class AutomationRunner {
 
   async run(
     automationId: string,
-    mode?: "scheduled"
+    schedule?: Pick<AutomationSchedule, "runAt">
   ): Promise<{ output?: string; error?: string; skipped?: boolean }> {
-    const begun = await this.begin(automationId, { mode });
+    const begun = await this.begin(automationId, { schedule });
 
     return "skipped" in begun ? begun : this.finish(begun);
   }
@@ -75,11 +76,11 @@ export class AutomationRunner {
     automationId: string,
     {
       loaded,
-      mode,
+      schedule,
       webhook,
     }: {
       loaded?: StoredAutomation;
-      mode?: "scheduled";
+      schedule?: Pick<AutomationSchedule, "runAt">;
       webhook?: WebhookDelivery;
     }
   ): Promise<BegunRun | RunSkipped> {
@@ -103,7 +104,8 @@ export class AutomationRunner {
       }
 
       const scheduledRunAt =
-        mode === "scheduled" && automation.trigger.type === "runAt";
+        schedule &&
+        (schedule.runAt !== undefined || automation.trigger.type === "runAt");
 
       if (
         !(
@@ -143,7 +145,8 @@ export class AutomationRunner {
         if (scheduledRunAt) {
           const due = await this.automationService.consumeDueRunAt(
             automationId,
-            orgId
+            orgId,
+            schedule.runAt
           );
 
           if (!due) {

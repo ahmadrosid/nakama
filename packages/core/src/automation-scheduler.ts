@@ -11,7 +11,8 @@ export interface AutomationSchedulerDelegate {
   listScheduledAutomations(): Promise<AutomationSchedule[]>;
   runAutomation(
     automationId: string,
-    orgId: string
+    orgId: string,
+    runAt?: string
   ): Promise<{ ok: boolean; skipped?: boolean; error?: string }>;
 }
 
@@ -116,7 +117,7 @@ export class AutomationScheduler {
 
   private dispatch(automation: AutomationSchedule): void {
     void this.delegate
-      .runAutomation(automation.id, automation.orgId)
+      .runAutomation(automation.id, automation.orgId, automation.runAt)
       .then((result) => {
         if (!result.ok) {
           console.error(
