@@ -234,6 +234,8 @@ describe("internal automation routes", () => {
     "worker clock ahead",
     "before dispatch",
     "during dispatch",
+    "stale cron timer",
+    "profile automations off",
   ])("starts a one-time schedule from the last poll (%s)", async (scenario) => {
     const options = createServerOptions();
     const service = options.automationService;
@@ -261,7 +263,10 @@ describe("internal automation routes", () => {
         description: "One-time reminder",
         name: "Reminder",
         prompt: "Send reminder",
-        trigger: { at: oldAt, type: "runAt" },
+        trigger:
+          scenario === "stale cron timer"
+            ? { cron: "0 * * * *", timezone: "UTC", type: "schedule" }
+            : { at: oldAt, type: "runAt" },
       },
       PROFILE_ID
     );
@@ -282,7 +287,24 @@ describe("internal automation routes", () => {
     });
 
     const [schedule] = await client.listAutomationSchedules();
-    expect(schedule).toMatchObject({ id, orgId: ORG_ID, runAt: oldAt });
+    expect(schedule).toMatchObject({
+      id,
+      orgId: ORG_ID,
+      ...(scenario === "stale cron timer"
+        ? { cron: "0 * * * *" }
+        : { runAt: oldAt }),
+    });
+
+    const profileOff = scenario === "profile automations off";
+
+    const setProfileAutomations = async (automationsEnabled: boolean) => {
+      const profile = await options.databaseAdapter.getProfile(PROFILE_ID);
+
+      await options.databaseAdapter.upsertProfile({
+        ...profile!,
+        automationsEnabled,
+      });
+    };
 
     const reschedule = () =>
       service.update(id, ORG_ID, {
@@ -291,9 +313,14 @@ describe("internal automation routes", () => {
 
     if (
       scenario === "before dispatch" ||
-      scenario === "legacy worker after edit"
+      scenario === "legacy worker after edit" ||
+      scenario === "stale cron timer"
     ) {
       await reschedule();
+    }
+
+    if (profileOff) {
+      await setProfileAutomations(false);
     }
 
     const get = service.get.bind(service);
@@ -342,15 +369,21 @@ describe("internal automation routes", () => {
           runCount: runs.length,
         }).toEqual({
           enabled: true,
-          nextRunAt: newAt,
+          // A job that is due now has no next run.
+          nextRunAt: profileOff ? null : newAt,
           promptCalls: 0,
           runCount: 0,
         });
         expect(first).toMatchObject({ status: 409 });
 
-        clock.mockReturnValue(Date.parse(newAt));
+        if (profileOff) {
+          await setProfileAutomations(true);
+        } else {
+          clock.mockReturnValue(Date.parse(newAt));
+        }
+
         const [reloaded] = await client.listAutomationSchedules();
-        expect(reloaded?.runAt).toBe(newAt);
+        expect(reloaded?.runAt).toBe(profileOff ? oldAt : newAt);
         await dispatch(reloaded?.runAt);
       }
 

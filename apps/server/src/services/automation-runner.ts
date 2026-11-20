@@ -108,12 +108,9 @@ export class AutomationRunner {
         (schedule.runAt !== undefined || automation.trigger.type === "runAt");
 
       if (
-        !(
-          scheduledRunAt ||
-          (await this.automationService.isProfileAutomationEnabled(
-            automation.profileId
-          ))
-        )
+        !(await this.automationService.isProfileAutomationEnabled(
+          automation.profileId
+        ))
       ) {
         return {
           error: "Automations are disabled for this profile.",
@@ -140,27 +137,25 @@ export class AutomationRunner {
 
       const input = webhook?.payload;
       let run: Awaited<ReturnType<AutomationService["createRun"]>>;
+      let consumed = false;
 
       try {
-        if (scheduledRunAt) {
-          const due = await this.automationService.consumeDueRunAt(
+        if (scheduledRunAt || automation.trigger.type === "runAt") {
+          const current = await this.automationService.consumeRunAt(
             automationId,
             orgId,
-            schedule.runAt
+            scheduledRunAt ? schedule : undefined
           );
 
-          if (!due) {
+          if (!current) {
             return {
-              error: "One-time automation is no longer due.",
+              error: "One-time automation changed or is no longer due.",
               skipped: true,
             };
           }
 
-          automation = due;
-        } else if (automation.trigger.type === "runAt") {
-          await this.automationService.update(automationId, orgId, {
-            enabled: false,
-          });
+          automation = current;
+          consumed = true;
         }
 
         run = await this.automationService.createRun(
@@ -168,6 +163,20 @@ export class AutomationRunner {
           input === undefined ? undefined : { input }
         );
       } catch (error) {
+        // No run was recorded, so the one-time automation must stay on.
+        if (consumed) {
+          try {
+            await this.automationService.update(automationId, orgId, {
+              enabled: true,
+            });
+          } catch (restoreError) {
+            console.error(
+              "One-time automation could not be re-enabled:",
+              restoreError
+            );
+          }
+        }
+
         // Free the claim so a redelivery is not refused for the replay window.
         if (webhook) {
           await this.automationService.releaseWebhookDelivery(

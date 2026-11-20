@@ -5,6 +5,7 @@ import type {
   StoredAutomation,
 } from "@nakama/core";
 import {
+  AUTOMATION_RUN_AT_GRACE_MS,
   computeAutomationNextRunAt,
   isAutomationRunUnread,
   isWorkerSchedulable,
@@ -96,6 +97,16 @@ export function toRunRecord(
   }
 
   return record;
+}
+
+/**
+ * A worker dispatch must match the saved time. An older worker sends no
+ * time, so the job must be due; its clock can be ahead of this one.
+ */
+export function isRunAtDue(at: string, dispatchedAt?: string): boolean {
+  return dispatchedAt === undefined
+    ? Date.parse(at) <= Date.now() + AUTOMATION_RUN_AT_GRACE_MS
+    : at === dispatchedAt;
 }
 
 export async function enrichAutomation(

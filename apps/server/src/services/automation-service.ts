@@ -29,6 +29,7 @@ import {
   automationBelongsToOrg,
   encryptWebhookSecret,
   enrichAutomation,
+  isRunAtDue,
   scopeToolLimit,
   toRunRecord,
   updatedToolLimit,
@@ -341,10 +342,11 @@ export class AutomationService {
     });
   }
 
-  async consumeDueRunAt(
+  /** No `schedule` is a manual run. */
+  async consumeRunAt(
     id: string,
     orgId: string,
-    runAt?: string
+    schedule?: { runAt?: string }
   ): Promise<StoredAutomation | null> {
     const due = await this.writeLock.withLock(id, async () => {
       const current = await this.store.get(id);
@@ -352,9 +354,7 @@ export class AutomationService {
       if (
         !(current?.enabled && automationBelongsToOrg(current, orgId)) ||
         current.trigger.type !== "runAt" ||
-        !(runAt === undefined
-          ? Date.parse(current.trigger.at) <= Date.now()
-          : current.trigger.at === runAt) ||
+        !(schedule ? isRunAtDue(current.trigger.at, schedule.runAt) : true) ||
         !(await this.isProfileAutomationEnabled(current.profileId))
       ) {
         return null;
@@ -363,6 +363,7 @@ export class AutomationService {
       const disabled = await this.store.update({
         ...current,
         enabled: false,
+        updatedAt: new Date().toISOString(),
         version: current.version + 1,
       });
 
