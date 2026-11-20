@@ -1157,6 +1157,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT * FROM profiles WHERE org_id = ? ORDER BY is_default DESC, name ASC"
   );
 
+  // Starts from the org's profiles so sessions_profile_user serves each lookup.
+  const listProfileChatUsageForUserStmt = db.prepare<
+    { chats: number; last_used_at: string; profile_id: string },
+    SQLQueryBindings[]
+  >(`
+    SELECT s.profile_id AS profile_id, COUNT(*) AS chats,
+      MAX(COALESCE(s.updated_at, s.created_at)) AS last_used_at
+    FROM profiles p
+    INNER JOIN sessions s ON s.profile_id = p.id AND s.user_id = ?
+    WHERE p.org_id = ? AND s.app_user_id IS NULL AND s.parent_session_id IS NULL
+    GROUP BY s.profile_id
+  `);
+
   const getProfileStmt = db.prepare<ProfileRow, SQLQueryBindings[]>(
     "SELECT * FROM profiles WHERE id = ?"
   );
@@ -6577,6 +6590,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
 
       return rows.map(toProfileChangeEventRecord);
+    },
+
+    async listProfileChatUsageForUser(orgId, userId) {
+      return listProfileChatUsageForUserStmt.all(userId, orgId).map((row) => ({
+        chats: row.chats,
+        lastUsedAt: row.last_used_at,
+        profileId: row.profile_id,
+      }));
     },
 
     async listProfileComposioToolkits(profileId) {

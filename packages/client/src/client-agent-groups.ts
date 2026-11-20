@@ -8,6 +8,7 @@ import type {
   ListAgentGroupSessionsResponse,
   ListAgentGroupsResponse,
   ListRailPinsResponse,
+  ListRailUsageResponse,
 } from "@nakama/core/agent-groups";
 import type {
   DocumentAttachment,
@@ -199,6 +200,10 @@ export class AgentGroupsClient extends OrgMemoryClient {
 
   async listRailPins(): Promise<ListRailPinsResponse> {
     return this.request<ListRailPinsResponse>("/v1/rail-pins");
+  }
+
+  async listRailUsage(): Promise<ListRailUsageResponse> {
+    return this.request<ListRailUsageResponse>("/v1/rail-usage");
   }
 
   async setRailPin(itemId: string, pinned: boolean): Promise<void> {

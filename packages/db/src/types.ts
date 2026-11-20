@@ -1530,6 +1530,12 @@ export interface DatabaseAdapter {
     options?: { limit?: number; offset?: number }
   ): Promise<StoredProfileChangeEvent[]>;
 
+  /** The user's own top-level chats per agent of the org; unused agents are absent. */
+  listProfileChatUsageForUser(
+    orgId: string,
+    userId: string
+  ): Promise<{ chats: number; lastUsedAt: string; profileId: string }[]>;
+
   listProfileComposioToolkits(
     profileId: string
   ): Promise<StoredProfileComposioToolkitRecord[]>;

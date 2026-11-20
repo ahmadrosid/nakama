@@ -128,6 +128,12 @@ export interface ListRailPinsResponse {
   itemIds: string[];
 }
 
+/** How much the user used each agent, in direct chats and their own groups. */
+export interface ListRailUsageResponse {
+  /** Keyed by agent id; an agent the user never used is absent. */
+  agents: Record<string, { chats: number; lastUsedAt: string }>;
+}
+
 export interface MentionRange {
   end: number;
   handle: string;

@@ -2,16 +2,25 @@ import { ContextMenu } from "@base-ui/react/context-menu";
 import type { ProfileSummary } from "@nakama/core";
 import type { AgentGroup } from "@nakama/core/agent-groups";
 import type { AcpAgentPresetSummary, ToolSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
 import { ConfirmDialog } from "@nakama/ui/dialog";
-import { DropdownMenuItem } from "@nakama/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Delete02Icon,
+  FilterMailIcon,
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
   PlusSignSquareIcon,
+  Tick02Icon,
 } from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -28,6 +37,7 @@ import {
   useAgentGroupsQuery,
   useDeleteGroup,
   useRailPinsQuery,
+  useRailUsageQuery,
   useToggleRailPin,
 } from "@/hooks/use-agent-groups";
 import { useSelectProfile } from "@/hooks/use-select-profile";
@@ -44,6 +54,102 @@ import { markLogoSrc } from "@/lib/theme";
 const NO_PRESETS: AcpAgentPresetSummary[] = [];
 
 const NO_TOOLS: ToolSummary[] = [];
+
+const RAIL_SORT_STORAGE_KEY = "rail-sort";
+
+// A shorter rail shows every agent at a glance, so it has no sort button.
+const RAIL_SORT_MIN_AGENTS = 4;
+
+const RAIL_SORTS = [
+  { label: "Name", value: "name" },
+  { label: "Most used", value: "used" },
+  { label: "Recently used", value: "recent" },
+] as const;
+
+type RailSort = (typeof RAIL_SORTS)[number]["value"];
+
+type RailUsage = { chats: number; lastUsedAt: string } | undefined;
+
+function readStoredRailSort(): RailSort {
+  try {
+    const stored = localStorage.getItem(RAIL_SORT_STORAGE_KEY);
+
+    return RAIL_SORTS.find((sort) => sort.value === stored)?.value ?? "name";
+  } catch {
+    return "name";
+  }
+}
+
+/** Puts the more used agent first; equal agents keep the order they came in. */
+function compareRailUsage(
+  left: RailUsage,
+  right: RailUsage,
+  sort: RailSort
+): number {
+  if (sort === "used") {
+    return (right?.chats ?? 0) - (left?.chats ?? 0);
+  }
+
+  if (sort === "recent") {
+    return (right?.lastUsedAt ?? "").localeCompare(left?.lastUsedAt ?? "");
+  }
+
+  return 0;
+}
+
+function RailSortMenu({
+  onSort,
+  sort,
+}: {
+  onSort: (sort: RailSort) => void;
+  sort: RailSort;
+}) {
+  function handleSort(next: RailSort) {
+    onSort(next);
+
+    try {
+      localStorage.setItem(RAIL_SORT_STORAGE_KEY, next);
+    } catch {
+      // Private mode or a full quota: the sort then lasts for this visit only.
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="Sort agents"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            size="icon-sm"
+            title="Sort agents"
+            type="button"
+            variant="ghost"
+          >
+            <FilterMailIcon aria-hidden className="size-4" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent className="w-44" side="right" sideOffset={8}>
+        <div className="px-1.5 py-1 font-medium text-muted-foreground text-xs">
+          Sort agents by
+        </div>
+        {RAIL_SORTS.map((option) => (
+          <DropdownMenuCheckboxItem
+            checked={sort === option.value}
+            key={option.value}
+            onCheckedChange={() => handleSort(option.value)}
+          >
+            <span className="flex-1">{option.label}</span>
+            {sort === option.value ? (
+              <Tick02Icon aria-hidden className="text-primary" />
+            ) : null}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 type RailItem =
   | { id: string; kind: "agent"; profile: ProfileSummary }
@@ -68,6 +174,11 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { data: groups = [] } = useAgentGroupsQuery();
   const { data: pins = [] } = useRailPinsQuery();
   const togglePin = useToggleRailPin();
+  const [storedSort, setSort] = useState(readStoredRailSort);
+  const canSort = profiles.length >= RAIL_SORT_MIN_AGENTS;
+  // Without the button the user cannot leave a usage sort, so it does not apply.
+  const sort = canSort ? storedSort : "name";
+  const { data: usage = {} } = useRailUsageQuery(sort !== "name");
   // A long press opens the pin menu, and lifting the finger then fires a
   // click; for a moment that click neither navigates nor closes the menu.
   const menuOpenedAt = useRef(0);
@@ -88,7 +199,9 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const logoSrc = markLogoSrc(resolvedTheme);
 
   const orderedProfiles = profiles.toSorted(
-    (left, right) => Number(right.isSuper) - Number(left.isSuper)
+    (left, right) =>
+      Number(right.isSuper) - Number(left.isSuper) ||
+      compareRailUsage(usage[left.id], usage[right.id], sort)
   );
 
   function handleSelectProfile(profileId: string) {
@@ -283,6 +396,8 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
           src={logoSrc}
         />
       </div>
+
+      {canSort ? <RailSortMenu onSort={setSort} sort={sort} /> : null}
 
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-2 py-1">
         {pinnedItems.map(renderItem)}
