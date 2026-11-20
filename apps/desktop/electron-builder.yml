@@ -37,6 +37,13 @@ mac:
       arch: [arm64]
     - target: zip
       arch: [arm64]
+# A plain color keeps .background.tiff out of the DMG, so users who show hidden files
+# in Finder see only .VolumeIcon.icns (the disk icon needs that file).
+dmg:
+  backgroundColor: '#f4f4f5'
+  window:
+    width: 540
+    height: 380
 win:
   icon: ../web/public/icons/icon-512-v2.png
   target:
