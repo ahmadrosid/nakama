@@ -21,8 +21,20 @@
       "cssModules": true
     }
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "useSortedProperties": "off"
+      }
+    }
+  },
   "javascript": {
     "globals": ["Bun"]
+  },
+  "yaml": {
+    "formatter": {
+      "enabled": false
+    }
   },
   "linter": {
     "rules": {
@@ -41,6 +53,9 @@
         "useSemanticElements": "off"
       },
       "complexity": {
+        "useMathMinMax": "off",
+        "useRegexpTest": "off",
+        "useWhile": "off",
         "noExcessiveCognitiveComplexity": "off",
         "noForEach": "off",
         "noVoid": "off",
@@ -49,6 +64,8 @@
         "useOptionalChain": "off"
       },
       "correctness": {
+        "noComponentHookFactories": "off",
+        "noUndeclaredDependencies": "off",
         "noUndeclaredVariables": "error",
         "noUnusedFunctionParameters": "off",
         "noUnusedInstantiation": "off",
@@ -66,9 +83,22 @@
         "useTopLevelRegex": "off"
       },
       "security": {
+        "useIframeSandbox": "off",
         "noDangerouslySetInnerHtml": "off"
       },
+      "nursery": {
+        "useTailwindSortedClasses": "off"
+      },
       "style": {
+        "noExcessiveClassesPerFile": "off",
+        "useConsistentTestIt": "off",
+        "useDomQuerySelector": "off",
+        "useImportsFirst": "off",
+        "useNamedCaptureGroup": "off",
+        "useTestHooksOnTop": "off",
+        "useThisInClassMethods": "off",
+        "useUnicodeRegex": "off",
+        "useVarsOnTop": "off",
         "noExportedImports": "off",
         "noIncrementDecrement": "off",
         "noMultiAssign": "off",
@@ -92,6 +122,13 @@
         "useTemplate": "off"
       },
       "suspicious": {
+        "noConditionalExpect": "off",
+        "noDuplicateSelectors": "off",
+        "noIdenticalTestTitle": "off",
+        "noImportCycles": "off",
+        "noLoopFunc": "off",
+        "useBaseline": "off",
+        "useExpect": "off",
         "noAlert": "error",
         "noArrayIndexKey": "off",
         "noConfusingVoidType": "off",
