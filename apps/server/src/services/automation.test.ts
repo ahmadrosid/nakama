@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  computeAutomationNextRunAt,
   createTelegramOutboundAdapter,
   getDiscordConfigDir,
   getDiscordConfigPath,
@@ -742,7 +743,7 @@ describe("AutomationService", () => {
       type: "schedule",
     });
     expect(automation.nextRunAt).toBe(
-      service.computeNextRunAt(automation.trigger, "Asia/Jakarta")
+      computeAutomationNextRunAt(automation.trigger, "Asia/Jakarta")
     );
   });
 

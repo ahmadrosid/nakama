@@ -101,7 +101,7 @@ export function registerInternalAutomationRoutes(
       }
     }
 
-    const result = await agent.runAutomation(automationId);
+    const result = await agent.runAutomation(automationId, "scheduled");
 
     console.log(
       `[automation-worker] run automation=${automationId} org=${automation.orgId} profile=${automation.profileId} skipped=${result.skipped ?? false}`

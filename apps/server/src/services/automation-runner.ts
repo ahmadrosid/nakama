@@ -41,9 +41,10 @@ export class AutomationRunner {
   ) {}
 
   async run(
-    automationId: string
+    automationId: string,
+    mode?: "scheduled"
   ): Promise<{ output?: string; error?: string; skipped?: boolean }> {
-    const begun = await this.begin(automationId);
+    const begun = await this.begin(automationId, { mode });
 
     return "skipped" in begun ? begun : this.finish(begun);
   }
@@ -53,7 +54,10 @@ export class AutomationRunner {
     automation: StoredAutomation,
     webhook: WebhookDelivery
   ): Promise<{ runId: string } | RunSkipped> {
-    const begun = await this.begin(automation.id, webhook, automation);
+    const begun = await this.begin(automation.id, {
+      loaded: automation,
+      webhook,
+    });
 
     if ("skipped" in begun) {
       return begun;
@@ -69,8 +73,15 @@ export class AutomationRunner {
   /** Takes the run lock and records the run; the caller must `finish` a begun run. */
   private async begin(
     automationId: string,
-    webhook?: WebhookDelivery,
-    loaded?: StoredAutomation
+    {
+      loaded,
+      mode,
+      webhook,
+    }: {
+      loaded?: StoredAutomation;
+      mode?: "scheduled";
+      webhook?: WebhookDelivery;
+    }
   ): Promise<BegunRun | RunSkipped> {
     if (this.running.has(automationId)) {
       return { error: "Automation is already running.", skipped: true };
@@ -80,7 +91,7 @@ export class AutomationRunner {
     let begun = false;
 
     try {
-      const automation =
+      let automation =
         loaded ?? (await this.automationService.get(automationId));
 
       if (!automation) {
@@ -91,10 +102,16 @@ export class AutomationRunner {
         return { error: "Automation is disabled.", skipped: true };
       }
 
+      const scheduledRunAt =
+        mode === "scheduled" && automation.trigger.type === "runAt";
+
       if (
-        !(await this.automationService.isProfileAutomationEnabled(
-          automation.profileId
-        ))
+        !(
+          scheduledRunAt ||
+          (await this.automationService.isProfileAutomationEnabled(
+            automation.profileId
+          ))
+        )
       ) {
         return {
           error: "Automations are disabled for this profile.",
@@ -123,7 +140,21 @@ export class AutomationRunner {
       let run: Awaited<ReturnType<AutomationService["createRun"]>>;
 
       try {
-        if (automation.trigger.type === "runAt") {
+        if (scheduledRunAt) {
+          const due = await this.automationService.consumeDueRunAt(
+            automationId,
+            orgId
+          );
+
+          if (!due) {
+            return {
+              error: "One-time automation is no longer due.",
+              skipped: true,
+            };
+          }
+
+          automation = due;
+        } else if (automation.trigger.type === "runAt") {
           await this.automationService.update(automationId, orgId, {
             enabled: false,
           });

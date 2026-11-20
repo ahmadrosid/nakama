@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { NakamaClient } from "@nakama/client";
 import {
   loadLocalAuthToken,
   readEnvValue,
@@ -6,6 +7,7 @@ import {
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../../services/auth-service";
+import { AutomationRunner } from "../../services/automation-runner";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -225,6 +227,131 @@ describe("internal automation routes", () => {
 
     expect(response.status).toBe(204);
   });
+
+  test.each(["unchanged", "before dispatch", "during dispatch"])(
+    "starts a one-time schedule from the last poll (edit: %s)",
+    async (edit) => {
+      const options = createServerOptions();
+      const service = options.automationService;
+      let promptCalls = 0;
+
+      // SAFETY: The runner calls only runAutomationPrompt on this fixture.
+      const runner = new AutomationRunner(service, {
+        runAutomationPrompt: async () => {
+          promptCalls += 1;
+
+          return "Reminder sent";
+        },
+      } as never);
+
+      await seedOrgAndProfile(options.databaseAdapter);
+      await seedLocalClientUser(options.databaseAdapter);
+
+      const oldTime = Date.now() + 60_000;
+      const oldAt = new Date(oldTime).toISOString();
+      const newAt = new Date(oldTime + 60 * 60_000).toISOString();
+
+      const { id } = await service.create(
+        ORG_ID,
+        {
+          description: "One-time reminder",
+          name: "Reminder",
+          prompt: "Send reminder",
+          trigger: { at: oldAt, type: "runAt" },
+        },
+        PROFILE_ID
+      );
+
+      const app = createHonoApp({
+        ...options,
+        agent: {
+          ...options.agent,
+          runAutomation: (...args: Parameters<AutomationRunner["run"]>) =>
+            runner.run(...args),
+        },
+      });
+
+      const client = new NakamaClient({
+        authToken: await loadLocalAuthToken(),
+        baseUrl: "http://localhost:4310",
+        fetch: async (input, init) => app.fetch(new Request(input, init)),
+      });
+
+      const [schedule] = await client.listAutomationSchedules();
+      expect(schedule).toMatchObject({ id, orgId: ORG_ID, runAt: oldAt });
+
+      const reschedule = () =>
+        service.update(id, ORG_ID, {
+          trigger: { at: newAt, type: "runAt" },
+        });
+
+      if (edit === "before dispatch") {
+        await reschedule();
+      }
+
+      const get = service.get.bind(service);
+      let editPending = edit === "during dispatch";
+
+      const read = spyOn(service, "get").mockImplementation(
+        async (automationId, orgId) => {
+          const current = await get(automationId, orgId);
+
+          if (editPending && orgId === undefined) {
+            editPending = false;
+            await reschedule();
+          }
+
+          return current;
+        }
+      );
+
+      const clock = spyOn(Date, "now").mockReturnValue(oldTime);
+
+      try {
+        const dispatch = () =>
+          client.runAutomationInternal(schedule!.id, schedule!.orgId);
+
+        const first = await dispatch().then(
+          () => "started",
+          (error: Error) => error
+        );
+
+        if (edit === "unchanged") {
+          expect(first).toBe("started");
+        } else {
+          const current = await service.get(id, ORG_ID);
+          const runs = await service.listRuns(id, ORG_ID);
+
+          expect({
+            enabled: current?.enabled,
+            nextRunAt: current?.nextRunAt,
+            promptCalls,
+            runCount: runs.length,
+          }).toEqual({
+            enabled: true,
+            nextRunAt: newAt,
+            promptCalls: 0,
+            runCount: 0,
+          });
+          expect(first).toMatchObject({ status: 409 });
+
+          clock.mockReturnValue(Date.parse(newAt));
+          const [reloaded] = await client.listAutomationSchedules();
+          expect(reloaded?.runAt).toBe(newAt);
+          await dispatch();
+        }
+
+        expect((await service.get(id, ORG_ID))?.enabled).toBe(false);
+        expect(promptCalls).toBe(1);
+        expect(
+          (await service.listRuns(id, ORG_ID)).map((run) => run.status)
+        ).toEqual(["completed"]);
+      } finally {
+        clock.mockRestore();
+        read.mockRestore();
+      }
+    }
+  );
 
   test("rejects a run without an orgId assertion", async () => {
     const options = createServerOptions();

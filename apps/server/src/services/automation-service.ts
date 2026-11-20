@@ -2,21 +2,16 @@ import { randomBytes } from "node:crypto";
 import type {
   AutomationDeliveryStatus,
   AutomationRunRecord,
-  AutomationTrigger,
   AutomationUnreadSummary,
   CreateAutomationRequest,
   StoredAutomation,
   UpdateAutomationRequest,
 } from "@nakama/core";
 import {
-  computeAutomationNextRunAt,
   createId,
-  DEFAULT_TIMEZONE,
-  isWorkerSchedulable,
   NakamaApiError,
   normalizeAutomationDelivery,
   resolveScheduleTimezone,
-  resolveWebPublicUrl,
   summarizeAutomationUnreadCounts,
   validateAutomationDelivery,
   validateAutomationInput,
@@ -33,6 +28,7 @@ import {
   assertAutomationVersion,
   automationBelongsToOrg,
   encryptWebhookSecret,
+  enrichAutomation,
   scopeToolLimit,
   toRunRecord,
   updatedToolLimit,
@@ -343,6 +339,39 @@ export class AutomationService {
 
       return this.enrichAutomation(updated);
     });
+  }
+
+  async consumeDueRunAt(
+    id: string,
+    orgId: string
+  ): Promise<StoredAutomation | null> {
+    const due = await this.writeLock.withLock(id, async () => {
+      const current = await this.store.get(id);
+
+      if (
+        !(current?.enabled && automationBelongsToOrg(current, orgId)) ||
+        current.trigger.type !== "runAt" ||
+        !(Date.parse(current.trigger.at) <= Date.now()) ||
+        !(await this.isProfileAutomationEnabled(current.profileId))
+      ) {
+        return null;
+      }
+
+      const disabled = await this.store.update({
+        ...current,
+        enabled: false,
+        updatedAt: new Date().toISOString(),
+        version: current.version + 1,
+      });
+
+      return disabled ? current : null;
+    });
+
+    if (due) {
+      await this.notifyChange();
+    }
+
+    return due;
   }
 
   /** New secret; the old one stops at once. Runs now use the caller's sign-ins. */
@@ -670,13 +699,6 @@ export class AutomationService {
     return toRunRecord(updated);
   }
 
-  computeNextRunAt(
-    trigger: AutomationTrigger,
-    userTimezone = DEFAULT_TIMEZONE
-  ): string | null {
-    return computeAutomationNextRunAt(trigger, userTimezone);
-  }
-
   assertCanAutomateMailbox(
     profileId: string,
     access?: ProfileAccess
@@ -687,25 +709,7 @@ export class AutomationService {
   private async enrichAutomation(
     automation: StoredAutomation
   ): Promise<StoredAutomation> {
-    const userTimezone = await this.getUserTimezone();
-    const [stored] = await this.db.listAutomationRuns(automation.id, 1);
-    const lastRun = stored ? toRunRecord(stored) : null;
-
-    const publicUrl =
-      automation.trigger.type === "webhook" ? resolveWebPublicUrl() : undefined;
-
-    return {
-      ...automation,
-      lastRunAt: lastRun?.startedAt ?? null,
-      lastRunDeliveryStatus: lastRun?.deliveryStatus ?? null,
-      lastRunStatus: lastRun?.status ?? null,
-      nextRunAt: isWorkerSchedulable(automation)
-        ? this.computeNextRunAt(automation.trigger, userTimezone)
-        : null,
-      ...(publicUrl && {
-        webhookUrl: `${publicUrl}/v1/automations/${encodeURIComponent(automation.id)}/webhook`,
-      }),
-    };
+    return enrichAutomation(this.db, automation, await this.getUserTimezone());
   }
 
   async isProfileAutomationEnabled(profileId: string): Promise<boolean> {
