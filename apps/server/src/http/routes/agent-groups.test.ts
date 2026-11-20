@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { AgentGroupInput } from "@nakama/core/agent-groups";
 import type { DocumentAttachment } from "@nakama/core/contract";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
-import { closeAgentGroupDatabases } from "../../services/agent-group-store";
+import {
+  appendAgentGroupMessage,
+  closeAgentGroupDatabases,
+  createAgentGroup,
+  createGroupSession,
+} from "../../services/agent-group-store";
 import { AgentService } from "../../services/agent-service";
 import { SuperNakamaSessionState } from "../../services/super-nakama-session-state";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -81,7 +86,7 @@ async function createScenario() {
     );
   }
 
-  return { agent, app, send };
+  return { agent, app, databaseAdapter, send };
 }
 
 const GOOD_GROUP = { memberIds: ["alpha", "beta"], name: "Launch" };
@@ -117,7 +122,7 @@ describe("agent group routes", () => {
       (r) =>
         r.method !== "ALL" &&
         (r.path.startsWith("/v1/agent-groups") ||
-          r.path.startsWith("/v1/rail-pins"))
+          r.path.startsWith("/v1/rail-"))
     );
 
     expect(served.length).toBeGreaterThan(20);
@@ -295,5 +300,63 @@ describe("agent group routes", () => {
     expect(
       (await send("GET", `/v1/agent-groups/${group.id}/files/content`)).status
     ).toBe(400);
+  });
+
+  test("rail usage counts the user's own direct chats and group chats per agent", async () => {
+    const { databaseAdapter, send } = await createScenario();
+
+    const session = {
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      model: null,
+      profileId: "alpha",
+      title: null,
+      userId: USER_ID,
+    };
+
+    await databaseAdapter.upsertSession({ ...session, id: "direct-1" });
+    await databaseAdapter.upsertSession({ ...session, id: "direct-2" });
+    // A sub-agent run and a chat with no owner are not the user's chats.
+    await databaseAdapter.upsertSession({
+      ...session,
+      id: "sub-agent",
+      parentSessionId: "direct-1",
+    });
+    await databaseAdapter.upsertSession({
+      ...session,
+      id: "ownerless",
+      userId: null,
+    });
+
+    const mine = createAgentGroup(ORG_ID, USER_ID, "Launch", ["alpha", "beta"]);
+    const chat = createGroupSession(ORG_ID, mine.id, "Plan");
+    appendAgentGroupMessage(ORG_ID, chat, null, "Plan the launch");
+    appendAgentGroupMessage(ORG_ID, chat, "beta", "First reply");
+    appendAgentGroupMessage(ORG_ID, chat, "beta", "Second reply");
+    appendAgentGroupMessage(ORG_ID, chat, "alpha", "My part");
+
+    const theirs = createAgentGroup(ORG_ID, "someone_else", "Other", [
+      "alpha",
+      "beta",
+    ]);
+
+    appendAgentGroupMessage(
+      ORG_ID,
+      createGroupSession(ORG_ID, theirs.id, "Private"),
+      "beta",
+      "Not yours"
+    );
+
+    const response = await send("GET", "/v1/rail-usage");
+    const { agents } = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(agents).sort()).toEqual(["alpha", "beta"]);
+    expect(agents.alpha.chats).toBe(3);
+    expect(agents.beta.chats).toBe(1);
+    // The group reply is newer than the direct chats from January.
+    expect(agents.alpha.lastUsedAt > "2026-01-01T00:00:00.000Z").toBe(true);
   });
 });

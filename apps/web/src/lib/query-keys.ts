@@ -122,6 +122,7 @@ export const queryKeys = {
     ["providers", providerId, "modelDiscovery"] as const,
   providers: ["providers"] as const,
   railPins: ["railPins"] as const,
+  railUsage: ["railUsage"] as const,
   remoteModelDiscovery: (options: {
     providerId?: string;
     baseUrl?: string;

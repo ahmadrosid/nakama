@@ -10,9 +10,14 @@ import {
   type ListAgentGroupSessionsResponse,
   type ListAgentGroupsResponse,
   type ListRailPinsResponse,
+  type ListRailUsageResponse,
 } from "@nakama/core/agent-groups";
 import type { Context } from "hono";
-import { listRailPins, setRailPin } from "../../services/agent-group-store";
+import {
+  listGroupAgentUsage,
+  listRailPins,
+  setRailPin,
+} from "../../services/agent-group-rail-store";
 import { readGroupDocuments } from "../../services/agent-group-turn";
 import {
   GROUP_MEMORY_CHARS,
@@ -213,6 +218,7 @@ export function registerAgentGroupRoutes(
     return;
   }
 
+  const db = options.databaseAdapter;
   const service = options.agent.groups;
 
   route(
@@ -673,6 +679,36 @@ export function registerAgentGroupRoutes(
         { itemIds: listRailPins(orgId, userId) },
         status
       )
+  );
+
+  route(
+    app,
+    {
+      method: "get",
+      path: "/v1/rail-usage",
+      status: 200,
+      summary: "Count the user's chats with each agent",
+    },
+    async (_c, { orgId, status, userId }) => {
+      const agents: ListRailUsageResponse["agents"] = {};
+
+      for (const usage of [
+        ...(await db.listProfileChatUsageForUser(orgId, userId)),
+        ...listGroupAgentUsage(orgId, userId),
+      ]) {
+        const known = agents[usage.profileId];
+
+        agents[usage.profileId] = {
+          chats: (known?.chats ?? 0) + usage.chats,
+          lastUsedAt:
+            known && known.lastUsedAt > usage.lastUsedAt
+              ? known.lastUsedAt
+              : usage.lastUsedAt,
+        };
+      }
+
+      return json<ListRailUsageResponse>({ agents }, status);
+    }
   );
 
   for (const [method, summary] of [

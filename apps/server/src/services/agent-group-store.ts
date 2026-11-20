@@ -107,7 +107,7 @@ export type StoredGroupSession = Omit<AgentGroupSession, "active">;
 // runs once. Keyed by path, which follows the config dir.
 const databases = new Map<string, Database>();
 
-function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
+export function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
   const directory = getOrgConfigDir(orgId);
   const path = join(directory, "agent-groups.sqlite");
   let db = databases.get(path);
@@ -384,37 +384,6 @@ export function deleteAgentGroupAvatar(
             (SELECT id FROM groups WHERE id = ? AND owner_user_id = ?)`
         )
         .run(groupId, ownerId).changes > 0
-  );
-}
-
-export function listRailPins(orgId: string, userId: string): string[] {
-  return withGroupDb(orgId, (db) =>
-    db
-      .query<{ item_id: string }, [string]>(
-        // A re-pin replaces the row, so the newest rowid is the latest pin.
-        "SELECT item_id FROM rail_pins WHERE user_id = ? ORDER BY rowid DESC"
-      )
-      .all(userId)
-      .map((row) => row.item_id)
-  );
-}
-
-export function setRailPin(
-  orgId: string,
-  userId: string,
-  itemId: string,
-  pinned: boolean
-): void {
-  withGroupDb(orgId, (db) =>
-    pinned
-      ? db
-          .query(
-            "INSERT OR REPLACE INTO rail_pins (user_id, item_id) VALUES (?, ?)"
-          )
-          .run(userId, itemId)
-      : db
-          .query("DELETE FROM rail_pins WHERE user_id = ? AND item_id = ?")
-          .run(userId, itemId)
   );
 }
 

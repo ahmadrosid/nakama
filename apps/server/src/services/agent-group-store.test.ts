@@ -4,6 +4,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { getOrgConfigDir } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
+import { listRailPins, setRailPin } from "./agent-group-rail-store";
 import {
   addAgentGroupHandles,
   appendAgentGroupMessage,
@@ -19,9 +20,7 @@ import {
   listAgentGroupMessages,
   listAgentGroups,
   listGroupSessions,
-  listRailPins,
   setAgentGroupAvatar,
-  setRailPin,
   updateAgentGroup,
   updateGroupSession,
 } from "./agent-group-store";

@@ -227,6 +227,15 @@ export function useRailPinsQuery() {
   });
 }
 
+/** The user's chat count and last use per agent; asked for only when a sort needs it. */
+export function useRailUsageQuery(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryFn: async () => (await client.listRailUsage()).agents,
+    queryKey: queryKeys.railUsage,
+  });
+}
+
 export function useToggleRailPin() {
   const queryClient = useQueryClient();
 
