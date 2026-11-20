@@ -57,6 +57,9 @@ const NO_TOOLS: ToolSummary[] = [];
 
 const RAIL_SORT_STORAGE_KEY = "rail-sort";
 
+// A shorter rail shows every agent at a glance, so it has no sort button.
+const RAIL_SORT_MIN_AGENTS = 4;
+
 const RAIL_SORTS = [
   { label: "Name", value: "name" },
   { label: "Most used", value: "used" },
@@ -171,7 +174,10 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { data: groups = [] } = useAgentGroupsQuery();
   const { data: pins = [] } = useRailPinsQuery();
   const togglePin = useToggleRailPin();
-  const [sort, setSort] = useState(readStoredRailSort);
+  const [storedSort, setSort] = useState(readStoredRailSort);
+  const canSort = profiles.length >= RAIL_SORT_MIN_AGENTS;
+  // Without the button the user cannot leave a usage sort, so it does not apply.
+  const sort = canSort ? storedSort : "name";
   const { data: usage = {} } = useRailUsageQuery(sort !== "name");
   // A long press opens the pin menu, and lifting the finger then fires a
   // click; for a moment that click neither navigates nor closes the menu.
@@ -391,7 +397,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
         />
       </div>
 
-      <RailSortMenu onSort={setSort} sort={sort} />
+      {canSort ? <RailSortMenu onSort={setSort} sort={sort} /> : null}
 
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-2 py-1">
         {pinnedItems.map(renderItem)}
