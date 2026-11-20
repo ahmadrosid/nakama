@@ -128,6 +128,9 @@ function RailSortMenu({
         }
       />
       <DropdownMenuContent className="w-44" side="right" sideOffset={8}>
+        <div className="px-1.5 py-1 font-medium text-muted-foreground text-xs">
+          Sort agents by
+        </div>
         {RAIL_SORTS.map((option) => (
           <DropdownMenuCheckboxItem
             checked={sort === option.value}
