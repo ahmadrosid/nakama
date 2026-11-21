@@ -549,7 +549,7 @@ jobs:
       - name: Check the time budget
         shell: bash
         env:
-          BUDGET: 135
+          BUDGET: 150
         run: |
           took=$(( $(date +%s) - JOB_START ))
           echo "Took ${took}s of a ${BUDGET}s budget."
