@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { validatePluginManifest } from "../../plugins";
 import { discoverSkillDirectory } from "../discover";
 import { readBundledSkillMarkdown } from "./index";
 import { ensureBundledSkillFiles } from "./install";
@@ -334,8 +335,6 @@ describe("ensureBundledSkillFiles", () => {
   });
 
   test("build-plugin accepts and rejects the same manifests as the host", async () => {
-    const { validatePluginManifest } = await import("../../plugins");
-
     const scriptPath = join(
       import.meta.dir,
       "create-plugin",

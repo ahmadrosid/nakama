@@ -10,6 +10,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import type { PublishedKnowledgeBaseDocument } from "../contract";
+import { runKnowledgeBaseSearch } from "../tools/knowledge-base-search";
 import { composeKnowledgeBaseCatalog } from "./catalog";
 
 interface KnowledgeBaseManifestFixture {
@@ -98,9 +99,6 @@ describe("knowledge base store", () => {
     expect(after.match(/\b(\d+) ready documents\b/)?.[1]).toBe("200");
     expect(Buffer.byteLength(after) - Buffer.byteLength(before)).toBe(2);
     expect(after).not.toContain(uploaded.document.filename);
-
-    const { runKnowledgeBaseSearch } =
-      await import("../tools/knowledge-base-search");
 
     const result = await runKnowledgeBaseSearch(
       { query: "date invoice" },
