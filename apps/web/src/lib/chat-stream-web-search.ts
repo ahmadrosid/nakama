@@ -1,12 +1,11 @@
 import {
   dedupeSources,
   normalizeSourceUrl,
-  readRecord,
-  readString,
   type WebSearchSource,
   type WebSearchToolState,
 } from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
+import { readRecord, readString } from "@/lib/json-readers";
 
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 

@@ -30,8 +30,6 @@ import {
 } from "hugeicons-react";
 import { type FormEvent, useId, useState } from "react";
 import { Link } from "react-router-dom";
-import { readRecord, readString } from "@/components/chat/web-search.shared";
-
 import { AddSkillDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
@@ -57,6 +55,7 @@ import {
   useInstallSkillMutation,
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
+import { readRecord, readString } from "@/lib/json-readers";
 import { pluginIcon, toolPlaygroundPath } from "@/lib/navigation";
 import { invalidateQueries } from "@/lib/query-client";
 import { PLUGIN_DESCRIPTIONS } from "@/pages/plugins/use-plugin-management";
