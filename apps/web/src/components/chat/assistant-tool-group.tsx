@@ -58,7 +58,6 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
-import { readString } from "@/components/chat/web-search.shared";
 import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
 import { CodingAgentCommandLogo } from "@/components/coding-agent-logos";
 import { PluginSurface } from "@/components/PluginSurface";
@@ -100,6 +99,7 @@ import {
 import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
 import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
+import { readString } from "@/lib/json-readers";
 import { groupPath } from "@/lib/navigation";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";

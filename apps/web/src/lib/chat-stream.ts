@@ -17,23 +17,24 @@ import {
 } from "@/lib/chat-stream-workflow";
 import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
+import {
+  readBoolean,
+  readRawString,
+  readRecord,
+  readString,
+} from "@/lib/json-readers";
 import type { DisplayDocument } from "@/lib/pasted-text";
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
 function formatBashToolResult(result: unknown): string | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result !== "object" || result === null) {
+  const record = readRecord(result);
+
+  if (!record) {
     return null;
   }
 
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  const { stdout, stderr, exitCode, timedOut } = result as {
-    stdout?: string;
-    stderr?: string;
-    exitCode?: number | null;
-    timedOut?: boolean;
-  };
-
+  const stdout = readRawString(record.stdout);
+  const stderr = readRawString(record.stderr);
   const parts: string[] = [];
 
   if (stdout) {
@@ -44,12 +45,12 @@ function formatBashToolResult(result: unknown): string | null {
     parts.push(`[stderr]\n${stderr.replace(/\r\n/g, "\n").trimEnd()}`);
   }
 
-  if (timedOut) {
+  if (record.timedOut) {
     parts.push("[timed out]");
   }
 
-  if (exitCode != null && exitCode !== 0) {
-    parts.push(`[exit code ${exitCode}]`);
+  if (record.exitCode != null && record.exitCode !== 0) {
+    parts.push(`[exit code ${record.exitCode}]`);
   }
 
   return parts.length > 0 ? parts.join("\n\n") : null;
@@ -61,23 +62,23 @@ function formatDefaultToolResult(result: unknown): string | null {
     return null;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result === "string") {
-    const trimmed = result.replace(/\r\n/g, "\n").trim();
+  const text = readRawString(result);
+
+  if (text !== null) {
+    const trimmed = text.replace(/\r\n/g, "\n").trim();
 
     return trimmed || null;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result === "object") {
-    // SAFETY: The enclosing parser checks the value before this conversion.
-    const error = (result as { error?: unknown }).error;
+  const record = readRecord(result);
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof error === "string" && error.trim()) {
-      return error.trim();
-    }
+  if (record) {
+    const error = readString(record.error);
 
+    return error ?? JSON.stringify(result, null, 2);
+  }
+
+  if (Array.isArray(result)) {
     return JSON.stringify(result, null, 2);
   }
 
@@ -99,13 +100,13 @@ export function splitToolResultImages(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   result: unknown
 ): ToolResultImageSplit {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result !== "object" || result === null) {
+  const record = readRecord(result);
+
+  if (!record) {
     return { images: [], rest: result };
   }
 
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  const { content } = result as { content?: unknown };
+  const { content } = record;
 
   if (!Array.isArray(content)) {
     return { images: [], rest: result };
@@ -117,13 +118,16 @@ export function splitToolResultImages(
   let hasImagePart = false;
 
   for (const item of content) {
-    // SAFETY: Each field is checked before use.
-    const { type, data, mimeType, text } = (item ?? {}) as {
-      type?: unknown;
-      data?: unknown;
-      mimeType?: unknown;
-      text?: unknown;
-    };
+    const part = readRecord(item);
+
+    if (!part) {
+      continue;
+    }
+
+    const type = part.type;
+    const data = readRawString(part.data);
+    const mimeType = readRawString(part.mimeType);
+    const text = readString(part.text);
 
     if (type === "image") {
       hasImagePart = true;
@@ -131,16 +135,13 @@ export function splitToolResultImages(
 
     if (
       type === "image" &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      typeof data === "string" &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      typeof mimeType === "string" &&
+      data !== null &&
+      mimeType !== null &&
       /^image\/[\w.+-]+$/.test(mimeType)
     ) {
       images.push({ data, mimeType });
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    } else if (type === "text" && typeof text === "string" && text.trim()) {
-      texts.push(text.trim());
+    } else if (type === "text" && text !== null) {
+      texts.push(text);
     }
   }
 
@@ -156,34 +157,32 @@ export function formatToolResult(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   result: unknown
 ): string | null {
-  if (
-    tool === "read_file" &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof result === "object" &&
-    result !== null &&
-    !("error" in result) &&
-    "content" in result &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof result.content === "string"
-  ) {
-    return result.content.replace(/\r\n/g, "\n").trim() || null;
+  if (tool === "read_file") {
+    const record = readRecord(result);
+
+    if (record && !("error" in record)) {
+      const content = readRawString(record.content);
+
+      if (content !== null) {
+        return content.replace(/\r\n/g, "\n").trim() || null;
+      }
+    }
   }
 
-  if (
-    tool === "extract_document_text" &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof result === "object" &&
-    result !== null &&
-    !("error" in result) &&
-    "text" in result &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof result.text === "string"
-  ) {
-    // The text starts with a one-paragraph note for the model; show the file.
-    const text = result.text.replace(/\r\n/g, "\n");
-    const start = text.indexOf("\n\n");
+  if (tool === "extract_document_text") {
+    const record = readRecord(result);
 
-    return (start === -1 ? text : text.slice(start + 2)).trim() || null;
+    if (record && !("error" in record)) {
+      const raw = readRawString(record.text);
+
+      if (raw !== null) {
+        // The text starts with a one-paragraph note for the model; show the file.
+        const text = raw.replace(/\r\n/g, "\n");
+        const start = text.indexOf("\n\n");
+
+        return (start === -1 ? text : text.slice(start + 2)).trim() || null;
+      }
+    }
   }
 
   if (tool === "bash") {
@@ -206,19 +205,12 @@ export function isToolResultError(
   result: unknown,
   formattedOutput: string | null
 ): boolean {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result === "object" && result !== null) {
-    // SAFETY: The enclosing parser checks the value before this conversion.
-    const record = result as {
-      error?: unknown;
-      exitCode?: number | null;
-      timedOut?: boolean;
-    };
+  const record = readRecord(result);
 
-    const error = record.error;
+  if (record) {
+    const error = readString(record.error);
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof error === "string" && error.trim()) {
+    if (error) {
       return true;
     }
 
@@ -246,22 +238,18 @@ export function isSubAgentTool(tool: string | undefined): boolean {
 type CreatedProfileSummary = Pick<
   ProfileSummary,
   "hasAvatar" | "id" | "isSuper" | "name" | "updatedAt"
->;
+> &
+  Partial<Pick<ProfileSummary, "createdAt">>;
 
 export function parseProfileCreatedResult(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   result: unknown
 ): CreatedProfileSummary | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result !== "object" || result === null) {
+  const record = readRecord(result);
+
+  if (!record) {
     return null;
   }
-
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  const record = result as {
-    profile?: unknown;
-    type?: unknown;
-  };
 
   // Accept the unmarked shape so older create_profile messages still get the
   // richer card after reload. New results always include the discriminator.
@@ -269,30 +257,34 @@ export function parseProfileCreatedResult(
     return null;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof record.profile !== "object" || record.profile === null) {
+  const profileRecord = readRecord(record.profile);
+
+  if (!profileRecord) {
     return null;
   }
 
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  const profile = record.profile as Partial<CreatedProfileSummary>;
+  // SAFETY: The checks below require every field the card reads; keep the
+  // original record so extra fields like createdAt survive for Moodstone.
+  const profile = profileRecord as Partial<CreatedProfileSummary>;
+
+  const id = readRawString(profile.id);
+  const name = readRawString(profile.name);
+  const hasAvatar = readBoolean(profile.hasAvatar);
+  const isSuper = readBoolean(profile.isSuper);
+  const updatedAt = readRawString(profile.updatedAt);
 
   if (
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof profile.id !== "string" ||
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof profile.name !== "string" ||
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof profile.hasAvatar !== "boolean" ||
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof profile.isSuper !== "boolean" ||
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof profile.updatedAt !== "string"
+    id === null ||
+    name === null ||
+    hasAvatar === null ||
+    isSuper === null ||
+    updatedAt === null
   ) {
     return null;
   }
 
-  // SAFETY: The enclosing parser checks the value before this conversion.
+  // SAFETY: The checks above reject a profile unless every required field is
+  // present, so the same object now satisfies the full summary.
   return profile as CreatedProfileSummary;
 }
 
@@ -300,26 +292,17 @@ export function parseGroupCreatedResult(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   result: unknown
 ): { id: string; name: string } | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result !== "object" || result === null) {
+  const record = readRecord(result);
+  const group = record ? readRecord(record.group) : null;
+
+  if (!record || record.type !== "group_created" || !group) {
     return null;
   }
 
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  const { group, type } = result as { group?: unknown; type?: unknown };
+  const id = readRawString(group.id);
+  const name = readRawString(group.name);
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (type !== "group_created" || typeof group !== "object" || group === null) {
-    return null;
-  }
-
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  const { id, name } = group as { id?: unknown; name?: unknown };
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  return typeof id === "string" && typeof name === "string"
-    ? { id, name }
-    : null;
+  return id !== null && name !== null ? { id, name } : null;
 }
 
 type SubAgentToolStatus = "success" | "fail" | "timeout";
@@ -337,19 +320,11 @@ export function parseSubAgentResult(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   result: unknown
 ): ParsedSubAgentResult | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof result !== "object" || result === null) {
+  const record = readRecord(result);
+
+  if (!record) {
     return null;
   }
-
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  const record = result as {
-    status?: unknown;
-    summary?: unknown;
-    output?: unknown;
-    error?: unknown;
-    sessionId?: unknown;
-  };
 
   const status =
     record.status === "success" ||
@@ -362,24 +337,10 @@ export function parseSubAgentResult(
     return null;
   }
 
-  const summary =
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof record.summary === "string" ? record.summary.trim() : "";
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  const output = typeof record.output === "string" ? record.output.trim() : "";
-
-  const error =
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof record.error === "string" && record.error.trim()
-      ? record.error.trim()
-      : undefined;
-
-  const sessionId =
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof record.sessionId === "string" && record.sessionId.trim()
-      ? record.sessionId.trim()
-      : undefined;
+  const summary = readString(record.summary) ?? "";
+  const output = readString(record.output) ?? "";
+  const error = readString(record.error) ?? undefined;
+  const sessionId = readString(record.sessionId) ?? undefined;
 
   return {
     output,
@@ -394,8 +355,7 @@ export function parseSubAgentResult(
 
 // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
 export function formatSubAgentTitle(input?: Record<string, unknown>): string {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  const task = typeof input?.task === "string" ? input.task.trim() : "";
+  const task = readString(input?.task) ?? "";
 
   if (!task) {
     return "Sub-agent";
@@ -420,9 +380,7 @@ export function formatSubAgentSubtitle(
       );
     }
 
-    const context =
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      typeof input?.context === "string" ? input.context.trim() : "";
+    const context = readString(input?.context) ?? "";
 
     if (context) {
       return truncateDisplay(context.split("\n")[0] ?? context, 72);
@@ -480,44 +438,38 @@ function formatToolSummary(
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   input?: Record<string, unknown>
 ): string | null {
-  if (
-    isSubAgentTool(tool) &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof input?.task === "string" &&
-    input.task.trim()
-  ) {
-    return input.task.trim();
+  const task = readString(input?.task);
+  const command = readString(input?.command);
+  const query = readString(input?.query);
+  const path = readString(input?.path);
+  const name = readString(input?.name);
+
+  if (isSubAgentTool(tool) && task) {
+    return task;
   }
 
-  if (
-    tool === "bash" &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof input?.command === "string" &&
-    input.command.trim()
-  ) {
-    return input.command.trim();
+  if (tool === "bash" && command) {
+    return command;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof input?.query === "string" && input.query.trim()) {
-    return input.query.trim();
+  if (query) {
+    return query;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof input?.path === "string" && input.path.trim()) {
-    return input.path.trim();
+  if (path) {
+    return path;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof input?.name === "string" && input.name.trim()) {
-    return input.name.trim();
+  if (name) {
+    return name;
   }
 
   if (input) {
     for (const value of Object.values(input)) {
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      if (typeof value === "string" && value.trim()) {
-        return value.trim();
+      const text = readString(value);
+
+      if (text) {
+        return text;
       }
     }
   }
@@ -555,17 +507,11 @@ export function formatToolActionLabel(
     return formatSubAgentTitle(input);
   }
 
+  const path = readRawString(input?.path);
+
   // The input holds only an attachment id; the result names the file.
   if (tool === "extract_document_text") {
-    const filename =
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      typeof result === "object" &&
-      result !== null &&
-      "filename" in result &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      typeof result.filename === "string"
-        ? result.filename.trim()
-        : "";
+    const filename = readString(readRecord(result)?.filename) ?? "";
 
     return filename ? `Read ${basename(filename)}` : "Read document";
   }
@@ -584,32 +530,27 @@ export function formatToolActionLabel(
     (tool === "write_file" ||
       tool === "write_docx" ||
       tool === "save_artifact") &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof input?.path === "string"
+    path !== null
   ) {
-    return `Wrote ${basename(input.path)}`;
+    return `Wrote ${basename(path)}`;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (tool === "delete_file" && typeof input?.path === "string") {
-    return `Deleted ${basename(input.path)}`;
+  if (tool === "delete_file" && path !== null) {
+    return `Deleted ${basename(path)}`;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (tool === "edit_file" && typeof input?.path === "string") {
-    return `Edited ${basename(input.path)}`;
+  if (tool === "edit_file" && path !== null) {
+    return `Edited ${basename(path)}`;
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (tool === "read_file" && typeof input?.path === "string") {
-    return `Read ${basename(input.path)}`;
+  if (tool === "read_file" && path !== null) {
+    return `Read ${basename(path)}`;
   }
 
   if (tool === "search_files") {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    const path = typeof input?.path === "string" ? basename(input.path) : null;
+    const searchPath = path === null ? null : basename(path);
 
-    return path ? `Searched ${path}` : "Searched files";
+    return searchPath ? `Searched ${searchPath}` : "Searched files";
   }
 
   if (tool === "knowledge_base_search") {
@@ -631,9 +572,8 @@ export function formatToolActionLabel(
       return `Ran ${truncateDisplay(firstLine, 96)}`;
     }
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof input?.path === "string") {
-      return `Read ${basename(input.path)} · ${truncateDisplay(firstLine, 48)}`;
+    if (path !== null) {
+      return `Read ${basename(path)} · ${truncateDisplay(firstLine, 48)}`;
     }
 
     const displayTool = tool?.replace(/^[^_]+__/, "") ?? "tool";
@@ -649,13 +589,10 @@ export function formatToolCommand(
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   input?: Record<string, unknown>
 ): string | null {
-  if (
-    tool === "bash" &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof input?.command === "string" &&
-    input.command.trim()
-  ) {
-    return input.command.trim();
+  const command = readString(input?.command);
+
+  if (tool === "bash" && command) {
+    return command;
   }
 
   if (!input || Object.keys(input).length === 0) {

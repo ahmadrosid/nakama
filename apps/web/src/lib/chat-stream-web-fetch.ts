@@ -1,12 +1,11 @@
 import {
   dedupeSources,
   normalizeSourceUrl,
-  readRecord,
-  readString,
   type WebFetchToolState,
   type WebSearchSource,
 } from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
+import { readRecord, readString } from "@/lib/json-readers";
 
 function formatDisplayUrlFromHref(url: string): string {
   try {
