@@ -4,30 +4,34 @@
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 
-const platform = process.platform === "win32" ? "windows" : process.platform;
+export function canaryBin(): string {
+  const platform = process.platform === "win32" ? "windows" : process.platform;
 
-const arch = process.arch === "arm64" ? "aarch64" : "x64";
+  const arch = process.arch === "arm64" ? "aarch64" : "x64";
 
-const manifest = Bun.resolveSync(
-  `@oven/bun-${platform}-${arch}/package.json`,
-  import.meta.dir
-);
+  const manifest = Bun.resolveSync(
+    `@oven/bun-${platform}-${arch}/package.json`,
+    import.meta.dir
+  );
 
-const bin = join(
-  dirname(manifest),
-  "bin",
-  platform === "windows" ? "bun.exe" : "bun"
-);
-
-const [command, ...args] = process.argv.slice(2);
-
-// --no-script: the root package.json maps `lint` and `fmt` to this file.
-const result = spawnSync(bin, [command, "--no-script", ...args], {
-  stdio: "inherit",
-});
-
-if (result.error) {
-  throw result.error;
+  return join(
+    dirname(manifest),
+    "bin",
+    platform === "windows" ? "bun.exe" : "bun"
+  );
 }
 
-process.exit(result.status ?? 1);
+if (import.meta.main) {
+  const [command, ...args] = process.argv.slice(2);
+
+  // --no-script: the root package.json maps `lint` and `fmt` to this file.
+  const result = spawnSync(canaryBin(), [command, "--no-script", ...args], {
+    stdio: "inherit",
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  process.exit(result.status ?? 1);
+}

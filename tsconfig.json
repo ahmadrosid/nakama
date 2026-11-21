@@ -3,7 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -17,6 +17,19 @@
       "@nakama/core": ["./packages/core/src/index.ts"],
       "@nakama/core/*": ["./packages/core/src/*"],
       "@nakama/db": ["./packages/db/src/index.ts"]
-    }
-  }
+    },
+    "jsx": "react-jsx"
+  },
+  "exclude": [
+    "**/node_modules",
+    "**/dist",
+    "apps/web",
+    "docs",
+    ".worktrees",
+    ".claude",
+    ".local-poc",
+    ".tmp-test-config",
+    "outputs",
+    "coverage"
+  ]
 }
