@@ -2,15 +2,15 @@ name: Desktop Release
 
 on:
   push:
-    tags: ['desktop-v*']
+    tags: ["desktop-v*"]
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Desktop tag to build (blank for selected ref; Store requires an existing release). Artifact only.'
+        description: "Desktop tag to build (blank for selected ref; Store requires an existing release). Artifact only."
         required: false
         type: string
       windows_target:
-        description: 'Windows artifact to build; manual runs never publish'
+        description: "Windows artifact to build; manual runs never publish"
         type: choice
         default: store
         options: [store, installer]

@@ -64,7 +64,7 @@ const hash = (value: string) =>
 function* chunks(content: string) {
   let line = 1;
 
-  for (let offset = 0; offset < content.length; ) {
+  for (let offset = 0; offset < content.length;) {
     let end = Math.min(offset + 30_000, content.length);
 
     if (end < content.length && /[\uD800-\uDBFF]/.test(content[end - 1]!)) {

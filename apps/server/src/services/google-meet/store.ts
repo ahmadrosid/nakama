@@ -155,7 +155,7 @@ export class MeetingStore {
             "INSERT INTO segments (meetingId,id,text,receivedAt) VALUES (?,?,?,?)"
           );
 
-          for (let offset = 0; offset < content.length; ) {
+          for (let offset = 0; offset < content.length;) {
             let end = Math.min(offset + 32_000, content.length);
 
             if (

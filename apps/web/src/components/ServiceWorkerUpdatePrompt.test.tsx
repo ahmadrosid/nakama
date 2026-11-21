@@ -12,9 +12,8 @@ mock.module("@/hooks/use-service-worker-update", () => ({
   }),
 }));
 
-const { ServiceWorkerUpdatePrompt } = await import(
-  "./ServiceWorkerUpdatePrompt"
-);
+const { ServiceWorkerUpdatePrompt } =
+  await import("./ServiceWorkerUpdatePrompt");
 
 const previousSessionStorage = Object.getOwnPropertyDescriptor(
   globalThis,

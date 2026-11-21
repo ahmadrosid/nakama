@@ -698,15 +698,13 @@ test.each(navigationScenarios)(
     const { act } = await import("react");
     const { createRoot } = await import("react-dom/client");
 
-    const { Route, Routes, useLocation, useNavigate } = await import(
-      "react-router-dom"
-    );
+    const { Route, Routes, useLocation, useNavigate } =
+      await import("react-router-dom");
 
     const { AppContext } = await import("@/context/app-context-shared");
 
-    const { useActiveChatProfileStore } = await import(
-      "@/context/active-chat-profile-store"
-    );
+    const { useActiveChatProfileStore } =
+      await import("@/context/active-chat-profile-store");
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

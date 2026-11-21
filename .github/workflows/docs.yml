@@ -3,14 +3,14 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths: ['docs/website/**', '.github/workflows/docs.yml']
+    paths: ["docs/website/**", ".github/workflows/docs.yml"]
   # A tagged image is published: republish version.txt for the update check.
   workflow_run:
     workflows: [Docker Publish]
     types: [completed]
   # Build only. A broken page should fail here, not after the merge.
   pull_request:
-    paths: ['docs/website/**', '.github/workflows/docs.yml']
+    paths: ["docs/website/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 # Default to read-only. Only the deploy job holds the Pages OIDC token, so the
@@ -27,9 +27,7 @@ jobs:
   build:
     # Docker Publish also runs on main. Only a successful v* tag run counts.
     if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'v'))
+      github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -79,7 +77,7 @@ jobs:
         working-directory: docs/website
         env:
           NODE_ENV: production
-          NAKAMA_DOCS_GITHUB_PAGES: 'true'
+          NAKAMA_DOCS_GITHUB_PAGES: "true"
           NAKAMA_LATEST_VERSION: ${{ steps.release.outputs.version }}
 
       - name: Setup Pages

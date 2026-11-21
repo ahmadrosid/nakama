@@ -50,7 +50,7 @@ Past reviews found these most often. Check them before you open a PR.
 - Bun 1.4+: `bun install`, `bun run`, `bun test`
 - Servers: `bun run dev:server` | `dev:web` | `cli`
 - Live LLM tests: `*.llm.test.ts` with MSW cassettes — see [CONTRIBUTING.md](./CONTRIBUTING.md#llm-cassette-tests-msw)
-- Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
+- Format / lint: `bun fmt` | `bun lint` | `bun run check:ci` (all CI checks) | `bun run fix`; unused exports: `bun run knip` (CI fails on findings)
 
 ## GitHub
 

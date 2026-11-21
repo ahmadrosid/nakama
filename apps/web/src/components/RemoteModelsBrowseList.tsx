@@ -101,8 +101,8 @@ export function RemoteModelsBrowseList({
 
   const canFetch = Boolean(
     providerId?.trim() ||
-      provider === "netra" ||
-      (trimmedBaseUrl && validateBaseUrlInput(trimmedBaseUrl) === null)
+    provider === "netra" ||
+    (trimmedBaseUrl && validateBaseUrlInput(trimmedBaseUrl) === null)
   );
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({

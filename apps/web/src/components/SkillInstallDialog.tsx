@@ -539,9 +539,9 @@ function OrganizationSkillActions({
 }) {
   const canDelete = Boolean(
     onDelete &&
-      canInstallBrowser &&
-      !bundledNames.has(skill.name) &&
-      !isPluginOwned(skill)
+    canInstallBrowser &&
+    !bundledNames.has(skill.name) &&
+    !isPluginOwned(skill)
   );
 
   return (

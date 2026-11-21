@@ -32,9 +32,9 @@ export function buildProfileChannels(
 
     const live = Boolean(
       !failed &&
-        worker?.running &&
-        worker.paired &&
-        ("connected" in worker ? worker.connected : true)
+      worker?.running &&
+      worker.paired &&
+      ("connected" in worker ? worker.connected : true)
     );
 
     const listenerOnly = LISTENER_ONLY.has(channel.id);

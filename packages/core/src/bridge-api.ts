@@ -34,11 +34,15 @@ const ProfilesResponseSchema = z.object({
   profiles: z.array(BridgeProfileSchema),
 });
 
-export interface BridgeUserOrgSummary
-  extends Pick<UserOrgSummary, "id" | "name" | "role" | "slug"> {}
+export interface BridgeUserOrgSummary extends Pick<
+  UserOrgSummary,
+  "id" | "name" | "role" | "slug"
+> {}
 
-export interface BridgeProfileSummary
-  extends Pick<ProfileSummary, "id" | "name"> {
+export interface BridgeProfileSummary extends Pick<
+  ProfileSummary,
+  "id" | "name"
+> {
   isDefault?: boolean;
   isSuper?: boolean;
   model?: string | null;

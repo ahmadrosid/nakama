@@ -23,9 +23,7 @@ jobs:
     # a gate that fires on every one of his PRs gets switched off within a day.
     # Bots have no issue to link either.
     if: >-
-      !contains(github.event.pull_request.labels.*.name, 'no-issue')
-      && github.event.pull_request.user.login != github.repository_owner
-      && !endsWith(github.event.pull_request.user.login, '[bot]')
+      !contains(github.event.pull_request.labels.*.name, 'no-issue') && github.event.pull_request.user.login != github.repository_owner && !endsWith(github.event.pull_request.user.login, '[bot]')
     steps:
       - name: Require a linked issue
         # Through env, never inline: a PR title is attacker-controlled text.

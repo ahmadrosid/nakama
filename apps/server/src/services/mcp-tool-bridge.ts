@@ -45,10 +45,10 @@ export function buildMcpToolDefinitions(
 
             return Boolean(
               current?.enabled &&
-                current.cachedTools.some(
-                  (tool) => tool.name === cachedTool.name
-                ) &&
-                (await discoveryAccess(server.id, cachedTool.name, context))
+              current.cachedTools.some(
+                (tool) => tool.name === cachedTool.name
+              ) &&
+              (await discoveryAccess(server.id, cachedTool.name, context))
             );
           }
         : undefined;

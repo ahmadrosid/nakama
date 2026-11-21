@@ -1785,8 +1785,7 @@
 }
 .meet-shimmer {
   -webkit-text-fill-color: transparent;
-  background:
-    linear-gradient(
+  background: linear-gradient(
       90deg,
       currentcolor 0%,
       currentcolor 40%,

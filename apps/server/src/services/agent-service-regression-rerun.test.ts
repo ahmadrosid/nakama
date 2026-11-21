@@ -75,7 +75,9 @@ describe("regression rerun tools", () => {
 
     const read = async () =>
       JSON.stringify(
-        await (await tool("regression_rerun", "read_file"))
+        await (
+          await tool("regression_rerun", "read_file")
+        )
           .run({ path: "out.txt" }, context)
           .catch((error: Error) => error.message)
       );
