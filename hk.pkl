@@ -10,7 +10,7 @@ local code = List("**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}")
 local staged = new Mapping<String, Step> {
   // Blocks files over 5,000 tokens. Reads the staged list itself.
   ["file-size"] {
-    check = "bun run scripts/check-file-size.ts"
+    check = "bun run check:file-size"
   }
   ["fmt"] {
     glob = List("**/*")
