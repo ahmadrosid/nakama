@@ -1,0 +1,59 @@
+amends "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Config.pkl"
+
+// Git hooks. Pre-commit formats and lints the staged files, in parallel.
+// Pre-push runs the same check as CI's check job.
+
+fail_fast = false
+
+local code = List("**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}")
+
+local staged = new Mapping<String, Step> {
+  // Blocks files over 5,000 tokens. Reads the staged list itself.
+  ["file-size"] {
+    check = "bun run scripts/check-file-size.ts"
+  }
+  ["fmt"] {
+    glob = List("**/*")
+    check = "bun fmt --check --no-error-on-unmatched-pattern {{files}}"
+    fix = "bun fmt --no-error-on-unmatched-pattern {{files}}"
+  }
+  ["lint"] {
+    glob = code
+    check = "bun lint {{files}}"
+    fix = "bun lint --fix {{files}}"
+  }
+  // The rules bun lint lacks, CSS, and import order (biome.jsonc).
+  ["biome"] {
+    glob = List("**/*")
+    check = "bunx biome check --no-errors-on-unmatched --files-ignore-unknown=true {{files}}"
+    fix = "bunx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {{files}}"
+  }
+  // Any warning blocks, so the score stays at 100. A merge stages upstream
+  // files too; their React checks ran in their own commits.
+  ["react-doctor"] {
+    glob = List("**/*.{tsx,jsx}", "apps/web/**/*.{ts,js}", "packages/ui/**/*.{ts,js}", "packages/plugins/**/*.{ts,js}")
+    check = #"[ -f "$(git rev-parse --git-path MERGE_HEAD)" ] || bun x react-doctor --staged -y --no-supply-chain --blocking warning --project @nakama/web,@nakama/ui,@nakama/plugin-supermemory"#
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = staged
+  }
+  ["pre-push"] {
+    steps {
+      ["ci"] {
+        check = "bun run check:ci"
+      }
+    }
+  }
+  ["check"] {
+    steps = staged
+  }
+  ["fix"] {
+    fix = true
+    steps = staged
+  }
+}

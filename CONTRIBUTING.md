@@ -188,7 +188,7 @@ bun run fix       # fix what can be fixed
 bun run knip      # unused files, dependencies, and exports
 ```
 
-Husky formats and lints staged files in `.husky/pre-commit` and re-stages them, so a commit can rewrite your files. Fix issues locally before pushing. CI fails on Knip findings (`bun run knip`).
+[hk](https://hk.jdx.dev) runs the git hooks in `hk.pkl`: pre-commit formats and lints the staged files and re-stages them, so a commit can rewrite your files; pre-push runs `bun run check:ci`, the same check as CI. Install hk 2.13 once (`brew install hk` or `mise use hk@2.13.0`); `bun install` sets up the hooks and fails without it. Fix issues locally before pushing. CI fails on Knip findings (`bun run knip`).
 
 ## Testing
 
