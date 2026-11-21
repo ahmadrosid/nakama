@@ -587,7 +587,11 @@ if __name__ == "__main__":
       "utf8"
     );
 
+    const t0 = performance.now();
     const { resolveToolsFromStorage } = await import("./tool-resolver");
+    console.log(
+      `[prof] tool-resolver import ${(performance.now() - t0).toFixed(0)}ms`
+    );
 
     const tools = await resolveToolsFromStorage([
       {
@@ -602,10 +606,12 @@ if __name__ == "__main__":
       },
     ]);
 
+    console.log(`[prof] resolve ${(performance.now() - t0).toFixed(0)}ms`);
     expect(tools).toHaveLength(1);
     expect(await tools[0]!.run({ a: 2, b: 3 }, { orgId: "org_a" })).toEqual({
       sum: 5,
     });
+    console.log(`[prof] python run ${(performance.now() - t0).toFixed(0)}ms`);
   });
 });
 
