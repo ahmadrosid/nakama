@@ -500,6 +500,16 @@ const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
   "whatsapp",
 ];
 
+/** The profile turned platform tools off and this kind of turn obeys it. */
+function platformToolsOff(
+  profile: StoredProfileRecord,
+  policy: ReturnType<typeof turnPolicy>["tools"]
+): boolean {
+  return Boolean(
+    policy?.profileOptOut && profile.platformToolsEnabled === false
+  );
+}
+
 function isSharedHistory(record: StoredSessionRecord): boolean {
   return SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel);
 }
@@ -6866,7 +6876,10 @@ export class AgentService {
     // admin who stripped every tool from a profile actually gets an empty tool
     // list on chat turns — injecting 16 helpers here makes small local models
     // print a fake tool call as plain text instead of doing the work.
-    const hasOwnTools = resolved.length > 0;
+    // An admin can also turn the groups off for chat turns, so the agent sees
+    // only the tools assigned to it.
+    const hasOwnTools =
+      resolved.length > 0 && !platformToolsOff(profile, policy);
 
     if (hasOwnTools && policy.automation && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
@@ -7118,8 +7131,8 @@ export class AgentService {
 
     // Part of the "no tools" contract: session-history and channel-artifact
     // helpers are also platform groups, so a profile that resolved to zero
-    // tools must not receive them either.
-    if (tools.length > 0) {
+    // tools, or turned platform tools off, must not receive them either.
+    if (tools.length > 0 && !platformToolsOff(profile, policy.tools)) {
       tools = [
         ...tools,
         createReadSessionHistoryTool(this.db, orgId, sessionId),

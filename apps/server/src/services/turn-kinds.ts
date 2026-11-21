@@ -41,6 +41,8 @@ interface TurnPolicy {
     /** Search-only MCP listing, when the instance turns discovery on. */
     mcpDiscovery: boolean;
     memoryWrite: boolean;
+    /** The profile's platformToolsEnabled switch can turn the groups off. */
+    profileOptOut: boolean;
     question: boolean;
     /** Every tool stays visible, but only read-only ones run. */
     readOnly: boolean;
@@ -66,6 +68,7 @@ const ALL_TOOLS = {
   automation: true,
   mcpDiscovery: true,
   memoryWrite: true,
+  profileOptOut: true,
   question: true,
   readOnly: false,
   skillManage: "by_channel",
@@ -81,6 +84,7 @@ const DELEGATED_TOOLS = {
   automation: false,
   mcpDiscovery: false,
   memoryWrite: true,
+  profileOptOut: false,
   question: false,
   readOnly: false,
   skillManage: false,

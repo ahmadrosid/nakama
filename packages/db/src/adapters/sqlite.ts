@@ -183,6 +183,7 @@ interface ProfileRow {
   name: string;
   org_id: string | null;
   owner_user_id: string | null;
+  platform_tools_enabled: number;
   shared_with_team: number;
   skills_curator_consolidate_enabled: number | null;
   skills_post_turn_review: number | null;
@@ -1200,6 +1201,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default,
       automations_enabled,
       groups_enabled,
+      platform_tools_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1210,7 +1212,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -1222,6 +1224,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default = excluded.is_default,
       automations_enabled = excluded.automations_enabled,
       groups_enabled = excluded.groups_enabled,
+      platform_tools_enabled = excluded.platform_tools_enabled,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
@@ -1245,6 +1248,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default,
       automations_enabled,
       groups_enabled,
+      platform_tools_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1255,7 +1259,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO NOTHING
   `);
 
@@ -1271,6 +1275,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     record.isDefault ? 1 : 0,
     record.automationsEnabled === false ? 0 : 1,
     record.groupsEnabled === false ? 0 : 1,
+    record.platformToolsEnabled === false ? 0 : 1,
     record.skillsWriteApproval == null
       ? null
       : record.skillsWriteApproval
@@ -7515,6 +7520,7 @@ function toProfileRecord(row: ProfileRow): StoredProfileRecord {
     name: row.name,
     orgId: row.org_id ?? null,
     ownerUserId: row.owner_user_id ?? null,
+    platformToolsEnabled: row.platform_tools_enabled !== 0,
     sharedWithTeam: row.shared_with_team !== 0,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled == null

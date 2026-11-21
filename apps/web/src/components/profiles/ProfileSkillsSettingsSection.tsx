@@ -3,7 +3,7 @@ import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
-import { Clock01Icon, UserGroupIcon } from "hugeicons-react";
+import { Clock01Icon, ToolsIcon, UserGroupIcon } from "hugeicons-react";
 import { SettingIcon } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { ProfileSkillsCuratorConsolidateField } from "@/components/profiles/ProfileSkillsCuratorConsolidateField";
 import { ProfileSkillsPostTurnReviewField } from "@/components/profiles/ProfileSkillsPostTurnReviewField";
@@ -31,6 +31,7 @@ export function ProfileSkillsSettingsSection({
 
   const automationsEnabled = profile.automationsEnabled !== false;
   const groupsEnabled = profile.groupsEnabled !== false;
+  const platformToolsEnabled = profile.platformToolsEnabled !== false;
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -77,6 +78,61 @@ export function ProfileSkillsSettingsSection({
                     void updateMutation
                       .mutateAsync({
                         input: { automationsEnabled },
+                        profileId: profile.id,
+                      })
+                      .then(() => toast("Saved."))
+                      .catch((error) => toast(formatError(error)));
+                  }}
+                  size="sm"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+      <section
+        aria-labelledby="profile-behavior-platform-tools"
+        className="flex flex-col gap-2"
+      >
+        <h3 className="type-label" id="profile-behavior-platform-tools">
+          Tools
+        </h3>
+        <Card className="w-full overflow-hidden shadow-none">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between gap-3 p-3 sm:px-4 sm:py-3">
+              <label
+                className="flex min-w-0 items-center gap-3 text-balance font-medium text-foreground text-sm"
+                htmlFor="profile-platform-tools-enabled"
+              >
+                <SettingIcon checked={platformToolsEnabled}>
+                  <ToolsIcon size={18} />
+                </SettingIcon>
+                <span className="min-w-0">
+                  <span className="block">Platform tools</span>
+                  <span
+                    className="mt-1 block text-pretty font-normal text-muted-foreground text-xs"
+                    id="profile-platform-tools-enabled-description"
+                  >
+                    Off: chats use only the tools assigned to this agent.
+                  </span>
+                </span>
+              </label>
+              <div className="flex shrink-0 items-center gap-2">
+                {updateMutation.isPending ? <Spinner /> : null}
+                <Switch
+                  aria-describedby="profile-platform-tools-enabled-description"
+                  aria-label="Platform tools"
+                  checked={platformToolsEnabled}
+                  disabled={readOnly}
+                  id="profile-platform-tools-enabled"
+                  onCheckedChange={(platformToolsEnabled) => {
+                    if (readOnly) {
+                      return;
+                    }
+
+                    void updateMutation
+                      .mutateAsync({
+                        input: { platformToolsEnabled },
                         profileId: profile.id,
                       })
                       .then(() => toast("Saved."))

@@ -2461,6 +2461,8 @@ export interface ProfileSummary {
   name: string;
   /** Member who created the agent. null for agents created by platform admins. */
   ownerUserId?: string | null;
+  /** false = chat turns get only the agent's own tools, no platform tools. */
+  platformToolsEnabled?: boolean;
   sharedAgent?: {
     available: boolean;
     publicationId: string;
@@ -2811,6 +2813,7 @@ export interface UpdateProfileRequest {
   groupsEnabled?: boolean;
   model?: string | null;
   name?: string;
+  platformToolsEnabled?: boolean;
   /** Owner or admin: false keeps the agent private to its owner. */
   sharedWithTeam?: boolean;
   skillsCuratorConsolidateEnabled?: boolean | null;
