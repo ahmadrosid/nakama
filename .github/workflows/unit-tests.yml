@@ -452,15 +452,6 @@ jobs:
           echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
           echo "WEB_ONLY=$web_only" >> "$GITHUB_ENV"
 
-      # Defender scans every file the tests write (SQLite files, temp folders).
-      # With the 5 s default timeout, tests that take about 1 s on Linux took
-      # 5-11 s here. The runner is a throwaway VM; this only changes scanning on
-      # it, for the checkout, temp and Bun folders.
-      - name: Skip Defender scans of the test folders
-        if: env.WEB_ONLY != 'true'
-        shell: pwsh
-        run: Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, "$env:USERPROFILE\.bun"
-
       # A web-only PR has nothing for these shards to run.
       - name: Set up Bun
         if: env.WEB_ONLY != 'true'
