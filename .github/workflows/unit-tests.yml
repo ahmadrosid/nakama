@@ -421,6 +421,19 @@ jobs:
         shell: bash
         run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
 
+      # C: (the default TEMP) syncs to disk about 14x slower than D:: an SQLite
+      # insert took 21 ms there and 1.5 ms on D:. Tests make their folders and
+      # databases under TEMP, so it goes on D:. The Bun cache goes there too:
+      # on the same drive as node_modules, install links instead of copying.
+      - name: Put temp files and the Bun cache on the D drive
+        shell: bash
+        run: |
+          {
+            echo "TEMP=$RUNNER_TEMP"
+            echo "TMP=$RUNNER_TEMP"
+            echo "BUN_INSTALL_CACHE_DIR=$RUNNER_TEMP\\bun-cache"
+          } >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -487,7 +500,7 @@ jobs:
         if: env.WEB_ONLY != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.bun/install/cache
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
           key: bun-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Install dependencies
@@ -530,7 +543,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.shard == 1
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.bun/install/cache
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
           key: bun-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Check the time budget
