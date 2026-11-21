@@ -295,6 +295,78 @@ describe("AgentService skill_manage injection", () => {
     expect(unset).toContain("todo_write");
   });
 
+  test("turning platform tools off reaches an open chat and channel helpers", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_platform_open_chat",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile(
+      "profile_default",
+      "tool_for_platform_open_chat"
+    );
+
+    const service = new AgentService(null, null, db);
+    let sent: string[] = [];
+
+    const record = (input: GenerateChatInput) => {
+      sent = (input.tools ?? []).map((tool) => tool.name);
+
+      return Promise.resolve({
+        assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
+        content: "ok",
+        toolCalls: [],
+      });
+    };
+
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: { generateChat: record, name: "openai", streamChat: record },
+      }),
+    });
+
+    const send = async (sessionId: string) => {
+      await (await service.sessions.get(sessionId, ORG_ID))?.send({
+        message: "hi",
+      });
+
+      return sent;
+    };
+
+    const web = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { orgRole: "admin" }
+    );
+
+    const discord = await service.createSession(
+      ORG_ID,
+      "discord",
+      "profile_default",
+      "user_1",
+      { orgRole: "admin" }
+    );
+
+    expect(await send(web)).toContain("todo_write");
+    expect(await send(discord)).toContain("read_session_history");
+
+    await service.updateProfile(ORG_ID, "profile_default", {
+      platformToolsEnabled: false,
+    });
+
+    expect(await send(web)).toEqual(["test_tool"]);
+    expect(await send(discord)).toEqual(["test_tool"]);
+  });
+
   test("skips platform tool groups for a profile with no tools", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());

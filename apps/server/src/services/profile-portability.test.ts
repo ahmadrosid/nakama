@@ -751,6 +751,10 @@ describe("profile portability", () => {
       updatedAt: now(),
     });
     await db.assignToolToProfile(profile.id, "tool_src");
+    await db.upsertProfile({
+      ...(await db.getProfile(profile.id))!,
+      platformToolsEnabled: false,
+    });
     const exported = await createProfilePackExport(db, ORG, profile.id);
 
     await db.deleteTool("tool_src");
@@ -778,9 +782,10 @@ describe("profile portability", () => {
 
     expect(imported.profileId).not.toBe(profile.id);
     expect(await db.listProfilesForOrg(DEST)).toHaveLength(before + 1);
-    expect((await db.getProfileForOrg(imported.profileId, DEST))?.model).toBe(
-      "anthropic:claude-sonnet-4-6"
-    );
+    expect(await db.getProfileForOrg(imported.profileId, DEST)).toMatchObject({
+      model: "anthropic:claude-sonnet-4-6",
+      platformToolsEnabled: false,
+    });
     expect(
       (await db.listToolsForProfile(imported.profileId)).map((t) => t.id)
     ).toContain("tool_dest");

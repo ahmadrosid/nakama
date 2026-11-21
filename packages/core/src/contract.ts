@@ -489,6 +489,8 @@ export interface ProfilePackMeta {
   mcpServerNames: string[];
   model: string | null;
   name: string;
+  /** Missing in packs exported before the switch existed; means on. */
+  platformToolsEnabled?: boolean;
   profileSkillNames: string[];
   sharedAgent?: {
     publicationId: string;
