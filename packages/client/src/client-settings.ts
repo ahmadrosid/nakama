@@ -3,8 +3,6 @@ import type {
   ComposioSettingsResponse,
   EmailSettingsResponse,
   ErrorTrackingSettingsResponse,
-  GenerateImageRequest,
-  GenerateImageResponse,
   ImageGenerationSettings,
   ImageGenerationSettingsResponse,
   ListTimezonesResponse,
@@ -152,15 +150,6 @@ export class SettingsClient extends SystemClient {
     );
 
     return response.imageGeneration;
-  }
-
-  async generateImage(
-    input: GenerateImageRequest
-  ): Promise<GenerateImageResponse> {
-    return this.request<GenerateImageResponse>("/v1/images/generate", {
-      body: JSON.stringify(input satisfies GenerateImageRequest),
-      method: "POST",
-    });
   }
 
   async getErrorTrackingSettings(): Promise<ErrorTrackingSettingsResponse> {

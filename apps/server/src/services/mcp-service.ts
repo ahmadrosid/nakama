@@ -829,26 +829,6 @@ export class McpService {
     await this.db.assignMcpServerToProfile(profileId, serverId);
   }
 
-  async unassignServerFromProfile(
-    profileId: string,
-    serverId: string
-  ): Promise<void> {
-    const profile = await this.db.getProfile(profileId);
-
-    if (!profile) {
-      throw new Error("Profile not found.");
-    }
-
-    const removed = await this.db.unassignMcpServerFromProfile(
-      profileId,
-      serverId
-    );
-
-    if (!removed) {
-      throw new Error("MCP server is not assigned to this profile.");
-    }
-  }
-
   async getStatusSummary(): Promise<{
     serverCount: number;
     connectedCount: number;

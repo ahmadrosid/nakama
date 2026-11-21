@@ -352,7 +352,6 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
       if (text.startsWith("/")) {
         await handleCommand(
-          ctx,
           text,
           conversationKey,
           channelOrgKey,
@@ -586,7 +585,6 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   }
 
   async function handleCommand(
-    ctx: Context,
     text: string,
     conversationKey: string,
     channelOrgKey: string,

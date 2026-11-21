@@ -39,8 +39,7 @@ const BASE = "http://localhost:4310";
 
 describe("skill proposal routes (v1)", () => {
   test("admin can list, approve, and reject proposals; member needs sessionId to list", async () => {
-    const { app, authService, databaseAdapter, skillProposalService } =
-      createApp();
+    const { app, databaseAdapter, skillProposalService } = createApp();
 
     const adminSession = await setupFreshInstallSession(
       app,

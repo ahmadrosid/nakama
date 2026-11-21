@@ -743,7 +743,7 @@ export async function createSqliteDatabase(
 
   // Stable proxy so services keep one adapter reference across reopen().
   const adapterProxy = new Proxy(adapter, {
-    get(_target, property, receiver) {
+    get(_target, property) {
       const value = Object.entries(adapter).find(
         ([key]) => key === String(property)
       )?.[1];
@@ -989,8 +989,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updated_at = excluded.updated_at
   `);
 
-  const deleteWorkflowStmt = db.prepare("DELETE FROM workflows WHERE id = ?");
-
   const listWorkflowRunsStmt = db.prepare<WorkflowRunRow, SQLQueryBindings[]>(`
     SELECT * FROM workflow_runs
     WHERE workflow_id = ?
@@ -998,25 +996,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT ?
   `);
 
-  const getWorkflowRunStmt = db.prepare<WorkflowRunRow, SQLQueryBindings[]>(`
-    SELECT * FROM workflow_runs
-    WHERE workflow_id = ? AND id = ?
-  `);
-
   const insertWorkflowRunStmt = db.prepare(`
     INSERT INTO workflow_runs (id, workflow_id, status, input, started_at, completed_at, output, error)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const updateWorkflowRunStmt = db.prepare(`
-    UPDATE workflow_runs
-    SET status = ?, input = ?, completed_at = ?, output = ?, error = ?
-    WHERE id = ?
-  `);
-
-  const deleteWorkflowRunStmt = db.prepare(`
-    DELETE FROM workflow_runs
-    WHERE workflow_id = ? AND id = ?
   `);
 
   const failExhaustedAutomationRunsStmt = db.prepare(`
@@ -1106,12 +1088,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const insertWorkflowRunStepStmt = db.prepare(`
     INSERT INTO workflow_run_steps (id, run_id, step_id, kind, status, input, output, error, started_at, completed_at, position)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const updateWorkflowRunStepStmt = db.prepare(`
-    UPDATE workflow_run_steps
-    SET status = ?, input = ?, output = ?, error = ?, completed_at = ?
-    WHERE id = ?
   `);
 
   const getAutomationRunReadThroughStmt = db.prepare<
@@ -2579,10 +2555,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updated_at = excluded.updated_at
   `);
 
-  const deleteComposioToolkitStmt = db.prepare(`
-    DELETE FROM composio_toolkits WHERE id = ?
-  `);
-
   const listProfileComposioToolkitsStmt = db.prepare<
     ProfileComposioToolkitRow,
     SQLQueryBindings[]
@@ -3706,20 +3678,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       status, reviewer_user_id, reviewed_at, created_at
     FROM skill_proposals
     WHERE org_id = ? AND id = ?
-    LIMIT 1
-  `);
-
-  const getPendingSkillProposalForCreateStmt = db.prepare<
-    SkillProposalRow,
-    SQLQueryBindings[]
-  >(`
-    SELECT
-      id, org_id, profile_id, session_id, proposed_by_user_id,
-      action, skill_name, content, patch_old_string, patch_new_string, relative_path,
-      consolidate_loser_skill_names, supporting_files,
-      status, reviewer_user_id, reviewed_at, created_at
-    FROM skill_proposals
-    WHERE org_id = ? AND profile_id = ? AND skill_name = ? AND action = 'create' AND status = 'pending'
     LIMIT 1
   `);
 
@@ -5450,12 +5408,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         deleteUserAutomationWebhookSecretsStmt.run(userId);
       }
     },
-
-    async deleteComposioToolkit(id) {
-      const result = deleteComposioToolkitStmt.run(id);
-
-      return result.changes > 0;
-    },
     async deleteComposioUserConnection(id) {
       const result = deleteComposioUserConnectionStmt.run(id);
 
@@ -5565,18 +5517,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       // FK cascade is off (PRAGMA foreign_keys = OFF), so unassign + delete
       // must be one transaction or seed/admin delete can leave partial state.
       const result = deleteToolEverywhereTransaction(id);
-
-      return result.changes > 0;
-    },
-
-    async deleteWorkflow(id) {
-      const result = deleteWorkflowStmt.run(id);
-
-      return result.changes > 0;
-    },
-
-    async deleteWorkflowRun(workflowId, runId) {
-      const result = deleteWorkflowRunStmt.run(workflowId, runId);
 
       return result.changes > 0;
     },
@@ -5913,16 +5853,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toOrgMemoryProposalRecord(row) : null;
     },
 
-    async getPendingSkillProposalForCreate(orgId, profileId, skillName) {
-      const row = getPendingSkillProposalForCreateStmt.get(
-        orgId,
-        profileId,
-        skillName
-      );
-
-      return row ? toSkillProposalRecord(row) : null;
-    },
-
     async getPendingSkillProposalForPatch(
       orgId,
       profileId,
@@ -6084,12 +6014,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getWorkflowStmt.get(id);
 
       return row ? toWorkflowRecord(row) : null;
-    },
-
-    async getWorkflowRun(workflowId, runId) {
-      const row = getWorkflowRunStmt.get(workflowId, runId);
-
-      return row ? toWorkflowRunRecord(row) : null;
     },
 
     async getWorkspaceSettings() {
@@ -7174,28 +7098,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         profile.email ?? null,
         updatedAt,
         id
-      );
-    },
-
-    async updateWorkflowRun(record) {
-      updateWorkflowRunStmt.run(
-        record.status,
-        record.input,
-        record.completedAt,
-        record.output,
-        record.error,
-        record.id
-      );
-    },
-
-    async updateWorkflowRunStep(record) {
-      updateWorkflowRunStepStmt.run(
-        record.status,
-        record.input,
-        record.output,
-        record.error,
-        record.completedAt,
-        record.id
       );
     },
     async upsertArtifactRecord(record) {

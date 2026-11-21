@@ -3,7 +3,6 @@ import type {
   ArtifactShareStatusResponse,
   DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
-  DeleteOrganizationKnowledgeBaseResponse,
   DocumentAttachment,
   ImportKnowledgeBaseZipRequest,
   ImportKnowledgeBaseZipResponse,
@@ -17,14 +16,10 @@ import type {
   RenameWorkspaceEntryRequest,
   RevokeArtifactShareResponse,
   SetFilePinnedRequest,
-  SoulStackResponse,
   SoulStatusResponse,
-  UpdateArtifactRequest,
-  UpdateArtifactResponse,
   UpdateSoulFileRequest,
   UploadKnowledgeBaseRequest,
   UploadKnowledgeBaseResponse,
-  UploadOrganizationKnowledgeBaseResponse,
   WorkspaceEntry,
 } from "@nakama/core/contract";
 import { readBoundedFile } from "./client-helpers";
@@ -49,12 +44,6 @@ export class ProfileFilesClient extends ProfilesClient {
       {
         method: "POST",
       }
-    );
-  }
-
-  async getProfileSoulStack(profileId: string): Promise<SoulStackResponse> {
-    return this.request<SoulStackResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/soul/stack`
     );
   }
 
@@ -274,56 +263,10 @@ export class ProfileFilesClient extends ProfilesClient {
     }
   }
 
-  async writeProfileArtifactContent(
-    profileId: string,
-    artifactPath: string,
-    content: string
-  ): Promise<UpdateArtifactResponse> {
-    const query = new URLSearchParams({ path: artifactPath });
-
-    return this.request<UpdateArtifactResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
-      {
-        body: JSON.stringify({ content } satisfies UpdateArtifactRequest),
-        method: "PUT",
-      }
-    );
-  }
-
   async listOrganizationKnowledgeBase(
     orgId: string
   ): Promise<{ documents: ListKnowledgeBaseResponse["documents"] }> {
     return this.request(`/v1/orgs/${encodeURIComponent(orgId)}/knowledge-base`);
-  }
-
-  async uploadOrganizationKnowledgeBaseDocument(
-    orgId: string,
-    document: DocumentAttachment,
-    onDuplicate?: KnowledgeBaseDuplicateAction
-  ): Promise<UploadOrganizationKnowledgeBaseResponse> {
-    const body: UploadKnowledgeBaseRequest = { document };
-
-    if (onDuplicate) {
-      body.onDuplicate = onDuplicate;
-    }
-
-    return this.request(
-      `/v1/orgs/${encodeURIComponent(orgId)}/knowledge-base`,
-      {
-        body: JSON.stringify(body),
-        method: "POST",
-      }
-    );
-  }
-
-  async deleteOrganizationKnowledgeBaseDocument(
-    orgId: string,
-    documentId: string
-  ): Promise<DeleteOrganizationKnowledgeBaseResponse> {
-    return this.request(
-      `/v1/orgs/${encodeURIComponent(orgId)}/knowledge-base/${encodeURIComponent(documentId)}`,
-      { method: "DELETE" }
-    );
   }
 
   async attachSharedKnowledgeBaseDocument(

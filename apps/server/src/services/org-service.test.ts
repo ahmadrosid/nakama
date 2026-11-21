@@ -583,7 +583,7 @@ describe("OrgService", () => {
 
   describe("webhook secrets of a member who loses access", () => {
     async function setup() {
-      const { authService, databaseAdapter, orgService } = createOrgService();
+      const { databaseAdapter, orgService } = createOrgService();
 
       const created = await orgService.createOrganization({
         admin: {
