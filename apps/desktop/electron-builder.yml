@@ -17,12 +17,12 @@ extraResources:
   - from: dist/runtime
     to: runtime
     filter:
-      - '**/*'
+      - "**/*"
   # electron-builder skips node_modules at a resource root; copy its contents explicitly.
   - from: dist/runtime/node_modules
     to: runtime/node_modules
     filter:
-      - '**/*'
+      - "**/*"
 mac:
   hardenedRuntime: true
   entitlements: entitlements.mac.plist
@@ -31,7 +31,7 @@ mac:
     - Contents/Resources/runtime/bin/bun
   icon: ../web/public/icons/icon-512-v2.png
   category: public.app-category.productivity
-  minimumSystemVersion: '15.0'
+  minimumSystemVersion: "15.0"
   target:
     - target: dmg
       arch: [arm64]
@@ -40,7 +40,7 @@ mac:
 # A plain color keeps .background.tiff out of the DMG, so users who show hidden files
 # in Finder see only .VolumeIcon.icns (the disk icon needs that file).
 dmg:
-  backgroundColor: '#f4f4f5'
+  backgroundColor: "#f4f4f5"
   window:
     width: 540
     height: 380

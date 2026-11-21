@@ -2693,9 +2693,9 @@ export function apply(ctx: Context) {
                       // A false filter check returns its result; a thrown error does not.
                       const skips = Boolean(
                         selectedStep &&
-                          attempt?.error &&
-                          attempt.output !== undefined &&
-                          selectedStep.fields.onFail === "skip"
+                        attempt?.error &&
+                        attempt.output !== undefined &&
+                        selectedStep.fields.onFail === "skip"
                       );
 
                       return (

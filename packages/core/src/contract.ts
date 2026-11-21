@@ -460,8 +460,7 @@ export interface RestoreDataImportResponse {
   restoredRoot: string;
 }
 
-export interface SetupRestoreDataImportResponse
-  extends RestoreDataImportResponse {
+export interface SetupRestoreDataImportResponse extends RestoreDataImportResponse {
   requiresRestart: boolean;
 }
 
@@ -708,8 +707,10 @@ export interface CreateOrganizationRequest {
   slug: string;
 }
 
-export interface CreateTeamRequest
-  extends Pick<CreateOrganizationRequest, "name" | "slug"> {
+export interface CreateTeamRequest extends Pick<
+  CreateOrganizationRequest,
+  "name" | "slug"
+> {
   adminUserId?: string;
   requestId: string;
 }
@@ -726,8 +727,7 @@ export interface PublishOrgSharedResourceRequest {
   resourceKind: OrgSharedResourceKind;
 }
 
-export interface OrgSharedResourcePublication
-  extends PublishOrgSharedResourceRequest {
+export interface OrgSharedResourcePublication extends PublishOrgSharedResourceRequest {
   createdAt: string;
   id: string;
   orgId: string;
@@ -2531,19 +2531,18 @@ export interface ListSkillsResponse {
   skills: SkillSummary[];
 }
 
-export interface PublishedSkillSummary
-  extends Pick<
-    SkillSummary,
-    | "createdAt"
-    | "createdBy"
-    | "description"
-    | "disableModelInvocation"
-    | "enabled"
-    | "hasTool"
-    | "id"
-    | "name"
-    | "updatedAt"
-  > {
+export interface PublishedSkillSummary extends Pick<
+  SkillSummary,
+  | "createdAt"
+  | "createdBy"
+  | "description"
+  | "disableModelInvocation"
+  | "enabled"
+  | "hasTool"
+  | "id"
+  | "name"
+  | "updatedAt"
+> {
   publicationId: string;
   scope: "parent";
   sourceOrganization: { id: string; name: string };
@@ -3121,11 +3120,10 @@ export interface KnowledgeBaseSource {
   url: string;
 }
 
-export interface PublishedKnowledgeBaseDocument
-  extends Pick<
-    KnowledgeBaseDocument,
-    "id" | "filename" | "mediaType" | "sizeBytes" | "status" | "uploadedAt"
-  > {
+export interface PublishedKnowledgeBaseDocument extends Pick<
+  KnowledgeBaseDocument,
+  "id" | "filename" | "mediaType" | "sizeBytes" | "status" | "uploadedAt"
+> {
   publicationId: string;
   scope: "parent";
   sourceOrganization: { id: string; name: string };
@@ -3743,8 +3741,7 @@ export interface LocalPluginDraftRequest {
   profileId: string;
 }
 
-export interface LocalPluginPreviewResponse
-  extends PluginPackagePreviewResponse {
+export interface LocalPluginPreviewResponse extends PluginPackagePreviewResponse {
   draft: LocalPluginDraftRequest;
   expectedRevision: number | null;
   files: Array<{ path: string; size: number }>;

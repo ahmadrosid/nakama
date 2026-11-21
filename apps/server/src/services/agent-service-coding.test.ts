@@ -289,7 +289,9 @@ describe("AgentService skill_manage injection", () => {
         { orgRole: "admin" }
       );
 
-      await (await service.sessions.get(sessionId, ORG_ID))?.send({
+      await (
+        await service.sessions.get(sessionId, ORG_ID)
+      )?.send({
         message: "hi",
       });
 
@@ -342,7 +344,9 @@ describe("AgentService skill_manage injection", () => {
     });
 
     const send = async (sessionId: string) => {
-      await (await service.sessions.get(sessionId, ORG_ID))?.send({
+      await (
+        await service.sessions.get(sessionId, ORG_ID)
+      )?.send({
         message: "hi",
       });
 

@@ -27,8 +27,10 @@ export interface SubAgentRunInput {
   userId?: string;
 }
 
-export interface GroupTurnRunInput
-  extends Omit<SubAgentRunInput, "clientOrigin" | "sessionId"> {
+export interface GroupTurnRunInput extends Omit<
+  SubAgentRunInput,
+  "clientOrigin" | "sessionId"
+> {
   /** A group memory write the turn saved, in order. */
   onGroupMemoryChange?: (change: AgentGroupMemoryChange) => void;
   /** The group's shared folder, which the member's file tools may also use. */

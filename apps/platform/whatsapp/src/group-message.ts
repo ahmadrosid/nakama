@@ -132,9 +132,9 @@ function isSameWhatsAppAddress(left: string, right: string): boolean {
 
   return Boolean(
     leftUser &&
-      leftUser === rightUser &&
-      leftServer &&
-      leftServer === rightServer
+    leftUser === rightUser &&
+    leftServer &&
+    leftServer === rightServer
   );
 }
 

@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR makes the old run's result useless, so stop it. Main
+# keeps every run: each push there is a commit someone may need a result for.
+concurrency:
+  group: issue-link-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   issue-link:
     runs-on: ubuntu-latest
@@ -17,9 +23,7 @@ jobs:
     # a gate that fires on every one of his PRs gets switched off within a day.
     # Bots have no issue to link either.
     if: >-
-      !contains(github.event.pull_request.labels.*.name, 'no-issue')
-      && github.event.pull_request.user.login != github.repository_owner
-      && !endsWith(github.event.pull_request.user.login, '[bot]')
+      !contains(github.event.pull_request.labels.*.name, 'no-issue') && github.event.pull_request.user.login != github.repository_owner && !endsWith(github.event.pull_request.user.login, '[bot]')
     steps:
       - name: Require a linked issue
         # Through env, never inline: a PR title is attacker-controlled text.

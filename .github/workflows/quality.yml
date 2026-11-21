@@ -3,39 +3,18 @@ name: Quality
 on:
   pull_request:
     # Markdown-only PRs change no code.
-    paths-ignore: ['**.md', '.agents/**', 'docs/**', 'scripts/**', 'assets/**']
+    paths-ignore: ["**.md", ".agents/**", "docs/**", "scripts/**", "assets/**"]
 
 permissions:
   contents: read
 
+# A new push to a PR makes the old run's result useless, so stop it. Main
+# keeps every run: each push there is a commit someone may need a result for.
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  # Same check as unit-tests.yml: does this PR touch only apps/web?
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      web_only: ${{ steps.scope.outputs.web_only }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Check PR files
-        id: scope
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          web_only=false
-          files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
-          if [[ -n "$files" ]]; then
-            web_only=true
-            while IFS= read -r file; do
-              [[ "$file" == apps/web/* ]] || { web_only=false; break; }
-            done <<< "$files"
-          fi
-          echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
-
   check:
     runs-on: ubuntu-latest
     steps:
@@ -76,118 +55,6 @@ jobs:
       - name: Publish report
         if: always()
         run: cat .jscpd-report/jscpd-report.md >> "$GITHUB_STEP_SUMMARY"
-
-  coverage:
-    needs: changes
-    runs-on: ubuntu-latest
-    # A report, not a gate. Unit Tests is what blocks a merge.
-    continue-on-error: true
-    env:
-      # A PR that only touches apps/web reports apps/web coverage only.
-      WEB_ONLY: ${{ needs.changes.outputs.web_only }}
-      # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs (PDF tests).
-      NAKAMA_CHROME_NO_SANDBOX: "true"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.0
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
-      # Same as unit-tests.yml: GitHub releases + cache, so a slow Ubuntu
-      # mirror cannot stall the job. Keep the version the same there.
-      - name: Install FFmpeg
-        if: env.WEB_ONLY != 'true'
-        uses: AnimMouse/setup-ffmpeg@178e0b4a408f06ce40d896c3cd79f50fa6f8b0c3 # v1.2.5
-        with:
-          version: "8.1"
-
-      # Electron's zip comes from GitHub releases, which sometimes return 504.
-      # The cache skips the download on most runs; the loop retries the rest.
-      - name: Cache Electron download
-        if: env.WEB_ONLY != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/electron
-          key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/electron/package.json') }}
-
-      - name: Set up Electron
-        if: env.WEB_ONLY != 'true'
-        run: |
-          for try in 1 2 3 4; do
-            bun apps/desktop/node_modules/electron/install.js && break
-            [[ $try == 4 ]] && exit 1
-            echo "Electron download failed (try $try), retry in $((try * 20))s"
-            sleep $((try * 20))
-          done
-          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
-          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
-
-      - name: Run tests with coverage
-        id: coverage
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p coverage
-          status=0
-          # Match the root workspace globs, but keep each workspace's config and report.
-          workspaces=(apps/* apps/platform/* packages/* packages/plugins/*)
-          if [[ "$WEB_ONLY" == true ]]; then workspaces=(apps/web); fi
-          for workspace in "${workspaces[@]}"; do
-            [ -f "$workspace/package.json" ] || continue
-            bun -e 'process.exit(require("./" + process.argv[1]).scripts?.test ? 0 : 1)' "$workspace/package.json" || continue
-            report="coverage/${workspace//\//-}"
-            workspace_status=0
-            if [ "$workspace" = apps/desktop ]; then
-              # The compound script must pass coverage flags to Bun, not Electron.
-              xvfb-run -a bun run --cwd "$workspace" test:coverage 2>&1 | tee "$report.txt" || workspace_status=$?
-            else
-              bun run --cwd "$workspace" test --coverage --coverage-reporter=text --timeout=30000 2>&1 | tee "$report.txt" || workspace_status=$?
-            fi
-            echo "$workspace_status" > "$report.status"
-            if [ "$workspace_status" -ne 0 ]; then status=1; fi
-          done
-          exit "$status"
-
-      - name: Publish summary
-        if: always()
-        shell: bash
-        env:
-          TEST_OUTCOME: ${{ steps.coverage.outcome }}
-        run: |
-          shopt -s nullglob
-          reports=(coverage/*.txt)
-          {
-            echo '## Coverage'
-            echo "Test step: **$TEST_OUTCOME** (advisory; Unit Tests is the merge gate)."
-            echo 'Reports are per workspace, not averaged. Electron smoke tests run without Bun coverage.'
-            if [ "${#reports[@]}" -eq 0 ]; then
-              echo 'No coverage reports produced. Check the setup and test logs.'
-            fi
-            for report in "${reports[@]}"; do
-              echo
-              echo "### ${report#coverage/}"
-              echo "Exit status: $(cat "${report%.txt}.status" 2>/dev/null || echo unknown)"
-              if grep -q '^All files' "$report"; then
-                echo '```text'
-                awk '/^File .*% Funcs/ || /^All files/' "$report"
-                echo '```'
-                echo '<details><summary>Per-file coverage</summary>'
-                echo
-                echo '```text'
-                awk '/^File .*% Funcs/{p=1} p && /^$/{p=0} p' "$report"
-                echo '```'
-                echo '</details>'
-              else
-                echo 'No coverage table produced. Check the test logs.'
-              fi
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
 
   test-mass:
     runs-on: ubuntu-latest

@@ -27,8 +27,7 @@ body:
     attributes:
       label: Reproduction
       description: >
-        Steps, a curl command, or a failing test. A test that fails on the named
-        commit and passes after the fix is the strongest form.
+        Steps, a curl command, or a failing test. A test that fails on the named commit and passes after the fix is the strongest form.
     validations:
       required: true
 
@@ -54,6 +53,5 @@ body:
       label: Security
       options:
         - label: >
-            This touches authentication, authorization, tenant isolation,
-            credentials, or untrusted code execution.
+            This touches authentication, authorization, tenant isolation, credentials, or untrusted code execution.
           required: false

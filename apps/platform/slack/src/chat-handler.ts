@@ -290,9 +290,8 @@ export function wantsSlackEvent(
   // In channels: an @mention opens a thread; after that the bot follows the thread.
   return Boolean(
     event.channel_type === "im" ||
-      (event.text ?? "").includes(`<@${botUserId}>`) ||
-      (event.thread_ts &&
-        sessionStore.get(`${event.channel}:${event.thread_ts}`))
+    (event.text ?? "").includes(`<@${botUserId}>`) ||
+    (event.thread_ts && sessionStore.get(`${event.channel}:${event.thread_ts}`))
   );
 }
 

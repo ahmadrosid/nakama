@@ -12,7 +12,7 @@ bun run scripts/check-file-size.ts || exit 1
 
 # Run formatter, capturing the exit code so we can still re-stage and report
 FORMAT_EXIT_CODE=0
-bun x ultracite fix --staged || FORMAT_EXIT_CODE=$?
+bun fmt --staged && bun lint --staged --fix && bunx biome check --staged --write || FORMAT_EXIT_CODE=$?
 
 # Re-stage files that were already staged
 echo "$STAGED_FILES" | while IFS= read -r file; do
@@ -22,11 +22,11 @@ echo "$STAGED_FILES" | while IFS= read -r file; do
 done
 
 if [ $FORMAT_EXIT_CODE -ne 0 ]; then
-  echo "Ultracite found issues that could not be auto-fixed."
+  echo "Lint found issues that could not be auto-fixed."
   exit $FORMAT_EXIT_CODE
 fi
 
-echo "✨ Files formatted by Ultracite"
+echo "✨ Staged files formatted and linted"
 # ultracite end
 
 # React Doctor: only when staged changes touch React code. Any warning blocks,

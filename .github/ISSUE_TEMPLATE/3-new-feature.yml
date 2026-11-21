@@ -5,8 +5,7 @@ body:
   - type: markdown
     attributes:
       value: >
-        If the surface already exists and you want it improved, use the
-        **Enhancement** form instead.
+        If the surface already exists and you want it improved, use the **Enhancement** form instead.
 
   - type: textarea
     id: summary
@@ -29,8 +28,7 @@ body:
     attributes:
       label: Proposed scope and non-goals
       description: >
-        Optional. Say what a first pass covers and what it deliberately leaves
-        out. Large items ship in phases here.
+        Optional. Say what a first pass covers and what it deliberately leaves out. Large items ship in phases here.
     validations:
       required: false
 
@@ -47,8 +45,7 @@ body:
     attributes:
       label: Acceptance criteria
       description: >
-        Checklist a reviewer can verify one item at a time. This is what the
-        closing PR is judged against, not the diff.
+        Checklist a reviewer can verify one item at a time. This is what the closing PR is judged against, not the diff.
       placeholder: |
         - [ ] the endpoint returns 400 without ?orgId=
         - [ ] existing callers keep working

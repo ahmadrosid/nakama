@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -46,12 +46,16 @@ const ORG_ID = "org_test";
 const SESSION_ID = "session_test";
 
 describe("super nakama create_tool setup", () => {
-  setToolSecrets(
-    new ManagedSecrets(
-      createInMemoryDatabaseAdapter(),
-      Buffer.alloc(32, 1).toString("base64")
-    )
-  );
+  // A fresh store per test: a key one case saves must not reach the next.
+  beforeEach(() => {
+    setToolSecrets(
+      new ManagedSecrets(
+        createInMemoryDatabaseAdapter(),
+        Buffer.alloc(32, 1).toString("base64")
+      )
+    );
+  });
+
   let tempConfigDir = "";
 
   afterEach(async () => {

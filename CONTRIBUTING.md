@@ -180,15 +180,15 @@ never the repository owner's own assignments.
 
 ## Code style and checks
 
-Lint and format with Biome via [Ultracite](https://www.ultracite.ai/). Config: `biome.jsonc`.
+Lint with `bun lint` (`.oxlintrc.json`), format with `bun fmt` (`.oxfmtrc.json`). Biome (`biome.jsonc`) checks the rules `bun lint` does not have, CSS, and import order. Both commands run the Bun canary that `package.json` pins, with any Bun you have installed.
 
 ```bash
-bun run check   # ultracite check
-bun run fix     # ultracite fix
-bun run knip    # unused files, dependencies, and exports
+bun run check:ci  # every check CI runs: bun lint, bun fmt --check, biome check
+bun run fix       # fix what can be fixed
+bun run knip      # unused files, dependencies, and exports
 ```
 
-Husky runs `bun x ultracite fix` on staged files in `.husky/pre-commit` and re-stages them, so a commit can rewrite your files. Fix issues locally before pushing. CI fails on Knip findings (`bun run knip`).
+Husky formats and lints staged files in `.husky/pre-commit` and re-stages them, so a commit can rewrite your files. Fix issues locally before pushing. CI fails on Knip findings (`bun run knip`).
 
 ## Testing
 

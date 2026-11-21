@@ -247,8 +247,8 @@ function useSoulTab(controlledProfileId?: string | null) {
 
   const isWritable = Boolean(
     openFileMeta?.writable &&
-      selectedProfile &&
-      (!selectedProfile.sharedAgent || openFile === "memory")
+    selectedProfile &&
+    (!selectedProfile.sharedAgent || openFile === "memory")
   );
 
   const setProfileId = useCallback(

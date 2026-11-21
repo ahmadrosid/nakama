@@ -76,6 +76,9 @@ describe("MCP browser authorization", () => {
     expect(authorizeParams.get("code_challenge")).toBeTruthy();
     expect(state).toBeTruthy();
 
+    // The fake server is shared, and other tests may run first.
+    const tokenRequestsBefore = remote.tokenRequests.length;
+
     await expect(
       service.completeOAuth(created.server.id, {
         callbackBaseUrl: CALLBACK_BASE_URL,
@@ -84,7 +87,7 @@ describe("MCP browser authorization", () => {
       })
     ).rejects.toThrow();
     // A refused state exchanges nothing.
-    expect(remote.tokenRequests).toHaveLength(0);
+    expect(remote.tokenRequests).toHaveLength(tokenRequestsBefore);
 
     const completed = await service.completeOAuth(created.server.id, {
       callbackBaseUrl: CALLBACK_BASE_URL,

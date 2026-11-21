@@ -541,9 +541,8 @@ describe("SkillProposalService", () => {
   test("approve edit with consolidate losers archives them without delete", async () => {
     const { pathExists } = await import("@nakama/core");
 
-    const { getProfileSkillsArchiveDir, getProfileSkillsDir } = await import(
-      "@nakama/core"
-    );
+    const { getProfileSkillsArchiveDir, getProfileSkillsDir } =
+      await import("@nakama/core");
 
     const db = createInMemoryDatabaseAdapter();
     const profile = await seedOrg(db);

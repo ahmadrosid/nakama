@@ -1,9 +1,6 @@
 export type { AgentChatSession, AgentDependencies } from "./chat";
 
-export {
-  createAgentChatSession,
-  createAutomationFromPrompt,
-} from "./chat";
+export { createAgentChatSession, createAutomationFromPrompt } from "./chat";
 
 export type { CompactionConfig } from "./history-compaction";
 

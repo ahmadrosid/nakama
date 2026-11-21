@@ -1182,42 +1182,42 @@ function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
 
   return Boolean(
     manifest &&
-      meta &&
-      (sharedAgent === undefined ||
-        (sharedReference &&
-          ["publicationId", "sourceOrgId", "sourceProfileId"].every((key) => {
-            const id = sharedReference.get(key);
+    meta &&
+    (sharedAgent === undefined ||
+      (sharedReference &&
+        ["publicationId", "sourceOrgId", "sourceProfileId"].every((key) => {
+          const id = sharedReference.get(key);
 
-            return isString(id) && id.trim().length > 0 && id.length <= 256;
-          }))) &&
-      manifest.get("apiVersion") === NAKAMA_API_VERSION &&
-      isString(manifest.get("createdAt")) &&
-      manifest.get("kind") === PROFILE_PACK_KIND &&
-      isString(manifest.get("sourceProfileId")) &&
-      isStringArray(manifest.get("topLevelPaths")) &&
-      isNumber(manifest.get("version")) &&
-      Array.isArray(skipped) &&
-      skipped.every(isProfilePackSkippedItem) &&
-      isStringArray(meta.get("bundledSkillNames")) &&
-      isStringArray(meta.get("composioToolkitSlugs")) &&
-      isStringArray(meta.get("mcpServerNames")) &&
-      isNullableString(meta.get("model")) &&
-      isString(meta.get("name")) &&
-      // Older packs have no switch; null is not a valid value.
-      (!meta.has("platformToolsEnabled") ||
-        (meta.get("platformToolsEnabled") !== null &&
-          isNullableBoolean(meta.get("platformToolsEnabled")))) &&
-      isStringArray(meta.get("profileSkillNames")) &&
-      isNullableBoolean(meta.get("skillsCuratorConsolidateEnabled")) &&
-      isNullableBoolean(meta.get("skillsPostTurnReview")) &&
-      isNullableBoolean(meta.get("skillsWriteApproval")) &&
-      isString(meta.get("systemPrompt")) &&
-      isNullableString(meta.get("thinkingEffort")) &&
-      isNullableBoolean(meta.get("thinkingEnabled")) &&
-      isStringArray(meta.get("toolNames")) &&
-      (customTools === undefined ||
-        (Array.isArray(customTools) &&
-          customTools.every(isProfilePackCustomTool)))
+          return isString(id) && id.trim().length > 0 && id.length <= 256;
+        }))) &&
+    manifest.get("apiVersion") === NAKAMA_API_VERSION &&
+    isString(manifest.get("createdAt")) &&
+    manifest.get("kind") === PROFILE_PACK_KIND &&
+    isString(manifest.get("sourceProfileId")) &&
+    isStringArray(manifest.get("topLevelPaths")) &&
+    isNumber(manifest.get("version")) &&
+    Array.isArray(skipped) &&
+    skipped.every(isProfilePackSkippedItem) &&
+    isStringArray(meta.get("bundledSkillNames")) &&
+    isStringArray(meta.get("composioToolkitSlugs")) &&
+    isStringArray(meta.get("mcpServerNames")) &&
+    isNullableString(meta.get("model")) &&
+    isString(meta.get("name")) &&
+    // Older packs have no switch; null is not a valid value.
+    (!meta.has("platformToolsEnabled") ||
+      (meta.get("platformToolsEnabled") !== null &&
+        isNullableBoolean(meta.get("platformToolsEnabled")))) &&
+    isStringArray(meta.get("profileSkillNames")) &&
+    isNullableBoolean(meta.get("skillsCuratorConsolidateEnabled")) &&
+    isNullableBoolean(meta.get("skillsPostTurnReview")) &&
+    isNullableBoolean(meta.get("skillsWriteApproval")) &&
+    isString(meta.get("systemPrompt")) &&
+    isNullableString(meta.get("thinkingEffort")) &&
+    isNullableBoolean(meta.get("thinkingEnabled")) &&
+    isStringArray(meta.get("toolNames")) &&
+    (customTools === undefined ||
+      (Array.isArray(customTools) &&
+        customTools.every(isProfilePackCustomTool)))
   );
 }
 
@@ -1235,11 +1235,11 @@ function isProfilePackCustomTool<T>(value: T): boolean {
 
   return Boolean(
     tool &&
-      isString(tool.get("description")) &&
-      isProfilePackJsonValue(tool.get("handlerConfig")) &&
-      isString(handlerType) &&
-      isCustomToolType(handlerType) &&
-      isString(tool.get("name"))
+    isString(tool.get("description")) &&
+    isProfilePackJsonValue(tool.get("handlerConfig")) &&
+    isString(handlerType) &&
+    isCustomToolType(handlerType) &&
+    isString(tool.get("name"))
   );
 }
 
