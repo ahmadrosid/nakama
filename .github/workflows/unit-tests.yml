@@ -121,6 +121,10 @@ jobs:
   test:
     name: test (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lists the saved test timings (Pick test timings).
+      actions: read
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -130,6 +134,12 @@ jobs:
       # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs (PDF tests).
       NAKAMA_CHROME_NO_SANDBOX: "true"
       SHARD: ${{ matrix.shard }}/8
+      # Tests write file-backed SQLite with synchronous=FULL, so every commit
+      # waits on fsync. The runner's /tmp is a network disk and four workers
+      # fsync at once: plain tests took 1-2 s and one stalled past 5 s. Temp
+      # files go to a RAM disk instead (mounted below; /dev/shm will not do:
+      # the server rightly refuses paths under /dev).
+      TMPDIR: /mnt/tests-tmp
     steps:
       # Budget: the job fails if its steps take longer, so a slowdown shows up
       # on the PR that causes it. Set from the slowest green run since the
@@ -167,20 +177,38 @@ jobs:
           fi
           echo "WEB_ONLY=$web_only" >> "$GITHUB_ENV"
 
+      - name: Mount a RAM disk for test temp files
+        run: |
+          sudo mkdir -p "$TMPDIR"
+          sudo mount -t tmpfs -o size=6g,mode=1777 tmpfs "$TMPDIR"
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           # Bun 1.4 supports the HTTP agent interception used by plugin registry fixtures.
           bun-version: 1.4.0
 
-      # Main saves the times of its last full run under its SHA. A PR takes the
-      # newest one; with none yet, bun splits the files by count.
+      # Main saves the times of its last full run under its SHA. Every shard
+      # must split by the same times, or a file runs in two shards or none: a
+      # main run that saved new times while this run's shards were starting did
+      # exactly that. So each shard takes the newest times saved before this run
+      # was created, the same answer for all shards and for re-runs. With none,
+      # bun splits the files by count.
+      - name: Pick test timings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          created=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          key=$(gh api "repos/$GITHUB_REPOSITORY/actions/caches?key=test-timings-&ref=refs/heads/main&sort=created_at&direction=desc&per_page=100" \
+            --jq "[.actions_caches[] | select(.created_at < \"$created\")][0].key // \"\"")
+          echo "Run created $created; timings: ${key:-none}"
+          echo "TIMINGS_KEY=${key:-test-timings-none}" >> "$GITHUB_ENV"
+
       - name: Restore test timings
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .test-timings
-          key: test-timings-${{ github.sha }}
-          restore-keys: test-timings-
+          key: ${{ env.TIMINGS_KEY }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
@@ -291,7 +319,13 @@ jobs:
             jq -s '{version: 1, files: (map(.files) | add // {})}' shards/*/"$suite".json > ".test-timings/$suite.json"
             jq -r '.files | keys[]' ".test-timings/$suite.json" | sort > "ran-$suite.txt"
             echo "$suite: $(wc -l < "expected-$suite.txt") expected, $(wc -l < "ran-$suite.txt") ran"
+            twice=$(cat shards/*/"$suite".json | jq -r '.files | keys[]' | sort | uniq -d)
             missing=$(comm -23 "expected-$suite.txt" "ran-$suite.txt")
+            if [[ -n "$twice" ]]; then
+              echo "::error::$suite test files more than one shard ran (the shards split differently):"
+              echo "$twice"
+              status=1
+            fi
             if [[ -n "$missing" ]]; then
               echo "::error::$suite test files no shard ran:"
               echo "$missing"
