@@ -174,8 +174,11 @@ jobs:
       # apps/web has its own bunfig preload, so it runs from its own folder.
       # bun reads main's times from the second --timings file and writes only
       # this shard's files to the first, which starts empty: a shard that dies
-      # early uploads nothing, and test-files sees the gap. Coverage costs about
-      # nothing here and replaces Quality's second full test run.
+      # early uploads nothing, and test-files sees the gap. --randomize shuffles
+      # test order with a new seed each run and prints it: a test that leaks
+      # state into the next one fails, and `--seed=<printed>` replays it.
+      # Coverage costs about nothing here and replaces Quality's second full
+      # test run.
       - name: Run tests
         run: |
           mkdir -p .test-timings shard
@@ -185,11 +188,11 @@ jobs:
           done
           status=0
           if [[ "$WEB_ONLY" != true ]]; then
-            xvfb-run -a bun test --shard="$SHARD" --parallel=4 --path-ignore-patterns '**/apps/web/**' \
+            xvfb-run -a bun test --shard="$SHARD" --parallel=4 --randomize --path-ignore-patterns '**/apps/web/**' \
               --timings=shard/root.json --timings=.test-timings/root.json --update-timings \
               --coverage --coverage-reporter=lcov --coverage-dir=shard/coverage-root || status=1
           fi
-          (cd apps/web && bun test --shard="$SHARD" --parallel=4 \
+          (cd apps/web && bun test --shard="$SHARD" --parallel=4 --randomize \
             --timings=../../shard/web.json --timings=../../.test-timings/web.json --update-timings \
             --coverage --coverage-reporter=lcov --coverage-dir=../../shard/coverage-web) || status=1
           exit "$status"
