@@ -72,6 +72,34 @@ jobs:
           bun run --filter @nakama/slack build
           bun run --filter @nakama/teams build
 
+      # Electron's zip comes from GitHub releases, which sometimes return 504.
+      # The cache skips the download on most runs; the loop retries the rest.
+      - name: Cache Electron download
+        if: env.WEB_ONLY != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/electron
+          key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/electron/package.json') }}
+
+      - name: Set up Electron
+        if: env.WEB_ONLY != 'true'
+        run: |
+          for try in 1 2 3 4; do
+            bun apps/desktop/node_modules/electron/install.js && break
+            [[ $try == 4 ]] && exit 1
+            echo "Electron download failed (try $try), retry in $((try * 20))s"
+            sleep $((try * 20))
+          done
+          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
+
+      # The only check that starts the real desktop app. It ran in Quality's
+      # coverage job before, which was a report, not a gate.
+      - name: Electron smoke test
+        if: env.WEB_ONLY != 'true'
+        working-directory: apps/desktop
+        run: xvfb-run -a node_modules/.bin/electron tests/smoke.mjs --smoke-test
+
   # Eight shards, balanced by the per-file times the last main run recorded.
   # Each shard writes the files it ran; test-files checks they add up to all.
   test:
@@ -143,31 +171,11 @@ jobs:
         with:
           version: "8.1"
 
-      # Electron's zip comes from GitHub releases, which sometimes return 504.
-      # The cache skips the download on most runs; the loop retries the rest.
-      - name: Cache Electron download
-        if: env.WEB_ONLY != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/electron
-          key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/electron/package.json') }}
-
-      - name: Set up Electron
-        if: env.WEB_ONLY != 'true'
-        run: |
-          for try in 1 2 3 4; do
-            bun apps/desktop/node_modules/electron/install.js && break
-            [[ $try == 4 ]] && exit 1
-            echo "Electron download failed (try $try), retry in $((try * 20))s"
-            sleep $((try * 20))
-          done
-          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
-          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
-
       # apps/web has its own bunfig preload, so it runs from its own folder.
       # bun reads main's times from the second --timings file and writes only
       # this shard's files to the first, which starts empty: a shard that dies
-      # early uploads nothing, and test-files sees the gap.
+      # early uploads nothing, and test-files sees the gap. Coverage costs about
+      # nothing here and replaces Quality's second full test run.
       - name: Run tests
         run: |
           mkdir -p .test-timings shard
@@ -178,10 +186,12 @@ jobs:
           status=0
           if [[ "$WEB_ONLY" != true ]]; then
             xvfb-run -a bun test --shard="$SHARD" --parallel=4 --path-ignore-patterns '**/apps/web/**' \
-              --timings=shard/root.json --timings=.test-timings/root.json --update-timings || status=1
+              --timings=shard/root.json --timings=.test-timings/root.json --update-timings \
+              --coverage --coverage-reporter=lcov --coverage-dir=shard/coverage-root || status=1
           fi
           (cd apps/web && bun test --shard="$SHARD" --parallel=4 \
-            --timings=../../shard/web.json --timings=../../.test-timings/web.json --update-timings) || status=1
+            --timings=../../shard/web.json --timings=../../.test-timings/web.json --update-timings \
+            --coverage --coverage-reporter=lcov --coverage-dir=../../shard/coverage-web) || status=1
           exit "$status"
 
       - name: Upload the files this shard ran
@@ -248,6 +258,40 @@ jobs:
           done
           [[ "$TEST_RESULT" == success ]] || { echo "::error::a test shard failed: $TEST_RESULT"; status=1; }
           exit "${status:-0}"
+
+      # A report, not a gate: a line covered in any shard counts as covered.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: |
+          shopt -s nullglob
+          files=()
+          for f in shards/*/coverage-root/lcov.info; do files+=("$f"); done
+          for f in shards/*/coverage-web/lcov.info; do files+=("web:$f"); done
+          {
+            echo '## Coverage'
+            echo 'Per workspace, merged across shards: a line run in any shard is covered; functions take the best shard per file.'
+            echo
+            echo '| Workspace | Lines | Functions |'
+            echo '| --- | --- | --- |'
+            for f in "${files[@]}"; do
+              if [[ "$f" == web:* ]]; then sed 's|^SF:|SF:apps/web/|' "${f#web:}"; else cat "$f"; fi
+            done | awk -F'[:,]' '
+              # Files outside the repo (temp fixtures) start with "..".
+              /^SF:/ { file = substr($0, 4); skip = file ~ /^\.\./; if (skip) next
+                       n = split(file, p, "/"); ws = p[1] "/" p[2]
+                       if (p[1] == "apps" && p[2] == "platform" || p[1] == "packages" && p[2] == "plugins") ws = ws "/" p[3]
+                       seen[ws] = 1; next }
+              skip { next }
+              /^DA:/ { k = file SUBSEP $2; if (!(k in line)) { line[k] = 0; lf[ws]++ }
+                       if ($3 > 0 && !line[k]) { line[k] = 1; lh[ws]++ }; next }
+              # bun writes per-file function totals only: keep the best shard.
+              /^FNF:/ { fnf[ws SUBSEP file] = $2; next }
+              /^FNH:/ { k = ws SUBSEP file; if ($2 > fnh[k]) fnh[k] = $2; next }
+              END { for (k in fnf) { split(k, q, SUBSEP); ff[q[1]] += fnf[k]; fh[q[1]] += fnh[k] }
+                    for (w in seen) printf "| %s | %.1f%% (%d/%d) | %.1f%% (%d/%d) |\n", w,
+                      lf[w] ? 100 * lh[w] / lf[w] : 0, lh[w], lf[w], ff[w] ? 100 * fh[w] / ff[w] : 0, fh[w], ff[w] }
+            ' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save test timings for PRs
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
