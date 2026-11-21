@@ -209,6 +209,7 @@ jobs:
         with:
           path: .test-timings
           key: ${{ env.TIMINGS_KEY }}
+          enableCrossOsArchive: true
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
@@ -268,7 +269,7 @@ jobs:
   # Proves the shards together ran every test file, and on main saves the times
   # the next PRs balance their shards with.
   test-files:
-    needs: test
+    needs: [test, test-windows]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -298,6 +299,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           TEST_RESULT: ${{ needs.test.result }}
+          WINDOWS_RESULT: ${{ needs.test-windows.result }}
         run: |
           web_only=false
           if [[ "$EVENT_NAME" == pull_request ]]; then
@@ -313,13 +315,22 @@ jobs:
           pattern='(\.|_)(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$'
           git ls-files | grep -E "$pattern" | grep -v '/node_modules/' > all.txt
           grep '^apps/web/' all.txt | sed 's|^apps/web/||' | sort > expected-web.txt
-          if [[ "$web_only" == true ]]; then : > expected-root.txt; else grep -v '^apps/web/' all.txt | sort > expected-root.txt; fi
+          if [[ "$web_only" == true ]]; then
+            : > expected-root.txt
+            : > expected-windows.txt
+          else
+            grep -v '^apps/web/' all.txt | sort > expected-root.txt
+            grep -E '^(apps/server|packages/(core|db|agent))/' all.txt | sort > expected-windows.txt
+          fi
+          shopt -s nullglob
           mkdir -p .test-timings
-          for suite in root web; do
-            jq -s '{version: 1, files: (map(.files) | add // {})}' shards/*/"$suite".json > ".test-timings/$suite.json"
+          for suite in root web windows; do
+            parts=(shards/*/"$suite".json)
+            [[ ${#parts[@]} -gt 0 ]] || parts=(<(echo '{"version":1,"files":{}}'))
+            jq -s '{version: 1, files: (map(.files) | add // {})}' "${parts[@]}" > ".test-timings/$suite.json"
             jq -r '.files | keys[]' ".test-timings/$suite.json" | sort > "ran-$suite.txt"
             echo "$suite: $(wc -l < "expected-$suite.txt") expected, $(wc -l < "ran-$suite.txt") ran"
-            twice=$(cat shards/*/"$suite".json | jq -r '.files | keys[]' | sort | uniq -d)
+            twice=$(cat "${parts[@]}" | jq -r '.files | keys[]' | sort | uniq -d)
             missing=$(comm -23 "expected-$suite.txt" "ran-$suite.txt")
             if [[ -n "$twice" ]]; then
               echo "::error::$suite test files more than one shard ran (the shards split differently):"
@@ -333,6 +344,7 @@ jobs:
             fi
           done
           [[ "$TEST_RESULT" == success ]] || { echo "::error::a test shard failed: $TEST_RESULT"; status=1; }
+          [[ "$WINDOWS_RESULT" == success ]] || { echo "::error::a Windows shard failed: $WINDOWS_RESULT"; status=1; }
           exit "${status:-0}"
 
       # A report, not a gate: a line covered in any shard counts as covered.
@@ -373,9 +385,11 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # Same path as the restore step: the cache version hashes the paths.
+          # Same path and cross-OS flag as the restore steps: the cache version
+          # hashes both, and Windows restores what Linux saved.
           path: .test-timings
           key: test-timings-${{ github.sha }}
+          enableCrossOsArchive: true
 
       - name: Check the time budget
         shell: bash
@@ -391,6 +405,10 @@ jobs:
     name: test-windows (${{ matrix.shard }}/4)
     runs-on: windows-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # Lists the saved test timings (Pick test timings).
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -434,12 +452,52 @@ jobs:
           echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
           echo "WEB_ONLY=$web_only" >> "$GITHUB_ENV"
 
+      # Defender scans every file the tests write (SQLite files, temp folders).
+      # With the 5 s default timeout, tests that take about 1 s on Linux took
+      # 5-11 s here. The runner is a throwaway VM; this only changes scanning on
+      # it, for the checkout, temp and Bun folders.
+      - name: Skip Defender scans of the test folders
+        if: env.WEB_ONLY != 'true'
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, "$env:USERPROFILE\.bun"
+
       # A web-only PR has nothing for these shards to run.
       - name: Set up Bun
         if: env.WEB_ONLY != 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.0
+
+      # Same times for every shard: see Pick test timings in the Linux job.
+      - name: Pick test timings
+        if: env.WEB_ONLY != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          created=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          key=$(gh api "repos/$GITHUB_REPOSITORY/actions/caches?key=test-timings-&ref=refs/heads/main&sort=created_at&direction=desc&per_page=100" \
+            --jq "[.actions_caches[] | select(.created_at < \"$created\")][0].key // \"\"")
+          echo "Run created $created; timings: ${key:-none}"
+          echo "TIMINGS_KEY=${key:-test-timings-none}" >> "$GITHUB_ENV"
+
+      # Restored on Linux, read here: the same JSON on every OS.
+      - name: Restore test timings
+        if: env.WEB_ONLY != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .test-timings
+          key: ${{ env.TIMINGS_KEY }}
+          enableCrossOsArchive: true
+
+      # bun install spent most of its 40 s downloading 759 packages. Main fills
+      # this cache; a PR with the same lockfile only links.
+      - name: Restore Bun download cache
+        if: env.WEB_ONLY != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Install dependencies
         if: env.WEB_ONLY != 'true'
@@ -453,22 +511,36 @@ jobs:
         with:
           version: "8.1"
 
+      # One run over the four suites, balanced by time like Linux, one worker
+      # per core, default 5 s timeout. bun reads main's times from the second
+      # --timings file and writes only this shard's files to the first.
       - name: Run tests
         if: env.WEB_ONLY != 'true'
-        # Split the slow server suite across runners; run each smaller suite once.
-        # Keep files isolated and budget for Windows filesystem and subprocess work.
         shell: bash
         env:
           SHARD: ${{ matrix.shard }}
         run: |
-          status=0
-          bun run --cwd apps/server test --shard="$SHARD/4" --parallel=2 --timeout=30000 || status=1
-          case "$SHARD" in
-            1) bun run --cwd packages/core test --parallel=2 --timeout=30000 || status=1 ;;
-            2) bun run --cwd packages/db test --parallel=2 --timeout=30000 || status=1 ;;
-            3) bun run --cwd packages/agent test --parallel=2 --timeout=30000 || status=1 ;;
-          esac
-          exit "$status"
+          mkdir -p .test-timings shard
+          [[ -f .test-timings/windows.json ]] || echo '{"version":1,"files":{}}' > .test-timings/windows.json
+          echo '{"version":1,"files":{}}' > shard/windows.json
+          bun test apps/server packages/core packages/db packages/agent \
+            --shard="$SHARD/4" --parallel=4 \
+            --timings=shard/windows.json --timings=.test-timings/windows.json --update-timings
+
+      - name: Upload the files this shard ran
+        if: ${{ !cancelled() && env.WEB_ONLY != 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-timings-windows-${{ matrix.shard }}
+          path: shard/windows.json
+          retention-days: 7
+
+      - name: Save Bun download cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.shard == 1
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Check the time budget
         shell: bash
