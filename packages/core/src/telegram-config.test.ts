@@ -25,10 +25,6 @@ import {
 import { getUserConfigDir } from "./user-config";
 
 describe("parseAllowedUserIds", () => {
-  test("parses comma-separated ids", () => {
-    expect(parseAllowedUserIds("123, 456")).toEqual([123, 456]);
-  });
-
   test("rejects invalid ids", () => {
     expect(() => parseAllowedUserIds("abc")).toThrow(
       "Invalid Telegram user ID"

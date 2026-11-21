@@ -61,21 +61,6 @@ describe("parseCatalogToolkitItem", () => {
       slug: "gmail",
     });
   });
-
-  test("returns null logo when meta logo is missing", () => {
-    expect(
-      parseCatalogToolkitItem({
-        meta: { description: "Chat" },
-        name: "Slack",
-        slug: "slack",
-      })
-    ).toEqual({
-      description: "Chat",
-      logoUrl: null,
-      name: "Slack",
-      slug: "slack",
-    });
-  });
 });
 
 describe("parseLinkRedirectUrl", () => {

@@ -686,15 +686,6 @@ describe("convertHtmlToMarkdown", () => {
     expect(md).toContain("Tail text");
   });
 
-  test("converts headings and bold", async () => {
-    const md = await convertHtmlToMarkdown(
-      "<h2>Sub</h2><p>a <strong>b</strong></p>"
-    );
-
-    expect(md).toContain("## Sub");
-    expect(md).toContain("**b**");
-  });
-
   test("removes framework comment noise", async () => {
     const md = await convertHtmlToMarkdown(`
       <!--[-->

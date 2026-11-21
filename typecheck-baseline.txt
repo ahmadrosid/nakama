@@ -57,7 +57,6 @@ apps/platform/teams/src/test-helpers.ts: TS2352
 apps/platform/telegram/src/attachments.test.ts: TS2352
 apps/platform/telegram/src/attachments.test.ts: TS2352
 apps/platform/telegram/src/attachments.test.ts: TS2352
-apps/platform/telegram/src/attachments.test.ts: TS2352
 apps/platform/telegram/src/chat-handler.ts: TS2322
 apps/platform/telegram/src/chat-handler.ts: TS2322
 apps/platform/telegram/src/test-helpers.ts: TS2352

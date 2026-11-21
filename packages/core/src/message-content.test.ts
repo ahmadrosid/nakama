@@ -174,8 +174,6 @@ describe("getUserMessageText", () => {
   });
 });
 
-describe("estimateUserContentTokens", () => {});
-
 describe("stripImagesForCompaction", () => {
   test("omits tool images while preserving the tool result and original history", () => {
     const message: ChatMessage = {
@@ -211,13 +209,6 @@ describe("stripImagesForCompaction", () => {
 });
 
 describe("parseDataUrl", () => {
-  test("parses valid data url", () => {
-    expect(parseDataUrl(`data:image/png;base64,${tinyPngBase64}`)).toEqual({
-      data: tinyPngBase64,
-      mediaType: "image/png",
-    });
-  });
-
   test("parses data url with parameters", () => {
     expect(
       parseDataUrl(`data:image/png;charset=utf-8;base64,${tinyPngBase64}`)

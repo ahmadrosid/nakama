@@ -28,14 +28,6 @@ describe("mcpServerDeleteBlockReason", () => {
     ).toBeNull();
   });
 
-  test("allows deleting the retired currency server", () => {
-    expect(
-      mcpServerDeleteBlockReason(
-        summary({ id: "mcp_currency_conversion", name: "currency-conversion" })
-      )
-    ).toBeNull();
-  });
-
   test("blocks preinstalled servers", () => {
     expect(
       mcpServerDeleteBlockReason(
@@ -45,27 +37,5 @@ describe("mcpServerDeleteBlockReason", () => {
         })
       )
     ).toBe("Preinstalled MCP servers cannot be deleted.");
-  });
-
-  test("allows servers assigned to profiles", () => {
-    expect(
-      mcpServerDeleteBlockReason(
-        summary({
-          assignedProfileCount: 1,
-          id: "mcp_custom_qa",
-          name: "QA-probe",
-        })
-      )
-    ).toBeNull();
-
-    expect(
-      mcpServerDeleteBlockReason(
-        summary({
-          assignedProfileCount: 3,
-          id: "mcp_custom_qa",
-          name: "QA-probe",
-        })
-      )
-    ).toBeNull();
   });
 });

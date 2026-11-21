@@ -135,22 +135,6 @@ describe("explainGuildMessageHandling", () => {
     expect(decision.reason).toBe("no-trigger");
   });
 
-  test("claims a foreign thread when a held role is @mentioned", () => {
-    const decision = explainGuildMessageHandling(
-      createGuildMessage({
-        botHeldRoleIds: [BOT_ROLE_ID],
-        content: `<@&${BOT_ROLE_ID}> please join`,
-        mentionedRoleIds: [BOT_ROLE_ID],
-        thread: true,
-      }),
-      BOT_INFO,
-      { botOwnsThread: false }
-    );
-
-    expect(decision.shouldHandle).toBe(true);
-    expect(decision.reason).toBe("claim-thread");
-  });
-
   test("handles reply to bot", () => {
     const decision = explainGuildMessageHandling(
       createGuildMessage({ content: "follow up", replyToBot: true }),

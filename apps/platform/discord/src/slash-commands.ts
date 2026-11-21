@@ -20,7 +20,7 @@ const COMMAND_NAMES = [
   "resume",
 ] as const;
 
-export function buildSlashCommands(): SlashCommandBuilder[] {
+function buildSlashCommands(): SlashCommandBuilder[] {
   const descriptions: Record<(typeof COMMAND_NAMES)[number], string> = {
     allow: "Add a Discord user to the bot allowed list",
     clear: "Clear chat history",
