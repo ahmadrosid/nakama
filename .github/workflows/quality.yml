@@ -18,6 +18,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -37,9 +44,25 @@ jobs:
       - name: Audit dependencies
         run: bun audit --audit-level=critical
 
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 40
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
+
   duplication:
     runs-on: ubuntu-latest
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -56,12 +79,28 @@ jobs:
         if: always()
         run: cat .jscpd-report/jscpd-report.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 20
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
+
   test-mass:
     runs-on: ubuntu-latest
     # A report, not a gate. Between v0.2.0 and v0.4.32 test code grew 211% while
     # source grew 82%, so test mass is where this repo actually bloats, and a
     # "files changed" count hides it.
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -95,3 +134,12 @@ jobs:
             echo "::notice::$note"
             printf '\n%s\n' "$note" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 20
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
