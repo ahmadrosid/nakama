@@ -452,6 +452,7 @@ export class ProfileService {
       model: source.model,
       name,
       orgId,
+      platformToolsEnabled: source.platformToolsEnabled !== false,
       skillsCuratorConsolidateEnabled: source.skillsCuratorConsolidateEnabled,
       skillsPostTurnReview: source.skillsPostTurnReview,
       skillsWriteApproval: source.skillsWriteApproval,
@@ -598,6 +599,10 @@ export class ProfileService {
           : request.groupsEnabled,
       model: request.model === undefined ? profile.model : request.model,
       name: request.name?.trim() ?? profile.name,
+      platformToolsEnabled:
+        request.platformToolsEnabled === undefined
+          ? profile.platformToolsEnabled !== false
+          : request.platformToolsEnabled,
       sharedWithTeam: request.sharedWithTeam ?? profile.sharedWithTeam,
       skillsCuratorConsolidateEnabled:
         request.skillsCuratorConsolidateEnabled === undefined
@@ -1946,6 +1951,7 @@ export class ProfileService {
       model: profile.model,
       name: profile.name,
       ownerUserId: profile.ownerUserId ?? null,
+      platformToolsEnabled: profile.platformToolsEnabled !== false,
       sharedWithTeam: profile.sharedWithTeam !== false,
       skillsCuratorConsolidateEnabled:
         profile.skillsCuratorConsolidateEnabled ?? null,
