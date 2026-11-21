@@ -16,3 +16,4 @@ Never delete tests for authorization, privacy, migrations or concurrency, whatev
 | 2026-11-21 | `apps/server/src/http/routes/llm.test.ts` | Random order: the vendor request log was never cleared | test bug | Clear it after each test |
 | 2026-11-21 | `apps/server/src/services/javascript-tool-loader.test.ts` | Random order: the resolver tests used a secret store another block set up | test bug | Own setup per block |
 | 2026-11-21 | `apps/server/src/tools/super-nakama-tool-setup.test.ts` | Random order: a key one case saved reached the next case | test bug | Fresh secret store per test |
+| 2026-11-21 | `apps/server/src/services/data-portability.test.ts` | "backup restore preserves current publication authority" timed out at 5 s once in CI shard 7 (run 44879345127); 0.09 s alone, 0.2–0.8 s under load | open | Suspect the plugin export barrier: it polls up to 6 s for `activeMutations` to reach 0, so a mutation another test left open would stall it |
