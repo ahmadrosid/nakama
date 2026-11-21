@@ -1,9 +1,6 @@
 import type {
-  AddOrgMemoryFactRequest,
   ApplySkillSuggestionResponse,
   ApproveOrgMemoryProposalRequest,
-  ArchiveOrgMemoryRequest,
-  ArchiveOrgMemoryResponse,
   ListOrgMemoryHistoryResponse,
   ListOrgMemoryProposalsResponse,
   ListSkillProposalsResponse,
@@ -11,12 +8,8 @@ import type {
   OrgMemoryHistoryRevisionResponse,
   OrgMemoryProposalResponse,
   OrgMemoryResponse,
-  OrgMemorySearchRequest,
-  OrgMemorySearchResponse,
-  PinOrgMemoryRequest,
   RestoreOrgMemoryHistoryResponse,
   SkillProposalResponse,
-  UnpinOrgMemoryRequest,
   UpdateOrgMemoryRequest,
 } from "@nakama/core/contract";
 import { OrgsClient } from "./client-orgs";
@@ -42,76 +35,6 @@ export class OrgMemoryClient extends OrgsClient {
         body: JSON.stringify(request),
         headers: { "X-Org-Id": orgId },
         method: "PUT",
-      }
-    );
-  }
-
-  async addOrgMemoryFact(
-    orgId: string,
-    request: AddOrgMemoryFactRequest
-  ): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/memory/facts`,
-      {
-        body: JSON.stringify(request),
-        headers: { "X-Org-Id": orgId },
-        method: "POST",
-      }
-    );
-  }
-
-  async searchOrgMemory(
-    orgId: string,
-    request: OrgMemorySearchRequest
-  ): Promise<OrgMemorySearchResponse> {
-    return this.request<OrgMemorySearchResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/memory/search`,
-      {
-        body: JSON.stringify(request),
-        headers: { "X-Org-Id": orgId },
-        method: "POST",
-      }
-    );
-  }
-
-  async pinOrgMemoryFact(
-    orgId: string,
-    request: PinOrgMemoryRequest
-  ): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/memory/pin`,
-      {
-        body: JSON.stringify(request),
-        headers: { "X-Org-Id": orgId },
-        method: "POST",
-      }
-    );
-  }
-
-  async unpinOrgMemoryFact(
-    orgId: string,
-    request: UnpinOrgMemoryRequest
-  ): Promise<OrgMemoryResponse> {
-    return this.request<OrgMemoryResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/memory/unpin`,
-      {
-        body: JSON.stringify(request),
-        headers: { "X-Org-Id": orgId },
-        method: "POST",
-      }
-    );
-  }
-
-  async archiveOrgMemory(
-    orgId: string,
-    request: ArchiveOrgMemoryRequest
-  ): Promise<ArchiveOrgMemoryResponse> {
-    return this.request<ArchiveOrgMemoryResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/memory/archive`,
-      {
-        body: JSON.stringify(request),
-        headers: { "X-Org-Id": orgId },
-        method: "POST",
       }
     );
   }

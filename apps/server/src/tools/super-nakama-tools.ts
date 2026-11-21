@@ -1,6 +1,5 @@
 import {
   type AssignSkillRequest,
-  type CreateProfileRequest,
   emptyObjectSchema,
   getCustomToolsDir,
   getProfileSoulDir,
@@ -807,19 +806,4 @@ function readString(input: SuperNakamaInput, key: string): string | null {
   const value = z.string().safeParse(input[key]).data;
 
   return value?.trim() || null;
-}
-
-function readSoulFiles(
-  input: SuperNakamaInput
-):
-  | CreateProfileRequest["soulFiles"]
-  | UpdateProfileRequest["soulFiles"]
-  | undefined {
-  const raw = input.soulFiles;
-
-  if (raw === undefined) {
-    return;
-  }
-
-  return soulFilesSchema.parse(raw);
 }

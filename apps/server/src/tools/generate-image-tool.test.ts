@@ -20,7 +20,6 @@ import {
 import { IMAGE_GENERATION_SELECTION } from "../providers/models";
 import { resolveToolsFromStorage } from "../services/tool-resolver";
 import {
-  createGenerateImageTool,
   formatImageMentionContext,
   GENERATE_IMAGE_TOOL_NAME,
   runGenerateImageTool,
@@ -48,17 +47,6 @@ const openaiConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
   ],
   ...overrides,
 });
-
-function generateImageTool(
-  db: ReturnType<typeof createInMemoryDatabaseAdapter>
-) {
-  return createGenerateImageTool({
-    db,
-    ensureSettingsLoaded: async () => {},
-    getUserConfig: () => null,
-    onChatgptTokenRefresh: async () => undefined,
-  });
-}
 
 describe("generate_image tool seed and resolver (U3)", () => {
   test("seedDatabase includes generate_image and a new Super Nakama gets it", async () => {

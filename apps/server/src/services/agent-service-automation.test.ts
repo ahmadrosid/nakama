@@ -50,16 +50,6 @@ describe("AgentService organization knowledge base", () => {
   });
 });
 
-async function captureError<T>(run: () => Promise<T>): Promise<Error | null> {
-  try {
-    await run();
-
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error : new Error(String(error));
-  }
-}
-
 describe("AgentService automation resume", () => {
   setupTestConfigDir("nakama-automation-resume-");
 
