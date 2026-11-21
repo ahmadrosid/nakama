@@ -165,22 +165,23 @@ jobs:
           sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
 
       # apps/web has its own bunfig preload, so it runs from its own folder.
-      # --update-timings rewrites each file with only this shard's files.
+      # bun reads main's times from the second --timings file and writes only
+      # this shard's files to the first, which starts empty: a shard that dies
+      # early uploads nothing, and test-files sees the gap.
       - name: Run tests
         run: |
-          mkdir -p .test-timings
+          mkdir -p .test-timings shard
           for suite in root web; do
             [[ -f .test-timings/$suite.json ]] || echo '{"version":1,"files":{}}' > ".test-timings/$suite.json"
+            echo '{"version":1,"files":{}}' > "shard/$suite.json"
           done
           status=0
           if [[ "$WEB_ONLY" != true ]]; then
             xvfb-run -a bun test --shard="$SHARD" --parallel=4 --path-ignore-patterns '**/apps/web/**' \
-              --timings=.test-timings/root.json --update-timings || status=1
-          else
-            echo '{"version":1,"files":{}}' > .test-timings/root.json
+              --timings=shard/root.json --timings=.test-timings/root.json --update-timings || status=1
           fi
           (cd apps/web && bun test --shard="$SHARD" --parallel=4 \
-            --timings=../../.test-timings/web.json --update-timings) || status=1
+            --timings=../../shard/web.json --timings=../../.test-timings/web.json --update-timings) || status=1
           exit "$status"
 
       - name: Upload the files this shard ran
@@ -188,8 +189,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-timings-${{ matrix.shard }}
-          path: .test-timings
-          include-hidden-files: true
+          path: shard
           retention-days: 7
 
   # Proves the shards together ran every test file, and on main saves the times
