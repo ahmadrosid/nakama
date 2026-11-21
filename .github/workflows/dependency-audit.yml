@@ -3,7 +3,17 @@ name: Dependency audit
 # The image installs `.docker/runtime-deps/bun.lock` and the docs site has its
 # own lockfile, so `bun audit` at the root misses shipped bytes and docs bytes.
 on:
+  # A PR that touches no dependency manifest cannot change the audit result.
+  # Main pushes and the weekly run always audit, so drift is still caught.
   pull_request:
+    paths:
+      - bun.lock
+      - package.json
+      - docs/website/bun.lock
+      - docs/website/package.json
+      - .docker/*/bun.lock
+      - .docker/*/package.json
+      - .github/workflows/dependency-audit.yml
   push:
     branches: [main]
   schedule:
@@ -12,44 +22,14 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR makes the old run's result useless, so stop it. Main
+# keeps every run: each push there is a commit someone may need a result for.
+concurrency:
+  group: dependency-audit-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  # A PR that touches no dependency manifest cannot change the audit result.
-  # Main pushes and the weekly run always audit, so drift is still caught.
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      lockfiles: ${{ steps.scope.outputs.lockfiles }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Check changed lockfiles
-        id: scope
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          lockfiles=true
-          if [ "$EVENT" = "pull_request" ]; then
-            lockfiles=false
-            files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
-            while IFS= read -r file; do
-              case "$file" in
-                bun.lock|package.json|docs/website/bun.lock|docs/website/package.json|.docker/*/bun.lock|.docker/*/package.json)
-                  lockfiles=true
-                  break
-                  ;;
-              esac
-            done <<< "$files"
-          fi
-          echo "lockfiles=$lockfiles" >> "$GITHUB_OUTPUT"
-
   audit:
-    needs: changes
-    if: needs.changes.outputs.lockfiles == 'true'
     runs-on: ubuntu-latest
     env:
       # GHSA-fc5q-39xc-vjpf: picomatch ReDoS, every version up to 4.0.7 and no
