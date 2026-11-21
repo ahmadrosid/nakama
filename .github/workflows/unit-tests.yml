@@ -421,7 +421,7 @@ jobs:
         shell: bash
         run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
 
-      # C: (the default TEMP) syncs to disk about 14x slower than D:: an SQLite
+      # C: (the default TEMP) syncs to disk about 14x slower than D: an SQLite
       # insert took 21 ms there and 1.5 ms on D:. Tests make their folders and
       # databases under TEMP, so it goes on D:. The Bun cache goes there too:
       # on the same drive as node_modules, install links instead of copying.
@@ -494,8 +494,8 @@ jobs:
           key: ${{ env.TIMINGS_KEY }}
           enableCrossOsArchive: true
 
-      # bun install spent most of its 40 s downloading 759 packages. Main fills
-      # this cache; a PR with the same lockfile only links.
+      # Main fills this cache, so a PR with the same lockfile does not download
+      # its 759 packages again.
       - name: Restore Bun download cache
         if: env.WEB_ONLY != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -549,7 +549,7 @@ jobs:
       - name: Check the time budget
         shell: bash
         env:
-          BUDGET: 240
+          BUDGET: 135
         run: |
           took=$(( $(date +%s) - JOB_START ))
           echo "Took ${took}s of a ${BUDGET}s budget."
