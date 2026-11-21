@@ -364,16 +364,22 @@ function isNewer(latest: string, current: string): boolean {
   return (diff ?? 0) > 0;
 }
 
-/** Cached for 10 minutes; a failure is cached for 1 minute. */
+/** Cached for 10 minutes; a failure is cached for 1 minute. A clock that moved
+ * back before an entry was stored makes it stale too. */
 export async function checkNakamaVersion(
   current: string,
   now = Date.now()
 ): Promise<NakamaVersionResponse> {
-  if (!cachedRelease || now - cachedRelease.at > RELEASE_CACHE_MS) {
+  if (
+    !cachedRelease ||
+    now < cachedRelease.at ||
+    now - cachedRelease.at > RELEASE_CACHE_MS
+  ) {
     let parts: number[] | null = null;
 
     if (
       releaseFailedAt === null ||
+      now < releaseFailedAt ||
       now - releaseFailedAt > RELEASE_FAILURE_CACHE_MS
     ) {
       // The timeout also covers the body read, so text() can reject too.

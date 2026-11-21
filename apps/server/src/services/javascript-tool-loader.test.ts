@@ -553,6 +553,16 @@ export async function run(input, context) {
 });
 
 describe("tool resolver", () => {
+  // Its own secret store: in random order this block can run first.
+  beforeEach(() => {
+    setToolSecrets(
+      new ManagedSecrets(
+        createInMemoryDatabaseAdapter(),
+        Buffer.alloc(32, 1).toString("base64")
+      )
+    );
+  });
+
   let configDir = "";
 
   afterEach(async () => {

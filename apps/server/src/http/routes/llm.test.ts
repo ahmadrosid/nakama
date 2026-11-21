@@ -54,7 +54,11 @@ const vendor = setupServer(
 
 beforeAll(() => vendor.listen({ onUnhandledRequest: "error" }));
 
-afterEach(() => vendor.resetHandlers());
+afterEach(() => {
+  vendor.resetHandlers();
+  // Each test counts its own vendor calls, in any order.
+  vendorRequests.length = 0;
+});
 
 afterAll(() => vendor.close());
 

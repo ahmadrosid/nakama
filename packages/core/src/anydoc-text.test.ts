@@ -293,13 +293,16 @@ describe("convertDocumentBytes", () => {
     );
 
     let started = false;
+    let conversion: Promise<string> | undefined;
 
     const queued = convertDocumentBytes(SAMPLE_CSV, {
       convertFn: () => {
         started = true;
 
         // Deliberately slower than the budget left once a slot frees.
-        return Bun.sleep(150).then(() => "# next");
+        conversion = Bun.sleep(150).then(() => "# next");
+
+        return conversion;
       },
       format: "csv",
       timeoutMs: 300,
@@ -314,5 +317,8 @@ describe("convertDocumentBytes", () => {
 
     await expect(queued).rejects.toThrow(/timed out/i);
     await Promise.allSettled(blockers);
+    // The cut-off conversion holds its slot until it stops; let it stop here,
+    // not inside the next test.
+    await conversion;
   });
 });
