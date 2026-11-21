@@ -31,8 +31,7 @@ import {
 } from "./coding-agent-spawn-env";
 import { killProcessTree } from "./custom-tool-subprocess";
 
-export interface CodingAgentHarnessStatus
-  extends StoredCodingAgentHarnessRecord {
+export interface CodingAgentHarnessStatus extends StoredCodingAgentHarnessRecord {
   authenticated: boolean | null;
   installed: boolean;
   nextStep: "install" | "retry" | null;

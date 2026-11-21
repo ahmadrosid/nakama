@@ -541,7 +541,7 @@ export async function createWindow(url, { show = true } = {}) {
       callback(
         Boolean(
           sameServer &&
-            ["clipboard-sanitized-write", "notifications"].includes(permission)
+          ["clipboard-sanitized-write", "notifications"].includes(permission)
         )
       );
     }

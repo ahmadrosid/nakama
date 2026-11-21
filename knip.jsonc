@@ -1,5 +1,15 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  // scripts/bun-canary.ts resolves the canary by platform name, and the
+  // anti-slop lint plugin (ignored below) imports @oxlint/plugins.
+  "ignoreDependencies": [
+    "@oven/bun-darwin-aarch64",
+    "@oven/bun-darwin-x64",
+    "@oven/bun-linux-aarch64",
+    "@oven/bun-linux-x64",
+    "@oven/bun-windows-x64",
+    "@oxlint/plugins"
+  ],
   "ignore": [
     "tools/oxlint/anti-slop/**",
     // Bundled skill scripts run through the agent's bash tool, not imports.

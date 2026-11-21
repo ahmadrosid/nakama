@@ -381,11 +381,11 @@ async function readOpenRouterStream(
 
     const outputStarted = Boolean(
       content ||
-        thinking ||
-        pending.size ||
-        delta?.content ||
-        delta?.reasoning ||
-        delta?.toolCalls?.length
+      thinking ||
+      pending.size ||
+      delta?.content ||
+      delta?.reasoning ||
+      delta?.toolCalls?.length
     );
 
     if (chunk.error) {

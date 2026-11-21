@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     # Desktop version bumps are checked by Desktop Release; PR checks still run.
-    paths-ignore: ['apps/desktop/package.json']
+    paths-ignore: ["apps/desktop/package.json"]
   # Lets a merge queue test the merged result. Does nothing until one is on.
   merge_group:
   pull_request:
     # Markdown-only PRs change no code.
-    paths-ignore: ['**.md', '.agents/**', 'docs/**', 'scripts/**', 'assets/**']
+    paths-ignore: ["**.md", ".agents/**", "docs/**", "scripts/**", "assets/**"]
 
 permissions:
   contents: read

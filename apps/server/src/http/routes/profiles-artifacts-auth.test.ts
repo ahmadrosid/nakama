@@ -53,9 +53,8 @@ test("workspace rename requires platform admin access and updates pins for every
     "rename-other@example.com"
   );
 
-  const ownerUser = (await databaseAdapter.getUserByEmail(
-    "rename@example.com"
-  ))!;
+  const ownerUser =
+    (await databaseAdapter.getUserByEmail("rename@example.com"))!;
 
   const otherUser = (await databaseAdapter.getUserByEmail(
     "rename-other@example.com"

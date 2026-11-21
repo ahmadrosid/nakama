@@ -90,8 +90,8 @@
   position: absolute;
   inset: 0;
   content: "";
-  background:
-    radial-gradient(circle, #ff6a0066 1.5px, transparent 2px) 0 0 / 7px 7px;
+  background: radial-gradient(circle, #ff6a0066 1.5px, transparent 2px) 0 0 /
+    7px 7px;
   mask-image: radial-gradient(ellipse at 20% 50%, #000, transparent 60%);
 }
 

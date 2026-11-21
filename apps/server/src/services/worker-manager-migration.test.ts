@@ -143,9 +143,8 @@ test("Supermemory receives only the requested OpenAI configuration on each start
 test("migration preserves an unambiguous connection and leaves ambiguous credentials stopped", async () => {
   const { createInMemoryDatabaseAdapter } = await import("@nakama/db");
 
-  const { saveTelegramConfig, loadTelegramConfigFile } = await import(
-    "@nakama/core/telegram-config"
-  );
+  const { saveTelegramConfig, loadTelegramConfigFile } =
+    await import("@nakama/core/telegram-config");
 
   const db = createInMemoryDatabaseAdapter();
   const now = new Date().toISOString();
@@ -397,9 +396,8 @@ test("failed stop preserves credentials and blocks owner recovery", async () => 
   );
   await expect(service.disableProfileChannels(owner, true)).rejects.toThrow();
 
-  const { loadWhatsAppConfigFile } = await import(
-    "@nakama/core/whatsapp-config"
-  );
+  const { loadWhatsAppConfigFile } =
+    await import("@nakama/core/whatsapp-config");
 
   expect(await loadWhatsAppConfigFile(owner)).not.toBeNull();
   await expect(service.startWorker("whatsapp", owner)).rejects.toThrow();
@@ -408,9 +406,8 @@ test("failed stop preserves credentials and blocks owner recovery", async () => 
 });
 
 test("stopped agent logs remain available and clearing keeps sibling logs", async () => {
-  const { getChannelConfigDir } = await import(
-    "@nakama/core/channel-config-shared"
-  );
+  const { getChannelConfigDir } =
+    await import("@nakama/core/channel-config-shared");
 
   const a = { orgId: "org_a", profileId: "agent_a" };
   const b = { orgId: "org_a", profileId: "agent_b" };

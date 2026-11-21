@@ -4383,8 +4383,8 @@ export class AgentService {
       // new sign-in makes it work again.
       needsSignIn: Boolean(
         cloudUrl &&
-          computerId &&
-          this.nakamaCloud?.passesFor(cloudUrl, computerId).refused
+        computerId &&
+        this.nakamaCloud?.passesFor(cloudUrl, computerId).refused
       ),
       orgName: instance?.nakamaCloud?.orgName ?? null,
       otherProviders:

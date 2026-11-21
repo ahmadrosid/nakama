@@ -410,10 +410,10 @@ workerManager.channelOwnerAvailable = async ({ orgId, profileId }) => {
 
   return Boolean(
     org &&
-      !org.archivedAt &&
-      (await database.adapter.listProfilesForOrg(orgId)).some(
-        (profile) => profile.id === profileId
-      )
+    !org.archivedAt &&
+    (await database.adapter.listProfilesForOrg(orgId)).some(
+      (profile) => profile.id === profileId
+    )
   );
 };
 

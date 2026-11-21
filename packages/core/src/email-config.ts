@@ -147,10 +147,10 @@ export function isEmailConfigComplete(
 
   return Boolean(
     config.imapHost.trim() &&
-      config.smtpHost.trim() &&
-      config.username.trim() &&
-      config.password.trim() &&
-      resolveFromAddress(config)
+    config.smtpHost.trim() &&
+    config.username.trim() &&
+    config.password.trim() &&
+    resolveFromAddress(config)
   );
 }
 

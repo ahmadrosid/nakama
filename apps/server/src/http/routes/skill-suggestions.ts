@@ -125,11 +125,11 @@ export function registerSkillSuggestionRoutes(
 
       return Boolean(
         access &&
-          canChatWithProfile(access, {
-            isPlatformAdmin: auth.isPlatformAdmin,
-            orgRole: auth.orgRole,
-            userId: auth.user.id,
-          })
+        canChatWithProfile(access, {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          orgRole: auth.orgRole,
+          userId: auth.user.id,
+        })
       );
     }
 

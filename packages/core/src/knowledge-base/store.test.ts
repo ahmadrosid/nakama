@@ -99,9 +99,8 @@ describe("knowledge base store", () => {
     expect(Buffer.byteLength(after) - Buffer.byteLength(before)).toBe(2);
     expect(after).not.toContain(uploaded.document.filename);
 
-    const { runKnowledgeBaseSearch } = await import(
-      "../tools/knowledge-base-search"
-    );
+    const { runKnowledgeBaseSearch } =
+      await import("../tools/knowledge-base-search");
 
     const result = await runKnowledgeBaseSearch(
       { query: "date invoice" },
