@@ -21,28 +21,20 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
+  # bun test does not type-check or bundle. Docker Publish does both, but only
+  # after the merge. Keep this list the same as the one in Dockerfile.
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # A PR that only touches apps/web runs the web build and tests, not the rest
-    # (WEB_ONLY, set by the first steps).
-    env:
-      # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs (PDF tests).
-      NAKAMA_CHROME_NO_SANDBOX: "true"
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          # Full history for the PR diff below. Blobless: a name-only diff needs
-          # trees, not file contents, so this costs about what a shallow clone does.
           fetch-depth: 0
           filter: blob:none
 
-      # Does this PR touch only apps/web? Each job checks for itself, so no job
-      # waits for a separate one to start.
       - name: Check PR files
         id: scope
-        shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -58,7 +50,70 @@ jobs:
               done <<< "$files"
             fi
           fi
-          echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
+          echo "WEB_ONLY=$web_only" >> "$GITHUB_ENV"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Build what the image builds
+        run: |
+          bun run --filter @nakama/web build
+          [[ "$WEB_ONLY" == true ]] && exit 0
+          bun run --filter @nakama/server build
+          bun run --filter @nakama/automation build
+          bun run --filter @nakama/telegram build
+          bun run --filter @nakama/whatsapp build
+          bun run --filter @nakama/discord build
+          bun run --filter @nakama/slack build
+          bun run --filter @nakama/teams build
+
+  # Eight shards, balanced by the per-file times the last main run recorded.
+  # Each shard writes the files it ran; test-files checks they add up to all.
+  test:
+    name: test (${{ matrix.shard }}/8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs (PDF tests).
+      NAKAMA_CHROME_NO_SANDBOX: "true"
+      SHARD: ${{ matrix.shard }}/8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Full history for the PR diff below. Blobless: a name-only diff needs
+          # trees, not file contents, so this costs about what a shallow clone does.
+          fetch-depth: 0
+          filter: blob:none
+
+      # Does this PR touch only apps/web? Each job checks for itself, so no job
+      # waits for a separate one to start.
+      - name: Check PR files
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          web_only=false
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+            if [[ -n "$files" ]]; then
+              web_only=true
+              while IFS= read -r file; do
+                [[ "$file" == apps/web/* ]] || { web_only=false; break; }
+              done <<< "$files"
+            fi
+          fi
           echo "WEB_ONLY=$web_only" >> "$GITHUB_ENV"
 
       - name: Set up Bun
@@ -66,6 +121,15 @@ jobs:
         with:
           # Bun 1.4 supports the HTTP agent interception used by plugin registry fixtures.
           bun-version: 1.4.0
+
+      # Main saves the times of its last full run under its SHA. A PR takes the
+      # newest one; with none yet, bun splits the files by count.
+      - name: Restore test timings
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .test-timings
+          key: test-timings-${{ github.sha }}
+          restore-keys: test-timings-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
@@ -88,40 +152,110 @@ jobs:
           path: ~/.cache/electron
           key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/node_modules/electron/package.json') }}
 
-      - parallel:
-          # bun test does not type-check or bundle. Docker Publish does both, but
-          # only after the merge. Keep this list the same as the one in Dockerfile.
-          - name: Build what the image builds
-            run: |
-              bun run --filter @nakama/web build
-              [[ "$WEB_ONLY" == true ]] && exit 0
-              bun run --filter @nakama/server build
-              bun run --filter @nakama/automation build
-              bun run --filter @nakama/telegram build
-              bun run --filter @nakama/whatsapp build
-              bun run --filter @nakama/discord build
-              bun run --filter @nakama/slack build
-              bun run --filter @nakama/teams build
+      - name: Set up Electron
+        if: env.WEB_ONLY != 'true'
+        run: |
+          for try in 1 2 3 4; do
+            bun apps/desktop/node_modules/electron/install.js && break
+            [[ $try == 4 ]] && exit 1
+            echo "Electron download failed (try $try), retry in $((try * 20))s"
+            sleep $((try * 20))
+          done
+          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
 
-          - name: Set up Electron
-            run: |
-              [[ "$WEB_ONLY" == true ]] && exit 0
-              for try in 1 2 3 4; do
-                bun apps/desktop/node_modules/electron/install.js && break
-                [[ $try == 4 ]] && exit 1
-                echo "Electron download failed (try $try), retry in $((try * 20))s"
-                sleep $((try * 20))
-              done
-              sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
-              sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
-
+      # apps/web has its own bunfig preload, so it runs from its own folder.
+      # bun reads main's times from the second --timings file and writes only
+      # this shard's files to the first, which starts empty: a shard that dies
+      # early uploads nothing, and test-files sees the gap.
       - name: Run tests
         run: |
-          if [[ "$WEB_ONLY" == true ]]; then
-            bun run --cwd apps/web test --parallel=4
-          else
-            xvfb-run -a bun run test
+          mkdir -p .test-timings shard
+          for suite in root web; do
+            [[ -f .test-timings/$suite.json ]] || echo '{"version":1,"files":{}}' > ".test-timings/$suite.json"
+            echo '{"version":1,"files":{}}' > "shard/$suite.json"
+          done
+          status=0
+          if [[ "$WEB_ONLY" != true ]]; then
+            xvfb-run -a bun test --shard="$SHARD" --parallel=4 --path-ignore-patterns '**/apps/web/**' \
+              --timings=shard/root.json --timings=.test-timings/root.json --update-timings || status=1
           fi
+          (cd apps/web && bun test --shard="$SHARD" --parallel=4 \
+            --timings=../../shard/web.json --timings=../../.test-timings/web.json --update-timings) || status=1
+          exit "$status"
+
+      - name: Upload the files this shard ran
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-timings-${{ matrix.shard }}
+          path: shard
+          retention-days: 7
+
+  # Proves the shards together ran every test file, and on main saves the times
+  # the next PRs balance their shards with.
+  test-files:
+    needs: test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Download shard results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: test-timings-*
+          path: shards
+
+      - name: Check every test file ran
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          web_only=false
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+            if [[ -n "$files" ]]; then
+              web_only=true
+              while IFS= read -r file; do
+                [[ "$file" == apps/web/* ]] || { web_only=false; break; }
+              done <<< "$files"
+            fi
+          fi
+          # bun test's own file pattern, from git rather than from bun.
+          pattern='(\.|_)(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$'
+          git ls-files | grep -E "$pattern" | grep -v '/node_modules/' > all.txt
+          grep '^apps/web/' all.txt | sed 's|^apps/web/||' | sort > expected-web.txt
+          if [[ "$web_only" == true ]]; then : > expected-root.txt; else grep -v '^apps/web/' all.txt | sort > expected-root.txt; fi
+          mkdir -p .test-timings
+          for suite in root web; do
+            jq -s '{version: 1, files: (map(.files) | add // {})}' shards/*/"$suite".json > ".test-timings/$suite.json"
+            jq -r '.files | keys[]' ".test-timings/$suite.json" | sort > "ran-$suite.txt"
+            echo "$suite: $(wc -l < "expected-$suite.txt") expected, $(wc -l < "ran-$suite.txt") ran"
+            missing=$(comm -23 "expected-$suite.txt" "ran-$suite.txt")
+            if [[ -n "$missing" ]]; then
+              echo "::error::$suite test files no shard ran:"
+              echo "$missing"
+              status=1
+            fi
+          done
+          [[ "$TEST_RESULT" == success ]] || { echo "::error::a test shard failed: $TEST_RESULT"; status=1; }
+          exit "${status:-0}"
+
+      - name: Save test timings for PRs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Same path as the restore step: the cache version hashes the paths.
+          path: .test-timings
+          key: test-timings-${{ github.sha }}
 
   # Windows tests cover server and shared packages, not apps/web.
   test-windows:
