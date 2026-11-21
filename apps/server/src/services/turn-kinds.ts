@@ -131,12 +131,13 @@ const TURN_POLICIES: Record<TurnKind, TurnPolicy> = {
     instructions: [],
     tools: { ...DELEGATED_TOOLS, subAgent: true },
   },
-  // Replays a saved case, so nothing it does may reach outside the run.
+  // Replays a saved case, so nothing it does may reach outside the run. It
+  // replays a chat, so it obeys the chat's platform tools switch.
   regression_rerun: {
     channel: "automation",
     instructions: [],
     orgRole: "member",
-    tools: { ...DELEGATED_TOOLS, readOnly: true },
+    tools: { ...DELEGATED_TOOLS, profileOptOut: true, readOnly: true },
   },
   sub_agent: {
     channel: "subagent",

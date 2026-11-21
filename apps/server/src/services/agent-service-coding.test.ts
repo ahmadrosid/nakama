@@ -210,6 +210,15 @@ describe("AgentService skill_manage injection", () => {
       expect(await names(on, kind)).toContain("todo_write");
     }
 
+    // A rerun replays a chat, so it gets the chat's tools.
+    expect(await names(off, "regression_rerun")).toEqual(["test_tool"]);
+    expect(await names(on, "regression_rerun")).toContain("propose_org_memory");
+
+    // Super Nakama has no switch.
+    expect(await names({ ...off, isSuper: true }, "chat")).toEqual(
+      await names({ ...on, isSuper: true }, "chat")
+    );
+
     // Unattended turns ignore the switch.
     for (const kind of [
       "automation",

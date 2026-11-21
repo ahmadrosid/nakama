@@ -274,9 +274,14 @@ export function registerProfileRoutes(
     .openapi("CreateProfileRequest");
 
   const updateProfileSchema = z
-    .object({ platformToolsEnabled: z.boolean().optional() })
+    .object({})
     .passthrough()
     .openapi("UpdateProfileRequest");
+
+  // Checked at runtime only, so the documented request stays open.
+  const updateProfileBodySchema = z
+    .object({ platformToolsEnabled: z.boolean().optional() })
+    .passthrough();
 
   const soulStatusSchema = z
     .object({})
@@ -2170,7 +2175,7 @@ export function registerProfileRoutes(
     const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
-    const body = await readJson(c.req.raw, updateProfileSchema);
+    const body = await readJson(c.req.raw, updateProfileBodySchema);
 
     // Sharing a member's agent is the owner's call. Admins cannot force it.
     if (body.sharedWithTeam !== undefined) {

@@ -500,13 +500,18 @@ const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
   "whatsapp",
 ];
 
-/** The profile turned platform tools off and this kind of turn obeys it. */
+/**
+ * The profile turned platform tools off and this kind of turn obeys it.
+ * Super Nakama works through its own tools, so it has no switch.
+ */
 function platformToolsOff(
   profile: StoredProfileRecord,
   policy: ReturnType<typeof turnPolicy>["tools"]
 ): boolean {
   return Boolean(
-    policy?.profileOptOut && profile.platformToolsEnabled === false
+    policy?.profileOptOut &&
+      !profile.isSuper &&
+      profile.platformToolsEnabled === false
   );
 }
 
