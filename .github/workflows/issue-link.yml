@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR makes the old run's result useless, so stop it. Main
+# keeps every run: each push there is a commit someone may need a result for.
+concurrency:
+  group: issue-link-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   issue-link:
     runs-on: ubuntu-latest
