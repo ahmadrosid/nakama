@@ -34,7 +34,7 @@ To try it on your own machine:
 docker pull ghcr.io/ahmadrosid/nakama:latest
 umask 077
 printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
 Open `http://localhost:4310`. On a server, use Compose instead: it pins the version, keeps a daily backup, and can upgrade from Settings. See [Docker](/docker#on-a-server).

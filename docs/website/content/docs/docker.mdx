@@ -50,7 +50,7 @@ To try Nakama on your own machine, pull the prebuilt image and start it:
 docker pull ghcr.io/ahmadrosid/nakama:latest
 umask 077
 printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
   --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
@@ -91,7 +91,7 @@ Check that you have a backup (**Export ZIP** in the dashboard), then replace the
 ```bash
 docker pull ghcr.io/ahmadrosid/nakama:latest
 docker rm -f nakama
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
   --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
@@ -207,7 +207,7 @@ To skip the setup wizard on a fresh data volume, set all three admin seed variab
 Partial seed config fails boot with a clear error. Restarting a seeded instance is a no-op (idempotent).
 
 ```bash
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
   -e NAKAMA_SEED_ADMIN_EMAIL=admin@example.com \
   -e NAKAMA_SEED_ADMIN_NAME=Admin \
   -e NAKAMA_SEED_ADMIN_PASSWORD=seedpass123 \
@@ -253,7 +253,7 @@ The Claude, Codex, and OpenCode [ACP agents](/acp-agents) need the Claude Code, 
 If you use these agents, run the full image:
 
 ```bash
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest-full
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest-full
 ```
 
 To build it from source, pass the build arg:
@@ -267,7 +267,7 @@ To keep the default image, give the agents a binary through the data volume. Ins
 ```bash
 docker exec nakama bun add -g @openai/codex @anthropic-ai/claude-code opencode-ai
 docker rm -f nakama
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
   -e CODEX_PATH=/nakama/data/.bun/bin/codex \
   -e CLAUDE_CODE_EXECUTABLE=/nakama/data/.bun/bin/claude \
   -e OPENCODE_PATH=/nakama/data/.bun/bin/opencode \
@@ -281,7 +281,7 @@ The image does not include [CloakBrowser](https://github.com/CloakHQ/CloakBrowse
 To use Cloak as the Chromium behind agent-browser, bind-mount the Cloak binary and pass the same host env Nakama's `bash` tool already inherits:
 
 ```bash
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
+docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
   -v /path/to/cloak-chromium:/cloak/chromium:ro \
   -e AGENT_BROWSER_EXECUTABLE_PATH=/cloak/chromium \
   -e AGENT_BROWSER_ARGS="<copy from Cloak's agent-browser example>" \
