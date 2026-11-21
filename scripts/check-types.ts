@@ -10,9 +10,11 @@ const BASELINE = "typecheck-baseline.txt";
 
 const PROJECTS = [".", "apps/web"];
 
-// "path(line,col): error TS1234: message" -> "path: TS1234: message". Line
-// numbers move with every edit, so they are not part of the key.
-const ERROR_LINE = /^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$/;
+// "path(line,col): error TS1234: message" -> "path: TS1234". Line numbers move
+// with every edit, and TypeScript 7 checks in parallel, so the order it prints
+// union members in can change between runs: neither is part of the key. A count
+// per key still catches a second error of the same code in the same file.
+const ERROR_LINE = /^(.+?)\(\d+,\d+\): error (TS\d+): /;
 
 function typeErrors(): string[] {
   const errors: string[] = [];
@@ -36,7 +38,7 @@ function typeErrors(): string[] {
       const match = ERROR_LINE.exec(line);
 
       if (match) {
-        errors.push(`${match[1]}: ${match[2]}: ${match[3]}`);
+        errors.push(`${match[1]}: ${match[2]}`);
       }
     }
 

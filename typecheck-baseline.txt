@@ -1,296 +1,296 @@
-apps/cli/src/chat.test.ts: TS2304: Cannot find name 'ProfileSummary'.
-apps/cli/src/chat.test.ts: TS2352: Conversion of type '{ isRaw: true; isTTY: true; setRawMode: () => never; }' to type 'ReadStream' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/cli/src/chat.test.ts: TS2353: Object literal may only specify known properties, and 'content' does not exist in type 'CliToolResult'.
-apps/cli/src/chat.ts: TS18047: 'prompt' is possibly 'null'.
-apps/cli/src/image-input.ts: TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{ ".gif": string; ".jpeg": string; ".jpg": string; ".png": string; ".webp": string; }'.
-apps/cli/src/org.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/cli/src/persistent-prompt.test.ts: TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
-apps/cli/src/persistent-prompt.test.ts: TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
-apps/cli/src/persistent-prompt.test.ts: TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
-apps/cli/src/persistent-prompt.test.ts: TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
-apps/cli/src/persistent-prompt.test.ts: TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
-apps/cli/src/persistent-prompt.test.ts: TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
-apps/cli/src/persistent-prompt.test.ts: TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
-apps/cli/src/setup.test.ts: TS2322: Type 'typeof fetch' is not assignable to type '(request: Request, env?: { server?: RequestAddressSource | undefined; } | {} | undefined, executionCtx?: ExecutionContext | undefined) => Promise<...> | Response'.
-apps/cli/src/setup.test.ts: TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
-apps/cli/src/setup.ts: TS2339: Property 'token' does not exist on type 'AuthUserResponse'.
-apps/cli/src/setup.ts: TS2554: Expected 1 arguments, but got 2.
-apps/cli/src/terminal-layout.ts: TS18048: 'row' is possibly 'undefined'.
-apps/cli/src/terminal-layout.ts: TS2322: Type 'number | undefined' is not assignable to type 'number'.
-apps/cli/src/terminal-layout.ts: TS2445: Property 'resetRenderState' is protected and only accessible within class 'TuiMainScreen' and its subclasses.
-apps/cli/src/terminal-layout.ts: TS2445: Property 'resetRenderState' is protected and only accessible within class 'TuiMainScreen' and its subclasses.
-apps/cli/src/terminal-screen.test.ts: TS2769: No overload matches this call.
-apps/platform/automation/src/index.ts: TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
-apps/platform/automation/src/scheduler.test.ts: TS2352: Conversion of type 'number' to type 'Timeout' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/automation/src/scheduler.test.ts: TS2352: Conversion of type 'number' to type 'Timeout' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/automation/src/scheduler.test.ts: TS2352: Conversion of type '{ getAutomationWorkerSettings?: (() => Promise<{ pollIntervalMinutes: number; }>) | undefined; runSkillCuratorInternal?: ((orgId: string) => Promise<never>) | undefined; getTimezone: () => Promise<...>; listAutomationSchedules: () => Promise<AutomationSchedule[]>; listSkillCuratorOrgs: () => Promise<ListSkillCurator...' to type 'NakamaClient' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/automation/src/scheduler.ts: TS2339: Property 'pollInFlight' does not exist on type 'AutomationWorkerScheduler'.
-apps/platform/automation/src/scheduler.ts: TS2339: Property 'pollInFlight' does not exist on type 'AutomationWorkerScheduler'.
-apps/platform/automation/src/scheduler.ts: TS2339: Property 'pollInFlight' does not exist on type 'AutomationWorkerScheduler'.
-apps/platform/discord/src/bot.ts: TS2345: Argument of type 'ChatInputCommandInteraction<CacheType>' is not assignable to parameter of type 'SlashDeferInteraction'.
-apps/platform/discord/src/channel-artifact-flow.ts: TS2322: Type 'Promise<{ id: string; } | null>' is not assignable to type 'Promise<void>'.
-apps/platform/discord/src/chat-handler.test.ts: TS2322: Type '{ active: boolean; channel: "discord"; createdAt: string; id: string; messageCount: number; preview: string; profileId: string; title: null; updatedAt: string; }[]' is not assignable to type 'SessionSummary[]'.
-apps/platform/discord/src/chat-handler.test.ts: TS2322: Type '{ active: boolean; channel: "discord"; createdAt: string; id: string; messageCount: number; preview: string; profileId: string; title: null; updatedAt: string; }[]' is not assignable to type 'SessionSummary[]'.
-apps/platform/discord/src/chat-handler.test.ts: TS2352: Conversion of type 'ButtonInteraction<CacheType> | StringSelectMenuInteraction<CacheType>' to type 'ChatInputCommandInteraction<CacheType>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/discord/src/chat-handler.test.ts: TS2352: Conversion of type 'ButtonInteraction<CacheType> | StringSelectMenuInteraction<CacheType>' to type 'ChatInputCommandInteraction<CacheType>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/discord/src/chat-handler.test.ts: TS2352: Conversion of type '{ client: Client<true>; type: InteractionType.ApplicationCommand; channelId: Snowflake; commandId: Snowflake; commandGuildId: Snowflake | null; deferred: boolean; ephemeral: boolean | null; ... 20 more ...; message: { components: { ...; }[]; }; }' to type 'ButtonInteraction<CacheType> | StringSelectMenuInteraction<CacheType>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/discord/src/chat-handler.test.ts: TS2741: Property 'threadStore' is missing in type '{ authStore: DiscordAuthStore; client: NakamaClient; config: { botToken: string; profileId: string; }; orgStore: ChannelOrgStore; sessionStore: SessionStore; }' but required in type 'ChatHandlerDeps'.
-apps/platform/discord/src/chat-handler.ts: TS2322: Type 'Promise<{ id: string; } | null>' is not assignable to type 'Promise<void>'.
-apps/platform/discord/src/chat-handler.ts: TS2322: Type 'ThreadChannel<boolean>' is not assignable to type 'TextBasedChannel'.
-apps/platform/discord/src/chat-handler.ts: TS2345: Argument of type 'AgentQuestionnaire | null' is not assignable to parameter of type 'AgentQuestionnaire'.
-apps/platform/discord/src/chat-handler.ts: TS2345: Argument of type 'ThreadChannel<boolean>' is not assignable to parameter of type 'TextBasedChannel'.
-apps/platform/discord/src/messenger.ts: TS2339: Property 'send' does not exist on type 'TextBasedChannel'.
-apps/platform/discord/src/send-artifact-attachment.test.ts: TS2352: Conversion of type '{ send: () => Promise<never>; }' to type 'TextBasedChannel' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/discord/src/send-artifact-attachment.ts: TS2339: Property 'send' does not exist on type 'TextBasedChannel'.
-apps/platform/discord/src/test-helpers.ts: TS2304: Cannot find name 'SendMessageInput'.
-apps/platform/discord/src/test-helpers.ts: TS2304: Cannot find name 'SendMessageInput'.
-apps/platform/discord/src/test-helpers.ts: TS2352: Conversion of type '{ attachments: Map<string, { contentType: string | null; name: string; size: number; url: string; }>; author: { bot: false; id: string; }; channel: { archived: boolean; fetch: () => Promise<...>; ... 9 more ...; setArchived: (value: boolean) => Promise<...>; } | { ...; }; ... 6 more ...; stickers: { ...; }; }' to type 'Message<boolean>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/discord/src/test-helpers.ts: TS2352: Conversion of type '{ attachments: Map<string, { contentType: string | null; name: string; size: number; url: string; }>; author: { bot: false; id: string; }; channel: { id: string; isDMBased: () => boolean; isTextBased: () => boolean; isThread: () => boolean; messages: { fetch: () => Promise<...>; }; parentId: null; send: (payload: st...' to type 'Message<boolean>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/discord/src/test-helpers.ts: TS2352: Conversion of type '{ channel: { archived: boolean; fetch: () => Promise<{ archived: boolean; id: string; isDMBased: () => boolean; isThread: () => boolean; parentId: string; }>; id: string; isDMBased: () => boolean; isThread: () => boolean; parentId: string | null; partial: boolean; setArchived: (value: boolean) => Promise<...>; } | {...' to type 'ChatInputCommandInteraction<CacheType>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/discord/src/test-helpers.ts: TS2352: Conversion of type '{ createChatSession: () => { clear: () => Promise<void>; compact: () => Promise<{ action: "summarized"; messagesAfter: number; messagesBefore: number; }>; createAutomation: () => Promise<{}>; getMessages: () => Promise<...>; id: string; purge: () => Promise<...>; send: () => Promise<...>; sendStream: (input: SendMes...' to type 'NakamaClient' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/slack/src/socket.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/slack/src/socket.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/slack/src/socket.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/slack/src/socket.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/slack/src/test-helpers.ts: TS2352: Conversion of type '{ createChatSession: () => { clear: () => Promise<void>; getMessages: () => Promise<never[]>; id: string; sendStream: (input: { message: string; }, handlers: StreamHandlers, streamOptions?: { signal?: AbortSignal; }) => Promise<...>; }; ... 6 more ...; setOrgId: () => void; }' to type 'NakamaClient' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/teams/src/test-helpers.ts: TS2352: Conversion of type '{ createChatSession: (sessionId: string) => { clear: () => Promise<void>; getMessages: () => Promise<never[]>; id: string; sendStream: (input: { message: string; }, onChunk: (delta: string) => void, streamOptions?: { signal?: AbortSignal; }) => Promise<...>; }; ... 6 more ...; setOrgId: () => void; }' to type 'NakamaClient' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/telegram/src/attachments.test.ts: TS2352: Conversion of type '{ api: { getFile: () => Promise<never>; token: string; }; }' to type 'Context' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/telegram/src/attachments.test.ts: TS2352: Conversion of type '{ api: { getFile: () => Promise<{ file_path: string; file_size: number | undefined; }>; token: string; }; message: { caption: string | undefined; document: { file_id: string; file_name: string | undefined; file_size: number | undefined; mime_type: string | undefined; }; }; }' to type 'Context' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/telegram/src/attachments.test.ts: TS2352: Conversion of type '{ api: { getFile: () => Promise<{ file_path: string; file_size: number; }>; token: string; }; }' to type 'Context' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/telegram/src/attachments.test.ts: TS2352: Conversion of type '{ api: { getFile: () => Promise<{ file_path: string; }>; token: string; }; }' to type 'Context' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/telegram/src/chat-handler.ts: TS2322: Type 'Promise<TelegramReplyMessage | undefined>' is not assignable to type 'Promise<void>'.
-apps/platform/telegram/src/chat-handler.ts: TS2322: Type 'Promise<true>' is not assignable to type 'Promise<void>'.
-apps/platform/telegram/src/test-helpers.ts: TS2352: Conversion of type '{ answerCallbackQuery: (answer?: { text?: string; }) => Promise<void>; api: { editMessageText: (chatId: number, messageId: number, text: string, editOptionsArg?: Parameters<Context["api"]["editMessageText"]>[3]) => Promise<void>; }; ... 9 more ...; replyWithDraft: (text: string, other: { draft_id: number; }, signal?...' to type 'Context' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/telegram/src/test-helpers.ts: TS2352: Conversion of type '{ createChatSession: () => { clear: () => Promise<void>; compact: () => Promise<{ action: "summarized"; messagesAfter: number; messagesBefore: number; }>; createAutomation: () => Promise<{}>; getMessages: () => Promise<...>; id: string; purge: () => Promise<...>; send: () => Promise<...>; sendStream: (input: SendMes...' to type 'NakamaClient' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554: Expected 0 arguments, but got 2.
-apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554: Expected 0 arguments, but got 2.
-apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554: Expected 0 arguments, but got 2.
-apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554: Expected 0 arguments, but got 2.
-apps/platform/whatsapp/src/chat-handler.test.ts: TS2322: Type '(_jid: string, content: AnyMessageContent) => Promise<void>' is not assignable to type '(jid: string, content: baileys.AnyMessageContent) => Promise<{ key: { id: string; }; }>'.
-apps/platform/whatsapp/src/chat-handler.test.ts: TS2322: Type '(_jid: string, content: AnyMessageContent) => Promise<void>' is not assignable to type '(jid: string, content: baileys.AnyMessageContent) => Promise<{ key: { id: string; }; }>'.
-apps/platform/whatsapp/src/chat-handler.test.ts: TS2339: Property 'document' does not exist on type 'AnyMessageContent'.
-apps/platform/whatsapp/src/chat-handler.test.ts: TS2339: Property 'document' does not exist on type 'AnyMessageContent'.
-apps/platform/whatsapp/src/chat-handler.test.ts: TS2339: Property 'document' does not exist on type 'AnyMessageContent'.
-apps/platform/whatsapp/src/chat-handler.test.ts: TS2339: Property 'document' does not exist on type 'AnyMessageContent'.
-apps/platform/whatsapp/src/chat-handler.test.ts: TS2339: Property 'groupMetadata' does not exist on type '{ end: () => void; ev: { off: () => void; on: () => void; }; sendMessage: (jid: string, content: AnyMessageContent) => Promise<{ key: { id: string; }; }>; sendPresenceUpdate: () => Promise<...>; }'.
-apps/platform/whatsapp/src/chat-handler.ts: TS2305: Module '"@nakama/client"' has no exported member 'SendStreamOptions'.
-apps/platform/whatsapp/src/inbound-message.test.ts: TS2378: A 'get' accessor must return a value.
-apps/platform/whatsapp/src/outbound-server.test.ts: TS2339: Property 'text' does not exist on type 'AnyMessageContent'.
-apps/platform/whatsapp/src/outbound-server.test.ts: TS2339: Property 'text' does not exist on type 'AnyMessageContent'.
-apps/platform/whatsapp/src/send-artifact-document.test.ts: TS2352: Conversion of type '{ sendMessage: () => Promise<unknown>; }' to type '{ communityMetadata: (jid: string) => Promise<GroupMetadata>; communityCreate: (subject: string, body: string) => Promise<GroupMetadata | null>; ... 167 more ...; fetchNewChatMessageCap: () => Promise<...>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/whatsapp/src/send-artifact-document.test.ts: TS2352: Conversion of type '{ sendMessage: () => Promise<unknown>; }' to type '{ communityMetadata: (jid: string) => Promise<GroupMetadata>; communityCreate: (subject: string, body: string) => Promise<GroupMetadata | null>; ... 167 more ...; fetchNewChatMessageCap: () => Promise<...>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/whatsapp/src/socket.test.ts: TS2352: Conversion of type 'number' to type 'Timeout' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/whatsapp/src/socket.test.ts: TS2741: Property '__promisify__' is missing in type '(fn: any, ms: any) => Timeout' but required in type 'typeof setTimeout'.
-apps/platform/whatsapp/src/socket.test.ts: TS7006: Parameter 'fn' implicitly has an 'any' type.
-apps/platform/whatsapp/src/socket.test.ts: TS7006: Parameter 'ms' implicitly has an 'any' type.
-apps/platform/whatsapp/src/socket.ts: TS2345: Argument of type 'WAMessage' is not assignable to parameter of type '{ key: { remoteJid?: string | null | undefined; fromMe?: boolean | null | undefined; participant?: string | null | undefined; id?: string | null | undefined; }; message?: IMessage | null | undefined; messageStubType?: number | undefined; }'.
-apps/platform/whatsapp/src/socket.ts: TS2345: Argument of type '{ output?: { statusCode?: number | undefined; } | undefined; cause?: DisconnectDiagnosticValue | undefined; data?: DisconnectDiagnosticValue | undefined; } | undefined' is not assignable to parameter of type 'DisconnectDiagnosticValue | null | undefined'.
-apps/platform/whatsapp/src/test-helpers.ts: TS2305: Module '"@nakama/client"' has no exported member 'SendStreamOptions'.
-apps/platform/whatsapp/src/test-helpers.ts: TS2339: Property 'profileId' does not exist on type '{}'.
-apps/platform/whatsapp/src/test-helpers.ts: TS2352: Conversion of type '{ createChatSession: () => { clear: () => Promise<void>; compact: () => Promise<{ action: "summarized"; messagesAfter: number; messagesBefore: number; }>; createAutomation: () => Promise<...>; ... 4 more ...; sendStream: (_input: SendMessageArg, streamHandlers: StreamHandlers, streamOptions?: any) => Promise<...>; }...' to type 'NakamaClient' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/platform/whatsapp/src/test-helpers.ts: TS2554: Expected 1 arguments, but got 0.
-apps/platform/whatsapp/src/test-helpers.ts: TS2554: Expected 1 arguments, but got 0.
-apps/platform/whatsapp/src/test-helpers.ts: TS7006: Parameter '_channel' implicitly has an 'any' type.
-apps/platform/whatsapp/src/typing-indicator.test.ts: TS2352: Conversion of type '{ sendPresenceUpdate(): Promise<void>; }' to type '{ communityMetadata: (jid: string) => Promise<GroupMetadata>; communityCreate: (subject: string, body: string) => Promise<GroupMetadata | null>; ... 167 more ...; fetchNewChatMessageCap: () => Promise<...>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345: Argument of type 'HonoApp' is not assignable to parameter of type '{ fetch: typeof fetch; }'.
-apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345: Argument of type 'HonoApp' is not assignable to parameter of type '{ fetch: typeof fetch; }'.
-apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345: Argument of type 'HonoApp' is not assignable to parameter of type '{ fetch: typeof fetch; }'.
-apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345: Argument of type 'HonoApp' is not assignable to parameter of type '{ fetch: typeof fetch; }'.
-apps/server/src/http/routes/data-portability.test.ts: TS2322: Type 'Buffer<ArrayBufferLike>' is not assignable to type 'BodyInit | null | undefined'.
-apps/server/src/http/routes/data-portability.test.ts: TS2322: Type 'Buffer<ArrayBufferLike>' is not assignable to type 'BodyInit | null | undefined'.
-apps/server/src/http/routes/data-portability.test.ts: TS2769: No overload matches this call.
-apps/server/src/http/routes/data-portability.test.ts: TS2769: No overload matches this call.
-apps/server/src/http/routes/google-meet-capture.test.ts: TS2345: Argument of type 'string | Uint8Array<ArrayBufferLike>' is not assignable to parameter of type 'string | Blob | BufferSource'.
-apps/server/src/http/routes/internal-automations.test.ts: TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
-apps/server/src/http/routes/llm-request-safety.ts: TS2345: Argument of type 'ThinkingEffort' is not assignable to parameter of type '"high" | "low" | "medium"'.
-apps/server/src/http/routes/llm-request-safety.ts: TS2345: Argument of type 'ThinkingEffort' is not assignable to parameter of type '"high" | "low" | "medium"'.
-apps/server/src/http/routes/mcp-registry.test.ts: TS2345: Argument of type 'TestBrowserSession' is not assignable to parameter of type 'TestBrowserSession & { orgId: string; }'.
-apps/server/src/http/routes/models.ts: TS2322: Type '{ createdAt: string; id: string; label: string; modelCount: number; type: ProviderName; }[]' is not assignable to type 'ProviderInstanceSummary[]'.
-apps/server/src/http/routes/models.ts: TS2322: Type '{ createdAt: string; id: string; label: string; modelCount: number; type: ProviderName; }[]' is not assignable to type 'ProviderInstanceSummary[]'.
-apps/server/src/http/routes/settings-rbac.test.ts: TS2769: No overload matches this call.
-apps/server/src/http/routes/settings-rbac.test.ts: TS2769: No overload matches this call.
-apps/server/src/http/routes/setup-import.test.ts: TS2322: Type 'Buffer<ArrayBufferLike>' is not assignable to type 'BodyInit | null | undefined'.
-apps/server/src/http/routes/skills-marketplace.test.ts: TS2345: Argument of type 'TestBrowserSession' is not assignable to parameter of type 'TestBrowserSession & { orgId: string; }'.
-apps/server/src/http/routes/system-version.test.ts: TS2345: Argument of type 'TestBrowserSession' is not assignable to parameter of type 'TestBrowserSession & { orgId: string; }'.
-apps/server/src/http/routes/system-version.test.ts: TS2345: Argument of type 'TestBrowserSession' is not assignable to parameter of type 'TestBrowserSession & { orgId: string; }'.
-apps/server/src/http/shared.ts: TS2322: Type 'undefined' is not assignable to type 'T'.
-apps/server/src/providers/anthropic/pause-continuation.test.ts: TS2741: Property 'preconnect' is missing in type '() => Promise<Response>' but required in type 'typeof fetch'.
-apps/server/src/providers/anthropic/web-search.ts: TS2578: Unused '@ts-expect-error' directive.
-apps/server/src/providers/models.test.ts: TS2345: Argument of type '"acp" | ProviderName' is not assignable to parameter of type 'ProviderName'.
-apps/server/src/providers/models.test.ts: TS2345: Argument of type '"acp" | ProviderName' is not assignable to parameter of type 'ProviderName'.
-apps/server/src/providers/nakama-cloud/sign-in.test.ts: TS2741: Property 'preconnect' is missing in type '(input: URL | RequestInfo, init: BunFetchRequestInit | RequestInit | undefined) => Promise<Response>' but required in type 'typeof fetch'.
-apps/server/src/providers/openai-compatible/index.llm.test.ts: TS2322: Type 'ToolDefinition<{ content: string; path: string; }, WriteFileOutput>' is not assignable to type 'LlmToolDefinition'.
-apps/server/src/providers/openai-compatible/index.test.ts: TS2739: Type '{ apiKey: string; baseUrl: string; model: string; }' is missing the following properties from type 'OpenAICompatibleProviderOptions': displayName, supportsThinking
-apps/server/src/providers/openai/stream.test.ts: TS2345: Argument of type '{ toolCallId: string; tool: string; delta: string; accumulatedArguments?: string | undefined; }' is not assignable to parameter of type '{ accumulatedArguments: string; delta: string; tool: string; toolCallId: string; }'.
-apps/server/src/providers/opencode-go/index.test.ts: TS2769: No overload matches this call.
-apps/server/src/providers/opencode-go/index.test.ts: TS2769: No overload matches this call.
-apps/server/src/providers/opencode-go/index.test.ts: TS2769: No overload matches this call.
-apps/server/src/services/agent-group-store.test.ts: TS2769: No overload matches this call.
-apps/server/src/services/agent-service-regression-rerun.test.ts: TS2322: Type 'void' is not assignable to type 'undefined'.
-apps/server/src/services/automation.test.ts: TS2741: Property 'description' is missing in type '{ name: string; profileId: string; prompt: string; toolLimit: { composioToolkits: never[]; mcpServerIds: never[]; toolIds: string[]; }; trigger: { type: "manual"; }; }' but required in type 'CreateAutomationRequest'.
-apps/server/src/services/automation.test.ts: TS2741: Property 'description' is missing in type '{ name: string; prompt: string; toolLimit: { composioToolkits: never[]; mcpServerIds: string[]; toolIds: string[]; }; trigger: { type: "manual"; }; }' but required in type 'CreateAutomationRequest'.
-apps/server/src/services/automation.test.ts: TS2741: Property 'description' is missing in type '{ name: string; prompt: string; trigger: { cron: string; type: "schedule"; }; }' but required in type 'CreateAutomationRequest'.
-apps/server/src/services/automation.test.ts: TS2741: Property 'description' is missing in type '{ name: string; prompt: string; trigger: { cron: string; type: "schedule"; }; }' but required in type 'CreateAutomationRequest'.
-apps/server/src/services/automation.test.ts: TS2741: Property 'description' is missing in type '{ name: string; prompt: string; trigger: { type: "manual"; }; }' but required in type 'CreateAutomationRequest'.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS18046: 'provider' is of type 'unknown'.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2339: Property 'headers' does not exist on type '{}'.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2339: Property 'options' does not exist on type '{}'.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2339: Property 'options' does not exist on type '{}'.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554: Expected 2-3 arguments, but got 1.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554: Expected 2-3 arguments, but got 1.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554: Expected 2-3 arguments, but got 1.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554: Expected 2-3 arguments, but got 1.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554: Expected 2-3 arguments, but got 1.
-apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554: Expected 2-3 arguments, but got 1.
-apps/server/src/services/composio-service.test.ts: TS2353: Object literal may only specify known properties, and 'executeTool' does not exist in type 'Partial<Pick<ComposioApiClient, "createProfileSession" | "deleteConnectedAccount" | "linkToolkitAccount" | "listCatalogToolkits" | "listSessionTools">>'.
-apps/server/src/services/composio-service.test.ts: TS2353: Object literal may only specify known properties, and 'executeTool' does not exist in type 'Pick<ComposioApiClient, "createProfileSession" | "deleteConnectedAccount" | "linkToolkitAccount" | "listCatalogToolkits" | "listSessionTools">'.
-apps/server/src/services/composio-service.test.ts: TS7006: Parameter 'accountId' implicitly has an 'any' type.
-apps/server/src/services/composio-service.test.ts: TS7006: Parameter 'slug' implicitly has an 'any' type.
-apps/server/src/services/composio-service.test.ts: TS7006: Parameter 'userId' implicitly has an 'any' type.
-apps/server/src/services/data-portability.ts: TS2304: Cannot find name 'ZipEntryInfo'.
-apps/server/src/services/data-portability.ts: TS2304: Cannot find name 'ZipEntryInfo'.
-apps/server/src/services/data-portability.ts: TS2304: Cannot find name 'ZipEntryInfo'.
-apps/server/src/services/data-portability.ts: TS2304: Cannot find name 'ZipEntryInfo'.
-apps/server/src/services/data-portability.ts: TS2304: Cannot find name 'ZipEntryInfo'.
-apps/server/src/services/google-meet/actions.test.ts: TS2322: Type '{ downloadMeetRecording: Mock<() => Promise<never>>; listMeetRecordings: Mock<() => Promise<{ driveConnected: boolean; gmailConnected: boolean; recordings: { date: string; fileId: string; messageId: string; name: string; size: number; }[]; }>>; }' is not assignable to type 'Pick<ComposioService, "downloadMeetRecording" | "listMeetRecordings">'.
-apps/server/src/services/google-meet/service.test.ts: TS2322: Type '(orgId: string, userId: string) => Promise<{ driveConnected: true; gmailConnected: true; recordings: never[]; }>' is not assignable to type '(orgId: string, userId: string) => Promise<{ composioConfigured: boolean; driveConnected: boolean; gmailConnected: boolean; recordings: { fileId: string; messageId: string; name: string; size: number; date: string; }[]; }>'.
-apps/server/src/services/mcp-tool-bridge.llm.test.ts: TS2322: Type '(server: StoredMcpServerRecord, name: string, args: McpToolArguments) => Promise<{ documents: { documentId: string; title: string; }[]; content?: undefined; ... 5 more ...; error?: undefined; } | { ...; } | { ...; } | { ...; } | { ...; }>' is not assignable to type '(server: StoredMcpServerRecord, toolName: string, input: McpToolArguments, orgId: string | undefined, profileId: string) => Promise<JsonValue>'.
-apps/server/src/services/meet-recording-import.test.ts: TS2345: Argument of type '{ downloadMeetRecording(): Promise<{ file: unknown; recording: { name: string; }; }>; }' is not assignable to parameter of type 'Pick<ComposioService, "downloadMeetRecording">'.
-apps/server/src/services/meet-recording-import.test.ts: TS2345: Argument of type '{ downloadMeetRecording(): Promise<{ file: unknown; recording: { name: string; }; }>; }' is not assignable to parameter of type 'Pick<ComposioService, "downloadMeetRecording">'.
-apps/server/src/services/meet-recording-import.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/server/src/services/meet-recording-import.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/server/src/services/meet-recording-import.test.ts: TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
-apps/server/src/services/org-memory-service.test.ts: TS2353: Object literal may only specify known properties, and 'resecondaryMemberUserId' does not exist in type 'StoredOrgMemoryProposal'.
-apps/server/src/services/plugin-service.test.ts: TS2353: Object literal may only specify known properties, and 'properties' does not exist in type '{ type: string; }'.
-apps/server/src/services/profile-service.test.ts: TS2741: Property 'updatedAt' is missing in type '{ createdAt: string; id: string; isSuper: false; model: null; name: string; orgId: string; systemPrompt: string; }' but required in type 'StoredProfileRecord'.
-apps/server/src/services/session-persistence.ts: TS2554: Expected 1 arguments, but got 0.
-apps/server/src/services/session-runtime.test.ts: TS2769: No overload matches this call.
-apps/server/src/services/session-runtime.test.ts: TS2769: No overload matches this call.
-apps/server/src/services/skill-post-turn-review-service.test.ts: TS2769: No overload matches this call.
-apps/server/src/services/skills-service.test.ts: TS2353: Object literal may only specify known properties, and 'resecondaryMemberUserId' does not exist in type 'StoredSkillProposal'.
-apps/server/src/services/turn-runner.test.ts: TS2322: Type '(error: unknown) => Promise<void>' is not assignable to type '(error: unknown, options?: ReportErrorOptions) => Promise<ErrorReport>'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-apps/server/src/tools/bash.ts: TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{ "[:alnum:]": string; "[:alpha:]": string; "[:blank:]": string; "[:digit:]": string; "[:lower:]": string; "[:space:]": string; "[:upper:]": string; "[:word:]": string; "[:xdigit:]": string; }'.
-apps/server/src/tools/browser-tools.ts: TS2304: Cannot find name 'JsonValue'.
-apps/server/src/tools/super-nakama-create-plugin.llm.test.ts: TS2353: Object literal may only specify known properties, and 'backend' does not exist in type 'BashRunOptions'.
-packages/agent/src/chat-provider-retry.test.ts: TS2322: Type 'unknown' is not assignable to type '{ error?: string | undefined; }'.
-packages/agent/src/chat-provider-retry.test.ts: TS2322: Type '{ arguments: { message: string; }; id: string; name: string; }' is not assignable to type 'string'.
-packages/agent/src/chat-provider-retry.test.ts: TS2722: Cannot invoke an object which is possibly 'undefined'.
-packages/agent/src/chat-tool-loop.test.ts: TS2339: Property 'toolCalls' does not exist on type 'ChatMessage'.
-packages/client/src/client.test.ts: TS2769: No overload matches this call.
-packages/client/src/client.test.ts: TS2769: No overload matches this call.
-packages/client/src/client.test.ts: TS2769: No overload matches this call.
-packages/core/src/local-auth.test.ts: TS2769: No overload matches this call.
-packages/db/src/regression-cases.test.ts: TS2769: No overload matches this call.
-packages/db/src/regression-cases.test.ts: TS2769: No overload matches this call.
-packages/plugins/supermemory/src/actions.test.ts: TS2741: Property 'preconnect' is missing in type '() => Promise<Response>' but required in type 'typeof fetch'.
-packages/plugins/supermemory/src/actions.test.ts: TS2741: Property 'preconnect' is missing in type '(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>' but required in type 'typeof fetch'.
-packages/plugins/supermemory/src/actions.test.ts: TS2741: Property 'preconnect' is missing in type '(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>' but required in type 'typeof fetch'.
-packages/plugins/supermemory/src/actions.test.ts: TS2741: Property 'preconnect' is missing in type '(url: URL | RequestInfo, init: BunFetchRequestInit | RequestInit | undefined) => Promise<Response>' but required in type 'typeof fetch'.
-packages/plugins/supermemory/src/actions.ts: TS2345: Argument of type 'JsonValue | undefined' is not assignable to parameter of type 'string'.
-packages/plugins/supermemory/src/ui-page.tsx: TS2345: Argument of type '{ message: string | 0 | false | undefined; state: string; } | null' is not assignable to parameter of type 'SetStateAction<{ state: string; message?: string | undefined; } | null>'.
-packages/plugins/supermemory/src/ui-settings.tsx: TS2345: Argument of type '{ token: string | undefined; url: string; }' is not assignable to parameter of type 'JsonValue | undefined'.
-packages/plugins/supermemory/src/use-collection.ts: TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string | Error'.
-packages/plugins/supermemory/src/use-collection.ts: TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string | Error'.
-packages/plugins/supermemory/src/worker.test.ts: TS2741: Property 'preconnect' is missing in type '() => Promise<Response>' but required in type 'typeof fetch'.
-packages/plugins/supermemory/src/worker.ts: TS2339: Property 'type' does not exist on type 'string | number | boolean | JsonValue[] | { [key: string]: JsonValue; }'.
-packages/plugins/supermemory/src/worker.ts: TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{ "darwin-arm64": string; "darwin-x64": string; "linux-arm64": string; "linux-x64": string; }'.
-packages/plugins/workflows/src/actions.ts: TS2322: Type '{ error?: string; output?: string; runId?: string; skipped?: boolean; name: string; run: WorkflowRunRecord | null; status: "completed" | "failed" | "skipped" | undefined; workflowId: string; }' is not assignable to type 'WorkflowValue'.
-packages/plugins/workflows/src/ui.tsx: TS7006: Parameter 'field' implicitly has an 'any' type.
-packages/plugins/workflows/src/ui.tsx: TS7006: Parameter 'key' implicitly has an 'any' type.
-packages/plugins/workflows/src/ui.tsx: TS7006: Parameter 'key' implicitly has an 'any' type.
-packages/plugins/workflows/src/ui.tsx: TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{ agent: string[]; assert: string[]; compare: string[]; template: string[]; tool: string[]; }'.
-packages/plugins/workflows/src/ui.tsx: TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{ agent: string[]; assert: string[]; compare: string[]; template: string[]; tool: string[]; }'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2339: Property 'steps' does not exist on type 'never'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2345: Argument of type '{ completeRun(_runId: string, _workflowId: string, result: { output?: string; error?: string; }): Promise<{ completedAt: string; error: string | null; id: string; input: null; output: string | null; startedAt: string; status: "completed" | "failed"; steps: { ...; }[]; workflowId: string; }>; createRun(): Promise<......' is not assignable to parameter of type 'WorkflowRunnerService'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2345: Argument of type '{ completeRun(_runId: string, _workflowId: string, result: { output?: string; error?: string; }): Promise<{ completedAt: string; error: string | null; id: string; input: null; output: string | null; startedAt: string; status: "completed" | "failed"; steps: { ...; }[]; workflowId: string; }>; createRun(): Promise<......' is not assignable to parameter of type 'WorkflowRunnerService'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2345: Argument of type '{ completeRun(_runId: string, _workflowId: string, result: { output?: string; error?: string; }): Promise<{ completedAt: string; error: string | null; id: string; input: null; output: string | null; startedAt: string; status: "completed" | "failed"; steps: { ...; }[]; workflowId: string; }>; createRun(): Promise<......' is not assignable to parameter of type 'WorkflowRunnerService'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2345: Argument of type '{ completeRun(_runId: string, _workflowId: string, result: { output?: string; error?: string; }): Promise<{ completedAt: string; error: string | null; id: string; input: null; output: string | null; startedAt: string; status: "completed" | "failed"; steps: { ...; }[]; workflowId: string; }>; createRun(): Promise<......' is not assignable to parameter of type 'WorkflowRunnerService'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2345: Argument of type '{ completeRun(_runId: string, _workflowId: string, result: { output?: string; error?: string; }): Promise<{ completedAt: string; error: string | null; id: string; input: null; output: string | null; startedAt: string; status: "completed" | "failed"; steps: { ...; }[]; workflowId: string; }>; createRun(): Promise<......' is not assignable to parameter of type 'WorkflowRunnerService'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2345: Argument of type '{ completeRun(_runId: string, _workflowId: string, result: { output?: string; error?: string; }): Promise<{ completedAt: string; error: string | null; id: string; input: null; output: string | null; startedAt: string; status: "completed" | "failed"; steps: { ...; }[]; workflowId: string; }>; createRun(): Promise<......' is not assignable to parameter of type 'WorkflowRunnerService'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2345: Argument of type '{ completeRun(_runId: string, _workflowId: string, result: { output?: string; error?: string; }): Promise<{ completedAt: string; error: string | null; id: string; input: null; output: string | null; startedAt: string; status: "completed" | "failed"; steps: { ...; }[]; workflowId: string; }>; createRun(): Promise<......' is not assignable to parameter of type 'WorkflowRunnerService'.
-packages/plugins/workflows/src/workflow-runner.test.ts: TS2769: No overload matches this call.
-packages/plugins/workflows/src/workflow-runner.ts: TS2345: Argument of type 'unknown' is not assignable to parameter of type 'WorkflowValue'.
-packages/plugins/workflows/src/workflow-runner.ts: TS2345: Argument of type 'unknown' is not assignable to parameter of type 'WorkflowValue'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2322: Type 'WorkflowValue' is not assignable to type 'string | undefined'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2345: Argument of type 'WorkflowValue' is not assignable to parameter of type 'string'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2345: Argument of type 'WorkflowValue' is not assignable to parameter of type 'string'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2345: Argument of type '{ actionKey: string; actor: { id: string; role: "admin"; }; apiVersion: 1; databasePath: string; dataDir: string; host: ({ op }: { op: string; }) => Promise<"Summary" | { id: string; isDefault: boolean; }[]>; invocationId: string; orgId: string; pluginId: string; pluginVersion: string; }' is not assignable to parameter of type 'Context'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2345: Argument of type '{ actionKey: string; actor: { id: string; role: "admin"; }; apiVersion: 1; databasePath: string; dataDir: string; host: ({ op }: { op: string; }) => Promise<{ id: string; isDefault: boolean; }[]>; invocationId: string; orgId: string; pluginId: string; pluginVersion: string; }' is not assignable to parameter of type 'Context'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2345: Argument of type '{ actor: { id: string; role: "admin"; }; apiVersion: 1; databasePath: string; dataDir: string; host: ({ op }: { op: string; }) => Promise<"Summary" | { id: string; isDefault: boolean; }[]>; invocationId: string; orgId: string; pluginId: string; pluginVersion: string; actionKey: string; }' is not assignable to parameter of type 'Context'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2741: Property 'description' is missing in type '{ name: string; steps: ({ id: string; input: {}; kind: "tool"; tool: string; } | { id: string; kind: "compare"; left: string; onFail: "skip"; op: "contains"; right: string; } | { id: string; kind: "summarize"; prompt: string; })[]; }' but required in type 'CreateWorkflowRequest'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2741: Property 'description' is missing in type '{ name: string; steps: ({ readonly id: "summary"; readonly kind: "summarize"; readonly prompt: "Summarize"; } | { id: string; input: {}; kind: "tool"; tool: string; })[]; }' but required in type 'CreateWorkflowRequest'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2741: Property 'description' is missing in type '{ name: string; steps: ({ readonly id: "summary"; readonly kind: "summarize"; readonly prompt: "Summarize"; } | { readonly id: "fetch"; readonly input: { readonly url: "{{input.url}}"; }; readonly kind: "tool"; readonly tool: "web_fetch"; })[]; }' but required in type 'CreateWorkflowRequest'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2741: Property 'description' is missing in type '{ name: string; steps: never; }' but required in type 'CreateWorkflowRequest'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2741: Property 'description' is missing in type '{ name: string; steps: { id: string; kind: "summarize"; prompt: string; }[]; }' but required in type 'CreateWorkflowRequest'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2741: Property 'description' is missing in type '{ name: string; steps: { id: string; kind: "summarize"; prompt: string; }[]; }' but required in type 'CreateWorkflowRequest'.
-packages/plugins/workflows/src/workflow-service.test.ts: TS2741: Property 'description' is missing in type '{ name: string; steps: { id: string; kind: "summarize"; prompt: string; }[]; }' but required in type 'CreateWorkflowRequest'.
-packages/plugins/workflows/src/workflow-service.ts: TS2322: Type 'WorkflowRecord' is not assignable to type 'Record<string, JsonValue>'.
-scripts/check-acp.ts: TS1375: 'await' expressions are only allowed at the top level of a file when that file is a module, but this file has no imports or exports. Consider adding an empty 'export {}' to make this file a module.
-tools/oxlint/anti-slop/effect/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/effect/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/effect/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/effect/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/effect/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/effect/rules/no-manual-effect-error-tag.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/effect/rules/no-manual-tag-comparison.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/effect/rules/no-manual-tagged-construction.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/index.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-array-filter-map.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-known-value-widening.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-known-value-widening.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-known-value-widening.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-module-mocking.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-object-parameters.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-object-parameters.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-reduce-accumulator-copy.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-reflect-apply.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-reflect-get.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-unknown-parameters.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-unknown-returns.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-unknown-type-aliases.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-unsafe-dictionary-type.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/no-unsafe-dictionary-type.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/rules/require-readable-spacing.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/shared/dictionary-types.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/shared/reflect-method.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/shared/type-alias-resolution.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
-tools/oxlint/anti-slop/vendor/eslint-stylistic/padding-line-between-statements.ts: TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+apps/cli/src/chat.test.ts: TS2304
+apps/cli/src/chat.test.ts: TS2352
+apps/cli/src/chat.test.ts: TS2353
+apps/cli/src/chat.ts: TS18047
+apps/cli/src/image-input.ts: TS7053
+apps/cli/src/org.test.ts: TS2352
+apps/cli/src/persistent-prompt.test.ts: TS2322
+apps/cli/src/persistent-prompt.test.ts: TS2322
+apps/cli/src/persistent-prompt.test.ts: TS2322
+apps/cli/src/persistent-prompt.test.ts: TS2322
+apps/cli/src/persistent-prompt.test.ts: TS2322
+apps/cli/src/persistent-prompt.test.ts: TS2322
+apps/cli/src/persistent-prompt.test.ts: TS2322
+apps/cli/src/setup.test.ts: TS2322
+apps/cli/src/setup.test.ts: TS2345
+apps/cli/src/setup.ts: TS2339
+apps/cli/src/setup.ts: TS2554
+apps/cli/src/terminal-layout.ts: TS18048
+apps/cli/src/terminal-layout.ts: TS2322
+apps/cli/src/terminal-layout.ts: TS2445
+apps/cli/src/terminal-layout.ts: TS2445
+apps/cli/src/terminal-screen.test.ts: TS2769
+apps/platform/automation/src/index.ts: TS2322
+apps/platform/automation/src/scheduler.test.ts: TS2352
+apps/platform/automation/src/scheduler.test.ts: TS2352
+apps/platform/automation/src/scheduler.test.ts: TS2352
+apps/platform/automation/src/scheduler.ts: TS2339
+apps/platform/automation/src/scheduler.ts: TS2339
+apps/platform/automation/src/scheduler.ts: TS2339
+apps/platform/discord/src/bot.ts: TS2345
+apps/platform/discord/src/channel-artifact-flow.ts: TS2322
+apps/platform/discord/src/chat-handler.test.ts: TS2322
+apps/platform/discord/src/chat-handler.test.ts: TS2322
+apps/platform/discord/src/chat-handler.test.ts: TS2352
+apps/platform/discord/src/chat-handler.test.ts: TS2352
+apps/platform/discord/src/chat-handler.test.ts: TS2352
+apps/platform/discord/src/chat-handler.test.ts: TS2741
+apps/platform/discord/src/chat-handler.ts: TS2322
+apps/platform/discord/src/chat-handler.ts: TS2322
+apps/platform/discord/src/chat-handler.ts: TS2345
+apps/platform/discord/src/chat-handler.ts: TS2345
+apps/platform/discord/src/messenger.ts: TS2339
+apps/platform/discord/src/send-artifact-attachment.test.ts: TS2352
+apps/platform/discord/src/send-artifact-attachment.ts: TS2339
+apps/platform/discord/src/test-helpers.ts: TS2304
+apps/platform/discord/src/test-helpers.ts: TS2304
+apps/platform/discord/src/test-helpers.ts: TS2352
+apps/platform/discord/src/test-helpers.ts: TS2352
+apps/platform/discord/src/test-helpers.ts: TS2352
+apps/platform/discord/src/test-helpers.ts: TS2352
+apps/platform/slack/src/socket.test.ts: TS2352
+apps/platform/slack/src/socket.test.ts: TS2352
+apps/platform/slack/src/socket.test.ts: TS2352
+apps/platform/slack/src/socket.test.ts: TS2352
+apps/platform/slack/src/test-helpers.ts: TS2352
+apps/platform/teams/src/test-helpers.ts: TS2352
+apps/platform/telegram/src/attachments.test.ts: TS2352
+apps/platform/telegram/src/attachments.test.ts: TS2352
+apps/platform/telegram/src/attachments.test.ts: TS2352
+apps/platform/telegram/src/attachments.test.ts: TS2352
+apps/platform/telegram/src/chat-handler.ts: TS2322
+apps/platform/telegram/src/chat-handler.ts: TS2322
+apps/platform/telegram/src/test-helpers.ts: TS2352
+apps/platform/telegram/src/test-helpers.ts: TS2352
+apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554
+apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554
+apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554
+apps/platform/whatsapp/src/baileys-logger.test.ts: TS2554
+apps/platform/whatsapp/src/chat-handler.test.ts: TS2322
+apps/platform/whatsapp/src/chat-handler.test.ts: TS2322
+apps/platform/whatsapp/src/chat-handler.test.ts: TS2339
+apps/platform/whatsapp/src/chat-handler.test.ts: TS2339
+apps/platform/whatsapp/src/chat-handler.test.ts: TS2339
+apps/platform/whatsapp/src/chat-handler.test.ts: TS2339
+apps/platform/whatsapp/src/chat-handler.test.ts: TS2339
+apps/platform/whatsapp/src/chat-handler.ts: TS2305
+apps/platform/whatsapp/src/inbound-message.test.ts: TS2378
+apps/platform/whatsapp/src/outbound-server.test.ts: TS2339
+apps/platform/whatsapp/src/outbound-server.test.ts: TS2339
+apps/platform/whatsapp/src/send-artifact-document.test.ts: TS2352
+apps/platform/whatsapp/src/send-artifact-document.test.ts: TS2352
+apps/platform/whatsapp/src/socket.test.ts: TS2352
+apps/platform/whatsapp/src/socket.test.ts: TS2741
+apps/platform/whatsapp/src/socket.test.ts: TS7006
+apps/platform/whatsapp/src/socket.test.ts: TS7006
+apps/platform/whatsapp/src/socket.ts: TS2345
+apps/platform/whatsapp/src/socket.ts: TS2345
+apps/platform/whatsapp/src/test-helpers.ts: TS2305
+apps/platform/whatsapp/src/test-helpers.ts: TS2339
+apps/platform/whatsapp/src/test-helpers.ts: TS2352
+apps/platform/whatsapp/src/test-helpers.ts: TS2554
+apps/platform/whatsapp/src/test-helpers.ts: TS2554
+apps/platform/whatsapp/src/test-helpers.ts: TS7006
+apps/platform/whatsapp/src/typing-indicator.test.ts: TS2352
+apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345
+apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345
+apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345
+apps/server/src/http/routes/channel-legacy-claim.test.ts: TS2345
+apps/server/src/http/routes/data-portability.test.ts: TS2322
+apps/server/src/http/routes/data-portability.test.ts: TS2322
+apps/server/src/http/routes/data-portability.test.ts: TS2769
+apps/server/src/http/routes/data-portability.test.ts: TS2769
+apps/server/src/http/routes/google-meet-capture.test.ts: TS2345
+apps/server/src/http/routes/internal-automations.test.ts: TS2322
+apps/server/src/http/routes/llm-request-safety.ts: TS2345
+apps/server/src/http/routes/llm-request-safety.ts: TS2345
+apps/server/src/http/routes/mcp-registry.test.ts: TS2345
+apps/server/src/http/routes/models.ts: TS2322
+apps/server/src/http/routes/models.ts: TS2322
+apps/server/src/http/routes/settings-rbac.test.ts: TS2769
+apps/server/src/http/routes/settings-rbac.test.ts: TS2769
+apps/server/src/http/routes/setup-import.test.ts: TS2322
+apps/server/src/http/routes/skills-marketplace.test.ts: TS2345
+apps/server/src/http/routes/system-version.test.ts: TS2345
+apps/server/src/http/routes/system-version.test.ts: TS2345
+apps/server/src/http/shared.ts: TS2322
+apps/server/src/providers/anthropic/pause-continuation.test.ts: TS2741
+apps/server/src/providers/anthropic/web-search.ts: TS2578
+apps/server/src/providers/models.test.ts: TS2345
+apps/server/src/providers/models.test.ts: TS2345
+apps/server/src/providers/nakama-cloud/sign-in.test.ts: TS2741
+apps/server/src/providers/openai-compatible/index.llm.test.ts: TS2322
+apps/server/src/providers/openai-compatible/index.test.ts: TS2739
+apps/server/src/providers/openai/stream.test.ts: TS2345
+apps/server/src/providers/opencode-go/index.test.ts: TS2769
+apps/server/src/providers/opencode-go/index.test.ts: TS2769
+apps/server/src/providers/opencode-go/index.test.ts: TS2769
+apps/server/src/services/agent-group-store.test.ts: TS2769
+apps/server/src/services/agent-service-regression-rerun.test.ts: TS2322
+apps/server/src/services/automation.test.ts: TS2741
+apps/server/src/services/automation.test.ts: TS2741
+apps/server/src/services/automation.test.ts: TS2741
+apps/server/src/services/automation.test.ts: TS2741
+apps/server/src/services/automation.test.ts: TS2741
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS18046
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2339
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2339
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2339
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554
+apps/server/src/services/coding-agent-harness-config-files.test.ts: TS2554
+apps/server/src/services/composio-service.test.ts: TS2353
+apps/server/src/services/composio-service.test.ts: TS2353
+apps/server/src/services/composio-service.test.ts: TS7006
+apps/server/src/services/composio-service.test.ts: TS7006
+apps/server/src/services/composio-service.test.ts: TS7006
+apps/server/src/services/data-portability.ts: TS2304
+apps/server/src/services/data-portability.ts: TS2304
+apps/server/src/services/data-portability.ts: TS2304
+apps/server/src/services/data-portability.ts: TS2304
+apps/server/src/services/data-portability.ts: TS2304
+apps/server/src/services/google-meet/actions.test.ts: TS2322
+apps/server/src/services/google-meet/service.test.ts: TS2322
+apps/server/src/services/mcp-tool-bridge.llm.test.ts: TS2322
+apps/server/src/services/meet-recording-import.test.ts: TS2345
+apps/server/src/services/meet-recording-import.test.ts: TS2345
+apps/server/src/services/meet-recording-import.test.ts: TS2352
+apps/server/src/services/meet-recording-import.test.ts: TS2352
+apps/server/src/services/meet-recording-import.test.ts: TS2352
+apps/server/src/services/org-memory-service.test.ts: TS2353
+apps/server/src/services/plugin-service.test.ts: TS2353
+apps/server/src/services/profile-service.test.ts: TS2741
+apps/server/src/services/session-persistence.ts: TS2554
+apps/server/src/services/session-runtime.test.ts: TS2769
+apps/server/src/services/session-runtime.test.ts: TS2769
+apps/server/src/services/skill-post-turn-review-service.test.ts: TS2769
+apps/server/src/services/skills-service.test.ts: TS2353
+apps/server/src/services/turn-runner.test.ts: TS2322
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.test.ts: TS2353
+apps/server/src/tools/bash.ts: TS7053
+apps/server/src/tools/browser-tools.ts: TS2304
+apps/server/src/tools/super-nakama-create-plugin.llm.test.ts: TS2353
+packages/agent/src/chat-provider-retry.test.ts: TS2322
+packages/agent/src/chat-provider-retry.test.ts: TS2322
+packages/agent/src/chat-provider-retry.test.ts: TS2722
+packages/agent/src/chat-tool-loop.test.ts: TS2339
+packages/client/src/client.test.ts: TS2769
+packages/client/src/client.test.ts: TS2769
+packages/client/src/client.test.ts: TS2769
+packages/core/src/local-auth.test.ts: TS2769
+packages/db/src/regression-cases.test.ts: TS2769
+packages/db/src/regression-cases.test.ts: TS2769
+packages/plugins/supermemory/src/actions.test.ts: TS2741
+packages/plugins/supermemory/src/actions.test.ts: TS2741
+packages/plugins/supermemory/src/actions.test.ts: TS2741
+packages/plugins/supermemory/src/actions.test.ts: TS2741
+packages/plugins/supermemory/src/actions.ts: TS2345
+packages/plugins/supermemory/src/ui-page.tsx: TS2345
+packages/plugins/supermemory/src/ui-settings.tsx: TS2345
+packages/plugins/supermemory/src/use-collection.ts: TS2345
+packages/plugins/supermemory/src/use-collection.ts: TS2345
+packages/plugins/supermemory/src/worker.test.ts: TS2741
+packages/plugins/supermemory/src/worker.ts: TS2339
+packages/plugins/supermemory/src/worker.ts: TS7053
+packages/plugins/workflows/src/actions.ts: TS2322
+packages/plugins/workflows/src/ui.tsx: TS7006
+packages/plugins/workflows/src/ui.tsx: TS7006
+packages/plugins/workflows/src/ui.tsx: TS7006
+packages/plugins/workflows/src/ui.tsx: TS7053
+packages/plugins/workflows/src/ui.tsx: TS7053
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2339
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.test.ts: TS2769
+packages/plugins/workflows/src/workflow-runner.ts: TS2345
+packages/plugins/workflows/src/workflow-runner.ts: TS2345
+packages/plugins/workflows/src/workflow-service.test.ts: TS2322
+packages/plugins/workflows/src/workflow-service.test.ts: TS2345
+packages/plugins/workflows/src/workflow-service.test.ts: TS2345
+packages/plugins/workflows/src/workflow-service.test.ts: TS2345
+packages/plugins/workflows/src/workflow-service.test.ts: TS2345
+packages/plugins/workflows/src/workflow-service.test.ts: TS2345
+packages/plugins/workflows/src/workflow-service.test.ts: TS2741
+packages/plugins/workflows/src/workflow-service.test.ts: TS2741
+packages/plugins/workflows/src/workflow-service.test.ts: TS2741
+packages/plugins/workflows/src/workflow-service.test.ts: TS2741
+packages/plugins/workflows/src/workflow-service.test.ts: TS2741
+packages/plugins/workflows/src/workflow-service.test.ts: TS2741
+packages/plugins/workflows/src/workflow-service.test.ts: TS2741
+packages/plugins/workflows/src/workflow-service.ts: TS2322
+scripts/check-acp.ts: TS1375
+tools/oxlint/anti-slop/effect/index.ts: TS5097
+tools/oxlint/anti-slop/effect/index.ts: TS5097
+tools/oxlint/anti-slop/effect/index.ts: TS5097
+tools/oxlint/anti-slop/effect/index.ts: TS5097
+tools/oxlint/anti-slop/effect/index.ts: TS5097
+tools/oxlint/anti-slop/effect/rules/no-manual-effect-error-tag.ts: TS5097
+tools/oxlint/anti-slop/effect/rules/no-manual-tag-comparison.ts: TS5097
+tools/oxlint/anti-slop/effect/rules/no-manual-tagged-construction.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/index.ts: TS5097
+tools/oxlint/anti-slop/rules/no-array-filter-map.ts: TS5097
+tools/oxlint/anti-slop/rules/no-known-value-widening.ts: TS5097
+tools/oxlint/anti-slop/rules/no-known-value-widening.ts: TS5097
+tools/oxlint/anti-slop/rules/no-known-value-widening.ts: TS5097
+tools/oxlint/anti-slop/rules/no-module-mocking.ts: TS5097
+tools/oxlint/anti-slop/rules/no-object-parameters.ts: TS5097
+tools/oxlint/anti-slop/rules/no-object-parameters.ts: TS5097
+tools/oxlint/anti-slop/rules/no-reduce-accumulator-copy.ts: TS5097
+tools/oxlint/anti-slop/rules/no-reflect-apply.ts: TS5097
+tools/oxlint/anti-slop/rules/no-reflect-get.ts: TS5097
+tools/oxlint/anti-slop/rules/no-unknown-parameters.ts: TS5097
+tools/oxlint/anti-slop/rules/no-unknown-returns.ts: TS5097
+tools/oxlint/anti-slop/rules/no-unknown-type-aliases.ts: TS5097
+tools/oxlint/anti-slop/rules/no-unsafe-dictionary-type.ts: TS5097
+tools/oxlint/anti-slop/rules/no-unsafe-dictionary-type.ts: TS5097
+tools/oxlint/anti-slop/rules/require-readable-spacing.ts: TS5097
+tools/oxlint/anti-slop/shared/dictionary-types.ts: TS5097
+tools/oxlint/anti-slop/shared/reflect-method.ts: TS5097
+tools/oxlint/anti-slop/shared/type-alias-resolution.ts: TS5097
+tools/oxlint/anti-slop/vendor/eslint-stylistic/padding-line-between-statements.ts: TS5097
