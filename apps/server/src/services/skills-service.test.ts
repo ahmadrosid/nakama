@@ -503,19 +503,9 @@ export async function run(input, context) {
   test.each(["tool.py", "scripts/probe.py"])(
     "shared Python %s keeps review and team execution checks",
     async (file) => {
-      const t0 = performance.now();
-
-      const mark = (label: string) =>
-        console.log(
-          `[prof] ${file} ${label} ${(performance.now() - t0).toFixed(0)}ms`
-        );
-
       const { db, skill, publication, service } = await setupPublishedSkill();
-      mark("L1 const { db, skill, publication, service } = await ");
       const modulePath = join(skill.sourcePath, file);
-      mark("L2 const modulePath = join(skill.sourcePath, file);");
       await mkdir(join(skill.sourcePath, "scripts"), { recursive: true });
-      mark("L3 await mkdir(join(skill.sourcePath, scripts), { r");
 
       const source = `"""Report execution context."""
 import json
@@ -532,7 +522,6 @@ if __name__ == "__main__":
 `;
 
       await writeFile(modulePath, source);
-      mark("L4 await writeFile(modulePath, source);");
 
       if (file.startsWith("scripts/")) {
         await writeFile(
@@ -542,11 +531,8 @@ if __name__ == "__main__":
       }
 
       await db.assignSkillToProfile("profile_team_a", skill.id);
-      mark("L5 await db.assignSkillToProfile(profile_team_a, sk");
       const agent = new AgentService(null, null, db);
-      mark("L6 const agent = new AgentService(null, null, db);");
       agent.setSkillsService(service);
-      mark("L7 agent.setSkillsService(service);");
 
       const context = agent.buildPluginToolContext("team_a", {
         profileId: "profile_team_a",
@@ -554,12 +540,8 @@ if __name__ == "__main__":
         workflowId: "workflow",
       });
 
-      mark("L8 });");
-
       const teamRoot = context.workspaceRoot!;
-      mark("L9 const teamRoot = context.workspaceRoot!;");
       await mkdir(teamRoot, { recursive: true });
-      mark("L10 await mkdir(teamRoot, { recursive: true });");
 
       const expectedName =
         file === "tool.py" ? "shared-notes" : "shared_notes_probe";
@@ -568,22 +550,14 @@ if __name__ == "__main__":
         await service.loadToolsForProfile("team_a", "profile_team_a")
       ).find((tool) => tool.name === expectedName)!;
 
-      mark("L11 ).find((tool) => tool.name === expectedName)!;");
-
       expect(blocked).toBeDefined();
-      mark("L12 expect(blocked).toBeDefined();");
       expect(await blocked.run({}, context)).toHaveProperty("error");
-      mark("L13 expect(await blocked.run({}, context)).toHavePrope");
       await expect(
         readFile(join(teamRoot, "executed.marker"))
       ).rejects.toThrow();
-      mark("L14 ).rejects.toThrow();");
       const parent = (await db.getOrganizationById("parent"))!;
-      mark("L15 const parent = (await db.getOrganizationById(pare");
       await db.upsertOrganization({ ...parent, skillsWriteApproval: true });
-      mark("L16 await db.upsertOrganization({ ...parent, skillsWri");
       const proposals = new SkillProposalService(db, service);
-      mark("L17 const proposals = new SkillProposalService(db, ser");
 
       const approve = async () => {
         const staged = await proposals.stageProposal({
@@ -597,47 +571,35 @@ if __name__ == "__main__":
         await proposals.approveProposal("parent", staged.proposalId!, "admin");
       };
 
-      mark("L18 };");
-
       await approve();
-      mark("L19 await approve();");
 
       const tool = (
         await service.loadToolsForProfile("team_a", "profile_team_a")
       ).find((entry) => entry.name === expectedName)!;
-
-      mark("L20 ).find((entry) => entry.name === expectedName)!;");
 
       const result = await tool.run(
         {},
         { ...context, workspaceRoot: skill.sourcePath }
       );
 
-      mark("L21 );");
-
       expect(result).toMatchObject({
         config: null,
         value: "original",
         workspace: teamRoot,
       });
-      mark("L22 });");
       // SAFETY: The fixture returns os.getcwd(), a string.
       expect(await realpath((result as { cwd: string }).cwd)).toBe(
         await realpath(teamRoot)
       );
-      mark("L23 );");
       expect(await readFile(join(teamRoot, "executed.marker"), "utf8")).toBe(
         "team"
       );
-      mark("L24 );");
       await expect(
         readFile(join(skill.sourcePath, "executed.marker"))
       ).rejects.toThrow();
-      mark("L25 ).rejects.toThrow();");
       expect(
         await service.composeCatalogForProfile("team_a", "profile_team_a")
       ).not.toContain(skill.sourcePath);
-      mark("L26 ).not.toContain(skill.sourcePath);");
 
       for (const denied of [
         { ...context, orgRole: undefined },
@@ -650,43 +612,31 @@ if __name__ == "__main__":
       }
 
       await writeFile(modulePath, source.replace('"original"', '"updated"'));
-      mark("L27 await writeFile(modulePath, source.replace('origi");
       expect(await tool.run({}, context)).toHaveProperty("error");
-      mark("L28 expect(await tool.run({}, context)).toHaveProperty");
       await approve();
-      mark("L29 await approve();");
       expect(await tool.run({}, context)).toMatchObject({ value: "updated" });
-      mark("L30 expect(await tool.run({}, context)).toMatchObject(");
       await db.unassignSkillFromProfile("profile_team_a", skill.id);
-      mark("L31 await db.unassignSkillFromProfile(profile_team_a");
       await expect(tool.run({}, context)).rejects.toMatchObject({
         status: 404,
       });
-      mark("L32 });");
       await db.assignSkillToProfile("profile_team_a", skill.id);
-      mark("L33 await db.assignSkillToProfile(profile_team_a, sk");
       await db.deleteOrgSharedResource("parent", publication.id);
-      mark("L34 await db.deleteOrgSharedResource(parent, publica");
       await expect(tool.run({}, context)).rejects.toMatchObject({
         status: 404,
       });
-      mark("L35 });");
       expect(
         (await service.loadToolsForProfile("team_a", "profile_team_a")).map(
           (entry) => entry.name
         )
       ).not.toContain(expectedName);
-      mark("L36 ).not.toContain(expectedName);");
       expect(
         (await db.listSkillsForProfile("profile_team_a")).map(
           (entry) => entry.id
         )
       ).toEqual([skill.id]);
-      mark("L37 ).toEqual([skill.id]);");
       expect(await readFile(modulePath, "utf8")).toBe(
         source.replace('"original"', '"updated"')
       );
-      mark("L38 );");
     }
   );
 
