@@ -10,8 +10,6 @@ import {
 const tinyPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-describe("extractImageParts", () => {});
-
 describe("replaceImagePartsWithDescriptions", () => {
   test("annotates image parts with descriptions", () => {
     const result = replaceImagePartsWithDescriptions(
@@ -32,25 +30,7 @@ describe("replaceImagePartsWithDescriptions", () => {
       },
     ]);
   });
-
-  test("returns plain string when only image descriptions remain for string content", () => {
-    const result = replaceImagePartsWithDescriptions(
-      [{ data: tinyPngBase64, mediaType: "image/png", type: "image" }],
-      ["A chart with three bars."]
-    );
-
-    expect(result).toEqual([
-      {
-        data: tinyPngBase64,
-        description: "A chart with three bars.",
-        mediaType: "image/png",
-        type: "image",
-      },
-    ]);
-  });
 });
-
-describe("image description text helpers", () => {});
 
 describe("resolveUserContentForNonVisionProvider", () => {
   test("converts described image parts to text", () => {

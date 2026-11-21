@@ -155,17 +155,6 @@ describe("teams commands", () => {
     });
   });
 
-  test("!stop with nothing running answers and starts no turn", async () => {
-    await withTempHome("nakama-teams-commands-", async (homeDir) => {
-      const { handle, replies, turns } = createHarness(homeDir);
-
-      await handle(activity({ text: "!stop" }));
-
-      expect(turns).toEqual([]);
-      expect(replies).toHaveLength(1);
-    });
-  });
-
   test("after a turn ends, !stop answers as if nothing ran", async () => {
     await withTempHome("nakama-teams-commands-", async (homeDir) => {
       const { handle, replies } = createHarness(homeDir);

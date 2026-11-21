@@ -67,5 +67,3 @@ describe("markdownToDocx table cells", () => {
     expect(runs).toContainEqual(["italic", false, true]);
   });
 });
-
-describe("markdownToDocx inline markdown outside tables", () => {});

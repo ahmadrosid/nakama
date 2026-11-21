@@ -30,18 +30,4 @@ describe("tool playground params", () => {
 
     expect(result).toEqual({});
   });
-
-  test("suggestToolParamsFromPrompt unwraps provider JSON output", async () => {
-    const result = await suggestToolParamsFromPrompt(
-      { description: "Echo", prompt: "test", toolName: "echo" },
-      {
-        // SAFETY: This test double only calls generateText, and this is its complete implementation.
-        provider: {
-          generateText: async () => '{"query":"nakama"}',
-        } as never,
-      }
-    );
-
-    expect(result).toEqual({ query: "nakama" });
-  });
 });

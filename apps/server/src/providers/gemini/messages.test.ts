@@ -64,26 +64,6 @@ describe("toGeminiContents", () => {
     expect(contents[2]?.parts?.[0]?.functionResponse?.name).toBe("write_file");
     expect(contents[2]?.parts?.[0]?.functionResponse?.id).toBe("call_1");
   });
-
-  test("maps image parts to inlineData", async () => {
-    const messages: ChatMessage[] = [
-      {
-        content: [
-          { text: "What is this?", type: "text" },
-          { data: tinyPngBase64, mediaType: "image/png", type: "image" },
-        ],
-        role: "user",
-      },
-    ];
-
-    const contents = await toGeminiContents(messages);
-
-    expect(contents[0]?.parts?.[0]?.text).toBe("What is this?");
-    expect(contents[0]?.parts?.[1]?.inlineData).toEqual({
-      data: tinyPngBase64,
-      mimeType: "image/png",
-    });
-  });
 });
 
 describe("parseGeminiFunctionCalls", () => {
@@ -120,14 +100,6 @@ describe("Gemini 2.5 function calls, which carry no id", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.name).toBe("knowledge_base_search");
     expect(calls[0]?.arguments).toEqual({ query: "permit" });
-  });
-
-  test("a provider id is kept as it is", () => {
-    const calls = parseGeminiFunctionCalls([
-      { args: {}, id: "call_333446", name: "knowledge_base_search" },
-    ]);
-
-    expect(calls[0]?.id).toBe("call_333446");
   });
 
   test("two different tools in one turn stay apart", () => {

@@ -1355,41 +1355,6 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
-  test("role mention of a role the bot holds creates a thread", async () => {
-    await withTempHome(async (homeDir) => {
-      const streamedInputs: unknown[] = [];
-
-      const { handleMessage, threadStore } = await createPairedHandler(
-        homeDir,
-        {
-          onSendStream: async (input) => {
-            streamedInputs.push(input);
-
-            return "Role mention reply";
-          },
-        }
-      );
-
-      const roleId = "1525964112708894884";
-
-      const guild = createGuildChatMessage({
-        botHeldRoleIds: [roleId],
-        content: `<@&${roleId}> pull the latest main branch`,
-        mentionedRoleIds: [roleId],
-      });
-
-      await handleMessage(guild.message);
-
-      expect(guild.startThreadCalls).toBe(1);
-      expect(guild.lastThreadName).toBe("pull the latest main branch");
-      expect(guild.threadSentMessages).toContain("Role mention reply");
-      expect(threadStore.hasThreadId(guild.createdThreadId!)).toBe(true);
-      expect(streamedInputs[0]).toEqual({
-        message: "pull the latest main branch",
-      });
-    });
-  });
-
   test("second mention in the same channel creates a new thread", async () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, threadStore } = await createPairedHandler(

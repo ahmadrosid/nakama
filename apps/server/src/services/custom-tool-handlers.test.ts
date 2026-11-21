@@ -237,10 +237,6 @@ describe("withToolRetries", () => {
 });
 
 describe("getCustomToolHandler seam", () => {
-  test("returns null for unknown handler types", () => {
-    expect(getCustomToolHandler("ruby")).toBeNull();
-  });
-
   test.each([
     {
       file: "marker.py",

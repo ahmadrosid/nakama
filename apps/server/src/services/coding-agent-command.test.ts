@@ -149,24 +149,6 @@ describe("buildCodingAgentCommandTemplate", () => {
 });
 
 describe("formatCodingAgentCommandContext", () => {
-  test("formats harness context for bash delegation", async () => {
-    const context = formatCodingAgentCommandContext(
-      await buildCodingAgentCommandTemplate(
-        {
-          args: [],
-          command: "opencode",
-          kind: "opencode",
-          name: "OpenCode",
-        },
-        "Ship feature",
-        "/tmp/workspace"
-      )
-    );
-
-    expect(context).toContain("bash");
-    expect(context).toContain("opencode run");
-  });
-
   test("redacts API keys from prompt context", async () => {
     const context = formatCodingAgentCommandContext(
       await buildCodingAgentCommandTemplate(

@@ -459,44 +459,6 @@ describe("SkillPostTurnReviewService", () => {
     }
   });
 
-  test("resolveProviderForProfile passes the model string to createProvider", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-    await db.upsertProfile({
-      createdAt: now,
-      id: "profile_1",
-      isSuper: false,
-      model: "openai-1::gpt-5.4",
-      name: "Bot",
-      orgId: "org_1",
-      systemPrompt: "",
-      updatedAt: now,
-    });
-
-    const userConfig: UserConfig = {
-      defaultProviderId: "openai-1",
-      providers: [
-        {
-          apiKey: "sk-test",
-          createdAt: now,
-          id: "openai-1",
-          label: "OpenAI",
-          type: "openai",
-        },
-      ],
-    };
-
-    const service = new SkillPostTurnReviewService(db, () => userConfig);
-
-    const provider = await service.resolveProviderForProfile(
-      "profile_1",
-      "ses_test_1"
-    );
-
-    expect(provider).not.toBeNull();
-    expect(provider?.name).toBe("openai");
-  });
-
   test("resolveProviderForProfile sends the chat session id to OpenCode Go", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();

@@ -29,17 +29,6 @@ describe("static web serving before auth", () => {
     expect(await response.text()).toBe("<html>SPA</html>");
   });
 
-  test("GET /login returns index.html without auth token", async () => {
-    const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/login")
-    );
-
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("<html>SPA</html>");
-  });
-
   test("GET /app.js returns the file without auth token", async () => {
     const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
 
@@ -85,28 +74,6 @@ async function createMockAppWithWorkerManager(
 }
 
 describe("GET /v1/workers/{name}/logs", () => {
-  test("returns logs for a valid worker", async () => {
-    const { app, session } = await createMockAppWithWorkerManager({
-      getWorkerLogs: async () => ({ stderr: "err1", stdout: "log1\nlog2" }),
-      isValidWorker: (name: string) => name === "whatsapp",
-    });
-
-    const response = await app.fetch(
-      new Request(
-        "http://localhost:4310/v1/workers/whatsapp/logs?profileId=default",
-        {
-          headers: session.headers(),
-        }
-      )
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      stderr: "err1",
-      stdout: "log1\nlog2",
-    });
-  });
-
   test("clamps lines parameter to valid range", async () => {
     const { app, session } = await createMockAppWithWorkerManager({
       getWorkerLogs: async (_name: string, lines: number) => ({

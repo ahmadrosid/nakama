@@ -3,8 +3,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { formatCliDisplayPath } from "./display-path";
 
-describe("isCliVerbose", () => {});
-
 describe("formatCliDisplayPath", () => {
   const home = homedir();
 

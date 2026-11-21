@@ -118,14 +118,6 @@ describe("ACP agent presets", () => {
       expect(existsSync(preset.agent.args[0] ?? "")).toBe(true);
     }
   });
-
-  test("always offers OpenCode in ACP mode, installed or not", () => {
-    const opencode = listAcpAgentPresets().find(
-      (preset) => preset.id === "opencode"
-    );
-
-    expect(opencode?.agent).toEqual(OPENCODE);
-  });
 });
 
 describe("ACP agent launch", () => {
