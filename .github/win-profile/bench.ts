@@ -77,7 +77,12 @@ for (const base of Object.keys(dirs)) {
 
     rmSync(dir, { recursive: true, force: true });
   });
-  rmSync(root, { recursive: true, force: true });
+
+  try {
+    rmSync(root, { recursive: true, force: true });
+  } catch (error) {
+    console.log(`cleanup skipped: ${String(error)}`);
+  }
 }
 
 console.log("\n== processes");

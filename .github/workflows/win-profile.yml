@@ -40,7 +40,7 @@ jobs:
         run: |
           dirs=("$TEMP/bench" "$RUNNER_TEMP/bench")
           [[ -n "$DEV_DRIVE" ]] && dirs+=("$DEV_DRIVE/bench")
-          bun .github/win-profile/bench.ts "${dirs[@]}"
+          bun .github/win-profile/bench.ts "${dirs[@]}" || echo "bench exited $?"
       - name: Install
         shell: bash
         run: |
