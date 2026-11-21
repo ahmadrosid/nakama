@@ -22,6 +22,8 @@ const IGNORED_PATHS = [
   /^packages\/plugins\/[^/]+\/(actions\/[^/]+\.js|ui\/app\.js|workers\/[^/]+\.js)$/,
   // One line per lint rule, generated from the rules that pass today.
   /^\.oxlintrc\.json$/,
+  // Type errors known when bun check started; the list only shrinks.
+  /^typecheck-baseline\.txt$/,
   // Vendored upstream source, kept verbatim; not written by hand here.
   /^apps\/web\/src\/components\/moodstone\/(core\/|svg\.ts$)/,
 ];
