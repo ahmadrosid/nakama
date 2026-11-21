@@ -176,20 +176,56 @@ jobs:
       # this shard's files to the first, which starts empty: a shard that dies
       # early uploads nothing, and test-files sees the gap. Coverage costs about
       # nothing here and replaces Quality's second full test run.
+      # Selection narrows PR feedback only; the full suite still runs in the merge
+      # queue and on main. Off until the merge queue is on: set the repository
+      # variable TEST_SELECTION to "on".
+      #
+      # bun --changed follows imports from the changed files to the tests that
+      # reach them. It cannot see a file code reads or starts by path, so these
+      # rerun everything: any changed file that is not JS/TS source (SQL schema,
+      # JSON, cassettes, lockfiles, package.json, tsconfig, bunfig, workflows),
+      # the apps/web test preload, the scripts the server starts by path
+      # (*-runner.js, apps/server/src/index.ts), and test fixtures and helpers.
+      - name: Pick tests
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SELECTION: ${{ vars.TEST_SELECTION }}
+        run: |
+          changed=""
+          if [[ "$EVENT_NAME" == pull_request && "$SELECTION" == on ]]; then
+            changed="--changed=$BASE_SHA"
+            while IFS= read -r file; do
+              case "$file" in
+                *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.mts | *.cts) ;;
+                *) echo "Full suite: $file is not JS/TS source"; changed=""; break ;;
+              esac
+              case "$file" in
+                apps/web/scripts/test-setup.ts | *-runner.js | apps/server/src/index.ts | *fixture* | *test-helpers* | */testing/*)
+                  echo "Full suite: $file is loaded by path or shared by tests"; changed=""; break ;;
+              esac
+            done <<< "$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          fi
+          echo "CHANGED=$changed" >> "$GITHUB_ENV"
+          [[ -n "$changed" ]] && echo "Selected: tests that $changed reaches" || echo "Full suite"
+
       - name: Run tests
         run: |
           mkdir -p .test-timings shard
+          # test-files proves completeness only for a full run.
+          [[ -n "$CHANGED" ]] && touch shard/selected
           for suite in root web; do
             [[ -f .test-timings/$suite.json ]] || echo '{"version":1,"files":{}}' > ".test-timings/$suite.json"
             echo '{"version":1,"files":{}}' > "shard/$suite.json"
           done
           status=0
           if [[ "$WEB_ONLY" != true ]]; then
-            xvfb-run -a bun test --shard="$SHARD" --parallel=4 --path-ignore-patterns '**/apps/web/**' \
+            xvfb-run -a bun test $CHANGED --shard="$SHARD" --parallel=4 --path-ignore-patterns '**/apps/web/**' \
               --timings=shard/root.json --timings=.test-timings/root.json --update-timings \
               --coverage --coverage-reporter=lcov --coverage-dir=shard/coverage-root || status=1
           fi
-          (cd apps/web && bun test --shard="$SHARD" --parallel=4 \
+          (cd apps/web && bun test $CHANGED --shard="$SHARD" --parallel=4 \
             --timings=../../shard/web.json --timings=../../.test-timings/web.json --update-timings \
             --coverage --coverage-reporter=lcov --coverage-dir=../../shard/coverage-web) || status=1
           exit "$status"
@@ -238,6 +274,11 @@ jobs:
                 [[ "$file" == apps/web/* ]] || { web_only=false; break; }
               done <<< "$files"
             fi
+          fi
+          if compgen -G 'shards/*/selected' > /dev/null; then
+            echo "Selected tests only; the merge queue runs and checks the full suite."
+            [[ "$TEST_RESULT" == success ]] || { echo "::error::a test shard failed: $TEST_RESULT"; exit 1; }
+            exit 0
           fi
           # bun test's own file pattern, from git rather than from bun.
           pattern='(\.|_)(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$'
