@@ -515,6 +515,13 @@ jobs:
         with:
           version: "8.1"
 
+      # The first Python start on a fresh runner reads python.exe and its
+      # libraries from a cold C: drive: 730 ms in a test where the next start
+      # took 84 ms. One start here, so no test pays it inside its 5 s.
+      - name: Warm up Python
+        if: env.WEB_ONLY != 'true'
+        run: python -c "import json, os, sys"
+
       # One run over the four suites, balanced by time like Linux, one worker
       # per core, default 5 s timeout. bun reads main's times from the second
       # --timings file and writes only this shard's files to the first.
