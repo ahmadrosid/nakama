@@ -134,6 +134,12 @@ jobs:
       # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs (PDF tests).
       NAKAMA_CHROME_NO_SANDBOX: "true"
       SHARD: ${{ matrix.shard }}/8
+      # Tests write file-backed SQLite with synchronous=FULL, so every commit
+      # waits on fsync. The runner's /tmp is a network disk and four workers
+      # fsync at once: plain tests took 1-2 s and one stalled past 5 s. Temp
+      # files go to a RAM disk instead (mounted below; /dev/shm will not do:
+      # the server rightly refuses paths under /dev).
+      TMPDIR: /mnt/tests-tmp
     steps:
       # Budget: the job fails if its steps take longer, so a slowdown shows up
       # on the PR that causes it. Set from the slowest green run since the
@@ -170,6 +176,11 @@ jobs:
             fi
           fi
           echo "WEB_ONLY=$web_only" >> "$GITHUB_ENV"
+
+      - name: Mount a RAM disk for test temp files
+        run: |
+          sudo mkdir -p "$TMPDIR"
+          sudo mount -t tmpfs -o size=6g,mode=1777 tmpfs "$TMPDIR"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
