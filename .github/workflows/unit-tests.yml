@@ -27,6 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -100,6 +107,15 @@ jobs:
         working-directory: apps/desktop
         run: xvfb-run -a node_modules/.bin/electron tests/smoke.mjs --smoke-test
 
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 70
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
+
   # Eight shards, balanced by the per-file times the last main run recorded.
   # Each shard writes the files it ran; test-files checks they add up to all.
   test:
@@ -115,6 +131,13 @@ jobs:
       NAKAMA_CHROME_NO_SANDBOX: "true"
       SHARD: ${{ matrix.shard }}/8
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -205,6 +228,15 @@ jobs:
           path: shard
           retention-days: 7
 
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 95
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
+
   # Proves the shards together ran every test file, and on main saves the times
   # the next PRs balance their shards with.
   test-files:
@@ -213,6 +245,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -304,6 +343,15 @@ jobs:
           path: .test-timings
           key: test-timings-${{ github.sha }}
 
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 30
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
+
   # Windows tests cover server and shared packages, not apps/web.
   test-windows:
     name: test-windows (${{ matrix.shard }}/4)
@@ -314,6 +362,13 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -380,3 +435,12 @@ jobs:
             3) bun run --cwd packages/agent test --parallel=2 --timeout=30000 || status=1 ;;
           esac
           exit "$status"
+
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 240
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }

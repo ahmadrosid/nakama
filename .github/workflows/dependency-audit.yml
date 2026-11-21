@@ -37,6 +37,13 @@ jobs:
       # Drop this once picomatch ships a fix.
       AUDIT_IGNORE: --ignore=GHSA-fc5q-39xc-vjpf
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -55,3 +62,12 @@ jobs:
       - name: Audit docs website lockfile
         working-directory: docs/website
         run: bun audit --audit-level=high $AUDIT_IGNORE
+
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 20
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
