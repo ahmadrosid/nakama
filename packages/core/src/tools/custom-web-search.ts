@@ -133,6 +133,49 @@ function buildRequest(
     };
   }
 
+  // You.com answers without a key at the agents search URL. A YDC_API_KEY
+  // moves the call to the keyed Search API.
+  if (config.provider === "youcom") {
+    const keylessUrl = "https://api.you.com/v1/agents/search";
+    const keyedUrl = "https://ydc-index.io/v1/search";
+    const count = String(MAX_RESULTS);
+    headers["user-agent"] = "youdotcom-integration/ahmadrosid-nakama";
+
+    if (config.apiKey) {
+      headers["x-api-key"] = config.apiKey;
+
+      const url =
+        !config.endpoint || config.endpoint === keylessUrl
+          ? keyedUrl
+          : config.endpoint;
+
+      return {
+        body: JSON.stringify({ count: MAX_RESULTS, query }),
+        headers,
+        method: "POST",
+        url,
+      };
+    }
+
+    const base =
+      !config.endpoint || config.endpoint === keyedUrl
+        ? keylessUrl
+        : config.endpoint;
+
+    const url = new URL(base);
+    url.searchParams.set("query", query);
+    url.searchParams.set("count", count);
+
+    return {
+      headers: {
+        accept: "application/json",
+        "user-agent": "youdotcom-integration/ahmadrosid-nakama",
+      },
+      method: "GET",
+      url: url.toString(),
+    };
+  }
+
   if (config.provider === "exa") {
     headers["x-api-key"] = config.apiKey;
 
@@ -158,7 +201,7 @@ function buildRequest(
   };
 }
 
-/** Exa puts hits on `results`; Firecrawl on `data.web`. */
+/** Exa puts hits on `results`; Firecrawl on `data.web`; You.com on `results.web`. */
 function findResultArray(payload: JsonValue): JsonValue[] {
   const record = readRecord(payload);
 
@@ -171,6 +214,16 @@ function findResultArray(payload: JsonValue): JsonValue[] {
 
     if (Array.isArray(candidate) && candidate.length > 0) {
       return candidate;
+    }
+  }
+
+  const nestedResults = record.results;
+
+  if (nestedResults !== undefined) {
+    const nested = findResultArray(nestedResults);
+
+    if (nested.length > 0) {
+      return nested;
     }
   }
 
@@ -193,9 +246,24 @@ function toResult(entry: JsonValue): CustomWebSearchResult | null {
     return null;
   }
 
+  const snippetParts: string[] = [];
+
+  if (Array.isArray(record.snippets)) {
+    for (const entry of record.snippets) {
+      const part = readString(entry);
+
+      if (part) {
+        snippetParts.push(part);
+      }
+    }
+  }
+
+  const snippets = snippetParts.join(" ") || undefined;
+
   const snippet =
     readString(record.snippet) ??
     readString(record.description) ??
+    (snippets || undefined) ??
     readString(record.text) ??
     readString(record.markdown) ??
     readString(record.content);

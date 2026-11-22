@@ -320,6 +320,79 @@ describe("createCustomWebSearchTool", () => {
     expect(captured[0]?.url).toBe("https://api.keenable.ai/v1/search");
     expect(captured[0]?.headers["x-api-key"]).toBe("keenable-key");
   });
+
+  test("sends a keyless You.com search to the agents endpoint", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch(
+      {
+        body: {
+          results: {
+            web: [
+              {
+                description: "Bun 1.4 release notes",
+                title: "Bun 1.4",
+                url: "https://bun.sh/blog/bun-v1.4",
+              },
+            ],
+          },
+        },
+      },
+      captured
+    );
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "",
+        endpoint: "https://api.you.com/v1/agents/search",
+        provider: "youcom",
+      })
+    );
+
+    const output = await tool?.run({ query: "bun release" }, {});
+
+    expect(captured[0]?.method).toBe("GET");
+    expect(captured[0]?.url).toBe(
+      "https://api.you.com/v1/agents/search?query=bun+release&count=5"
+    );
+    expect(captured[0]?.headers["user-agent"]).toBe(
+      "youdotcom-integration/ahmadrosid-nakama"
+    );
+    expect(captured[0]?.headers["x-api-key"]).toBeUndefined();
+    expect(output).toEqual({
+      provider: "youcom",
+      query: "bun release",
+      results: [
+        {
+          snippet: "Bun 1.4 release notes",
+          title: "Bun 1.4",
+          url: "https://bun.sh/blog/bun-v1.4",
+        },
+      ],
+    });
+  });
+
+  test("sends a You.com key to the keyed search endpoint", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch({ body: { results: { web: [] } } }, captured);
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "ydc-key",
+        endpoint: "https://api.you.com/v1/agents/search",
+        provider: "youcom",
+      })
+    );
+
+    await tool?.run({ query: "bun release" }, {});
+
+    expect(captured[0]?.method).toBe("POST");
+    expect(captured[0]?.url).toBe("https://ydc-index.io/v1/search");
+    expect(captured[0]?.headers["x-api-key"]).toBe("ydc-key");
+    expect(captured[0]?.headers["user-agent"]).toBe(
+      "youdotcom-integration/ahmadrosid-nakama"
+    );
+    expect(captured[0]?.body).toEqual({ count: 5, query: "bun release" });
+  });
 });
 
 describe("parseCustomWebSearchResults", () => {
@@ -343,6 +416,28 @@ describe("parseCustomWebSearchResults", () => {
       "Three",
       "Four",
       "Five",
+    ]);
+  });
+
+  test("reads You.com results.web and joins snippets", () => {
+    const results = parseCustomWebSearchResults({
+      results: {
+        web: [
+          {
+            snippets: ["First passage.", "Second passage."],
+            title: "Bun",
+            url: "https://bun.sh",
+          },
+        ],
+      },
+    });
+
+    expect(results).toEqual([
+      {
+        snippet: "First passage. Second passage.",
+        title: "Bun",
+        url: "https://bun.sh",
+      },
     ]);
   });
 });

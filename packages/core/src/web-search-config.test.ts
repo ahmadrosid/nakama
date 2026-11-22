@@ -29,6 +29,7 @@ describe("web search config", () => {
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.SERPLY_API_KEY;
     delete process.env.KEENABLE_API_KEY;
+    delete process.env.YDC_API_KEY;
   });
 
   async function useTempConfigDir(): Promise<void> {
@@ -159,6 +160,20 @@ describe("web search config", () => {
     expect(saved.configured).toBe(true);
     expect(saved.endpoint).toBe("https://api.keenable.ai/v1/search");
     expect(WEB_SEARCH_PROVIDER_LABELS.keenable).toBe("Keenable");
+    expect((await saveWebSearchConfig({ provider: "exa" })).configured).toBe(
+      false
+    );
+  });
+
+  test("uses You.com without a key and still needs one for Exa", async () => {
+    await useTempConfigDir();
+
+    const saved = await saveWebSearchConfig({ provider: "youcom" });
+
+    expect(saved.configured).toBe(true);
+    expect(saved.endpoint).toBe("https://api.you.com/v1/agents/search");
+    expect(WEB_SEARCH_PROVIDER_LABELS.youcom).toBe("You.com");
+    expect(isWebSearchProvider("youcom")).toBe(true);
     expect((await saveWebSearchConfig({ provider: "exa" })).configured).toBe(
       false
     );
