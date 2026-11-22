@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { AgentService } from "./agent-service";
 import { setToolSecrets } from "./custom-tool-shared";
 import {
   makeCustomToolRecord,
@@ -11,6 +12,7 @@ import {
 } from "./custom-tool-test-helpers";
 import { ManagedSecrets } from "./managed-secrets";
 import { loadPythonTool, resolvePythonBin } from "./python-tool-loader";
+import { resolveToolsFromStorage } from "./tool-resolver";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -587,8 +589,6 @@ if __name__ == "__main__":
       "utf8"
     );
 
-    const { resolveToolsFromStorage } = await import("./tool-resolver");
-
     const tools = await resolveToolsFromStorage([
       {
         createdAt: new Date().toISOString(),
@@ -681,7 +681,6 @@ if __name__ == "__main__":
       "tool_shout"
     );
 
-    const { AgentService } = await import("./agent-service");
     const agentService = new AgentService(null, null, databaseAdapter);
 
     const response = await agentService.runToolPlayground(
