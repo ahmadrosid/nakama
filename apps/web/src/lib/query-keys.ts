@@ -86,6 +86,19 @@ export const queryKeys = {
     ["organizationOverview", parentOrgId, activeOrgId] as const,
   organizationPublicationCatalog: (orgId: string, kind: string) =>
     ["organizationPublicationCatalog", orgId, kind] as const,
+  platformSessionSteps: (
+    orgId: string,
+    sessionId: string,
+    at?: string,
+    id?: number
+  ) =>
+    [
+      "platformSessionSteps",
+      orgId,
+      sessionId,
+      at ?? "first",
+      id ?? "at",
+    ] as const,
   // Under orgMembers, so a new invite refreshes this list too.
   orgInvites: (orgId: string) => ["orgMembers", orgId, "invites"] as const,
   orgJoinRequests: (orgId: string) =>
