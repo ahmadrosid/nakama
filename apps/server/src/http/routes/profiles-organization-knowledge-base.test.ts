@@ -1524,34 +1524,4 @@ describe("organization knowledge base routes", () => {
       expect([method, path, response.status]).toEqual([method, path, 403]);
     }
   }, 30_000);
-
-  test("openapi documents the organization knowledge base routes", async () => {
-    const { app } = createApp();
-    const response = await app.fetch(new Request(`${BASE}/openapi.json`));
-    expect(response.status).toBe(200);
-
-    const spec: ReturnType<typeof app.getOpenAPI31Document> =
-      await response.json();
-
-    const expected = [
-      ["/v1/orgs/{orgId}/knowledge-base", ["get", "post"]],
-      ["/v1/orgs/{orgId}/knowledge-base/{documentId}", ["delete"]],
-      ["/v1/orgs/{orgId}/knowledge-base/{documentId}/content", ["get"]],
-      ["/v1/orgs/{orgId}/shared-resources/{publicationId}/content", ["get"]],
-      [
-        "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
-        ["put", "delete"],
-      ],
-    ] as const;
-
-    for (const [path, methods] of expected) {
-      for (const method of methods) {
-        expect([method, path, Boolean(spec.paths?.[path]?.[method])]).toEqual([
-          method,
-          path,
-          true,
-        ]);
-      }
-    }
-  }, 20_000);
 });

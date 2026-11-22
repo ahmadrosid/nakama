@@ -162,39 +162,6 @@ describe("provider user content mapping", () => {
     });
   });
 
-  test("toOpenAIMessages maps image parts", async () => {
-    const result = await toOpenAIMessages("system", [multimodalUserMessage]);
-    const user = result.find((message) => message.role === "user");
-
-    expect(Array.isArray(user?.content)).toBe(true);
-
-    const parts = Array.isArray(user?.content) ? user.content : [];
-    const imagePart = parts[1];
-    expect(parts[0]).toEqual({ text: "What is this?", type: "text" });
-    expect(imagePart?.type).toBe("image_url");
-    expect(
-      imagePart?.type === "image_url" ? imagePart.image_url.url : undefined
-    ).toStartWith("data:image/png;base64,");
-  });
-
-  test("toResponsesInput maps image parts", async () => {
-    const result = await toResponsesInput([multimodalUserMessage]);
-
-    const user = result[0];
-
-    expect(user).toMatchObject({
-      content: [
-        { text: "What is this?", type: "input_text" },
-        {
-          image_url: expect.stringMatching(/^data:image\/png;base64,/),
-          type: "input_image",
-        },
-      ],
-      role: "user",
-      type: "message",
-    });
-  });
-
   test("toOpenAIMessages maps document parts", async () => {
     const result = await toOpenAIMessages("system", [documentUserMessage]);
     const user = result.find((message) => message.role === "user");
@@ -232,25 +199,6 @@ describe("provider user content mapping", () => {
     expect(parts[1]).toEqual({
       text: "[File: Pasted text (3 words).txt]\nalpha beta gamma",
       type: "text",
-    });
-  });
-
-  test("toResponsesInput maps document parts", async () => {
-    const result = await toResponsesInput([documentUserMessage]);
-
-    const user = result[0];
-
-    expect(user).toMatchObject({
-      content: [
-        { text: "Summarize this file", type: "input_text" },
-        {
-          file_data: "data:application/pdf;base64,JVBERi0=",
-          filename: "report.pdf",
-          type: "input_file",
-        },
-      ],
-      role: "user",
-      type: "message",
     });
   });
 

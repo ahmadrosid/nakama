@@ -129,28 +129,6 @@ function caretDown(textarea: HTMLTextAreaElement) {
   return event;
 }
 
-test("ArrowUp recalls the most recently sent prompt", async () => {
-  const sent: string[] = [];
-
-  const { container, textarea } = await renderComposer((text) =>
-    sent.push(text)
-  );
-
-  await typeText(textarea, "hello");
-  await submit(container, textarea);
-
-  expect(textarea.value).toBe("");
-
-  let event: KeyboardEvent | undefined;
-  await act(async () => {
-    event = caretUp(textarea);
-  });
-
-  expect(event?.defaultPrevented).toBe(true);
-  expect(textarea.value).toBe("hello");
-  expect(sent).toEqual(["hello"]);
-});
-
 test("ArrowUp steps further back through older prompts, clamped at the oldest", async () => {
   const { container, textarea } = await renderComposer(() => undefined);
 

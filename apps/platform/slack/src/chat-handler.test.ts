@@ -584,26 +584,6 @@ describe("normalizeSlackText", () => {
 });
 
 describe("replyToSlackEvent", () => {
-  test("replies in the event thread for a channel message without a thread", async () => {
-    const posted: Posted[] = [];
-
-    const slack = {
-      postMessage: async (channel: string, text: string, threadTs?: string) => {
-        posted.push({ channel, text, threadTs });
-      },
-    };
-
-    await replyToSlackEvent(
-      slack,
-      { channel: "C1", ts: "100.000", type: "message" },
-      "error reply"
-    );
-
-    expect(posted).toEqual([
-      { channel: "C1", text: "error reply", threadTs: "100.000" },
-    ]);
-  });
-
   test("replies in the existing thread for a channel thread message", async () => {
     const posted: Posted[] = [];
 

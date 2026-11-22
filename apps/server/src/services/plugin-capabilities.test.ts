@@ -28,6 +28,7 @@ import {
   pluginPackage,
 } from "../testing/plugin-package-fixture";
 import { PluginHostError, PluginService } from "./plugin-service";
+import { ProfileService } from "./profile-service";
 import { SkillCuratorService } from "./skill-curator-service";
 import { SkillsService } from "./skills-service";
 import { resolveProfileStoredTools } from "./tool-resolver";
@@ -748,7 +749,6 @@ Standalone body.
       skill!.description
     );
 
-    const { ProfileService } = await import("./profile-service");
     const profiles = new ProfileService(db);
     await expect(profiles.deleteTool(tool!.id)).rejects.toThrow();
     expect(await db.getTool(tool!.id)).not.toBeNull();

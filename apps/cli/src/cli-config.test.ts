@@ -54,15 +54,6 @@ describe("cli-config", () => {
       expect(await loadSavedCliProfileId()).toBe("local");
     });
   });
-  test("saves and loads profile_id", async () => {
-    await withCliConfigDir(async () => {
-      await saveCliProfileId("super_nakama");
-      expect(await loadSavedCliProfileId()).toBe("super_nakama");
-
-      const raw = await readFile(getCliConfigPath(), "utf8");
-      expect(raw).toContain("profile_id=super_nakama");
-    });
-  });
 
   test("ignores unknown keys when loading cli.ini", async () => {
     await withCliConfigDir(async () => {

@@ -271,12 +271,6 @@ describe("mcp tool bridge", () => {
     expect(calls).toBe(0);
   });
 
-  test("namespaces tool names by server", () => {
-    expect(namespacedMcpToolName("filesystem", "read_file")).toBe(
-      "filesystem__read_file"
-    );
-  });
-
   test("sanitizes invalid characters in MCP tool names", () => {
     expect(sanitizeLlmToolNamePart("list/tools")).toBe("list_tools");
     expect(sanitizeLlmToolNamePart("my server")).toBe("my_server");

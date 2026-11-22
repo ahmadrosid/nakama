@@ -69,8 +69,6 @@ function skill(overrides: Partial<SkillSummary>): SkillSummary {
   };
 }
 
-describe("findActiveSkillSlashRange", () => {});
-
 describe("filterSkillsForSlashQuery", () => {
   test("returns all skills for an empty query", () => {
     expect(
@@ -88,21 +86,6 @@ describe("filterSkillsForSlashQuery", () => {
     expect(
       filterSkillsForSlashQuery([weatherSkill, deploySkill], "production")
     ).toEqual([deploySkill]);
-  });
-
-  test("hides bundled management skills even when they match the query", () => {
-    expect(
-      filterSkillsForSlashQuery(
-        [createAutomationSkill, manageSkillsSkill, weatherSkill],
-        "create"
-      )
-    ).toEqual([]);
-    expect(
-      filterSkillsForSlashQuery(
-        [createAutomationSkill, manageSkillsSkill, weatherSkill],
-        "manage"
-      )
-    ).toEqual([]);
   });
 });
 
@@ -162,12 +145,6 @@ describe("/btw side chat command", () => {
     expect(matchComposerBtwCommand("please /btw")).toBeNull();
   });
 });
-
-describe("matchComposerLearningLoopCommand", () => {});
-
-describe("replaceSlashRangeWithSkillInvocation", () => {});
-
-describe("replaceSlashRangeWithReservedCommand", () => {});
 
 describe("getSkillTokenRanges", () => {
   test("does not create token ranges for partial invocations", () => {

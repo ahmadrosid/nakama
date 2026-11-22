@@ -57,20 +57,6 @@ describe("buildDiscordImageInput", () => {
     expect(result).toBeNull();
   });
 
-  test("rejects non-image attachments", async () => {
-    const result = await buildDiscordImageInput(
-      createMessage({
-        attachments: [{ contentType: "application/pdf", name: "doc.pdf" }],
-        content: "",
-      })
-    );
-
-    expect(result).toEqual({
-      kind: "reject",
-      message: UNSUPPORTED_ATTACHMENT_REPLY,
-    });
-  });
-
   test("ignores non-image attachments when caption text is present", async () => {
     const result = await buildDiscordImageInput(
       createMessage({

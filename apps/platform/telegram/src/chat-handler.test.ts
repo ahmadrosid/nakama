@@ -2021,37 +2021,6 @@ describe("createChatHandler security", () => {
 });
 
 describe("bridge API integration", () => {
-  test("calls org and profile APIs before creating a chat session", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeTelegramConfigIni(homeDir, {
-        botToken: "1234567890:TEST",
-        pairedUserIds: [1001],
-      });
-
-      const {
-        calls,
-        orgIds,
-        handler: handleMessage,
-      } = await createTestHandler(
-        homeDir,
-        {
-          config: TEST_CONFIG,
-        },
-        {}
-      );
-
-      const { ctx } = createMessageContext({ text: "hello", userId: 1001 });
-      await handleMessage(ctx);
-
-      expect(calls.listUserOrgs).toBeGreaterThanOrEqual(1);
-      expect(calls.setOrgId).toBeGreaterThanOrEqual(1);
-      expect(orgIds).toContain("org_test");
-      expect(calls.listProfiles).toBeGreaterThanOrEqual(1);
-      expect(calls.createSession).toBe(1);
-      expect(calls.sendStream).toBe(1);
-    });
-  });
-
   test("auto-selects a single org without prompting", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

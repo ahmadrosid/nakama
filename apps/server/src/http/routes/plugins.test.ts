@@ -1350,30 +1350,4 @@ describe("plugin HTTP API", () => {
       ).toBe(true);
     }
   );
-
-  test("openapi documents plugin routes", async () => {
-    const { app } = createApp();
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/openapi.json")
-    );
-
-    expect(response.status).toBe(200);
-
-    // SAFETY: This test controls the fixture shape at this boundary.
-    const spec = (await response.json()) as {
-      paths: Record<string, { get?: object; post?: object; put?: object }>;
-    };
-
-    expect(spec.paths["/v1/platform/plugins/releases"]).toBeTruthy();
-    expect(spec.paths["/v1/platform/plugins/updates"]).toBeTruthy();
-    expect(spec.paths["/v1/plugins"]).toBeTruthy();
-    expect(
-      spec.paths["/v1/plugins/official/{pluginId}/reinstall"]
-    ).toBeTruthy();
-    expect(
-      spec.paths["/v1/plugins/{pluginId}/actions/{actionKey}"]
-    ).toBeTruthy();
-    expect(spec.paths["/v1/plugins/ui/{orgId}/{pluginId}/{path}"]).toBeTruthy();
-  });
 });

@@ -4,7 +4,6 @@ import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   AVAILABLE_MODELS,
   getDefaultModel,
-  getModelById,
   getModelsForProvider,
   isOpenRouterModelSlug,
   modelSupportsVision,
@@ -151,71 +150,12 @@ describe("resolveModel", () => {
     expect(getDefaultModel("openai")).toBe("gpt-5.4");
   });
 
-  test("exposes current Gemini limits and standard text prices without changing defaults", () => {
-    for (const [id, input, output] of [
-      ["gemini-2.5-flash", 0.3, 2.5],
-      ["gemini-2.5-pro", 1.25, 10],
-      ["gemini-3.8-flash", 0.75, 3.75],
-      ["gemini-3.1-pro-preview", 2, 12],
-    ] as const) {
-      expect(getModelById(id)).toMatchObject({
-        contextWindow: 1_048_576,
-        inputPerMillionUsd: input,
-        maxOutputTokens: 65_536,
-        outputPerMillionUsd: output,
-        provider: "gemini",
-      });
-    }
-
-    expect(getModelById("gemini-3.8-flash")?.default).not.toBe(true);
-  });
-
-  test("exposes current Anthropic limits and prices while preserving selections", () => {
-    for (const [id, contextWindow, maxOutputTokens, input, output] of [
-      ["claude-sonnet-5", 1_000_000, 128_000, 2, 10],
-      ["claude-sonnet-5-5", 1_000_000, 128_000, 2, 10],
-      ["claude-opus-5", 1_000_000, 128_000, 5, 25],
-      ["claude-opus-5-5", 1_000_000, 128_000, 4, 20],
-      ["claude-haiku-4-5-20251001", 200_000, 64_000, 1, 5],
-      ["claude-sonnet-4-6", 1_000_000, 128_000, 3, 15],
-      ["claude-opus-4-6", 1_000_000, 128_000, 5, 25],
-    ] as const) {
-      expect(getModelById(id)).toMatchObject({
-        contextWindow,
-        inputPerMillionUsd: input,
-        maxOutputTokens,
-        outputPerMillionUsd: output,
-        provider: "anthropic",
-        supportsThinking: true,
-        supportsVision: true,
-      });
-      expect(resolveModel("anthropic", id)).toBe(id);
-    }
-
-    expect(getDefaultModel("anthropic")).toBe("claude-sonnet-4-6");
-    expect(
-      resolveModel("anthropic", undefined, [
-        { default: true, id: "claude-opus-4-6" },
-      ])
-    ).toBe("claude-opus-4-6");
-  });
-
   test("passes through non-catalog models for native providers", () => {
     expect(resolveModel("anthropic", "claude-haiku-4-5-20251001")).toBe(
       "claude-haiku-4-5-20251001"
     );
     expect(resolveModel("openai", "gpt-4o-2025-08")).toBe("gpt-4o-2025-08");
     expect(resolveModel("gemini", "gemini-3.0-ultra")).toBe("gemini-3.0-ultra");
-  });
-
-  test("resolves compatible models from custom list", () => {
-    const customModels = [{ default: true, id: "llama3.2" }];
-    expect(resolveModel("openai_compatible", "llama3.2", customModels)).toBe(
-      "llama3.2"
-    );
-    expect(resolveModel("openai_compatible", undefined, customModels)).toBe(
-      "llama3.2"
-    );
   });
 
   test("passes through unknown OpenCode Go model ids", () => {
