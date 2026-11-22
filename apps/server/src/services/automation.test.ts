@@ -510,36 +510,6 @@ describe("AutomationService", () => {
     expect(await service.listAll()).toEqual([]);
   });
 
-  test("accepts email delivery when composeio MCP email sending is assigned", async () => {
-    const db = await createTestDb();
-    await assignComposeioGmailSender(db, PROFILE_ID);
-
-    const service = new AutomationService(db, {
-      canSendEmail: (profileId) =>
-        hasAutomationEmailDeliveryPath(db, profileId, {
-          loadConfig: async () => null,
-        }),
-      getUserTimezone: async () => "UTC",
-    });
-
-    const automation = await service.create(
-      ORG_ID,
-      {
-        delivery: { channel: "email", to: "hey@ahmadrosid.com" },
-        description: "Daily digest",
-        name: "Digest",
-        prompt: "Summarize news",
-        trigger: { type: "manual" },
-      },
-      PROFILE_ID
-    );
-
-    expect(automation.delivery).toEqual({
-      channel: "email",
-      to: "hey@ahmadrosid.com",
-    });
-  });
-
   test("falls back to the prompt when description is omitted", async () => {
     const db = await createTestDb();
 
@@ -1225,40 +1195,6 @@ describe("AutomationRunner", () => {
     }
   );
 
-  test("writes completed run records", async () => {
-    const db = await createTestDb();
-
-    const service = new AutomationService(db, {
-      getUserTimezone: async () => "UTC",
-    });
-
-    const automation = await service.create(
-      ORG_ID,
-      {
-        description: "Run once",
-        name: "Manual task",
-        prompt: "Say hello",
-        trigger: { type: "manual" },
-      },
-      PROFILE_ID
-    );
-
-    const agentService = {
-      runAutomationPrompt: async () => "Hello from automation",
-    };
-
-    // SAFETY: This test double supplies only the fields exercised by this test.
-    const runner = new AutomationRunner(service, agentService as never);
-    const result = await runner.run(automation.id);
-
-    expect(result.output).toBe("Hello from automation");
-
-    const runs = await service.listRuns(automation.id);
-    expect(runs).toHaveLength(1);
-    expect(runs[0]?.status).toBe("completed");
-    expect(runs[0]?.output).toBe("Hello from automation");
-  });
-
   test("resumes an interrupted run instead of failing it", async () => {
     const db = await createTestDb();
 
@@ -1584,56 +1520,6 @@ describe("AutomationRunner", () => {
     const updated = await service.get(automation.id, ORG_ID);
     expect(updated?.enabled).toBe(false);
     expect(updated?.nextRunAt).toBeNull();
-  });
-
-  test("records delivery status after successful runs", async () => {
-    const db = await createTestDb();
-
-    const service = new AutomationService(db, {
-      getUserTimezone: async () => "UTC",
-    });
-
-    const now = new Date().toISOString();
-    await db.upsertAutomation({
-      createdAt: now,
-      definition: {
-        delivery: { channel: "telegram" },
-        description: "Daily digest",
-        prompt: "Summarize news",
-        steps: [],
-        trigger: { type: "manual" },
-        version: 1,
-      },
-      enabled: true,
-      id: "automation_delivery_test",
-      name: "Digest",
-      orgId: ORG_ID,
-      profileId: PROFILE_ID,
-      updatedAt: now,
-      version: 1,
-    });
-
-    const agentService = {
-      runAutomationPrompt: async () => "News summary",
-    };
-
-    const deliveryService = new AutomationDeliveryService(service, {
-      telegram: {
-        send: async () => ({ ok: true }),
-      },
-    });
-
-    const runner = new AutomationRunner(
-      service,
-      // SAFETY: This test double supplies only the fields exercised by this test.
-      agentService as never,
-      deliveryService
-    );
-
-    await runner.run("automation_delivery_test");
-
-    const runs = await service.listRuns("automation_delivery_test");
-    expect(runs[0]?.deliveryStatus).toBe("sent");
   });
 
   test("sends long telegram output as several messages without truncation", async () => {

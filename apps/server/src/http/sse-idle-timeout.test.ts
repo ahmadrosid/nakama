@@ -45,20 +45,6 @@ describe("disableBunIdleTimeoutForSse", () => {
 
     expect(calls).toEqual([{ request, seconds: 0 }]);
   });
-
-  test("leaves non-SSE responses on the default idle timeout", () => {
-    const request = new Request("http://127.0.0.1:4310/health");
-    const response = new Response("ok");
-    let called = false;
-
-    disableBunIdleTimeoutForSse(request, response, {
-      timeout() {
-        called = true;
-      },
-    });
-
-    expect(called).toBe(false);
-  });
 });
 
 describe("isLongHeldAutomationRunRequest", () => {

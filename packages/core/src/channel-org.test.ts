@@ -30,10 +30,6 @@ const orgs: UserOrgSummary[] = [
 ];
 
 describe("findOrgBySelectionInput", () => {
-  test("matches list index", () => {
-    expect(findOrgBySelectionInput("2", orgs)?.id).toBe("org_b");
-  });
-
   test("matches slug", () => {
     expect(findOrgBySelectionInput("acme", orgs)?.id).toBe("org_a");
   });

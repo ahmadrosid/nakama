@@ -58,8 +58,6 @@ function providerReplying(reply: string) {
   return { generateText: async () => reply } as never;
 }
 
-describe("listSetupChecklistCandidates", () => {});
-
 describe("parseSetupChecklistReply", () => {
   test("maps ids to items in reply order", () => {
     expect(

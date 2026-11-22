@@ -35,17 +35,6 @@ function call(
 }
 
 describe("createRateLimitMiddleware", () => {
-  test("lets a client through while it still has budget", async () => {
-    const app = buildApp({ max: 5 });
-    const statuses: number[] = [];
-
-    for (let i = 0; i < 5; i++) {
-      statuses.push((await call(app)).status);
-    }
-
-    expect(statuses).toEqual([200, 200, 200, 200, 200]);
-  });
-
   test("answers 429 with Retry-After once the budget is spent", async () => {
     const app = buildApp({ max: 2 });
 

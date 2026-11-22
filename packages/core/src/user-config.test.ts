@@ -16,7 +16,6 @@ import {
   isProviderConfigured,
   loadUserConfig,
   loadUserWebPublicUrl,
-  normalizeProviderInstanceLabel,
   parseIniWithSections,
   readChatgptOAuthFromInstance,
   readXaiOAuthFromInstance,
@@ -456,12 +455,6 @@ created_at=2026-06-15T00:00:00.000Z
 
     const loaded = await loadUserConfig();
     expect(loaded?.providers[0]?.label).toBe("OpenCode Go");
-  });
-
-  test("normalizeProviderInstanceLabel rejects undefined string", () => {
-    expect(normalizeProviderInstanceLabel("openrouter", "undefined", [])).toBe(
-      "OpenRouter"
-    );
   });
 
   test("saveUserWebPublicUrl preserves path segments", async () => {

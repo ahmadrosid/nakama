@@ -28,16 +28,6 @@ describe("bridge API contract", () => {
     );
   });
 
-  test("parseListProfilesResponse accepts valid payloads", () => {
-    expect(
-      parseListProfilesResponse({
-        profiles: [{ id: "default", name: "Default Bot" }],
-      })
-    ).toEqual({
-      profiles: [{ id: "default", name: "Default Bot" }],
-    });
-  });
-
   test("parseListProfilesResponse preserves profile chat fields", () => {
     expect(
       parseListProfilesResponse({

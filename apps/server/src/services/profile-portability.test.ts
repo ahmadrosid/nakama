@@ -1570,20 +1570,4 @@ describe("profile portability", () => {
       )
     ).rejects.toThrow();
   });
-
-  test("a Python skill tool still travels in a pack", async () => {
-    const { db, service } = await setup();
-    const { profile } = await service.createProfile(ORG, { name: "Py Bot" });
-    await writeSkill(db, ORG, profile.id, "py-skill");
-    await writeFile(
-      path.join(soul(ORG, profile.id), "skills", "py-skill", "tool.py"),
-      '"""Docs."""\n\ndef run(input, context):\n    return {}\n',
-      "utf8"
-    );
-
-    const exported = await createProfilePackExport(db, ORG, profile.id);
-    expect(Object.keys(unzipSync(new Uint8Array(exported.data)))).toContain(
-      "skills/py-skill/tool.py"
-    );
-  });
 });

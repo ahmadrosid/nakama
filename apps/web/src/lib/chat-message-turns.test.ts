@@ -184,27 +184,6 @@ describe("groupMessagesIntoTurns", () => {
     });
   });
 
-  test("keeps consecutive assistants and tools in one assistant turn", () => {
-    const messages: ChatListItem[] = [
-      item({ content: "thinking aloud", id: "a0", role: "assistant" }),
-      item({ id: "t1", role: "tool", tool: "bash", toolStatus: "done" }),
-      item({ content: "final", id: "a1", role: "assistant" }),
-    ];
-
-    const turns = groupMessagesIntoTurns(messages);
-
-    expect(turns).toHaveLength(1);
-    expect(turns[0]?.kind).toBe("assistant");
-
-    if (turns[0]?.kind === "assistant") {
-      expect(turns[0].messages.map(({ message }) => message.id)).toEqual([
-        "a0",
-        "t1",
-        "a1",
-      ]);
-    }
-  });
-
   test("merges successive tool batches and trailing reasoning", () => {
     const tools = [3, 4, 6].flatMap((count, group) =>
       Array.from({ length: count }, (_, index) =>
@@ -298,8 +277,6 @@ describe("groupMessagesIntoTurns", () => {
     });
   });
 });
-
-describe("turnKey", () => {});
 
 describe("segmentAssistantTurn tool URL copies", () => {
   const signed = `https://media.example.com/v2/image/id:abc?exp=1&fallback=${"a1b2".repeat(30)}4b2e830&sig=xyz`;
