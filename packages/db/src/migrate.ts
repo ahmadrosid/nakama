@@ -76,6 +76,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateComposioTables);
   atomic(migrateComposioUserConnections);
   atomic(migrateAuditEventsTable);
+  atomic(migrateAuditEventsChainColumns);
   atomic(migrateProfileChangeEventsTable);
   atomic(migrateSkillVersionsTable);
   atomic(migratePluginTables);
@@ -297,7 +298,19 @@ function migrateAuditEventsTable(db: Database): void {
       resource_id TEXT,
       metadata TEXT NOT NULL DEFAULT '{}',
       request_id TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      outcome TEXT NOT NULL DEFAULT 'success',
+      status INTEGER,
+      method TEXT,
+      route TEXT,
+      session_id TEXT,
+      actor_mode TEXT,
+      client_ip TEXT,
+      forwarded_for TEXT,
+      user_agent TEXT,
+      seq INTEGER,
+      prev_hash TEXT NOT NULL DEFAULT '',
+      hash TEXT NOT NULL DEFAULT ''
     );
 
     CREATE INDEX IF NOT EXISTS audit_events_created
@@ -305,6 +318,9 @@ function migrateAuditEventsTable(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS audit_events_org_created
       ON audit_events (org_id, created_at DESC, id DESC);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq
+      ON audit_events (seq);
 
     CREATE TRIGGER IF NOT EXISTS audit_events_no_update
     BEFORE UPDATE ON audit_events
@@ -318,6 +334,61 @@ function migrateAuditEventsTable(db: Database): void {
       SELECT RAISE(ABORT, 'audit_events are append-only');
     END;
   `);
+}
+
+/**
+ * Existing installs get the request-context and hash-chain columns added on
+ * top of the original table. `seq` stays NULL for rows written before the
+ * chain existed, so they verify as legacy instead of breaking the chain.
+ */
+function migrateAuditEventsChainColumns(db: Database): void {
+  // SAFETY: SQLite `PRAGMA table_info` returns rows with a string `name` column.
+  const columns = db.prepare("PRAGMA table_info(audit_events)").all() as Array<{
+    name: string;
+  }>;
+
+  const has = (name: string): boolean =>
+    columns.some((column) => column.name === name);
+
+  if (!has("outcome")) {
+    db.exec(
+      "ALTER TABLE audit_events ADD COLUMN outcome TEXT NOT NULL DEFAULT 'success'"
+    );
+  }
+
+  if (!has("status")) {
+    db.exec("ALTER TABLE audit_events ADD COLUMN status INTEGER");
+  }
+
+  for (const name of [
+    "actor_mode",
+    "client_ip",
+    "forwarded_for",
+    "method",
+    "route",
+    "session_id",
+    "user_agent",
+  ]) {
+    if (!has(name)) {
+      db.exec(`ALTER TABLE audit_events ADD COLUMN ${name} TEXT`);
+    }
+  }
+
+  if (!has("seq")) {
+    db.exec("ALTER TABLE audit_events ADD COLUMN seq INTEGER");
+  }
+
+  for (const name of ["prev_hash", "hash"]) {
+    if (!has(name)) {
+      db.exec(
+        `ALTER TABLE audit_events ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`
+      );
+    }
+  }
+
+  db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq ON audit_events (seq)"
+  );
 }
 
 function migrateSessionStepsTable(db: Database): void {

@@ -77,6 +77,11 @@ export const queryKeys = {
   },
   models: ["models"] as const,
   nakamaCloud: ["nakamaCloud"] as const,
+  auditEventCategories: (orgId: string) =>
+    ["auditEventCategories", orgId] as const,
+  auditEvents: (orgId: string, filters: string) =>
+    ["auditEvents", orgId, filters] as const,
+  auditEventsVerify: ["auditEventsVerify"] as const,
   nakamaUpgrade: ["system", "upgrade"] as const,
   nakamaVersion: ["system", "version"] as const,
   notificationDestinations: (orgId: string) =>

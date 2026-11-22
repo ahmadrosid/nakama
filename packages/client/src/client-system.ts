@@ -1,4 +1,6 @@
 import type {
+  AuditChainVerificationResult,
+  AuditEventStats,
   AutomationWorkerSettingsResponse,
   BackupStatusResponse,
   ChatgptOAuthDeviceCompleteRequest,
@@ -13,6 +15,8 @@ import type {
   DataImportPreviewResponse,
   DeleteProviderResponse,
   HealthResponse,
+  ListAuditEventsParams,
+  ListAuditEventsResponse,
   ListProvidersResponse,
   ModelsResponse,
   NakamaUpgradeResponse,
@@ -136,6 +140,55 @@ export class SystemClient extends NakamaClientCore {
 
   exportDataResponse(): Promise<Response> {
     return this.fetchRaw("/v1/platform/data/export");
+  }
+
+  async listAuditEvents(
+    params: ListAuditEventsParams & { orgId?: string } = {}
+  ): Promise<ListAuditEventsResponse> {
+    const query = new URLSearchParams();
+
+    for (const key of [
+      "action",
+      "category",
+      "limit",
+      "offset",
+      "orgId",
+      "outcome",
+      "search",
+    ] as const) {
+      const value = params[key];
+
+      if (value !== undefined) {
+        query.set(key, String(value));
+      }
+    }
+
+    return this.request<ListAuditEventsResponse>(
+      `/v1/platform/audit-events?${query}`
+    );
+  }
+
+  async listAuditEventCategories(orgId?: string): Promise<AuditEventStats> {
+    const query = new URLSearchParams();
+
+    if (orgId) {
+      query.set("orgId", orgId);
+    }
+
+    return this.request<AuditEventStats>(
+      `/v1/platform/audit-events/stats${query.size > 0 ? `?${query}` : ""}`
+    );
+  }
+
+  async verifyAuditChain(): Promise<AuditChainVerificationResult> {
+    return this.request<AuditChainVerificationResult>(
+      "/v1/platform/audit-events/verify",
+      { method: "POST" }
+    );
+  }
+
+  exportAuditEventsResponse(): Promise<Response> {
+    return this.fetchRaw("/v1/platform/audit-events/export");
   }
 
   async exportUserData(userId: string): Promise<{

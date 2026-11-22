@@ -873,16 +873,68 @@ export interface StoredSessionStep {
   toolName: string;
 }
 
+/** Who performed an audited action: dashboard session, API token, agent tool run, or the system itself. */
+export type AuditActorMode = "agent" | "session" | "system" | "token";
+
 export interface StoredAuditEvent {
   action: string;
+  actorMode: AuditActorMode | null;
   actorUserId: string | null;
+  clientIp: string | null;
   createdAt: string;
+  forwardedFor: string | null;
+  /** Hex SHA-256 chain hash. Empty for rows written before the chain existed. */
+  hash: string | null;
   id: string;
   metadata: Record<string, boolean | null | number | string>;
+  method: string | null;
   orgId: string | null;
+  outcome: "success" | "failure";
+  prevHash: string | null;
   requestId: string | null;
   resourceId: string | null;
   resourceType: string;
+  route: string | null;
+  /** Hash-chain position. NULL marks rows written before the chain existed. */
+  seq: number | null;
+  /** Browser session id when the actor used the dashboard. */
+  sessionId: string | null;
+  status: number | null;
+  userAgent: string | null;
+}
+
+export interface AuditChainVerification {
+  brokenId: string | null;
+  brokenSeq: number | null;
+  checked: number;
+  legacy: number;
+  ok: boolean;
+  reason: string | null;
+}
+
+/**
+ * Write input for the audit ledger. Request context fields are optional:
+ * internal writers (agent tool runs, provider connects) do not have them.
+ */
+export interface CreateAuditEventInput {
+  action: string;
+  actorMode?: AuditActorMode | null;
+  actorUserId?: string | null;
+  clientIp?: string | null;
+  createdAt: string;
+  forwardedFor?: string | null;
+  id: string;
+  metadata?: Record<string, boolean | null | number | string>;
+  method?: string | null;
+  orgId?: string | null;
+  outcome?: "success" | "failure";
+  requestId?: string | null;
+  resourceId?: string | null;
+  resourceType: string;
+  route?: string | null;
+  sessionId?: string | null;
+  status?: number | null;
+  userAgent?: string | null;
 }
 
 export interface StoredAutomationWebhookSecret {
@@ -1040,7 +1092,7 @@ export interface DatabaseAdapter {
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
   /** Append-only insert. Adapters must not expose update/delete for this table. */
-  createAuditEvent(record: StoredAuditEvent): Promise<void>;
+  createAuditEvent(record: CreateAuditEventInput): Promise<void>;
 
   createBrowserSession(record: StoredBrowserSessionRecord): Promise<void>;
   createMfaBackupCode(record: StoredMfaBackupCode): Promise<void>;
@@ -1150,6 +1202,12 @@ export interface DatabaseAdapter {
     passwordHash: string;
     updatedAt: string;
   }): Promise<boolean>;
+
+  /** Yields the whole trail oldest first, in batches, without loading it all. */
+  exportAuditEvents(options?: {
+    batchSize?: number;
+    orgId?: string;
+  }): AsyncGenerator<StoredAuditEvent[], void, unknown>;
   /**
    * Settles runs left `running` by a process that exited mid-run. Only a
    * `finally` in the owning process completes a run, so a kill leaves the row
@@ -1423,12 +1481,18 @@ export interface DatabaseAdapter {
     sessionId: string
   ): Promise<StoredAttachmentRecord[]>;
 
+  /** Distinct `domain` prefixes of recorded actions, for filter dropdowns. */
+  listAuditEventCategories(orgId?: string): Promise<string[]>;
+
   listAuditEvents(options?: {
     action?: string;
+    category?: string;
     limit?: number;
     offset?: number;
     orgId?: string;
-  }): Promise<StoredAuditEvent[]>;
+    outcome?: string;
+    search?: string;
+  }): Promise<{ events: StoredAuditEvent[]; total: number }>;
   listAutomationRunSteps(
     runId: string
   ): Promise<StoredAutomationRunStepRecord[]>;
@@ -1896,4 +1960,7 @@ export interface DatabaseAdapter {
   upsertTool(record: StoredToolRecord): Promise<void>;
   upsertWorkflow(record: StoredWorkflowRecord): Promise<void>;
   upsertWorkspaceSettings(record: StoredWorkspaceSettingsRecord): Promise<void>;
+
+  /** Walks the hash chain and reports the first broken link, if any. */
+  verifyAuditChain(): Promise<AuditChainVerification>;
 }

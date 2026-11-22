@@ -823,7 +823,21 @@ CREATE TABLE IF NOT EXISTS audit_events (
   resource_id TEXT,
   metadata TEXT NOT NULL DEFAULT '{}',
   request_id TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  outcome TEXT NOT NULL DEFAULT 'success',
+  status INTEGER,
+  method TEXT,
+  route TEXT,
+  session_id TEXT,
+  actor_mode TEXT,
+  client_ip TEXT,
+  forwarded_for TEXT,
+  user_agent TEXT,
+  -- Hash-chain position. NULL marks rows written before the chain existed;
+  -- they verify as legacy instead of breaking the chain.
+  seq INTEGER,
+  prev_hash TEXT NOT NULL DEFAULT '',
+  hash TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS audit_events_created
@@ -831,6 +845,9 @@ CREATE INDEX IF NOT EXISTS audit_events_created
 
 CREATE INDEX IF NOT EXISTS audit_events_org_created
   ON audit_events (org_id, created_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq
+  ON audit_events (seq);
 
 CREATE TRIGGER IF NOT EXISTS audit_events_no_update
 BEFORE UPDATE ON audit_events

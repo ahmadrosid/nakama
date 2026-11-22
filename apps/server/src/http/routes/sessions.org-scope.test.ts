@@ -463,7 +463,7 @@ describe("session routes are scoped to the caller's active org", () => {
     };
 
     const browserEvents = async () =>
-      (await databaseAdapter.listAuditEvents({})).filter((event) =>
+      (await databaseAdapter.listAuditEvents({})).events.filter((event) =>
         event.action.startsWith("session.browser_")
       );
 
@@ -489,7 +489,7 @@ describe("session routes are scoped to the caller's active org", () => {
       expect(await postControls()).toEqual([409, 409, 409]);
 
       for (const event of await browserEvents()) {
-        expect(event.metadata).toMatchObject({ outcome: "failure" });
+        expect(event).toMatchObject({ outcome: "failure" });
       }
 
       browserRuns = true;
@@ -513,9 +513,7 @@ describe("session routes are scoped to the caller's active org", () => {
 
     const events = await browserEvents();
 
-    const succeeded = events.filter(
-      (event) => event.metadata?.outcome === "success"
-    );
+    const succeeded = events.filter((event) => event.outcome === "success");
 
     expect(events).toHaveLength(6);
     expect(succeeded.map((event) => event.action).sort()).toEqual([
@@ -527,10 +525,12 @@ describe("session routes are scoped to the caller's active org", () => {
     for (const event of succeeded) {
       expect(event).toMatchObject({
         actorUserId: "user_victim",
-        metadata: { outcome: "success", status: 204 },
+        metadata: {},
         orgId: VICTIM_ORG,
+        outcome: "success",
         resourceId: victimSessionId,
         resourceType: "session",
+        status: 204,
       });
     }
 

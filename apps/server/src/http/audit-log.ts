@@ -1,13 +1,15 @@
 import { log } from "@nakama/core";
-import type { DatabaseAdapter, StoredAuditEvent } from "@nakama/db";
+import type { CreateAuditEventInput, DatabaseAdapter } from "@nakama/db";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
+import {
+  type AuditDescriptor,
+  decodePathPart,
+  describeResourceAuditEvent,
+  event,
+} from "./audit-log-routes";
+import { clientAddress } from "./rate-limit-middleware";
 import type { AppEnv } from "./types";
-
-type AuditDescriptor = Pick<
-  StoredAuditEvent,
-  "action" | "resourceId" | "resourceType"
-> & { orgId?: string | null };
 
 const FIXED_EVENTS = new Map<string, AuditDescriptor>([
   ["PATCH /v1/auth/me", event("account.update", "user")],
@@ -46,6 +48,9 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
     event("plugin.release_install", "plugin"),
   ],
   ["POST /v1/profiles/pack/import", event("profile.import", "profile")],
+  // Reading the whole audit trail is itself a sensitive read, so the export
+  // lands in the same ledger, like tera-router's export that audits itself.
+  ["GET /v1/platform/audit-events/export", event("audit.export", "audit")],
   // This server's own Nakama Cloud sign-in: it changes the default provider.
   [
     "POST /v1/nakama-cloud/sign-in",
@@ -62,11 +67,18 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
  * - authentication: setup, login success/failure, logout, password change and
  *   reset, MFA/passkey enrollment and removal, token rotation
  * - authorization: organization/member/invite lifecycle and role changes
- * - configuration: providers and installation settings
- * - sensitive resources: profile/org CRUD, export/import, session revocation
+ * - configuration: providers, skills, tools, automations, plugins, MCP
+ *   servers, notification destinations, integrations, and installation
+ *   settings
+ * - sensitive resources: profile/org CRUD, export/import, session lifecycle,
+ *   memory edits, artifact and shared-resource publication, tool runs
  *
- * Add a rule here whenever a new route joins one of those classes. Request
- * bodies are intentionally never recorded, so credentials cannot enter metadata.
+ * Add a rule here whenever a new route joins one of those classes. Deliberately
+ * unaudited: chat message turns and LLM text/computer calls (hot path, like
+ * tera-router's gateway), previews and connection tests (no state change),
+ * push presence and user-context writes (client state), meet extension
+ * control (ephemeral), automation drafts and read-state marks. Request bodies
+ * are intentionally never recorded, so credentials cannot enter metadata.
  */
 export function describeAuditEvent(
   method: string,
@@ -284,7 +296,7 @@ export function describeAuditEvent(
     };
   }
 
-  return null;
+  return describeResourceAuditEvent(method, pathname);
 }
 
 export function createAuditLogMiddleware(
@@ -298,6 +310,18 @@ export function createAuditLogMiddleware(
 
       return;
     }
+
+    // Capture the request context before the route runs: the client address,
+    // forwarded chain, and user agent do not change during a request.
+    const clientIp = clientAddress(
+      c,
+      process.env.NAKAMA_TRUST_PROXY === "true"
+    );
+
+    const forwardedFor = c.req.header("x-forwarded-for") ?? null;
+    const userAgent = c.req.header("user-agent")?.slice(0, 512) ?? null;
+    const method = c.req.method;
+    const route = c.req.path;
 
     // Login names its actor by email. A reset request names its target by
     // email, and the caller is often anonymous, so that user is the resource.
@@ -335,16 +359,22 @@ export function createAuditLogMiddleware(
       : (auth?.activeOrgId ?? responseIdentity.orgId ?? null);
 
     try {
-      await databaseAdapter.createAuditEvent({
+      const record: CreateAuditEventInput = {
         action: descriptor.action,
+        actorMode: auth
+          ? auth.mode === "browser-session"
+            ? "session"
+            : "token"
+          : "system",
         actorUserId,
+        clientIp,
         createdAt: new Date().toISOString(),
+        forwardedFor,
         id: `audit_${crypto.randomUUID()}`,
-        metadata: {
-          outcome: status < 400 ? "success" : "failure",
-          status,
-        },
+        metadata: {},
+        method,
         orgId,
+        outcome: status < 400 ? "success" : "failure",
         requestId: c.get("requestId") ?? null,
         resourceId:
           descriptor.resourceId ??
@@ -353,7 +383,13 @@ export function createAuditLogMiddleware(
           responseIdentity.resourceId ??
           (descriptor.resourceType === "user" ? actorUserId : null),
         resourceType: descriptor.resourceType,
-      });
+        route,
+        sessionId: auth?.session?.id ?? null,
+        status,
+        userAgent,
+      };
+
+      await databaseAdapter.createAuditEvent(record);
     } catch (error) {
       log("error", "audit.write_failed", {
         action: descriptor.action,
@@ -362,30 +398,6 @@ export function createAuditLogMiddleware(
       });
     }
   };
-}
-
-function event(
-  action: string,
-  resourceType: string,
-  resourceId?: string
-): AuditDescriptor {
-  return {
-    action,
-    resourceId: resourceId ? decodePathPart(resourceId) : null,
-    resourceType,
-  };
-}
-
-function decodePathPart(value: string | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 async function resolveBodyEmailUserId(

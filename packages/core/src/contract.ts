@@ -926,6 +926,59 @@ export interface ListOrgInvitesResponse {
   invites: OrgInviteSummary[];
 }
 
+/** One entry of the append-only audit trail (the dashboard Events page). */
+export interface AuditEvent {
+  action: string;
+  actorMode: "agent" | "session" | "system" | "token" | null;
+  actorUserId: string | null;
+  clientIp: string | null;
+  createdAt: string;
+  forwardedFor: string | null;
+  hash: string | null;
+  id: string;
+  metadata: Record<string, boolean | null | number | string>;
+  method: string | null;
+  orgId: string | null;
+  outcome: "success" | "failure";
+  prevHash: string | null;
+  requestId: string | null;
+  resourceId: string | null;
+  resourceType: string;
+  route: string | null;
+  /** Hash-chain position; null marks rows written before the chain existed. */
+  seq: number | null;
+  sessionId: string | null;
+  status: number | null;
+  userAgent: string | null;
+}
+
+export interface ListAuditEventsParams {
+  action?: string;
+  category?: string;
+  limit?: number;
+  offset?: number;
+  outcome?: "success" | "failure";
+  search?: string;
+}
+
+export interface ListAuditEventsResponse {
+  events: AuditEvent[];
+  total: number;
+}
+
+export interface AuditEventStats {
+  categories: string[];
+}
+
+export interface AuditChainVerificationResult {
+  brokenId: string | null;
+  brokenSeq: number | null;
+  checked: number;
+  legacy: number;
+  ok: boolean;
+  reason: string | null;
+}
+
 /** An accepted invite waiting for an org admin to approve or reject it. */
 export interface OrgJoinRequest {
   createdAt: string;
