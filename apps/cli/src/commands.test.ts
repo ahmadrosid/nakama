@@ -92,8 +92,6 @@ describe("resolveModelSwitchTarget", () => {
   });
 });
 
-describe("effectiveModelState", () => {});
-
 describe("effortForActiveModel", () => {
   test("names the level the active model gets", () => {
     const gpt = { ...profile, model: "provider-b::gpt-4o" };

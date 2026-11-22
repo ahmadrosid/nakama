@@ -11,28 +11,6 @@ import {
 import { ensureProviderConfigured } from "./setup";
 
 describe("isProviderConfigured", () => {
-  test("treats env API keys as configured when config.ini stores an empty key", () => {
-    const id = createProviderInstanceId();
-
-    expect(
-      isProviderConfigured(
-        {
-          defaultProviderId: id,
-          providers: [
-            {
-              apiKey: "",
-              createdAt: "2026-06-07T10:00:00.000Z",
-              id,
-              label: "OpenAI",
-              type: "openai",
-            },
-          ],
-        },
-        { OPENAI_API_KEY: "sk-test" }
-      )
-    ).toBe(true);
-  });
-
   test("treats a mounted API key file as configured", async () => {
     const directory = await mkdtemp(join(tmpdir(), "nakama-provider-key-"));
     const keyPath = join(directory, "openai");

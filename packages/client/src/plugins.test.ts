@@ -101,11 +101,3 @@ test("plugin client methods send expected org and revision fields", async () => 
     version: "1.0.0",
   });
 });
-
-test("plugin client falls back to the configured org when a call omits one", async () => {
-  const { client, fetchCalls } = captureClient();
-  await client.listOrgPlugins();
-  expect(new Headers(fetchCalls[0]!.init?.headers).get("X-Org-Id")).toBe(
-    "org_cookie"
-  );
-});

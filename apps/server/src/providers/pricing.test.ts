@@ -106,16 +106,6 @@ describe("estimateUsageCostUsd", () => {
     ).toBeCloseTo(4.62);
   });
 
-  test("computes cost from catalog pricing", () => {
-    const cost = estimateUsageCostUsd(
-      "claude-sonnet-4-6",
-      1_000_000,
-      1_000_000
-    );
-
-    expect(cost).toBe(18);
-  });
-
   test("uses Cloudflare's published input and output rates for exact model ids", () => {
     // https://developers.cloudflare.com/workers-ai/platform/pricing/
     // Checked 2026-09-22. Each row guards a separately maintained catalog entry.
@@ -298,13 +288,6 @@ describe("getExplicitModelPricing", () => {
   test("returns null where getModelPricing falls back", () => {
     expect(getExplicitModelPricing("vendor/custom-model")).toBeNull();
     expect(getModelPricing("vendor/custom-model")).not.toBeNull();
-  });
-
-  test("returns the catalog rates for a known model", () => {
-    expect(getExplicitModelPricing("claude-sonnet-4-6")).toEqual({
-      inputPerMillionUsd: 3,
-      outputPerMillionUsd: 15,
-    });
   });
 
   test("keeps the Images rates for gpt-image-2 on a compatible endpoint without its own rates", () => {

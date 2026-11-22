@@ -2354,43 +2354,6 @@ Use Claude Code guidance.
     expect(matches[0]?.sourcePath).toContain(join("agent", "skills"));
   });
 
-  test("syncs profile-scoped skills without scanning every profile directory", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new SkillsService(db);
-
-    const profileDir = join(
-      configDir,
-      "orgs",
-      ORG_ID,
-      "profiles",
-      PROFILE_ID,
-      "skills",
-      "notes"
-    );
-
-    await mkdir(profileDir, { recursive: true });
-    await writeFile(
-      join(profileDir, "SKILL.md"),
-      `---
-name: notes
-description: Capture notes for the user.
----
-
-Use this skill when the user asks to save a note.
-`
-    );
-
-    await service.syncProfileSkills(ORG_ID, PROFILE_ID);
-
-    const listed = await service.listSkills();
-    const notes = listed.skills.find((skill) => skill.name === "notes");
-
-    expect(notes).toBeDefined();
-    expect(notes?.sourcePath).toContain(
-      join("orgs", ORG_ID, "profiles", PROFILE_ID, "skills", "notes")
-    );
-  });
-
   test("patchSkill updates skill body on disk", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);

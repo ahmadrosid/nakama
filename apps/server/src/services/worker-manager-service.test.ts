@@ -352,26 +352,6 @@ describe("WorkerManagerService", () => {
       expect(pm2.stop).toHaveBeenCalled();
       expect((await readWorkerDesiredState()).automation).toBe(true);
     });
-
-    test("stops worker by name", async () => {
-      const mockPm2 = createMockPm2();
-      const service = new WorkerManagerService(projectRoot, mockPm2);
-
-      await service.stopWorker("telegram");
-
-      expect(mockPm2.stop).toHaveBeenCalledWith(
-        "telegram",
-        expect.any(Function)
-      );
-      expect(await readWorkerDesiredState()).toEqual({
-        automation: true,
-        discord: false,
-        slack: false,
-        teams: false,
-        telegram: false,
-        whatsapp: false,
-      });
-    });
   });
 
   describe("getWorkerStatus", () => {

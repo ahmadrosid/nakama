@@ -31,8 +31,6 @@ function agentSkill(
   };
 }
 
-describe("jaccardOverlap", () => {});
-
 describe("classifyConsolidateEligibility", () => {
   test("skips recent patches; null patched is eligible", () => {
     expect(

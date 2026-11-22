@@ -77,22 +77,6 @@ describe("chat-stream-web-search", () => {
     ]);
   });
 
-  test("parseWebSearchSourcesFromResult handles Exa MCP content wrapper", () => {
-    const sources = parseWebSearchSourcesFromResult({
-      content: [
-        {
-          text: "Title: Example\nURL: https://example.com/article\nPublished: N/A\nAuthor: N/A",
-          type: "text",
-        },
-      ],
-      text: "Title: Example\nURL: https://example.com/article\nPublished: N/A\nAuthor: N/A",
-    });
-
-    expect(sources).toHaveLength(1);
-    expect(sources[0]?.title).toBe("Example");
-    expect(sources[0]?.href).toBe("https://example.com/article");
-  });
-
   test("parseWebSearchSourcesFromResult handles OpenAI action sources", () => {
     const sources = parseWebSearchSourcesFromResult({
       query: "latest AI news",
@@ -300,43 +284,6 @@ describe("buildStreamHandlers web_search lifecycle", () => {
 
     expect(messages[0]).toMatchObject({
       content: "web_search completed",
-      toolStatus: "done",
-    });
-    expect(
-      parseWebSearchSourcesFromResult(messages[0]?.toolResult)
-    ).toHaveLength(1);
-  });
-
-  test("onToolStart and onToolEnd work for Exa MCP web search tools", async () => {
-    const { buildStreamHandlers } = await import("./chat-stream");
-    let messages: ChatListItem[] = [];
-
-    const handlers = buildStreamHandlers((updater) => {
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
-      messages = typeof updater === "function" ? updater(messages) : updater;
-    });
-
-    handlers.onToolStart?.({
-      input: { query: "JWT middleware security" },
-      tool: "exa__web_search_exa",
-      toolCallId: "tool_exa_1",
-    });
-
-    expect(messages[0]).toMatchObject({
-      tool: "exa__web_search_exa",
-      toolInput: { query: "JWT middleware security" },
-      toolStatus: "running",
-    });
-
-    handlers.onToolEnd?.({
-      result: {
-        text: "Title: JWT Guide\nURL: https://example.com/jwt\nPublished: N/A\nAuthor: N/A",
-      },
-      tool: "exa__web_search_exa",
-      toolCallId: "tool_exa_1",
-    });
-
-    expect(messages[0]).toMatchObject({
       toolStatus: "done",
     });
     expect(

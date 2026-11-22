@@ -42,8 +42,6 @@ describe("inferArtifactMimeType", () => {
   });
 });
 
-describe("resolveArtifactMimeType", () => {});
-
 describe("mime predicates", () => {
   test("classifies markdown, html, text, image, and video", () => {
     expect(isMarkdownArtifactMimeType("text/markdown; charset=utf-8")).toBe(
