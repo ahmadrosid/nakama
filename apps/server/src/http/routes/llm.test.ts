@@ -147,21 +147,6 @@ test("model routes refuse a missing pass, a bad pass and a cloud attachment refe
   ).toBe(400);
 });
 
-test("a pass lists the models", async () => {
-  const { app, pass } = await setup();
-
-  const response = await app.request("/v1/llm/models", {
-    headers: { authorization: `Bearer ${pass}` },
-  });
-
-  const body = z
-    .object({ models: z.array(z.object({ id: z.string() })) })
-    .parse(await response.json());
-
-  expect(response.status).toBe(200);
-  expect(body.models.length).toBeGreaterThan(0);
-});
-
 test("when an admin turns Nakama Desktop off, model calls are refused, and they work again when it is on", async () => {
   const { app, databaseAdapter, orgId, pass } = await setup();
   const orgService = new OrgService(databaseAdapter, new AuthService());

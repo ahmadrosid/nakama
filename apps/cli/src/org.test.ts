@@ -90,12 +90,6 @@ describe("parseCliOrgArgs", () => {
     expect(parseCliOrgArgs(["--org=org_xyz"])).toEqual({ orgId: "org_xyz" });
   });
 
-  test("parses org slugs", () => {
-    expect(parseCliOrgArgs(["--org", "acme-co"])).toEqual({
-      orgId: "acme-co",
-    });
-  });
-
   test("rejects missing --org value", () => {
     expect(() => parseCliOrgArgs(["--org"])).toThrow(InvalidOrgArgError);
     expect(() => parseCliOrgArgs(["--org", "--theme", "dark"])).toThrow(

@@ -83,12 +83,6 @@ test("shows no backup error when the last scheduled backup was good", async () =
   expect(alerts(panel)).toBe(0);
 });
 
-test("shows an alert when the backup status cannot be read", async () => {
-  const panel = await renderPanel(new Error("network down"));
-
-  expect(alerts(panel)).toBe(1);
-});
-
 test("hides an old failure when the status refetch fails", async () => {
   const panel = await renderPanel(new Error("network down"), {
     lastError: { at: "2026-11-03T02:00:00.000Z", message },

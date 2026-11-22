@@ -52,5 +52,3 @@ describe("precacheUrls", () => {
     ]);
   });
 });
-
-describe("buildVersion", () => {});

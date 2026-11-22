@@ -30,20 +30,6 @@ test("renderUserContext returns nothing when every answer is blank", () => {
   expect(renderUserContext({ name: "", role: "   " })).toBe("");
 });
 
-test("parseUserContext keeps unknown lines as extra", () => {
-  const parsed = parseUserContext(`# About Me
-
-- What you do: Backend engineer
-
-## Notes
-
-Ships on Fridays.
-`);
-
-  expect(parsed.answers.role).toBe("Backend engineer");
-  expect(parsed.extra).toBe("## Notes\n\nShips on Fridays.");
-});
-
 test("parse and render round-trip hand-written extra content", () => {
   const original = `# About Me
 

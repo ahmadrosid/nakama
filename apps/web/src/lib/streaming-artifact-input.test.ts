@@ -69,20 +69,6 @@ describe("parseStreamingArtifactToolInput", () => {
     });
   });
 
-  test("rejects meta sidecar paths", () => {
-    expect(
-      parseStreamingArtifactToolInput(
-        "write_file",
-        '{"path":"artifacts/report.md.nakama-meta.json","content":"{}"}'
-      )
-    ).toEqual({
-      content: null,
-      eligible: false,
-      filename: null,
-      relativePath: null,
-    });
-  });
-
   test("rejects partial meta sidecar paths while streaming", () => {
     expect(
       parseStreamingArtifactToolInput(

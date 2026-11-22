@@ -151,7 +151,7 @@ export async function ensureBuiltinToolDefinitions(
   }
 }
 
-export async function ensureSubAgentToolDefinition(
+async function ensureSubAgentToolDefinition(
   db: DatabaseAdapter
 ): Promise<void> {
   const now = new Date().toISOString();

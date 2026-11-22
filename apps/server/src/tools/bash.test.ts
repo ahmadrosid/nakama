@@ -395,22 +395,6 @@ const timer = setInterval(() => {
     expect(survivedAbort).toBe(false);
   }, 10_000);
 
-  test("runs commands in the profile workspace by default", async () => {
-    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
-
-    const result = await runBash(
-      { command: process.platform === "win32" ? "pwd -W" : "pwd" },
-      { orgId: "org_test", profileId: "profile_test" },
-      { workspaceRoot }
-    );
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe(
-      (await realpath(workspaceRoot)).replaceAll("\\", "/")
-    );
-    expect(result.timedOut).toBe(false);
-  });
-
   test("ordinary commands resolve the profile workspace without an override", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;

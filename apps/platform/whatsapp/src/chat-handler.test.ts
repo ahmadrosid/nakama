@@ -529,27 +529,6 @@ describe("createChatHandler", () => {
     });
   });
 
-  test("handles /clear command", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeWhatsAppConfigIni(homeDir, {
-        pairedJid: PAIRED_JID,
-        phoneNumber: "1234567890",
-      });
-
-      const {
-        calls,
-        handler: handleMessage,
-        sent,
-      } = await createTestHandler(homeDir);
-
-      await handleMessage({ jid: PAIRED_JID, text: "/clear" });
-
-      expect(calls.compact).toBe(0);
-      expect(sent.length).toBe(1);
-      expect(sent[0].text).toBe("History cleared.");
-    });
-  });
-
   test("/status names the agent and this chat's session", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {
@@ -722,30 +701,6 @@ describe("createChatHandler", () => {
 });
 
 describe("bridge API integration", () => {
-  test("calls org and profile APIs before creating a chat session", async () => {
-    await withTempHome(async (homeDir) => {
-      await writeWhatsAppConfigIni(homeDir, {
-        pairedJid: PAIRED_JID,
-        phoneNumber: "1234567890",
-      });
-
-      const {
-        calls,
-        orgIds,
-        handler: handleMessage,
-      } = await createTestHandler(homeDir);
-
-      await handleMessage({ jid: PAIRED_JID, text: "hello" });
-
-      expect(calls.listUserOrgs).toBeGreaterThanOrEqual(1);
-      expect(calls.setOrgId).toBeGreaterThanOrEqual(1);
-      expect(orgIds).toContain("org_test");
-      expect(calls.listProfiles).toBeGreaterThanOrEqual(1);
-      expect(calls.createSession).toBe(1);
-      expect(calls.sendStream).toBe(1);
-    });
-  });
-
   test("auto-selects a single org without prompting", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {

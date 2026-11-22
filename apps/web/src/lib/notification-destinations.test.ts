@@ -4,8 +4,6 @@ import {
   parseTelegramTopicLink,
 } from "./notification-destinations";
 
-describe("buildNotificationWebhookUrl", () => {});
-
 test("preserves Telegram topic-link parsing", () => {
   expect(parseTelegramTopicLink("https://t.me/c/3734526664/167")).toEqual({
     chatId: -1_003_734_526_664,
