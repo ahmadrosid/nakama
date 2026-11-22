@@ -9,6 +9,7 @@ import {
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
+import { createPluginAgentHost } from "./plugin-agent-host";
 import { PluginService } from "./plugin-service";
 
 const directories: string[] = [];
@@ -277,7 +278,6 @@ test("official workflow install imports once, executes through IPC, isolates org
 }, 20_000);
 
 test("host capabilities enforce profile tenancy, Super Nakama access, and tool assignment", async () => {
-  const { createPluginAgentHost } = await import("./plugin-agent-host");
   const db = createInMemoryDatabaseAdapter();
   const now = new Date().toISOString();
 
@@ -451,7 +451,6 @@ test("failed official setup disables the new installation and can be retried", a
 });
 
 test("only Data View reaches Google Sheets, as the calling member", async () => {
-  const { createPluginAgentHost } = await import("./plugin-agent-host");
   const calls: unknown[][] = [];
 
   const host = createPluginAgentHost(
