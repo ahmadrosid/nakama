@@ -250,8 +250,7 @@ function WebSearchApiKeyFields({
   const [showApiKey, setShowApiKey] = useState(false);
 
   const canSave =
-    !(pending ||
-    managedByEnvironment ) &&
+    !(pending || managedByEnvironment) &&
     Boolean(apiKey.trim() || keyAlreadySaved || keyOptional);
 
   return (
