@@ -34,7 +34,7 @@ import {
 } from "@/hooks/use-audit-events";
 import { client, formatError } from "@/lib/client";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 const SEARCH_PLACEHOLDER = "Search action, resource, actor, IP";
 
@@ -120,6 +120,7 @@ export function EventsPage() {
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [category, setCategory] = useState("all");
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const debounceTimerRef = useRef<number | null>(null);
 
@@ -127,7 +128,7 @@ export function EventsPage() {
 
   const filters: AuditEventsFilters = {
     category: category === "all" ? undefined : category,
-    limit: PAGE_SIZE,
+    limit: pageSize,
     offset,
     outcome: outcome === "all" ? undefined : outcome,
     search: trimmedSearch || undefined,
@@ -201,12 +202,17 @@ export function EventsPage() {
         />
       </div>
 
-      {total > PAGE_SIZE ? (
+      {total > 0 ? (
         <EventsPagination
           count={events.length}
           isFetching={eventsQuery.isFetching}
           offset={offset}
           onOffsetChange={setOffset}
+          onPageSizeChange={(next) => {
+            setPageSize(next);
+            setOffset(0);
+          }}
+          pageSize={pageSize}
           total={total}
         />
       ) : null}
@@ -430,37 +436,58 @@ function EventsPagination({
   isFetching,
   offset,
   onOffsetChange,
+  onPageSizeChange,
+  pageSize,
   total,
 }: {
   count: number;
   isFetching: boolean;
   offset: number;
   onOffsetChange: (next: number) => void;
+  onPageSizeChange: (next: number) => void;
+  pageSize: number;
   total: number;
 }) {
   const hasMore = offset + count < total;
 
   return (
-    <div className="mt-3 flex items-center justify-center gap-2">
-      <Button
-        disabled={offset === 0 || isFetching}
-        onClick={() => onOffsetChange(Math.max(0, offset - PAGE_SIZE))}
-        size="sm"
-        variant="outline"
+    <div className="mt-3 flex items-center justify-between gap-2">
+      <Select
+        onValueChange={(value) => onPageSizeChange(Number(value))}
+        value={String(pageSize)}
       >
-        Previous
-      </Button>
-      <span className="text-muted-foreground text-xs">
-        {count === 0 ? 0 : offset + 1}-{offset + count} of {total}
-      </span>
-      <Button
-        disabled={!hasMore || isFetching}
-        onClick={() => onOffsetChange(offset + PAGE_SIZE)}
-        size="sm"
-        variant="outline"
-      >
-        Next
-      </Button>
+        <SelectTrigger aria-label="Events per page" className="w-28">
+          <SelectValue>{`${pageSize} / page`}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {PAGE_SIZE_OPTIONS.map((size) => (
+            <SelectItem key={size} value={String(size)}>
+              {size} / page
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex items-center gap-2">
+        <Button
+          disabled={offset === 0 || isFetching}
+          onClick={() => onOffsetChange(Math.max(0, offset - pageSize))}
+          size="sm"
+          variant="outline"
+        >
+          Previous
+        </Button>
+        <span className="text-muted-foreground text-xs">
+          {count === 0 ? 0 : offset + 1}-{offset + count} of {total}
+        </span>
+        <Button
+          disabled={!hasMore || isFetching}
+          onClick={() => onOffsetChange(offset + pageSize)}
+          size="sm"
+          variant="outline"
+        >
+          Next
+        </Button>
+      </div>
     </div>
   );
 }
