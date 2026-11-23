@@ -874,7 +874,13 @@ export interface StoredSessionStep {
 }
 
 /** Who performed an audited action: dashboard session, API token, agent tool run, or the system itself. */
-export type AuditActorMode = "agent" | "session" | "system" | "token";
+/** `anonymous`: an unauthenticated request (login, signup, reset). `system`: written by the server itself. */
+export type AuditActorMode =
+  | "agent"
+  | "anonymous"
+  | "session"
+  | "system"
+  | "token";
 
 export interface StoredAuditEvent {
   action: string;
@@ -1947,6 +1953,10 @@ export interface DatabaseAdapter {
   upsertWorkflow(record: StoredWorkflowRecord): Promise<void>;
   upsertWorkspaceSettings(record: StoredWorkspaceSettingsRecord): Promise<void>;
 
-  /** Walks the hash chain and reports the first broken link, if any. */
+  /**
+   * Walks the hash chain and reports the first broken link, if any. Detects
+   * accidental corruption only: the hash is unkeyed, so a writer of the
+   * database file can rewrite the chain and still pass.
+   */
   verifyAuditChain(): Promise<AuditChainVerification>;
 }

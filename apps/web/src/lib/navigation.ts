@@ -141,7 +141,7 @@ const NAV_GROUPS: NavGroup[] = [
       navItem(
         "events",
         "Events",
-        "Audit trail of every action in this org",
+        "Audit trail of security and configuration actions",
         Clock01Icon
       ),
     ],

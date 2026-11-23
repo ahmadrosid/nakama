@@ -127,6 +127,7 @@ describe("audit event API", () => {
     expect(loginEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          actorMode: "anonymous",
           actorUserId: platformUser?.id,
           outcome: "failure",
           status: 401,

@@ -929,7 +929,7 @@ export interface ListOrgInvitesResponse {
 /** One entry of the append-only audit trail (the dashboard Events page). */
 export interface AuditEvent {
   action: string;
-  actorMode: "agent" | "session" | "system" | "token" | null;
+  actorMode: "agent" | "anonymous" | "session" | "system" | "token" | null;
   actorUserId: string | null;
   clientIp: string | null;
   createdAt: string;

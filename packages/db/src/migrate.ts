@@ -7,6 +7,12 @@ import { GENERATE_IMAGE_TOOL_ID } from "@nakama/core/tools/protected";
 
 const BOOTSTRAP_SCHEMA_VERSION = 1;
 
+/** Audit rows older than this may be pruned; younger rows cannot be deleted. */
+export const AUDIT_EVENT_RETENTION_DAYS = 365;
+
+/** ISO-8601 cutoff in the same format as `audit_events.created_at`. */
+export const AUDIT_EVENT_RETENTION_CUTOFF_SQL = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-${AUDIT_EVENT_RETENTION_DAYS} days')`;
+
 export function migrateDatabase(db: Database): void {
   applyBootstrapSchema(db);
 
@@ -319,17 +325,8 @@ function migrateAuditEventsTable(db: Database): void {
     CREATE INDEX IF NOT EXISTS audit_events_org_created
       ON audit_events (org_id, created_at DESC, id DESC);
 
-    CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq
-      ON audit_events (seq);
-
     CREATE TRIGGER IF NOT EXISTS audit_events_no_update
     BEFORE UPDATE ON audit_events
-    BEGIN
-      SELECT RAISE(ABORT, 'audit_events are append-only');
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
-    BEFORE DELETE ON audit_events
     BEGIN
       SELECT RAISE(ABORT, 'audit_events are append-only');
     END;
@@ -389,6 +386,19 @@ function migrateAuditEventsChainColumns(db: Database): void {
   db.exec(
     "CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq ON audit_events (seq)"
   );
+
+  // Rebuilt on every open so installs with the older never-delete trigger
+  // pick up the retention window. Only rows past it can be pruned.
+  db.exec(`
+    DROP TRIGGER IF EXISTS audit_events_no_delete;
+
+    CREATE TRIGGER audit_events_no_delete
+    BEFORE DELETE ON audit_events
+    WHEN OLD.created_at >= ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_events are append-only');
+    END;
+  `);
 }
 
 function migrateSessionStepsTable(db: Database): void {

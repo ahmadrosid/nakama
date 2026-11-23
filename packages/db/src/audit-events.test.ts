@@ -224,6 +224,31 @@ describe("audit events", () => {
     });
   });
 
+  test("upgrades an audit_events table created before the chain columns", () => {
+    const database = new Database(":memory:");
+    database.exec(`
+      CREATE TABLE audit_events (
+        id TEXT PRIMARY KEY NOT NULL,
+        actor_user_id TEXT,
+        org_id TEXT,
+        action TEXT NOT NULL,
+        resource_type TEXT NOT NULL,
+        resource_id TEXT,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        request_id TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+
+    migrateDatabase(database);
+
+    const columns = database
+      .query<{ name: string }, []>("PRAGMA table_info(audit_events)")
+      .all();
+
+    expect(columns.map((column) => column.name)).toContain("seq");
+  });
+
   test("rows written before the chain verify as legacy", async () => {
     const database = new Database(":memory:");
     migrateDatabase(database);
@@ -252,6 +277,72 @@ describe("audit events", () => {
       legacy: 1,
       ok: true,
       reason: null,
+    });
+  });
+
+  test("prunes rows past retention, records the prune, and keeps the chain verifiable", async () => {
+    const database = new Database(":memory:");
+    migrateDatabase(database);
+    const adapter = createSqliteDatabaseAdapter(database);
+    const now = new Date().toISOString();
+
+    // The 1000th append triggers the prune.
+    for (let index = 1; index <= 1000; index += 1) {
+      await adapter.createAuditEvent({
+        action: "tool.call",
+        createdAt: index <= 400 ? "2020-01-01T00:00:00.000Z" : now,
+        id: `audit_${index}`,
+        resourceType: "tool",
+      });
+    }
+
+    const rows = (await Array.fromAsync(adapter.exportAuditEvents())).flat();
+
+    expect(rows).toHaveLength(601);
+    expect(rows[0]?.seq).toBe(401);
+    expect(rows.filter((row) => row.action === "audit.prune")).toHaveLength(1);
+
+    // 601 rows span two verify pages, so a timer queued now runs mid-verify.
+    let yielded = false;
+    setImmediate(() => {
+      yielded = true;
+    });
+
+    await expect(adapter.verifyAuditChain()).resolves.toMatchObject({
+      checked: 601,
+      ok: true,
+    });
+
+    expect(yielded).toBe(true);
+
+    expect(() =>
+      database.exec("DELETE FROM audit_events WHERE id = 'audit_401'")
+    ).toThrow();
+  });
+
+  test("flags old rows deleted without a recorded prune", async () => {
+    const database = new Database(":memory:");
+    migrateDatabase(database);
+    const adapter = createSqliteDatabaseAdapter(database);
+
+    for (const [index, createdAt] of [
+      "2020-01-01T00:00:00.000Z",
+      "2020-01-02T00:00:00.000Z",
+      new Date().toISOString(),
+    ].entries()) {
+      await adapter.createAuditEvent({
+        action: "auth.login",
+        createdAt,
+        id: `audit_${index + 1}`,
+        resourceType: "user",
+      });
+    }
+
+    database.exec("DELETE FROM audit_events WHERE seq = 1");
+
+    await expect(adapter.verifyAuditChain()).resolves.toMatchObject({
+      brokenSeq: 2,
+      ok: false,
     });
   });
 });

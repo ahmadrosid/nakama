@@ -846,17 +846,8 @@ CREATE INDEX IF NOT EXISTS audit_events_created
 CREATE INDEX IF NOT EXISTS audit_events_org_created
   ON audit_events (org_id, created_at DESC, id DESC);
 
-CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq
-  ON audit_events (seq);
-
 CREATE TRIGGER IF NOT EXISTS audit_events_no_update
 BEFORE UPDATE ON audit_events
-BEGIN
-  SELECT RAISE(ABORT, 'audit_events are append-only');
-END;
-
-CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
-BEFORE DELETE ON audit_events
 BEGIN
   SELECT RAISE(ABORT, 'audit_events are append-only');
 END;

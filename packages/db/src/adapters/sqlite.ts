@@ -19,10 +19,15 @@ import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
-import { migrateDatabase } from "../migrate";
+import {
+  AUDIT_EVENT_RETENTION_CUTOFF_SQL,
+  AUDIT_EVENT_RETENTION_DAYS,
+  migrateDatabase,
+} from "../migrate";
 import type {
   BeginOrgTeamCreationInput,
   CompareAndSetOrgPluginStateInput,
+  CreateAuditEventInput,
   DatabaseAdapter,
   OrgMemoryProposalStatus,
   PluginPublishResult,
@@ -783,6 +788,12 @@ export async function createSqliteDatabase(
     },
   };
 }
+
+/** Rows hashed per verify step before yielding to the event loop. */
+const AUDIT_VERIFY_PAGE_ROWS = 500;
+
+/** Expired audit rows are pruned on every Nth append. */
+const AUDIT_PRUNE_EVERY_ROWS = 1000;
 
 /** How long claim rows block replays before prune (also caps table growth). */
 const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -3064,6 +3075,101 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT 1
   `);
 
+  // Drops the oldest stretch of the chain past retention. Stops at the first
+  // row still inside the window and always keeps the head, so the rows left
+  // stay one contiguous chain that the next append links to.
+  const pruneAuditEventsStmt = db.prepare(`
+    DELETE FROM audit_events
+    WHERE created_at < ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
+      AND (seq IS NULL OR seq < COALESCE(
+        (
+          SELECT MIN(seq) FROM audit_events
+          WHERE seq IS NOT NULL
+            AND created_at >= ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
+        ),
+        (SELECT MAX(seq) FROM audit_events)
+      ))
+  `);
+
+  /** Appends one row to the hash chain. Call inside a transaction. */
+  function appendAuditEvent(record: CreateAuditEventInput): number {
+    // SAFETY: The statement selects `hash, seq` from the top chained row.
+    const head = auditChainHeadStmt.get() as {
+      hash: string;
+      seq: number;
+    } | null;
+
+    const seq = (head?.seq ?? 0) + 1;
+    const prevHash = head?.hash ?? "";
+    const metadata = JSON.stringify(record.metadata ?? {});
+    const outcome = record.outcome ?? "success";
+
+    const hash = computeAuditEventHash({
+      action: record.action,
+      actorMode: record.actorMode ?? null,
+      actorUserId: record.actorUserId ?? null,
+      clientIp: record.clientIp ?? null,
+      createdAt: record.createdAt,
+      forwardedFor: record.forwardedFor ?? null,
+      id: record.id,
+      metadata,
+      method: record.method ?? null,
+      orgId: record.orgId ?? null,
+      outcome,
+      prevHash,
+      requestId: record.requestId ?? null,
+      resourceId: record.resourceId ?? null,
+      resourceType: record.resourceType,
+      route: record.route ?? null,
+      seq,
+      sessionId: record.sessionId ?? null,
+      status: record.status ?? null,
+      userAgent: record.userAgent ?? null,
+    });
+
+    createAuditEventStmt.run(
+      record.id,
+      record.actorUserId ?? null,
+      record.orgId ?? null,
+      record.action,
+      record.resourceType,
+      record.resourceId ?? null,
+      metadata,
+      record.requestId ?? null,
+      record.createdAt,
+      outcome,
+      record.status ?? null,
+      record.method ?? null,
+      record.route ?? null,
+      record.sessionId ?? null,
+      record.actorMode ?? null,
+      record.clientIp ?? null,
+      record.forwardedFor ?? null,
+      record.userAgent ?? null,
+      seq,
+      prevHash,
+      hash
+    );
+
+    return seq;
+  }
+
+  /** Prunes rows past retention and records the prune in the chain itself. */
+  function pruneExpiredAuditEvents(): void {
+    const deleted = pruneAuditEventsStmt.run().changes;
+
+    if (deleted > 0) {
+      appendAuditEvent({
+        action: "audit.prune",
+        actorMode: "system",
+        createdAt: new Date().toISOString(),
+        id: `audit_${crypto.randomUUID()}`,
+        metadata: { deleted, retentionDays: AUDIT_EVENT_RETENTION_DAYS },
+        resourceType: "audit_event",
+      });
+    }
+  }
+
   const auditLegacyRowCountStmt = db.prepare(`
     SELECT count(*) AS count
     FROM audit_events
@@ -3128,8 +3234,9 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       outcome, status, method, route, session_id, actor_mode,
       client_ip, forwarded_for, user_agent, seq, prev_hash, hash
     FROM audit_events
-    WHERE seq IS NOT NULL
+    WHERE seq IS NOT NULL AND seq > ?
     ORDER BY seq
+    LIMIT ?
   `);
 
   const exportAuditEventsStmt = db.prepare<AuditEventRow, SQLQueryBindings[]>(`
@@ -5227,63 +5334,13 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       // One short transaction per row: read the chain head, append, commit.
       // The unique index on seq makes a racing writer fail instead of fork.
       db.transaction(() => {
-        // SAFETY: The statement selects `hash, seq` from the top chained row.
-        const head = auditChainHeadStmt.get() as {
-          hash: string;
-          seq: number;
-        } | null;
+        const seq = appendAuditEvent(record);
 
-        const seq = (head?.seq ?? 0) + 1;
-        const prevHash = head?.hash ?? "";
-        const metadata = JSON.stringify(record.metadata ?? {});
-        const outcome = record.outcome ?? "success";
-
-        const hash = computeAuditEventHash({
-          action: record.action,
-          actorMode: record.actorMode ?? null,
-          actorUserId: record.actorUserId ?? null,
-          clientIp: record.clientIp ?? null,
-          createdAt: record.createdAt,
-          forwardedFor: record.forwardedFor ?? null,
-          id: record.id,
-          metadata,
-          method: record.method ?? null,
-          orgId: record.orgId ?? null,
-          outcome,
-          prevHash,
-          requestId: record.requestId ?? null,
-          resourceId: record.resourceId ?? null,
-          resourceType: record.resourceType,
-          route: record.route ?? null,
-          seq,
-          sessionId: record.sessionId ?? null,
-          status: record.status ?? null,
-          userAgent: record.userAgent ?? null,
-        });
-
-        createAuditEventStmt.run(
-          record.id,
-          record.actorUserId ?? null,
-          record.orgId ?? null,
-          record.action,
-          record.resourceType,
-          record.resourceId ?? null,
-          metadata,
-          record.requestId ?? null,
-          record.createdAt,
-          outcome,
-          record.status ?? null,
-          record.method ?? null,
-          record.route ?? null,
-          record.sessionId ?? null,
-          record.actorMode ?? null,
-          record.clientIp ?? null,
-          record.forwardedFor ?? null,
-          record.userAgent ?? null,
-          seq,
-          prevHash,
-          hash
-        );
+        // ponytail: prune rides on every Nth write, so no timer runs; an idle
+        // install keeps expired rows until it writes again.
+        if (seq % AUDIT_PRUNE_EVERY_ROWS === 0) {
+          pruneExpiredAuditEvents();
+        }
       })();
     },
 
@@ -6460,6 +6517,8 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       let checked = 0;
       let expectedSeq = 1;
       let prevHash = "";
+      let pruneRecorded = false;
+      let prunedBefore: { id: string; seq: number | null } | null = null;
 
       let broken: {
         brokenId: string | null;
@@ -6467,63 +6526,100 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         reason: string;
       } | null = null;
 
-      for (const row of verifyAuditChainStmt.iterate()) {
-        if (broken) {
-          break;
+      // Keyset pages with a macrotask yield between them, so a long chain
+      // does not hold the event loop (and every chat stream) for the whole
+      // table. No statement stays open across the yield.
+      // ponytail: a prune that lands mid-verify can drop rows ahead of the
+      // cursor and report a seq gap; run verify again if that happens.
+      let cursor = 0;
+      let page: AuditEventRow[] = [];
+
+      do {
+        if (cursor > 0) {
+          await new Promise((resolve) => setImmediate(resolve));
         }
 
-        const hash = computeAuditEventHash({
-          action: row.action,
-          actorMode: row.actor_mode,
-          actorUserId: row.actor_user_id,
-          clientIp: row.client_ip,
-          createdAt: row.created_at,
-          forwardedFor: row.forwarded_for,
-          id: row.id,
-          metadata: row.metadata,
-          method: row.method,
-          orgId: row.org_id,
-          outcome: row.outcome,
-          prevHash,
-          requestId: row.request_id,
-          resourceId: row.resource_id,
-          resourceType: row.resource_type,
-          route: row.route,
-          seq: row.seq ?? 0,
-          sessionId: row.session_id,
-          status: row.status,
-          userAgent: row.user_agent,
-        });
+        page = verifyAuditChainStmt.all(cursor, AUDIT_VERIFY_PAGE_ROWS);
 
-        if (row.seq !== expectedSeq) {
-          broken = {
-            brokenId: row.id,
-            brokenSeq: row.seq,
-            reason: `expected seq ${expectedSeq}`,
-          };
-        } else if (row.prev_hash !== prevHash) {
-          broken = {
-            brokenId: row.id,
-            brokenSeq: row.seq,
-            reason: "prev_hash does not link to the previous row",
-          };
-        } else if (hash === row.hash) {
-          prevHash = row.hash ?? "";
-          expectedSeq += 1;
-          checked += 1;
-        } else {
-          broken = {
-            brokenId: row.id,
-            brokenSeq: row.seq,
-            reason: "stored hash does not match recomputed hash",
-          };
+        for (const row of page) {
+          if (broken) {
+            break;
+          }
+
+          cursor = row.seq ?? cursor;
+
+          // Retention removes the oldest rows, so the chain may start past seq
+          // 1. It then links from the first kept row's prev_hash.
+          if (checked === 0 && row.seq !== null && row.seq > 1) {
+            expectedSeq = row.seq;
+            prevHash = row.prev_hash ?? "";
+            prunedBefore = { id: row.id, seq: row.seq };
+          }
+
+          pruneRecorded ||= row.action === "audit.prune";
+
+          const hash = computeAuditEventHash({
+            action: row.action,
+            actorMode: row.actor_mode,
+            actorUserId: row.actor_user_id,
+            clientIp: row.client_ip,
+            createdAt: row.created_at,
+            forwardedFor: row.forwarded_for,
+            id: row.id,
+            metadata: row.metadata,
+            method: row.method,
+            orgId: row.org_id,
+            outcome: row.outcome,
+            prevHash,
+            requestId: row.request_id,
+            resourceId: row.resource_id,
+            resourceType: row.resource_type,
+            route: row.route,
+            seq: row.seq ?? 0,
+            sessionId: row.session_id,
+            status: row.status,
+            userAgent: row.user_agent,
+          });
+
+          if (row.seq !== expectedSeq) {
+            broken = {
+              brokenId: row.id,
+              brokenSeq: row.seq,
+              reason: `expected seq ${expectedSeq}`,
+            };
+          } else if (row.prev_hash !== prevHash) {
+            broken = {
+              brokenId: row.id,
+              brokenSeq: row.seq,
+              reason: "prev_hash does not link to the previous row",
+            };
+          } else if (hash === row.hash) {
+            prevHash = row.hash ?? "";
+            expectedSeq += 1;
+            checked += 1;
+          } else {
+            broken = {
+              brokenId: row.id,
+              brokenSeq: row.seq,
+              reason: "stored hash does not match recomputed hash",
+            };
+          }
         }
-      }
+      } while (!broken && page.length === AUDIT_VERIFY_PAGE_ROWS);
 
       // SAFETY: The statement selects `COUNT(*) AS count` from `audit_events`.
       const { count: legacy } = auditLegacyRowCountStmt.get() as {
         count: number;
       };
+
+      // A pruned start is only valid when the prune itself is on the chain.
+      if (!broken && prunedBefore && !pruneRecorded) {
+        broken = {
+          brokenId: prunedBefore.id,
+          brokenSeq: prunedBefore.seq,
+          reason: "chain starts after seq 1 with no recorded prune",
+        };
+      }
 
       if (broken) {
         return { ...broken, checked, legacy, ok: false };
@@ -8559,6 +8655,13 @@ function toAuditEventRecord(row: AuditEventRow): StoredAuditEvent {
  * SHA-256 over a fixed-key-order JSON payload, so any stored change breaks
  * the chain. Metadata goes in verbatim (the serialized string), because a
  * re-canonicalization would re-order keys and break hashes of past rows.
+ *
+ * The hash is unkeyed and the head lives in the same file, so the chain
+ * catches accidental corruption and edits made through the app, not a
+ * writer of the SQLite file: one can drop the triggers, edit rows and
+ * recompute every later hash, or delete rows from the end.
+ * ponytail: unkeyed; HMAC with a secret kept outside the DB, or an external
+ * copy of the head, when the ledger must resist DB writers.
  */
 function computeAuditEventHash(input: {
   action: string;

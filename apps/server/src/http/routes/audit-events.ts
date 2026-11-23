@@ -9,7 +9,9 @@ import type { HonoApp } from "../types";
 
 const auditEventSchema = z.object({
   action: z.string(),
-  actorMode: z.enum(["agent", "session", "system", "token"]).nullable(),
+  actorMode: z
+    .enum(["agent", "anonymous", "session", "system", "token"])
+    .nullable(),
   actorUserId: z.string().nullable(),
   clientIp: z.string().nullable(),
   createdAt: z.string(),
@@ -199,20 +201,32 @@ export function registerAuditEventRoutes(
     }
 
     const encoder = new TextEncoder();
+    const batches = databaseAdapter.exportAuditEvents();
 
-    const stream = new ReadableStream({
-      async start(controller) {
+    // One batch per pull, so a slow client holds at most one batch in memory
+    // and an aborted download stops reading the table.
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
         try {
-          for await (const batch of databaseAdapter.exportAuditEvents()) {
-            for (const event of batch) {
-              controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-            }
+          const { done, value } = await batches.next();
+
+          if (done) {
+            controller.close();
+
+            return;
           }
 
-          controller.close();
+          controller.enqueue(
+            encoder.encode(
+              value.map((event) => `${JSON.stringify(event)}\n`).join("")
+            )
+          );
         } catch (error) {
           controller.error(error);
         }
+      },
+      async cancel() {
+        await batches.return();
       },
     });
 

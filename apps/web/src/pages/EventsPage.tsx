@@ -58,6 +58,12 @@ function actorLabel(event: AuditEvent): string {
     return event.actorUserId ? `Token \u00b7 ${event.actorUserId}` : "Token";
   }
 
+  if (event.actorMode === "anonymous") {
+    return event.actorUserId
+      ? `Anonymous \u00b7 ${event.actorUserId}`
+      : "Anonymous";
+  }
+
   if (event.actorMode === "session") {
     const suffix = event.sessionId
       ? event.sessionId.replaceAll("-", "").slice(0, 12)
@@ -101,16 +107,6 @@ function downloadBlob(filename: string, blob: Blob): void {
     anchor.remove();
   } finally {
     URL.revokeObjectURL(url);
-  }
-}
-
-async function exportAuditTrail(): Promise<void> {
-  try {
-    const response = await client.exportAuditEventsResponse();
-    const blob = await response.blob();
-    downloadBlob(`audit-${Date.now()}.jsonl`, blob);
-  } catch {
-    // The download failed; the toolbar button stays for a retry.
   }
 }
 
@@ -174,7 +170,9 @@ export function EventsPage() {
   return (
     <section className="mx-auto min-w-0 max-w-5xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Events</h1>
+        <h1 className="text-lg font-semibold">
+          {isPlatformAdmin ? "All events" : "Events"}
+        </h1>
         {isPlatformAdmin ? <PlatformAdminControls /> : null}
       </div>
 
@@ -222,6 +220,25 @@ function PlatformAdminControls() {
   const [verification, setVerification] =
     useState<AuditChainVerificationResult | null>(null);
 
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function exportAuditTrail() {
+    setExporting(true);
+    setExportError(null);
+
+    try {
+      // fetchRaw throws on a non-2xx status; blob() throws if the stream
+      // breaks mid-download, so a partial file is never saved.
+      const response = await client.exportAuditEventsResponse();
+      downloadBlob(`audit-${Date.now()}.jsonl`, await response.blob());
+    } catch (error) {
+      setExportError(formatError(error) || "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function verifyChain() {
     setVerifying(true);
 
@@ -243,6 +260,14 @@ function PlatformAdminControls() {
 
   return (
     <div className="flex items-center gap-2">
+      {exportError ? (
+        <span
+          className="rounded-full bg-destructive/10 px-2 py-1 text-destructive text-xs"
+          role="alert"
+        >
+          {exportError}
+        </span>
+      ) : null}
       {verification ? (
         <span
           className={
@@ -268,6 +293,7 @@ function PlatformAdminControls() {
         Verify
       </Button>
       <Button
+        disabled={exporting}
         onClick={() => {
           void exportAuditTrail();
         }}
@@ -508,6 +534,8 @@ function EventDetailList({
 }) {
   return (
     <dl className="grid grid-cols-[9rem_1fr] gap-y-1.5 text-sm">
+      <dt className="text-muted-foreground">Org</dt>
+      <dd className="font-mono text-xs">{event.orgId ?? "Installation"}</dd>
       <dt className="text-muted-foreground">Request</dt>
       <dd className="font-mono text-xs">{requestLabel(event)}</dd>
       <dt className="text-muted-foreground">Actor</dt>

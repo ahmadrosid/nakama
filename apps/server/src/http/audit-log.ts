@@ -73,8 +73,11 @@ const FIXED_EVENTS = new Map<string, AuditDescriptor>([
  * - sensitive resources: profile/org CRUD, export/import, session lifecycle,
  *   memory edits, artifact and shared-resource publication, tool runs
  *
- * Add a rule here whenever a new route joins one of those classes. Deliberately
- * unaudited: chat message turns and LLM text/computer calls (hot path, like
+ * Add a rule here whenever a new route joins one of those classes. Agent tool
+ * calls inside a chat turn are recorded by the agent service (`tool.call`),
+ * not by a route rule. Rows past the retention window are pruned
+ * (`AUDIT_EVENT_RETENTION_DAYS`). Deliberately unaudited: chat message text
+ * and LLM text/computer calls (hot path, like
  * tera-router's gateway), previews and connection tests (no state change),
  * push presence and user-context writes (client state), meet extension
  * control (ephemeral), automation drafts and read-state marks. Request bodies
@@ -365,7 +368,7 @@ export function createAuditLogMiddleware(
           ? auth.mode === "browser-session"
             ? "session"
             : "token"
-          : "system",
+          : "anonymous",
         actorUserId,
         clientIp,
         createdAt: new Date().toISOString(),
