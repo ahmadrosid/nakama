@@ -3,7 +3,11 @@ import type {
   AuditEvent,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { InputGroup, InputGroupInput } from "@nakama/ui/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@nakama/ui/input-group";
 import {
   Select,
   SelectContent,
@@ -47,7 +51,15 @@ const TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
-type OutcomeFilter = "all" | "success" | "failure";
+const OUTCOME_FILTERS = ["all", "success", "failure"] as const;
+
+type OutcomeFilter = (typeof OUTCOME_FILTERS)[number];
+
+const OUTCOME_LABELS: Record<OutcomeFilter, string> = {
+  all: "All outcomes",
+  failure: "Failed",
+  success: "Success",
+};
 
 function actorLabel(event: AuditEvent): string {
   if (event.actorMode === "agent") {
@@ -295,7 +307,7 @@ function PlatformAdminControls() {
         size="sm"
         variant="outline"
       >
-        <RefreshIcon className="size-4" />
+        <RefreshIcon aria-hidden className="size-4" />
         Verify
       </Button>
       <Button
@@ -306,7 +318,7 @@ function PlatformAdminControls() {
         size="sm"
         variant="outline"
       >
-        <Download01Icon className="size-4" />
+        <Download01Icon aria-hidden className="size-4" />
         Export
       </Button>
     </div>
@@ -333,7 +345,9 @@ function EventsFilterBar({
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <InputGroup className="min-w-56 flex-1">
-        <Search01Icon className="text-muted-foreground" />
+        <InputGroupAddon>
+          <Search01Icon aria-hidden />
+        </InputGroupAddon>
         <InputGroupInput
           aria-label="Search events"
           onChange={(event) => onSearchChange(event.target.value)}
@@ -349,12 +363,14 @@ function EventsFilterBar({
         value={outcome}
       >
         <SelectTrigger aria-label="Filter by outcome" className="w-40">
-          <SelectValue />
+          <SelectValue>{OUTCOME_LABELS[outcome]}</SelectValue>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All outcomes</SelectItem>
-          <SelectItem value="success">Success</SelectItem>
-          <SelectItem value="failure">Failed</SelectItem>
+          {OUTCOME_FILTERS.map((value) => (
+            <SelectItem key={value} value={value}>
+              {OUTCOME_LABELS[value]}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       <Select
@@ -364,7 +380,9 @@ function EventsFilterBar({
         value={category}
       >
         <SelectTrigger aria-label="Filter by action" className="w-40">
-          <SelectValue />
+          <SelectValue>
+            {category === "all" ? "All actions" : category}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All actions</SelectItem>
@@ -514,6 +532,7 @@ function EventRow({
       >
         <TableCell className="w-8">
           <ArrowRight01Icon
+            aria-hidden
             className={`size-4 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`}
           />
         </TableCell>
