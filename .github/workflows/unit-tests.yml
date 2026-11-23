@@ -27,6 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -100,11 +107,24 @@ jobs:
         working-directory: apps/desktop
         run: xvfb-run -a node_modules/.bin/electron tests/smoke.mjs --smoke-test
 
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 70
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
+
   # Eight shards, balanced by the per-file times the last main run recorded.
   # Each shard writes the files it ran; test-files checks they add up to all.
   test:
     name: test (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lists the saved test timings (Pick test timings).
+      actions: read
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -114,7 +134,20 @@ jobs:
       # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs (PDF tests).
       NAKAMA_CHROME_NO_SANDBOX: "true"
       SHARD: ${{ matrix.shard }}/8
+      # Tests write file-backed SQLite with synchronous=FULL, so every commit
+      # waits on fsync. The runner's /tmp is a network disk and four workers
+      # fsync at once: plain tests took 1-2 s and one stalled past 5 s. Temp
+      # files go to a RAM disk instead (mounted below; /dev/shm will not do:
+      # the server rightly refuses paths under /dev).
+      TMPDIR: /mnt/tests-tmp
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -144,20 +177,39 @@ jobs:
           fi
           echo "WEB_ONLY=$web_only" >> "$GITHUB_ENV"
 
+      - name: Mount a RAM disk for test temp files
+        run: |
+          sudo mkdir -p "$TMPDIR"
+          sudo mount -t tmpfs -o size=6g,mode=1777 tmpfs "$TMPDIR"
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           # Bun 1.4 supports the HTTP agent interception used by plugin registry fixtures.
           bun-version: 1.4.0
 
-      # Main saves the times of its last full run under its SHA. A PR takes the
-      # newest one; with none yet, bun splits the files by count.
+      # Main saves the times of its last full run under its SHA. Every shard
+      # must split by the same times, or a file runs in two shards or none: a
+      # main run that saved new times while this run's shards were starting did
+      # exactly that. So each shard takes the newest times saved before this run
+      # was created, the same answer for all shards and for re-runs. With none,
+      # bun splits the files by count.
+      - name: Pick test timings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          created=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          key=$(gh api "repos/$GITHUB_REPOSITORY/actions/caches?key=test-timings-&ref=refs/heads/main&sort=created_at&direction=desc&per_page=100" \
+            --jq "[.actions_caches[] | select(.created_at < \"$created\")][0].key // \"\"")
+          echo "Run created $created; timings: ${key:-none}"
+          echo "TIMINGS_KEY=${key:-test-timings-none}" >> "$GITHUB_ENV"
+
       - name: Restore test timings
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .test-timings
-          key: test-timings-${{ github.sha }}
-          restore-keys: test-timings-
+          key: ${{ env.TIMINGS_KEY }}
+          enableCrossOsArchive: true
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
@@ -174,8 +226,11 @@ jobs:
       # apps/web has its own bunfig preload, so it runs from its own folder.
       # bun reads main's times from the second --timings file and writes only
       # this shard's files to the first, which starts empty: a shard that dies
-      # early uploads nothing, and test-files sees the gap. Coverage costs about
-      # nothing here and replaces Quality's second full test run.
+      # early uploads nothing, and test-files sees the gap. --randomize shuffles
+      # test order with a new seed each run and prints it: a test that leaks
+      # state into the next one fails, and `--seed=<printed>` replays it.
+      # Coverage costs about nothing here and replaces Quality's second full
+      # test run.
       - name: Run tests
         run: |
           mkdir -p .test-timings shard
@@ -185,11 +240,11 @@ jobs:
           done
           status=0
           if [[ "$WEB_ONLY" != true ]]; then
-            xvfb-run -a bun test --shard="$SHARD" --parallel=4 --path-ignore-patterns '**/apps/web/**' \
+            xvfb-run -a bun test --shard="$SHARD" --parallel=4 --randomize --path-ignore-patterns '**/apps/web/**' \
               --timings=shard/root.json --timings=.test-timings/root.json --update-timings \
               --coverage --coverage-reporter=lcov --coverage-dir=shard/coverage-root || status=1
           fi
-          (cd apps/web && bun test --shard="$SHARD" --parallel=4 \
+          (cd apps/web && bun test --shard="$SHARD" --parallel=4 --randomize \
             --timings=../../shard/web.json --timings=../../.test-timings/web.json --update-timings \
             --coverage --coverage-reporter=lcov --coverage-dir=../../shard/coverage-web) || status=1
           exit "$status"
@@ -202,14 +257,30 @@ jobs:
           path: shard
           retention-days: 7
 
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 95
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
+
   # Proves the shards together ran every test file, and on main saves the times
   # the next PRs balance their shards with.
   test-files:
-    needs: test
+    needs: [test, test-windows]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -228,6 +299,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           TEST_RESULT: ${{ needs.test.result }}
+          WINDOWS_RESULT: ${{ needs.test-windows.result }}
         run: |
           web_only=false
           if [[ "$EVENT_NAME" == pull_request ]]; then
@@ -243,13 +315,28 @@ jobs:
           pattern='(\.|_)(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$'
           git ls-files | grep -E "$pattern" | grep -v '/node_modules/' > all.txt
           grep '^apps/web/' all.txt | sed 's|^apps/web/||' | sort > expected-web.txt
-          if [[ "$web_only" == true ]]; then : > expected-root.txt; else grep -v '^apps/web/' all.txt | sort > expected-root.txt; fi
+          if [[ "$web_only" == true ]]; then
+            : > expected-root.txt
+            : > expected-windows.txt
+          else
+            grep -v '^apps/web/' all.txt | sort > expected-root.txt
+            grep -E '^(apps/server|packages/(core|db|agent))/' all.txt | sort > expected-windows.txt
+          fi
+          shopt -s nullglob
           mkdir -p .test-timings
-          for suite in root web; do
-            jq -s '{version: 1, files: (map(.files) | add // {})}' shards/*/"$suite".json > ".test-timings/$suite.json"
+          for suite in root web windows; do
+            parts=(shards/*/"$suite".json)
+            [[ ${#parts[@]} -gt 0 ]] || parts=(<(echo '{"version":1,"files":{}}'))
+            jq -s '{version: 1, files: (map(.files) | add // {})}' "${parts[@]}" > ".test-timings/$suite.json"
             jq -r '.files | keys[]' ".test-timings/$suite.json" | sort > "ran-$suite.txt"
             echo "$suite: $(wc -l < "expected-$suite.txt") expected, $(wc -l < "ran-$suite.txt") ran"
+            twice=$(cat "${parts[@]}" | jq -r '.files | keys[]' | sort | uniq -d)
             missing=$(comm -23 "expected-$suite.txt" "ran-$suite.txt")
+            if [[ -n "$twice" ]]; then
+              echo "::error::$suite test files more than one shard ran (the shards split differently):"
+              echo "$twice"
+              status=1
+            fi
             if [[ -n "$missing" ]]; then
               echo "::error::$suite test files no shard ran:"
               echo "$missing"
@@ -257,6 +344,7 @@ jobs:
             fi
           done
           [[ "$TEST_RESULT" == success ]] || { echo "::error::a test shard failed: $TEST_RESULT"; status=1; }
+          [[ "$WINDOWS_RESULT" == success ]] || { echo "::error::a Windows shard failed: $WINDOWS_RESULT"; status=1; }
           exit "${status:-0}"
 
       # A report, not a gate: a line covered in any shard counts as covered.
@@ -297,20 +385,55 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # Same path as the restore step: the cache version hashes the paths.
+          # Same path and cross-OS flag as the restore steps: the cache version
+          # hashes both, and Windows restores what Linux saved.
           path: .test-timings
           key: test-timings-${{ github.sha }}
+          enableCrossOsArchive: true
+
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 30
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }
 
   # Windows tests cover server and shared packages, not apps/web.
   test-windows:
     name: test-windows (${{ matrix.shard }}/4)
     runs-on: windows-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # Lists the saved test timings (Pick test timings).
+      actions: read
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      # C: (the default TEMP) syncs to disk about 14x slower than D: an SQLite
+      # insert took 21 ms there and 1.5 ms on D:. Tests make their folders and
+      # databases under TEMP, so it goes on D:. The Bun cache goes there too:
+      # on the same drive as node_modules, install links instead of copying.
+      - name: Put temp files and the Bun cache on the D drive
+        shell: bash
+        run: |
+          {
+            echo "TEMP=$RUNNER_TEMP"
+            echo "TMP=$RUNNER_TEMP"
+            echo "BUN_INSTALL_CACHE_DIR=$RUNNER_TEMP\\bun-cache"
+          } >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -349,6 +472,37 @@ jobs:
         with:
           bun-version: 1.4.0
 
+      # Same times for every shard: see Pick test timings in the Linux job.
+      - name: Pick test timings
+        if: env.WEB_ONLY != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          created=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          key=$(gh api "repos/$GITHUB_REPOSITORY/actions/caches?key=test-timings-&ref=refs/heads/main&sort=created_at&direction=desc&per_page=100" \
+            --jq "[.actions_caches[] | select(.created_at < \"$created\")][0].key // \"\"")
+          echo "Run created $created; timings: ${key:-none}"
+          echo "TIMINGS_KEY=${key:-test-timings-none}" >> "$GITHUB_ENV"
+
+      # Restored on Linux, read here: the same JSON on every OS.
+      - name: Restore test timings
+        if: env.WEB_ONLY != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .test-timings
+          key: ${{ env.TIMINGS_KEY }}
+          enableCrossOsArchive: true
+
+      # Main fills this cache, so a PR with the same lockfile does not download
+      # its 759 packages again.
+      - name: Restore Bun download cache
+        if: env.WEB_ONLY != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
+          key: bun-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
       - name: Install dependencies
         if: env.WEB_ONLY != 'true'
         run: bun install --frozen-lockfile --ignore-scripts --filter nakama --filter '@nakama/server...' --filter './packages/*' --filter './packages/plugins/*'
@@ -361,19 +515,49 @@ jobs:
         with:
           version: "8.1"
 
+      # The first Python start on a fresh runner reads python.exe and its
+      # libraries from a cold C: drive: 730 ms in a test where the next start
+      # took 84 ms. One start here, so no test pays it inside its 5 s.
+      - name: Warm up Python
+        if: env.WEB_ONLY != 'true'
+        run: python -c "import json, os, sys"
+
+      # One run over the four suites, balanced by time like Linux, one worker
+      # per core, default 5 s timeout. bun reads main's times from the second
+      # --timings file and writes only this shard's files to the first.
       - name: Run tests
         if: env.WEB_ONLY != 'true'
-        # Split the slow server suite across runners; run each smaller suite once.
-        # Keep files isolated and budget for Windows filesystem and subprocess work.
         shell: bash
         env:
           SHARD: ${{ matrix.shard }}
         run: |
-          status=0
-          bun run --cwd apps/server test --shard="$SHARD/4" --parallel=2 --timeout=30000 || status=1
-          case "$SHARD" in
-            1) bun run --cwd packages/core test --parallel=2 --timeout=30000 || status=1 ;;
-            2) bun run --cwd packages/db test --parallel=2 --timeout=30000 || status=1 ;;
-            3) bun run --cwd packages/agent test --parallel=2 --timeout=30000 || status=1 ;;
-          esac
-          exit "$status"
+          mkdir -p .test-timings shard
+          [[ -f .test-timings/windows.json ]] || echo '{"version":1,"files":{}}' > .test-timings/windows.json
+          echo '{"version":1,"files":{}}' > shard/windows.json
+          bun test apps/server packages/core packages/db packages/agent \
+            --shard="$SHARD/4" --parallel=4 \
+            --timings=shard/windows.json --timings=.test-timings/windows.json --update-timings
+
+      - name: Upload the files this shard ran
+        if: ${{ !cancelled() && env.WEB_ONLY != 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-timings-windows-${{ matrix.shard }}
+          path: shard/windows.json
+          retention-days: 7
+
+      - name: Save Bun download cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.shard == 1
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.BUN_INSTALL_CACHE_DIR }}
+          key: bun-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 150
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }

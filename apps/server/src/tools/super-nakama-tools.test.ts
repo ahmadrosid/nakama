@@ -19,11 +19,6 @@ type TestProfileService = Partial<
   >
 >;
 
-interface TestCreateProfileInput {
-  model?: string | null;
-  name: string;
-}
-
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 const ORG_ID = "org_test";

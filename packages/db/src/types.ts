@@ -1096,7 +1096,6 @@ export interface DatabaseAdapter {
     userId: string,
     orgId?: string
   ): Promise<void>;
-  deleteComposioToolkit(id: string): Promise<boolean>;
   deleteComposioUserConnection(id: string): Promise<boolean>;
   deleteManagedSecret(scope: string, name: string): Promise<void>;
   deleteMcpServer(id: string): Promise<boolean>;
@@ -1125,8 +1124,6 @@ export interface DatabaseAdapter {
   deleteSession(id: string): Promise<boolean>;
   deleteSkill(id: string): Promise<boolean>;
   deleteTool(id: string): Promise<boolean>;
-  deleteWorkflow(id: string): Promise<boolean>;
-  deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
   /**
    * Resolves to `false` when the user is the last usable admin of a live org
    * or the last usable platform admin.
@@ -1275,11 +1272,6 @@ export interface DatabaseAdapter {
     orgId: string,
     bullet: string
   ): Promise<StoredOrgMemoryProposal | null>;
-  getPendingSkillProposalForCreate(
-    orgId: string,
-    profileId: string,
-    skillName: string
-  ): Promise<StoredSkillProposal | null>;
   getPendingSkillProposalForPatch(
     orgId: string,
     profileId: string,
@@ -1356,10 +1348,6 @@ export interface DatabaseAdapter {
   getUserById(id: string): Promise<StoredUserRecord | null>;
   getUserContext(orgId: string, userId: string): Promise<string | null>;
   getWorkflow(id: string): Promise<StoredWorkflowRecord | null>;
-  getWorkflowRun(
-    workflowId: string,
-    runId: string
-  ): Promise<StoredWorkflowRunRecord | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
   /**
@@ -1868,8 +1856,6 @@ export interface DatabaseAdapter {
     profile: { name: string | null; phone: string | null; email?: string },
     updatedAt: string
   ): Promise<void>;
-  updateWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
-  updateWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
   /** A new file at a path whose old row survived (e.g. removed by a shell) replaces that row. */
   upsertArtifactRecord(record: StoredArtifactRecord): Promise<void>;
   upsertAutomation(record: StoredAutomationRecord): Promise<void>;

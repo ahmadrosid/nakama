@@ -8,10 +8,6 @@ describe("AuthService", () => {
     authService = new AuthService();
   });
 
-  describe("hashPassword", () => {});
-
-  describe("verifyPassword", () => {});
-
   describe("browser session helpers", () => {
     test("creates opaque browser session tokens and hashes them", () => {
       const session = authService.createBrowserSessionTokens();

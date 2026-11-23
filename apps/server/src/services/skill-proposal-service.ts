@@ -320,10 +320,6 @@ export class SkillProposalService {
     };
   }
 
-  async countPending(orgId: string, profileId?: string): Promise<number> {
-    return this.requireDatabase().countPendingSkillProposals(orgId, profileId);
-  }
-
   private async stageCreate(
     input: StageSkillProposalInput
   ): Promise<StageSkillProposalResult> {

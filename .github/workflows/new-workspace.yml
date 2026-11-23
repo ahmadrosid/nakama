@@ -24,6 +24,13 @@ jobs:
     # The label is the escape hatch for a package that is genuinely the right call.
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'new-package') }}
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -53,3 +60,12 @@ jobs:
           If the package is the right call, add the new-package label to this PR.
           MSG
           exit 1
+
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 20
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }

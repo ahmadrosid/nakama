@@ -521,7 +521,7 @@ export function createHonoApp(options: ServerOptions) {
     });
   });
 
-  app.all("*", (c) => errorResponse("Not found", 404));
+  app.all("*", () => errorResponse("Not found", 404));
 
   return app;
 }

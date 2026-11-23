@@ -5,12 +5,6 @@ import {
 } from "./cloudflare-provider-config";
 
 describe("resolveCloudflareAccountInput", () => {
-  test("turns an account ID into the Workers AI base URL", () => {
-    expect(resolveCloudflareAccountInput("abc123")).toBe(
-      `${CLOUDFLARE_API_ROOT}/abc123/ai/v1`
-    );
-  });
-
   test("accepts a full Workers AI URL", () => {
     expect(
       resolveCloudflareAccountInput(

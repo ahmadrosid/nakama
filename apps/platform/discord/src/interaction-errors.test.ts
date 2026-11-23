@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { MessageFlags } from "discord.js";
 import {
   deferSlashInteraction,
-  getDiscordErrorCode,
   isIgnorableInteractionError,
 } from "./interaction-errors";
 
@@ -16,17 +15,6 @@ describe("isIgnorableInteractionError", () => {
     expect(isIgnorableInteractionError({ code: 50_035 })).toBe(false);
     expect(isIgnorableInteractionError(new Error("boom"))).toBe(false);
     expect(isIgnorableInteractionError(null)).toBe(false);
-  });
-});
-
-describe("getDiscordErrorCode", () => {
-  test("reads numeric code", () => {
-    expect(getDiscordErrorCode({ code: 10_062 })).toBe(10_062);
-  });
-
-  test("returns null without a numeric code", () => {
-    expect(getDiscordErrorCode({ code: "10062" })).toBeNull();
-    expect(getDiscordErrorCode(null)).toBeNull();
   });
 });
 

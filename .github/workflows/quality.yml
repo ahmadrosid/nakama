@@ -15,11 +15,25 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # One job for the small checks. Every step after install runs even when one
+  # before it failed, so a single run lists every failure.
   check:
     runs-on: ubuntu-latest
     steps:
+      # Budget: the job fails if its steps take longer, so a slowdown shows up
+      # on the PR that causes it. Set from the slowest green run since the
+      # shards landed (about 1.3x), and lowered as CI gets faster.
+      - name: Start the time budget
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Test mass diffs against the merge base. Blobless: files are fetched
+          # only for the commits the diff reads.
+          fetch-depth: 0
+          filter: blob:none
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -29,45 +43,30 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      # bun lint, bun fmt --check, biome check, bun check (types).
       - name: Check
         run: bun run check:ci
 
       # Critical only for now: four high advisories sit outside the declared
       # version ranges. Raise to high once those are bumped.
       - name: Audit dependencies
+        if: ${{ !cancelled() }}
         run: bun audit --audit-level=critical
-
-  duplication:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.14
 
       # Fails when duplication passes the threshold in .jscpd.json (3%).
       - name: Detect copy-paste
+        if: ${{ !cancelled() }}
         run: bun run dupes
 
-      - name: Publish report
+      - name: Publish copy-paste report
         if: always()
         run: cat .jscpd-report/jscpd-report.md >> "$GITHUB_STEP_SUMMARY"
 
-  test-mass:
-    runs-on: ubuntu-latest
-    # A report, not a gate. Between v0.2.0 and v0.4.32 test code grew 211% while
-    # source grew 82%, so test mass is where this repo actually bloats, and a
-    # "files changed" count hides it.
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          fetch-depth: 0
-
+      # A report, not a gate. Between v0.2.0 and v0.4.32 test code grew 211%
+      # while source grew 82%, so test mass is where this repo actually bloats,
+      # and a "files changed" count hides it.
       - name: Report test to source ratio
+        if: ${{ !cancelled() }}
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
@@ -95,3 +94,12 @@ jobs:
             echo "::notice::$note"
             printf '\n%s\n' "$note" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Check the time budget
+        shell: bash
+        env:
+          BUDGET: 55
+        run: |
+          took=$(( $(date +%s) - JOB_START ))
+          echo "Took ${took}s of a ${BUDGET}s budget."
+          (( took <= BUDGET )) || { echo "::error::Over the time budget: ${took}s > ${BUDGET}s. Find what got slower."; exit 1; }

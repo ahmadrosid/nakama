@@ -756,10 +756,6 @@ export class AgentService {
     };
   }
 
-  get profiles(): ProfileService {
-    return this.profileService;
-  }
-
   private getOrgMemoryService(): OrgMemoryService {
     if (!this.orgMemoryService) {
       this.orgMemoryService = new OrgMemoryService(this.db);
@@ -901,14 +897,6 @@ export class AgentService {
 
       return outcome;
     });
-  }
-
-  getMcpService(): McpService {
-    if (!this.mcpService) {
-      throw new Error("MCP service is not configured.");
-    }
-
-    return this.mcpService;
   }
 
   async getUserTimezone(): Promise<string> {
@@ -3418,10 +3406,6 @@ export class AgentService {
     this.skillPostTurnReviewService.schedulePostTurnSkillReview(sessionId);
   }
 
-  getSkillPostTurnReviewService(): SkillPostTurnReviewService {
-    return this.skillPostTurnReviewService;
-  }
-
   async purgeSession(sessionId: string, orgId: string): Promise<boolean> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -5858,7 +5842,7 @@ export class AgentService {
     profileId: string,
     includeContents = false
   ): Promise<SoulStatusResponse> {
-    const profile = await this.requireProfile(orgId, profileId);
+    await this.requireProfile(orgId, profileId);
     const status = await getSoulStatus(getProfileSoulDir(orgId, profileId));
 
     if (!includeContents) {

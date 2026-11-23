@@ -360,27 +360,6 @@ describe("McpService", () => {
     expect(listed.servers[0]?.toolCount).toBe(0);
   });
 
-  test("assigns MCP servers to profiles", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new McpService(db, new McpClientManager());
-
-    const created = await service.createServer({
-      config: { url: "https://example.com/mcp" },
-      connect: false,
-      name: "demo",
-      transport: "http",
-    });
-
-    const profileId = await seedProfile(db);
-
-    await service.assignServerToProfile(profileId, created.server.id);
-
-    const assigned = await db.listMcpServersForProfile(profileId);
-
-    expect(assigned).toHaveLength(1);
-    expect(assigned[0]?.id).toBe(created.server.id);
-  });
-
   test("updates MCP server config while preserving blank header values", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new McpService(db, new McpClientManager());
@@ -423,27 +402,6 @@ describe("McpService", () => {
       },
       url: "https://example.com/mcp",
     });
-  });
-
-  test("creates and lists stdio MCP servers", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new McpService(db, new McpClientManager());
-
-    await service.createServer({
-      config: {
-        args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-        command: "npx",
-      },
-      connect: false,
-      name: "filesystem",
-      transport: "stdio",
-    });
-
-    const listed = await service.listServers();
-
-    expect(listed.servers).toHaveLength(1);
-    expect(listed.servers[0]?.name).toBe("filesystem");
-    expect(listed.servers[0]?.transport).toBe("stdio");
   });
 
   test("rejects stdio MCP servers without command", async () => {

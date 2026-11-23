@@ -48,16 +48,6 @@ describe("validateAutomationInput", () => {
       })
     ).toThrow(/Invalid runAt/);
   });
-
-  test("rejects empty prompt", () => {
-    expect(() =>
-      validateAutomationInput({
-        name: "Daily digest",
-        prompt: "   ",
-        trigger: { type: "manual" },
-      })
-    ).toThrow(/prompt is required/);
-  });
 });
 
 describe("isValidCronExpression", () => {

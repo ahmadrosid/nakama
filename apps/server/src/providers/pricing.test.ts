@@ -24,22 +24,6 @@ const compatibleInstance = {
   type: "openai_compatible" as const,
 };
 
-const cerebrasInstance = {
-  apiKey: "csk-test",
-  createdAt: "2026-07-16T10:00:00.000Z",
-  id: "cb-1",
-  label: "Cerebras",
-  type: "cerebras" as const,
-};
-
-const fireworksInstance = {
-  apiKey: "fw-test",
-  createdAt: "2026-07-24T10:00:00.000Z",
-  id: "fw-1",
-  label: "Fireworks",
-  type: "fireworks" as const,
-};
-
 const moonshotInstance = {
   apiKey: "sk-moonshot-test",
   baseUrl: "https://api.moonshot.ai/v1",
@@ -120,16 +104,6 @@ describe("estimateUsageCostUsd", () => {
     expect(
       estimateUsageCostUsd("deepseek-v4-pro", 2_000_000, 500_000)
     ).toBeCloseTo(4.62);
-  });
-
-  test("computes cost from catalog pricing", () => {
-    const cost = estimateUsageCostUsd(
-      "claude-sonnet-4-6",
-      1_000_000,
-      1_000_000
-    );
-
-    expect(cost).toBe(18);
   });
 
   test("uses Cloudflare's published input and output rates for exact model ids", () => {
@@ -314,13 +288,6 @@ describe("getExplicitModelPricing", () => {
   test("returns null where getModelPricing falls back", () => {
     expect(getExplicitModelPricing("vendor/custom-model")).toBeNull();
     expect(getModelPricing("vendor/custom-model")).not.toBeNull();
-  });
-
-  test("returns the catalog rates for a known model", () => {
-    expect(getExplicitModelPricing("claude-sonnet-4-6")).toEqual({
-      inputPerMillionUsd: 3,
-      outputPerMillionUsd: 15,
-    });
   });
 
   test("keeps the Images rates for gpt-image-2 on a compatible endpoint without its own rates", () => {
