@@ -324,9 +324,11 @@ jobs:
           fi
           shopt -s nullglob
           mkdir -p .test-timings
+          # A real file, not <(...): the loop reads each part twice.
+          echo '{"version":1,"files":{}}' > empty-timings.json
           for suite in root web windows; do
             parts=(shards/*/"$suite".json)
-            [[ ${#parts[@]} -gt 0 ]] || parts=(<(echo '{"version":1,"files":{}}'))
+            [[ ${#parts[@]} -gt 0 ]] || parts=(empty-timings.json)
             jq -s '{version: 1, files: (map(.files) | add // {})}' "${parts[@]}" > ".test-timings/$suite.json"
             jq -r '.files | keys[]' ".test-timings/$suite.json" | sort > "ran-$suite.txt"
             echo "$suite: $(wc -l < "expected-$suite.txt") expected, $(wc -l < "ran-$suite.txt") ran"
