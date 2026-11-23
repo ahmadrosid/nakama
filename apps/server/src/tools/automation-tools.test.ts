@@ -58,21 +58,6 @@ function getCreateAutomationTool(
   return tool;
 }
 
-function getDeleteAutomationTool(
-  service: AutomationService,
-  runner: AutomationRunner
-) {
-  const tool = createAutomationTools(service, runner).find(
-    (entry) => entry.name === "delete_automation"
-  );
-
-  if (!tool) {
-    throw new Error("delete_automation tool not found");
-  }
-
-  return tool;
-}
-
 function getPreviousAutomationRunsTool(service: AutomationService) {
   const tool = createAutomationRunHistoryTools(service).find(
     (entry) => entry.name === "list_previous_automation_runs"

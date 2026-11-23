@@ -82,37 +82,6 @@ async function seedSession(
   });
 }
 
-/** Foreign keys on, as in production: the in-memory adapter turns them off. */
-async function openDatabaseWithProfiles(
-  ...profiles: [orgId: string, profileId: string][]
-) {
-  const database = await createSqliteDatabase(":memory:");
-  const now = new Date().toISOString();
-
-  for (const [orgId, id] of profiles) {
-    await database.adapter.upsertOrganization({
-      createdAt: now,
-      id: orgId,
-      name: orgId,
-      slug: orgId,
-      updatedAt: now,
-    });
-    await database.adapter.upsertProfile({
-      createdAt: now,
-      id,
-      isDefault: true,
-      isSuper: false,
-      model: null,
-      name: id,
-      orgId,
-      systemPrompt: "",
-      updatedAt: now,
-    });
-  }
-
-  return database;
-}
-
 describe("session persistence", () => {
   setupTestConfigDir("nakama-history-archive-");
 

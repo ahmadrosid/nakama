@@ -24,22 +24,6 @@ const compatibleInstance = {
   type: "openai_compatible" as const,
 };
 
-const cerebrasInstance = {
-  apiKey: "csk-test",
-  createdAt: "2026-07-16T10:00:00.000Z",
-  id: "cb-1",
-  label: "Cerebras",
-  type: "cerebras" as const,
-};
-
-const fireworksInstance = {
-  apiKey: "fw-test",
-  createdAt: "2026-07-24T10:00:00.000Z",
-  id: "fw-1",
-  label: "Fireworks",
-  type: "fireworks" as const,
-};
-
 const moonshotInstance = {
   apiKey: "sk-moonshot-test",
   baseUrl: "https://api.moonshot.ai/v1",

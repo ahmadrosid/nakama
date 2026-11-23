@@ -193,7 +193,7 @@ describe("teams chat handler", () => {
 
   test("an authorized sender's code-shaped message reaches the agent", async () => {
     await withTempHome("nakama-teams-handler-", async (homeDir) => {
-      const { handle, replies, turns } = createHarness(homeDir);
+      const { handle, turns } = createHarness(homeDir);
       const guid = "55555555-5555-4555-8555-555555555555";
       await handle(activity({ text: "A".repeat(32) }));
       await handle(activity({ text: guid }));

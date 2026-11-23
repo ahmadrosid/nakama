@@ -3,7 +3,6 @@ import type {
   AddOrgMemberResponse,
   AuditEventStats,
   AuthUserResponse,
-  CreateOrganizationRequest,
   CreateOrganizationResponse,
   CreateTeamRequest,
   InviteOrgMemberRequest,
@@ -199,15 +198,6 @@ export class OrgsClient extends AuthClient {
 
   async listPlatformOrganizations(): Promise<ListOrganizationsResponse> {
     return this.request<ListOrganizationsResponse>("/v1/platform/orgs");
-  }
-
-  async createPlatformOrganization(
-    request: CreateOrganizationRequest
-  ): Promise<CreateOrganizationResponse> {
-    return this.request<CreateOrganizationResponse>("/v1/platform/orgs", {
-      body: JSON.stringify(request),
-      method: "POST",
-    });
   }
 
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {

@@ -265,10 +265,6 @@ export class ManagedSecrets {
     await this.db.deleteManagedSecret(scope, name);
   }
 
-  list(): Promise<StoredManagedSecret[]> {
-    return this.db.listManagedSecrets();
-  }
-
   async fingerprint(): Promise<string> {
     const hash = createHash("sha256");
     const rows = await this.db.listManagedSecrets();
