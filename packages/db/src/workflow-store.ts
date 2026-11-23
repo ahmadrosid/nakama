@@ -9,20 +9,6 @@ export class DatabaseWorkflowStore {
 
     return records.map(fromRecord);
   }
-
-  async get(id: string): Promise<StoredWorkflow | null> {
-    const record = await this.db.getWorkflow(id);
-
-    return record ? fromRecord(record) : null;
-  }
-
-  async save(definition: StoredWorkflow): Promise<void> {
-    await this.db.upsertWorkflow(toRecord(definition));
-  }
-
-  async delete(id: string): Promise<boolean> {
-    return this.db.deleteWorkflow(id);
-  }
 }
 
 function fromRecord(record: StoredWorkflowRecord): StoredWorkflow {
@@ -42,25 +28,5 @@ function fromRecord(record: StoredWorkflowRecord): StoredWorkflow {
     steps: definition?.steps ?? [],
     updatedAt: record.updatedAt,
     version: definition?.version ?? record.version,
-  };
-}
-
-function toRecord(definition: StoredWorkflow): StoredWorkflowRecord {
-  const now = new Date().toISOString();
-
-  return {
-    createdAt: definition.createdAt ?? now,
-    definition: {
-      description: definition.description,
-      steps: definition.steps,
-      version: definition.version,
-    },
-    enabled: definition.enabled,
-    id: definition.id,
-    name: definition.name,
-    orgId: definition.orgId ?? null,
-    profileId: definition.profileId,
-    updatedAt: now,
-    version: definition.version,
   };
 }

@@ -8,7 +8,6 @@ import type {
   CreateProfileWithSuperNakamaRequest,
   CreateRegressionCaseRequest,
   CreateSkillRequest,
-  CreateToolRequest,
   ImageAttachment,
   InstallSkillRequest,
   ListMcpServersResponse,
@@ -37,12 +36,10 @@ import type {
   SkillsMarketplaceResponse,
   SuggestToolParamsRequest,
   SuggestToolParamsResponse,
-  SyncSkillsResponse,
   TestMcpServerResponse,
   ToolCredentialStatus,
   ToolResponse,
   ToolSetupPlan,
-  ToolSourceResponse,
   UpdateMcpServerRequest,
   UpdateProfileRequest,
 } from "@nakama/core/contract";
@@ -169,12 +166,6 @@ export class ProfilesClient extends SettingsClient {
     );
   }
 
-  async getToolSource(toolId: string): Promise<ToolSourceResponse> {
-    return this.request<ToolSourceResponse>(
-      `/v1/tools/${encodeURIComponent(toolId)}/source`
-    );
-  }
-
   async getToolCredentialStatus(toolId: string): Promise<ToolCredentialStatus> {
     return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`);
   }
@@ -227,16 +218,6 @@ export class ProfilesClient extends SettingsClient {
       body: JSON.stringify({ env }),
       method: "PUT",
     });
-  }
-
-  async createTool(request: CreateToolRequest) {
-    return this.request<{ tool: ListToolsResponse["tools"][number] }>(
-      "/v1/tools",
-      {
-        body: JSON.stringify(request),
-        method: "POST",
-      }
-    );
   }
 
   async deleteTool(toolId: string): Promise<void> {
@@ -521,12 +502,6 @@ export class ProfilesClient extends SettingsClient {
   async deleteSkill(skillId: string): Promise<void> {
     await this.request(`/v1/skills/${encodeURIComponent(skillId)}`, {
       method: "DELETE",
-    });
-  }
-
-  async syncSkills(): Promise<SyncSkillsResponse> {
-    return this.request<SyncSkillsResponse>("/v1/skills/sync", {
-      method: "POST",
     });
   }
 

@@ -13,7 +13,6 @@ import {
   styledLineText,
 } from "./styled-text";
 import type { TerminalInput } from "./terminal-input";
-import { stripAnsi } from "./text-measure";
 import type { MessageKind } from "./virtual-message-list";
 import {
   renderMarkdownLines,
@@ -116,10 +115,6 @@ export class TerminalLayout {
     this.render();
   }
 
-  isAnchored(): boolean {
-    return this.anchored;
-  }
-
   beginMessage(kind: MessageKind): void {
     this.flushStreamBuffer();
     this.messages.beginMessage(kind);
@@ -127,10 +122,6 @@ export class TerminalLayout {
 
   endMessage(): void {
     this.messages.sealMessage();
-  }
-
-  getLastOutputLine(): number {
-    return this.messages.totalLines(getTerminalColumns());
   }
 
   reset(): void {
@@ -194,10 +185,6 @@ export class TerminalLayout {
     return this.debugOverlay;
   }
 
-  setBottomLines(lines: Array<StyledLine | string>): void {
-    this.setReservedRows(lines.length, lines);
-  }
-
   setReservedRows(rows: number, lines: Array<StyledLine | string>): void {
     this.reservedRows = Math.max(1, rows);
     this.inputLines = (lines.length > 0 ? lines : [plainLine("")]).map((line) =>
@@ -257,10 +244,6 @@ export class TerminalLayout {
     this.writelnScroll(text);
   }
 
-  hasStatusLine(): boolean {
-    return this.statusLine !== null;
-  }
-
   writeScroll(text: StyledLine | string): void {
     const line = normalizeStyledLine(text);
     const plain = styledLineText(line);
@@ -298,10 +281,6 @@ export class TerminalLayout {
     }
 
     this.render();
-  }
-
-  writelnIntro(text: string): void {
-    process.stdout.write(`${stripAnsi(text)}\n`);
   }
 
   scrollPage(deltaPages: number): void {

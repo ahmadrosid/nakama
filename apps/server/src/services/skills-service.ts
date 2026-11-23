@@ -596,21 +596,6 @@ export class SkillsService {
     return this.getSkill(synced.id);
   }
 
-  async createAndAssignSkillToProfile(
-    orgId: string,
-    profileId: string,
-    request: Omit<CreateSkillRequest, "profileId">
-  ): Promise<SkillResponse> {
-    const created = await this.createSkill(orgId, {
-      ...request,
-      profileId,
-    });
-
-    await this.db.assignSkillToProfile(profileId, created.skill.id);
-
-    return created;
-  }
-
   async installSkillFromGitHub(
     orgId: string,
     request: InstallSkillRequest

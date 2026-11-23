@@ -626,7 +626,7 @@ describe("agent-service playground dispatch", () => {
   });
 
   test("runToolPlayground executes a python tool instead of its error stub", async () => {
-    const { configDir: dir, toolsDir } = await setupToolsDir();
+    const { configDir: dir } = await setupToolsDir();
     configDir = dir;
     await mkdir(path.join(configDir, "orgs", "org_playground", "tools"), {
       recursive: true,

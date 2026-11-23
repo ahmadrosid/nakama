@@ -18,7 +18,6 @@ import type {
   TelegramPairingStartResponse,
   TelegramPairingStatusResponse,
   TelegramSettingsResponse,
-  UpdateComposioSettingsRequest,
   UpdateDiscordSettingsRequest,
   UpdateNotificationDestinationRequest,
   UpdateProfileComposioToolkitsRequest,
@@ -263,15 +262,6 @@ export class ChannelsClient extends AutomationsClient {
 
   async getComposioSettings(): Promise<ComposioSettingsResponse> {
     return this.request<ComposioSettingsResponse>("/v1/settings/composio");
-  }
-
-  async setComposioSettings(
-    request: UpdateComposioSettingsRequest
-  ): Promise<ComposioSettingsResponse> {
-    return this.request<ComposioSettingsResponse>("/v1/settings/composio", {
-      body: JSON.stringify(request),
-      method: "PUT",
-    });
   }
 
   async setComposioSecret(apiKey: string): Promise<ComposioSettingsResponse> {

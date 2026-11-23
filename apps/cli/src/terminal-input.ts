@@ -182,10 +182,6 @@ export class TerminalInput {
     this.pending = "";
   }
 
-  isActive(): boolean {
-    return this.active;
-  }
-
   onInput(listener: (chunk: string) => void): () => void {
     this.listeners.add(listener);
 

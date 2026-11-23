@@ -293,16 +293,6 @@ export class AuthClient extends ChannelsClient {
     );
   }
 
-  /** Platform admin only: ends every login session a user holds. */
-  async revokeAllBrowserSessionsForUser(
-    userId: string
-  ): Promise<RevokeBrowserSessionsResponse> {
-    return this.request<RevokeBrowserSessionsResponse>(
-      `/v1/auth/users/${encodeURIComponent(userId)}/sessions`,
-      { method: "DELETE" }
-    );
-  }
-
   async logout(): Promise<void> {
     await this.request("/v1/auth/logout", {
       method: "POST",

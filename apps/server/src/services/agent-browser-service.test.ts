@@ -420,13 +420,6 @@ describe("Kernel browser runtime", () => {
   let requests: Array<{ body: unknown; method: string; url: string }> = [];
   let browsers: Map<string, Record<string, string>>;
 
-  const context = {
-    orgId: "org-a",
-    profileId: "agent-1",
-    sessionId: "chat-1",
-    userId: "user-1",
-  };
-
   beforeEach(async () => {
     configDir = await mkdtemp(join(tmpdir(), "nakama-kernel-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;

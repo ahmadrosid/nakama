@@ -85,8 +85,6 @@ describe("artifactCodeLanguage", () => {
 });
 
 describe("looksLikeUtf8Text", () => {
-  const encode = (value: string) => new TextEncoder().encode(value);
-
   test("rejects payloads with NUL bytes or invalid utf-8", () => {
     expect(
       looksLikeUtf8Text(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01]))
