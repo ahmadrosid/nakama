@@ -20,6 +20,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("command_code")).toBe("command_code");
     expect(parseProviderName("standardcompute")).toBe("standardcompute");
+    expect(parseProviderName("synap")).toBe("synap");
     expect(parseProviderName("deepseek")).toBe("deepseek");
     expect(parseProviderName("netra")).toBe("netra");
     expect(parseProviderName("doubao")).toBe("doubao");
@@ -173,6 +174,9 @@ describe("defaultDiscoveryBaseUrl", () => {
     );
     expect(defaultDiscoveryBaseUrl("standardcompute")).toBe(
       "https://api.stdcmpt.com/v1"
+    );
+    expect(defaultDiscoveryBaseUrl("synap")).toBe(
+      "https://pool.linkrra.com/v1"
     );
   });
 

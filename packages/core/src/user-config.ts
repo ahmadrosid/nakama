@@ -142,6 +142,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   qwen: "Qwen (DashScope)",
   qwen_cn: "Qwen (DashScope CN)",
   standardcompute: "Standard Compute",
+  synap: "Synap",
   together: "Together AI",
   vercel_ai_gateway: "Vercel AI Gateway",
   xai: "xAI Grok",

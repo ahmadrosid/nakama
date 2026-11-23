@@ -31,6 +31,7 @@ describe("saving models for discovery providers", () => {
     "groq",
     "cheaper_inference",
     "standardcompute",
+    "synap",
     "zhipu",
     "zhipu_cn",
   ];

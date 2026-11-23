@@ -115,6 +115,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   qwen: new Set<string>(),
   qwen_cn: new Set<string>(),
   standardcompute: new Set<string>(),
+  synap: new Set<string>(),
   together: new Set<string>(),
   vercel_ai_gateway: new Set<string>(),
   xai: new Set<string>(),

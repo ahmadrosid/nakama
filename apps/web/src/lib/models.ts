@@ -74,6 +74,7 @@ export function formatProviderLabel(
     provider === "groq" ||
     provider === "cheaper_inference" ||
     provider === "standardcompute" ||
+    provider === "synap" ||
     provider === "together" ||
     provider === "xiaomi" ||
     provider === "meta" ||
@@ -146,6 +147,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
   { id: "groq", label: "Groq" },
   { id: "cheaper_inference", label: "Cheaper Inference" },
   { id: "standardcompute", label: "Standard Compute" },
+  { id: "synap", label: "Synap" },
   { id: "minimax_cn", label: "MiniMax (CN)" },
   { id: "moonshot", label: "Moonshot Kimi" },
   { id: "moonshot_cn", label: "Moonshot Kimi (CN)" },

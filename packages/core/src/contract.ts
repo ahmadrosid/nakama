@@ -3227,6 +3227,7 @@ export type ProviderName =
   | "groq"
   | "cheaper_inference"
   | "standardcompute"
+  | "synap"
   | "together"
   | "xiaomi"
   | "meta"
