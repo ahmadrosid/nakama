@@ -81,11 +81,15 @@ export function createAuditLogMiddleware(
     try {
       const record: CreateAuditEventInput = {
         action: descriptor.action,
+        // Login, setup, and invite acceptance run before a session exists, so
+        // a success that names its user started a browser session.
         actorMode: auth
           ? auth.mode === "browser-session"
             ? "session"
             : "token"
-          : "anonymous",
+          : status < 400 && actorUserId
+            ? "session"
+            : "anonymous",
         actorUserId,
         clientIp,
         createdAt: new Date().toISOString(),
