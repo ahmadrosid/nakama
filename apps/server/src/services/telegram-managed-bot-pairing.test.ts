@@ -267,6 +267,50 @@ describe("TelegramManagedBotPairingService", () => {
     expect(actions).toEqual(["start", "status", "token", "token", "cancel"]);
     expect(JSON.stringify(result)).not.toContain("42:secret");
   });
+
+  test("defaults cloudUrl to withnakama.com and requests canonical endpoint", async () => {
+    let requestedUrl = "";
+    const pairingId = crypto.randomUUID();
+
+    const service = new TelegramManagedBotPairingService("", async (input) => {
+      requestedUrl = String(input);
+
+      return Response.json({
+        deepLink: `https://t.me/ManagerBot?start=${pairingId}`,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        pairingId,
+        secret: "s".repeat(43),
+        suggestedUsername: "nakama_bot",
+      });
+    });
+
+    await service.start("org", "user", "profile");
+    expect(requestedUrl).toBe("https://withnakama.com/api/telegram/pairing");
+  });
+
+  test("canonicalizes legacy getnakama.cloud URL to withnakama.com", async () => {
+    let requestedUrl = "";
+    const pairingId = crypto.randomUUID();
+
+    const service = new TelegramManagedBotPairingService(
+      "",
+      async (input) => {
+        requestedUrl = String(input);
+
+        return Response.json({
+          deepLink: `https://t.me/ManagerBot?start=${pairingId}`,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          pairingId,
+          secret: "s".repeat(43),
+          suggestedUsername: "nakama_bot",
+        });
+      },
+      "https://getnakama.cloud"
+    );
+
+    await service.start("org", "user", "profile");
+    expect(requestedUrl).toBe("https://withnakama.com/api/telegram/pairing");
+  });
 });
 
 describe("TelegramManagedBotPairingService deadline and save failure", () => {
