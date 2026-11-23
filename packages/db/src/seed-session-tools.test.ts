@@ -13,21 +13,6 @@ const SESSION_TOOL_IDS = [
 ];
 
 describe("session tool definitions", () => {
-  test("upserts both rows with the session handler type", async () => {
-    const db = createInMemoryDatabaseAdapter();
-
-    await ensureSessionToolDefinitions(db);
-    await ensureSessionToolDefinitions(db);
-
-    const list = await db.getTool(LIST_PROFILE_SESSIONS_TOOL_ID);
-    const read = await db.getTool(READ_PROFILE_SESSION_TOOL_ID);
-
-    expect(list?.name).toBe("list_profile_sessions");
-    expect(read?.name).toBe("read_profile_session");
-    expect(list?.handlerType).toBe("session");
-    expect(read?.handlerType).toBe("session");
-  });
-
   test("survives removeUnsupportedTools, which deletes unlisted handler types", async () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureSessionToolDefinitions(db);

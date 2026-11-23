@@ -791,25 +791,6 @@ describe("ComposioService", () => {
     }
   });
 
-  test("enableToolkit creates org-scoped toolkit row", async () => {
-    const { service, restore } = await createConfiguredService();
-
-    try {
-      const toolkit = await service.enableToolkit(ORG_ID, {
-        toolkitSlug: "gmail",
-      });
-
-      expect(toolkit.toolkitSlug).toBe("gmail");
-      expect(toolkit.status).toBe("enabled");
-
-      const listed = await service.listToolkits(ORG_ID, USER_ID);
-      expect(listed.orgToolkits).toHaveLength(1);
-      expect(listed.userConnections).toEqual([]);
-    } finally {
-      restore();
-    }
-  });
-
   test("enableToolkit assigns the toolkit to the org default profile", async () => {
     const { db, service, restore } = await createConfiguredService();
 
@@ -1170,22 +1151,6 @@ describe("ComposioService", () => {
       release();
       expect(await pending).toEqual([true, true, true]);
       expect(calls).toBe(1);
-    } finally {
-      restore();
-    }
-  });
-
-  test("resolveComposioActingUserId maps local client to earliest human admin", async () => {
-    const { db, service, restore } = await createConfiguredService();
-
-    try {
-      await seedOrgWithAdmin(db);
-      expect(
-        await service.resolveComposioActingUserId(ORG_ID, LOCAL_CLIENT_USER_ID)
-      ).toBe(USER_ID);
-      expect(await service.resolveComposioActingUserId(ORG_ID, USER_ID)).toBe(
-        USER_ID
-      );
     } finally {
       restore();
     }

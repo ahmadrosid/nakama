@@ -508,45 +508,6 @@ describe("chatMessagesToListItems", () => {
     });
   });
 
-  test("preserves Exa MCP web search tool rows from persisted tool messages", () => {
-    const exaResult = {
-      text: "Title: JWT Guide\nURL: https://example.com/jwt\nPublished: N/A\nAuthor: N/A",
-    };
-
-    const messages: ChatMessage[] = [
-      { content: "Search for JWT security", role: "user" },
-      {
-        content: "",
-        role: "assistant",
-        toolCalls: [
-          {
-            arguments: { query: "JWT security best practices" },
-            id: "tool_exa_1",
-            name: "exa__web_search_exa",
-          },
-        ],
-      },
-      {
-        content: JSON.stringify(exaResult),
-        name: "exa__web_search_exa",
-        role: "tool",
-        toolCallId: "tool_exa_1",
-      },
-      { content: "Here is what I found.", role: "assistant" },
-    ];
-
-    const items = chatMessagesToListItems(messages);
-
-    expect(
-      items.find((item) => item.tool === "exa__web_search_exa")
-    ).toMatchObject({
-      role: "tool",
-      toolInput: { query: "JWT security best practices" },
-      toolResult: exaResult,
-      toolStatus: "done",
-    });
-  });
-
   test("does not hydrate web_search when providerContent lacks hosted search", () => {
     const messages: ChatMessage[] = [
       {

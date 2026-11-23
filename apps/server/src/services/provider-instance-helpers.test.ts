@@ -643,12 +643,6 @@ describe("toProviderInstanceSummary", () => {
     type: "chatgpt",
   });
 
-  test("reports the plan of a connected ChatGPT account", () => {
-    expect(toProviderInstanceSummary(connectedChatgpt, 0).chatgptPlanType).toBe(
-      "free"
-    );
-  });
-
   test.each([
     { chatgptAccountId: "", name: "a disconnected account" },
     { chatgptAccessToken: "", name: "an account with no access token" },

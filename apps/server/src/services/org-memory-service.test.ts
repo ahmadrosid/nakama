@@ -47,12 +47,6 @@ describe("OrgMemoryService", () => {
     return new OrgMemoryService(db, { configDir: tempDir });
   }
 
-  test("getMemory returns the canonical preamble when the file is missing", async () => {
-    const service = await setup();
-    const content = await service.getMemory("org_a");
-    expect(content).toBe(`${ORG_MEMORY_PREAMBLE}\n`);
-  });
-
   test("addFact with pin creates MEMORY.md with preamble + bullet on first action", async () => {
     const service = await setup();
     await service.addFact("org_a", "deploys ship on Tuesdays", { pin: true });

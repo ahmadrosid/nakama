@@ -129,7 +129,6 @@ export function createMockClient(
 
   const profiles = options.profiles ?? [{ id: "default", model: null }];
   const orgs = options.orgs ?? createDefaultTestOrgs();
-  let activeOrgId: string | null = orgs[0]?.id ?? null;
 
   // SAFETY: This client mock implements the bridge calls exercised by its tests.
   const client = {
@@ -221,9 +220,7 @@ export function createMockClient(
         ),
       };
     },
-    setOrgId: (orgId: string | null) => {
-      activeOrgId = orgId?.trim() || null;
-    },
+    setOrgId: () => undefined,
   } as NakamaClient;
 
   assertBridgeClientMethods(client);

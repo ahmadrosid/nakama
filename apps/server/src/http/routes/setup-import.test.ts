@@ -469,7 +469,7 @@ describe("setup import routes", () => {
     const archive = await createArchiveOverEntryLimit();
     const data = archive.toString("base64");
 
-    const previewResponse = await app.fetch(
+    await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup/import/preview", {
         body: JSON.stringify({ data }),
         headers: { "Content-Type": "application/json" },

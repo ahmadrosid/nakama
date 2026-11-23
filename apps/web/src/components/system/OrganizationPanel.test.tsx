@@ -4036,11 +4036,9 @@ test.each([
     );
 
     const credentials = spyOn(client, "getToolCredentialStatus");
-    const source = spyOn(client, "getToolSource");
     cleanups.push(() => {
       read.mockRestore();
       credentials.mockRestore();
-      source.mockRestore();
     });
     const { container, queries, render } = await mountResourceReader("admin");
     const orgId = root ? "parent" : "team-a";
@@ -4081,7 +4079,6 @@ test.each([
     expect(dialog?.textContent).not.toContain("/private/parent");
     expect(dialog?.querySelectorAll("input,textarea,select")).toHaveLength(0);
     expect(credentials).not.toHaveBeenCalled();
-    expect(source).not.toHaveBeenCalled();
     await act(async () => {
       document
         .querySelector<HTMLButtonElement>('[data-slot="dialog-footer"] button')

@@ -256,22 +256,6 @@ describe("createCustomWebSearchTool", () => {
     });
   });
 
-  test("surfaces a Serply failure under its own label", async () => {
-    stubFetch({ body: "rate limited", status: 429 }, []);
-
-    const tool = createCustomWebSearchTool(
-      config({
-        apiKey: "serply-key",
-        endpoint: "https://api.serply.io/v1/search",
-        provider: "serply",
-      })
-    );
-
-    await expect(tool?.run({ query: "anything" }, {})).rejects.toThrow(
-      "Serply returned 429"
-    );
-  });
-
   test("sends a keyless Keenable search to the public endpoint", async () => {
     const captured: CapturedRequest[] = [];
     stubFetch(

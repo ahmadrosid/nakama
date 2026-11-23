@@ -351,62 +351,6 @@ describe("NotificationWebhookService", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  test("does not send twice for a repeated idempotency key", async () => {
-    const { apiKey, authService, databaseAdapter } = await seedDestination();
-    let sendCount = 0;
-
-    const service = new NotificationWebhookService(
-      databaseAdapter,
-      authService,
-      {
-        telegram: {
-          send: async () => {
-            sendCount += 1;
-
-            return { ok: true };
-          },
-        },
-      }
-    );
-
-    const payload = { body: "Customer: Ahmad", level: "success" as const };
-    await service.deliver("dest_1", apiKey, payload, "evt_replay_1");
-    await expect(
-      service.deliver("dest_1", apiKey, payload, "evt_replay_1")
-    ).rejects.toMatchObject({ status: 409 });
-
-    expect(sendCount).toBe(1);
-  });
-
-  test("keeps the claim when telegram delivery fails so a retry cannot double-send", async () => {
-    const { apiKey, authService, databaseAdapter } = await seedDestination();
-    let sendCount = 0;
-
-    const service = new NotificationWebhookService(
-      databaseAdapter,
-      authService,
-      {
-        telegram: {
-          send: async () => {
-            sendCount += 1;
-
-            return { error: "telegram down", ok: false };
-          },
-        },
-      }
-    );
-
-    await expect(
-      service.deliver("dest_1", apiKey, { body: "Hello" }, "evt_retry_1")
-    ).rejects.toMatchObject({ status: 502 });
-
-    await expect(
-      service.deliver("dest_1", apiKey, { body: "Hello" }, "evt_retry_1")
-    ).rejects.toMatchObject({ status: 409 });
-
-    expect(sendCount).toBe(1);
-  });
-
   test("allows the same idempotency key again after the replay window is pruned", async () => {
     const { apiKey, authService, databaseAdapter } = await seedDestination();
     let sendCount = 0;

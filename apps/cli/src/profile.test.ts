@@ -67,10 +67,6 @@ test("startup defaults to Super Nakama and respects saved and explicit choices",
   }
 });
 
-describe("parseCliProfileArgs", () => {});
-
-describe("sortProfilesForPicker", () => {});
-
 describe("resolveProfileInput", () => {
   test("resolves id, name, and index", () => {
     expect(resolveProfileInput(sampleProfiles, "profile_custom")?.name).toBe(

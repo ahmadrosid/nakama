@@ -65,12 +65,6 @@ function button(container: HTMLElement, name: string) {
   return match;
 }
 
-test("shows the new version", () => {
-  const container = render();
-
-  expect(container.textContent).toContain("0.4.68");
-});
-
 test("Later hides the prompt for the rest of the session", () => {
   const container = render();
 

@@ -245,17 +245,6 @@ export class McpClientManager {
     }
   }
 
-  async listTools(
-    serverId: string,
-    transport: McpTransport,
-    profileId?: string
-  ): Promise<CachedMcpTool[]> {
-    const client = this.requireClient(serverId, transport, profileId);
-    const result = await client.listTools();
-
-    return normalizeListedTools(result.tools);
-  }
-
   async callTool(
     serverId: string,
     transport: McpTransport,

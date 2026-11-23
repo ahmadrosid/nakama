@@ -118,15 +118,6 @@ describe("chat-stream-web-fetch", () => {
     ]);
   });
 
-  test("parseWebFetchSourcesFromResult handles Exa MCP wrapper", () => {
-    const sources = parseWebFetchSourcesFromResult({
-      text: "# Report\nURL: https://example.com/report\n\nBody text",
-    });
-
-    expect(sources).toHaveLength(1);
-    expect(sources[0]?.title).toBe("Report");
-  });
-
   test("search parser does not consume Exa fetch markdown", () => {
     const fetchText = "# Report\nURL: https://example.com/report\n\nBody";
     expect(parseWebSearchSourcesFromResult({ text: fetchText })).toEqual([]);

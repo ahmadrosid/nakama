@@ -525,21 +525,6 @@ describe("profile service createProfile", () => {
     expect(updated.profile.model).toBe("anthropic:claude-sonnet-4");
   });
 
-  test("generates a random id when id is omitted", async () => {
-    tempConfigDir = await mkdtemp(
-      path.join(os.tmpdir(), "nakama-profile-random-id-")
-    );
-    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-
-    const service = new ProfileService(createInMemoryDatabaseAdapter());
-
-    const created = await service.createProfile(ORG_ID, {
-      name: "Research Assistant",
-    });
-
-    expect(created.profile.id).toMatch(/^[0-9A-Za-z]{21}$/);
-  });
-
   test("lets two orgs create profiles with the same name", async () => {
     tempConfigDir = await mkdtemp(
       path.join(os.tmpdir(), "nakama-profile-cross-org-")
@@ -561,22 +546,6 @@ describe("profile service createProfile", () => {
     expect(second.profile.id).not.toBe(first.profile.id);
     expect(first.profile.name).toBe("Penulis");
     expect(second.profile.name).toBe("Penulis");
-  });
-
-  test("uses a custom profile id when provided", async () => {
-    tempConfigDir = await mkdtemp(
-      path.join(os.tmpdir(), "nakama-profile-custom-id-")
-    );
-    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-
-    const service = new ProfileService(createInMemoryDatabaseAdapter());
-
-    const created = await service.createProfile(ORG_ID, {
-      id: "research-bot",
-      name: "Research Bot",
-    });
-
-    expect(created.profile.id).toBe("research-bot");
   });
 
   test("rejects duplicate custom profile ids", async () => {

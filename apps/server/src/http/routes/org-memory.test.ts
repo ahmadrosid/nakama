@@ -24,7 +24,7 @@ const BASE = "http://localhost:4310";
 
 describe("org memory routes (v1)", () => {
   test("admin can add a fact, get memory, search, pin, unpin, archive", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, databaseAdapter } = createApp();
 
     const adminSession = await setupFreshInstallSession(
       app,
@@ -133,7 +133,7 @@ describe("org memory routes (v1)", () => {
   });
 
   test("member can read and search but not mutate", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, databaseAdapter } = createApp();
 
     const adminSession = await setupFreshInstallSession(
       app,
@@ -224,7 +224,7 @@ describe("org memory routes (v1)", () => {
   });
 
   test("PUT oversized body is rejected; cross-org is 404", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, databaseAdapter } = createApp();
 
     const adminSession = await setupFreshInstallSession(
       app,
@@ -260,7 +260,7 @@ describe("org memory routes (v1)", () => {
   });
 
   test("unpin/archive missing bullet returns 404", async () => {
-    const { app, authService, databaseAdapter } = createApp();
+    const { app, databaseAdapter } = createApp();
 
     const adminSession = await setupFreshInstallSession(
       app,
@@ -298,7 +298,7 @@ describe("org memory routes (v1)", () => {
   });
 
   test("admin can list, approve, and reject proposals; member cannot list", async () => {
-    const { app, authService, databaseAdapter, orgMemoryService } = createApp();
+    const { app, databaseAdapter, orgMemoryService } = createApp();
 
     const adminSession = await setupFreshInstallSession(
       app,

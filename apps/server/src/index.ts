@@ -249,11 +249,6 @@ const resumableAutomationRuns =
     MAX_AUTOMATION_RUN_RESUMES
   );
 
-// Channel credentials used to be install-wide. On a single-org install that
-// config can only belong to that org, so claim it once before any scope-exact
-// read reports the org as unconfigured.
-const organizations = await database.adapter.listOrganizations();
-
 const authService = new AuthService();
 
 const llmUsageTracker = new LlmUsageTracker(database.adapter);

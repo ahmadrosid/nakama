@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { Mood } from "./core";
 import {
-  type AgentActivity,
   MOODSTONE_COLORS,
   MOODSTONE_CUTS,
-  moodForActivity,
   moodstoneIndexes,
   moodstoneSvg,
 } from "./index";
@@ -47,22 +44,5 @@ describe("moodstoneSvg", () => {
     const svg = moodstoneSvg(0, 0, false, "idle");
 
     expect(svg).not.toContain("<animate");
-  });
-});
-
-describe("moodForActivity", () => {
-  test("maps every lifecycle state to its mood", () => {
-    const cases: Array<[AgentActivity, Mood]> = [
-      ["done", "done"],
-      ["error", "failed"],
-      ["idle", "idle"],
-      ["responding", "working"],
-      ["thinking", "thinking"],
-      ["tool", "observing"],
-    ];
-
-    for (const [activity, mood] of cases) {
-      expect(moodForActivity(activity)).toBe(mood);
-    }
   });
 });

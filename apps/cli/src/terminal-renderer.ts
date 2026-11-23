@@ -264,16 +264,6 @@ export class TerminalRenderer {
     this.layout.endMessage();
   }
 
-  getState(): TerminalRendererState {
-    return {
-      composer: cloneComposerState(this.state.composer),
-      pendingMessages: [...this.state.pendingMessages],
-      statusLine: this.state.statusLine
-        ? cloneStyledLine(this.state.statusLine)
-        : null,
-    };
-  }
-
   scrollPage(deltaPages: number): void {
     this.layout.scrollPage(deltaPages);
   }
