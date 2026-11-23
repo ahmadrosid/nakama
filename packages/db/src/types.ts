@@ -2,6 +2,8 @@ import type {
   AcpAgentConfig,
   AgentQuestionnaire,
   AgentTodo,
+  AuditChainVerificationResult,
+  AuditEvent,
   ChatMessage,
   JsonSchema,
   OrgPluginLifecycleState,
@@ -873,50 +875,12 @@ export interface StoredSessionStep {
   toolName: string;
 }
 
-/** Who performed an audited action: dashboard session, API token, agent tool run, or the system itself. */
-/** `anonymous`: an unauthenticated request (login, signup, reset). `system`: written by the server itself. */
-export type AuditActorMode =
-  | "agent"
-  | "anonymous"
-  | "session"
-  | "system"
-  | "token";
+/** Who performed an audited action. See `AuditEvent["actorMode"]`. */
+export type AuditActorMode = NonNullable<AuditEvent["actorMode"]>;
 
-export interface StoredAuditEvent {
-  action: string;
-  actorMode: AuditActorMode | null;
-  actorUserId: string | null;
-  clientIp: string | null;
-  createdAt: string;
-  forwardedFor: string | null;
-  /** Hex SHA-256 chain hash. Empty for rows written before the chain existed. */
-  hash: string | null;
-  id: string;
-  metadata: Record<string, boolean | null | number | string>;
-  method: string | null;
-  orgId: string | null;
-  outcome: "success" | "failure";
-  prevHash: string | null;
-  requestId: string | null;
-  resourceId: string | null;
-  resourceType: string;
-  route: string | null;
-  /** Hash-chain position. NULL marks rows written before the chain existed. */
-  seq: number | null;
-  /** Browser session id when the actor used the dashboard. */
-  sessionId: string | null;
-  status: number | null;
-  userAgent: string | null;
-}
+export type StoredAuditEvent = AuditEvent;
 
-export interface AuditChainVerification {
-  brokenId: string | null;
-  brokenSeq: number | null;
-  checked: number;
-  legacy: number;
-  ok: boolean;
-  reason: string | null;
-}
+export type AuditChainVerification = AuditChainVerificationResult;
 
 /**
  * Write input for the audit ledger. Request context fields are optional:

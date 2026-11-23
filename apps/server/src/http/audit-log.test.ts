@@ -567,4 +567,37 @@ describe("audit event API", () => {
 
     expect(denied.status).toBe(404);
   });
+
+  test("records a request the org check rejects before the route runs", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/skills/skill%201", {
+        headers: session.headers({
+          "X-CSRF-Token": session.csrfToken,
+          "X-Org-Id": "org_missing",
+        }),
+        method: "DELETE",
+      })
+    );
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(
+      (await databaseAdapter.listAuditEvents({ action: "skill.delete" })).events
+    ).toMatchObject([
+      {
+        actorMode: "session",
+        outcome: "failure",
+        resourceId: "skill 1",
+        status: response.status,
+      },
+    ]);
+  });
 });

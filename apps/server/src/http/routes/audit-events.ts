@@ -1,11 +1,12 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import type { ServerOptions } from "../context";
 import {
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { errorResponse, json } from "../shared";
-import type { HonoApp } from "../types";
+import type { AppEnv, HonoApp } from "../types";
 
 const auditEventSchema = z.object({
   action: z.string(),
@@ -87,95 +88,71 @@ export function registerAuditEventRoutes(
   options: ServerOptions
 ): void {
   app.openAPIRegistry.registerPath(listAuditEventsRoute);
-  app.get("/v1/platform/audit-events", async (c) => {
-    requirePlatformAdminFromContext(c);
-    const { databaseAdapter } = options;
 
-    if (!databaseAdapter) {
-      return errorResponse("Database not configured", 500);
-    }
+  // Platform admins read the whole installation, or one org via `?orgId`.
+  // Org admins read only their active org: the path org must match it, so a
+  // member of one org cannot enumerate another's ledger (null answers 404,
+  // which keeps existence opaque, like the sibling publication routes).
+  const scopes = [
+    [
+      "/v1/platform/audit-events",
+      (c: Context<AppEnv>): string | undefined => {
+        requirePlatformAdminFromContext(c);
 
-    const parsed = listAuditEventsQuerySchema.safeParse(c.req.query());
+        return c.req.query("orgId") || undefined;
+      },
+    ],
+    [
+      "/v1/orgs/:orgId/audit-events",
+      (c: Context<AppEnv>): string | null => {
+        const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+        const orgId = decodeURIComponent(c.req.param("orgId") ?? "");
 
-    if (!parsed.success) {
-      return errorResponse("Invalid audit event query", 400);
-    }
+        return auth.activeOrgId === orgId ? orgId : null;
+      },
+    ],
+  ] as const;
 
-    const { events, total } = await databaseAdapter.listAuditEvents(
-      parsed.data
-    );
+  for (const [path, scopeOf] of scopes) {
+    app.get(path, async (c) => {
+      const orgId = scopeOf(c);
 
-    return json({ events, total });
-  });
+      if (orgId === null) {
+        return errorResponse("Not found", 404);
+      }
 
-  // Org-scoped reads for org admins. The path org must be the active org, so
-  // a member of one org cannot enumerate another's ledger (404 keeps
-  // existence opaque, like the sibling publication routes).
-  app.get("/v1/orgs/:orgId/audit-events", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
-    const { databaseAdapter } = options;
+      if (!options.databaseAdapter) {
+        return errorResponse("Database not configured", 500);
+      }
 
-    const orgId = decodeURIComponent(c.req.param("orgId"));
+      const parsed = listAuditEventsQuerySchema.safeParse(c.req.query());
 
-    if (auth.activeOrgId !== orgId) {
-      return errorResponse("Not found", 404);
-    }
+      if (!parsed.success) {
+        return errorResponse("Invalid audit event query", 400);
+      }
 
-    if (!databaseAdapter) {
-      return errorResponse("Database not configured", 500);
-    }
-
-    const parsed = listAuditEventsQuerySchema.safeParse(c.req.query());
-
-    if (!parsed.success) {
-      return errorResponse("Invalid audit event query", 400);
-    }
-
-    const { events, total } = await databaseAdapter.listAuditEvents({
-      ...parsed.data,
-      orgId,
+      return json(
+        await options.databaseAdapter.listAuditEvents({ ...parsed.data, orgId })
+      );
     });
 
-    return json({ events, total });
-  });
+    app.get(`${path}/stats`, async (c) => {
+      const orgId = scopeOf(c);
 
-  app.get("/v1/orgs/:orgId/audit-events/stats", async (c) => {
-    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
-    const { databaseAdapter } = options;
+      if (orgId === null) {
+        return errorResponse("Not found", 404);
+      }
 
-    const orgId = decodeURIComponent(c.req.param("orgId"));
+      if (!options.databaseAdapter) {
+        return errorResponse("Database not configured", 500);
+      }
 
-    if (auth.activeOrgId !== orgId) {
-      return errorResponse("Not found", 404);
-    }
-
-    if (!databaseAdapter) {
-      return errorResponse("Database not configured", 500);
-    }
-
-    return json({
-      categories: await databaseAdapter.listAuditEventCategories(orgId),
+      return json({
+        categories:
+          await options.databaseAdapter.listAuditEventCategories(orgId),
+      });
     });
-  });
-
-  app.get("/v1/platform/audit-events/stats", async (c) => {
-    requirePlatformAdminFromContext(c);
-    const { databaseAdapter } = options;
-
-    if (!databaseAdapter) {
-      return errorResponse("Database not configured", 500);
-    }
-
-    const query = listAuditEventsQuerySchema
-      .pick({ orgId: true })
-      .safeParse(c.req.query());
-
-    const orgId = query.success ? query.data.orgId : undefined;
-
-    return json({
-      categories: await databaseAdapter.listAuditEventCategories(orgId),
-    });
-  });
+  }
 
   // The chain covers the whole installation, so integrity checks stay a
   // platform-admin capability.

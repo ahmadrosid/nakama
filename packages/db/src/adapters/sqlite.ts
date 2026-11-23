@@ -789,6 +789,25 @@ export async function createSqliteDatabase(
   };
 }
 
+/** Named bindings shared by the audit list and count queries. */
+type AuditEventFilter = Record<`$${string}`, number | string | null>;
+
+/** Filters shared by the audit list and count queries; bind `AuditEventFilter`. */
+const AUDIT_EVENT_FILTER_SQL = `WHERE ($orgId IS NULL OR org_id = $orgId)
+      AND ($action IS NULL OR action = $action)
+      AND ($outcome IS NULL OR outcome = $outcome)
+      AND ($category IS NULL OR action = $category OR action LIKE ($category || '.%'))
+      AND (
+        $search IS NULL
+        OR action LIKE $search ESCAPE '\\'
+        OR resource_id LIKE $search ESCAPE '\\'
+        OR actor_user_id LIKE $search ESCAPE '\\'
+        OR session_id LIKE $search ESCAPE '\\'
+        OR client_ip LIKE $search ESCAPE '\\'
+        OR forwarded_for LIKE $search ESCAPE '\\'
+        OR request_id LIKE $search ESCAPE '\\'
+      )`;
+
 /** Rows hashed per verify step before yielding to the event loop. */
 const AUDIT_VERIFY_PAGE_ROWS = 500;
 
@@ -3176,51 +3195,25 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE seq IS NULL
   `);
 
-  const listAuditEventsStmt = db.prepare<AuditEventRow, SQLQueryBindings[]>(`
+  const listAuditEventsStmt = db.prepare<AuditEventRow, [AuditEventFilter]>(`
     SELECT
       id, actor_user_id, org_id, action, resource_type, resource_id,
       metadata, request_id, created_at,
       outcome, status, method, route, session_id, actor_mode,
       client_ip, forwarded_for, user_agent, seq, prev_hash, hash
     FROM audit_events
-    WHERE (? IS NULL OR org_id = ?)
-      AND (? IS NULL OR action = ?)
-      AND (? IS NULL OR outcome = ?)
-      AND (? IS NULL OR action = ? OR action LIKE (? || '.%'))
-      AND (
-        ? IS NULL
-        OR action LIKE ? ESCAPE '\\'
-        OR resource_id LIKE ? ESCAPE '\\'
-        OR actor_user_id LIKE ? ESCAPE '\\'
-        OR session_id LIKE ? ESCAPE '\\'
-        OR client_ip LIKE ? ESCAPE '\\'
-        OR forwarded_for LIKE ? ESCAPE '\\'
-        OR request_id LIKE ? ESCAPE '\\'
-      )
+    ${AUDIT_EVENT_FILTER_SQL}
     ORDER BY created_at DESC, seq DESC, id DESC
-    LIMIT ? OFFSET ?
+    LIMIT $limit OFFSET $offset
   `);
 
   const countAuditEventsStmt = db.prepare<
     { count: number },
-    SQLQueryBindings[]
+    [AuditEventFilter]
   >(`
     SELECT count(*) AS count
     FROM audit_events
-    WHERE (? IS NULL OR org_id = ?)
-      AND (? IS NULL OR action = ?)
-      AND (? IS NULL OR outcome = ?)
-      AND (? IS NULL OR action = ? OR action LIKE (? || '.%'))
-      AND (
-        ? IS NULL
-        OR action LIKE ? ESCAPE '\\'
-        OR resource_id LIKE ? ESCAPE '\\'
-        OR actor_user_id LIKE ? ESCAPE '\\'
-        OR session_id LIKE ? ESCAPE '\\'
-        OR client_ip LIKE ? ESCAPE '\\'
-        OR forwarded_for LIKE ? ESCAPE '\\'
-        OR request_id LIKE ? ESCAPE '\\'
-      )
+    ${AUDIT_EVENT_FILTER_SQL}
   `);
 
   const listAuditEventCategoriesStmt = db.prepare(`
@@ -6453,48 +6446,18 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         ? `%${options.search.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
         : null;
 
-      const rows = listAuditEventsStmt.all(
-        orgId,
-        orgId,
-        action,
-        action,
-        outcome,
-        outcome,
-        category,
-        category,
-        category,
-        search,
-        search,
-        search,
-        search,
-        search,
-        search,
-        search,
-        search,
-        options.limit ?? 100,
-        options.offset ?? 0
-      );
+      const filter: AuditEventFilter = {
+        $action: action,
+        $category: category,
+        $limit: options.limit ?? 100,
+        $offset: options.offset ?? 0,
+        $orgId: orgId,
+        $outcome: outcome,
+        $search: search,
+      };
 
-      // SAFETY: The statement selects `COUNT(*) AS count` from `audit_events`.
-      const { count } = countAuditEventsStmt.get(
-        orgId,
-        orgId,
-        action,
-        action,
-        outcome,
-        outcome,
-        category,
-        category,
-        category,
-        search,
-        search,
-        search,
-        search,
-        search,
-        search,
-        search,
-        search
-      ) as { count: number };
+      const rows = listAuditEventsStmt.all(filter);
+      const count = countAuditEventsStmt.get(filter)?.count ?? 0;
 
       return { events: rows.map(toAuditEventRecord), total: count };
     },

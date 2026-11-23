@@ -929,11 +929,16 @@ export interface ListOrgInvitesResponse {
 /** One entry of the append-only audit trail (the dashboard Events page). */
 export interface AuditEvent {
   action: string;
+  /**
+   * Who acted: dashboard `session`, API `token`, `agent` tool run,
+   * `anonymous` request (login, signup, reset), or the server (`system`).
+   */
   actorMode: "agent" | "anonymous" | "session" | "system" | "token" | null;
   actorUserId: string | null;
   clientIp: string | null;
   createdAt: string;
   forwardedFor: string | null;
+  /** Hex SHA-256 chain hash. Empty for rows written before the chain existed. */
   hash: string | null;
   id: string;
   metadata: Record<string, boolean | null | number | string>;
@@ -947,6 +952,7 @@ export interface AuditEvent {
   route: string | null;
   /** Hash-chain position; null marks rows written before the chain existed. */
   seq: number | null;
+  /** Browser session id when the actor used the dashboard. */
   sessionId: string | null;
   status: number | null;
   userAgent: string | null;
