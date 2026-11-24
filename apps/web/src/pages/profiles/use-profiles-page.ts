@@ -201,6 +201,9 @@ export function useProfilesPage() {
   } | null>(null);
 
   const selectedIdRef = useRef(selectedId);
+  // The router moves the URL in a transition, so a new selection can commit
+  // while the URL still names the old agent. Only a URL that moved selects.
+  const seenUrlProfileIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -656,6 +659,8 @@ export function useProfilesPage() {
 
   useEffect(() => {
     if (profiles.length === 0) {
+      seenUrlProfileIdRef.current = null;
+
       if (selectedIdRef.current !== null) {
         setSelectedId(null);
       }
@@ -667,6 +672,7 @@ export function useProfilesPage() {
 
     if (!profileInitializedRef.current) {
       profileInitializedRef.current = true;
+      seenUrlProfileIdRef.current = urlProfileId;
 
       if (
         urlProfileId &&
@@ -697,14 +703,31 @@ export function useProfilesPage() {
     if (
       urlProfileId &&
       profiles.some((profile) => profile.id === urlProfileId) &&
-      urlProfileId !== selectedIdRef.current
+      urlProfileId !== seenUrlProfileIdRef.current
     ) {
-      void handleSelectProfileRef.current(urlProfileId);
+      seenUrlProfileIdRef.current = urlProfileId;
+
+      if (urlProfileId !== selectedIdRef.current) {
+        void handleSelectProfileRef.current(urlProfileId);
+
+        return;
+      }
+    }
+
+    const current = selectedIdRef.current;
+
+    // A stale URL write can drop the new selection, so write it again.
+    if (
+      current &&
+      urlProfileId !== current &&
+      !switchingProfileRef.current &&
+      profiles.some((profile) => profile.id === current)
+    ) {
+      setSelectedId(current);
 
       return;
     }
 
-    const current = selectedIdRef.current;
     const hiddenDeepLink = hiddenDeepLinkRef.current;
 
     if (
