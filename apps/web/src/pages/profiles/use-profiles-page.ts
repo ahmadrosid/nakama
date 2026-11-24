@@ -659,6 +659,8 @@ export function useProfilesPage() {
 
   useEffect(() => {
     if (profiles.length === 0) {
+      seenUrlProfileIdRef.current = null;
+
       if (selectedIdRef.current !== null) {
         setSelectedId(null);
       }
@@ -713,6 +715,19 @@ export function useProfilesPage() {
     }
 
     const current = selectedIdRef.current;
+
+    // A stale URL write can drop the new selection, so write it again.
+    if (
+      current &&
+      urlProfileId !== current &&
+      !switchingProfileRef.current &&
+      profiles.some((profile) => profile.id === current)
+    ) {
+      setSelectedId(current);
+
+      return;
+    }
+
     const hiddenDeepLink = hiddenDeepLinkRef.current;
 
     if (
