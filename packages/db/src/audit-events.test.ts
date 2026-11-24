@@ -320,6 +320,47 @@ describe("audit events", () => {
     ).toThrow();
   });
 
+  test("prunes a large backlog one bounded chunk at a time", async () => {
+    const database = new Database(":memory:");
+    migrateDatabase(database);
+
+    // 2500 expired pre-chain rows plus 1000 expired appends: 3499 prunable.
+    const insertLegacy = database.prepare(
+      `INSERT INTO audit_events (id, action, resource_type, metadata, created_at)
+       VALUES (?, 'tool.call', 'tool', '{}', '2020-01-01T00:00:00.000Z')`
+    );
+
+    for (let index = 1; index <= 2500; index += 1) {
+      insertLegacy.run(`audit_legacy_${index}`);
+    }
+
+    const adapter = createSqliteDatabaseAdapter(database);
+
+    for (let index = 1; index <= 1000; index += 1) {
+      await adapter.createAuditEvent({
+        action: "tool.call",
+        createdAt: "2020-01-01T00:00:00.000Z",
+        id: `audit_${index}`,
+        resourceType: "tool",
+      });
+    }
+
+    const prune = database
+      .query<{ deleted: number }, []>(
+        "SELECT json_extract(metadata, '$.deleted') AS deleted FROM audit_events WHERE action = 'audit.prune'"
+      )
+      .get();
+
+    expect(prune?.deleted).toBe(2000);
+    expect(
+      database.query("SELECT count(*) AS count FROM audit_events").get()
+    ).toEqual({ count: 1501 });
+
+    await expect(adapter.verifyAuditChain()).resolves.toMatchObject({
+      ok: true,
+    });
+  });
+
   test("flags old rows deleted without a recorded prune", async () => {
     const database = new Database(":memory:");
     migrateDatabase(database);

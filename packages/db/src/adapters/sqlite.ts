@@ -814,6 +814,10 @@ const AUDIT_VERIFY_PAGE_ROWS = 500;
 /** Expired audit rows are pruned on every Nth append. */
 const AUDIT_PRUNE_EVERY_ROWS = 1000;
 
+/** Most rows one prune deletes. Twice the interval, so a backlog shrinks by
+ * about one interval per prune even while new rows keep expiring. */
+const AUDIT_PRUNE_CHUNK_ROWS = 2 * AUDIT_PRUNE_EVERY_ROWS;
+
 /** How long claim rows block replays before prune (also caps table growth). */
 const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -3097,17 +3101,31 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   // Drops the oldest stretch of the chain past retention. Stops at the first
   // row still inside the window and always keeps the head, so the rows left
   // stay one contiguous chain that the next append links to.
+  // It runs inside a chat-turn write, so each call deletes at most
+  // AUDIT_PRUNE_CHUNK_ROWS rows and only looks that far down the chain; a
+  // backlog drains a chunk per prune instead of stalling one append.
+  // ponytail: a backlog bigger than the write rate drains slowly; move this
+  // to a timer outside the request path if that ever matters.
   const pruneAuditEventsStmt = db.prepare(`
     DELETE FROM audit_events
-    WHERE created_at < ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
-      AND (seq IS NULL OR seq < COALESCE(
-        (
-          SELECT MIN(seq) FROM audit_events
-          WHERE seq IS NOT NULL
-            AND created_at >= ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
-        ),
-        (SELECT MAX(seq) FROM audit_events)
-      ))
+    WHERE rowid IN (
+      SELECT rowid FROM audit_events
+      WHERE created_at < ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
+        AND (seq IS NULL OR seq < COALESCE(
+          (
+            SELECT MIN(seq) FROM (
+              SELECT seq, created_at FROM audit_events
+              WHERE seq IS NOT NULL
+              ORDER BY seq
+              LIMIT ${AUDIT_PRUNE_CHUNK_ROWS + 1}
+            )
+            WHERE created_at >= ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
+          ),
+          (SELECT MAX(seq) FROM audit_events)
+        ))
+      ORDER BY seq
+      LIMIT ${AUDIT_PRUNE_CHUNK_ROWS}
+    )
   `);
 
   /** Appends one row to the hash chain. Call inside a transaction. */
