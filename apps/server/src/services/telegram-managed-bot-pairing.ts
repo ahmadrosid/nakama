@@ -50,26 +50,7 @@ type TelegramRequestBody = {
 
 type CloudPairingRequest = { action: string; pairingId?: string };
 
-const DEFAULT_TELEGRAM_MANAGER_URL = "https://withnakama.com";
-
-function canonicalizeCloudUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-
-    if (parsed.hostname === "getnakama.cloud") {
-      parsed.hostname = "withnakama.com";
-
-      return parsed.toString();
-    }
-  } catch {
-    // Keep original string if invalid URL; cloudCall validates it.
-  }
-
-  return url;
-}
-
 export class TelegramManagedBotPairingService {
-  private readonly cloudUrl: string;
   private readonly pairings = new Map<string, Pairing>();
   private offset = 0;
   private readonly pollTimer = setInterval(() => {
@@ -90,10 +71,9 @@ export class TelegramManagedBotPairingService {
       input: RequestInfo | URL,
       init?: RequestInit
     ) => Promise<Response> = fetch,
-    cloudUrl = process.env.NAKAMA_TELEGRAM_MANAGER_URL ??
-      DEFAULT_TELEGRAM_MANAGER_URL
+    private readonly cloudUrl = process.env.NAKAMA_TELEGRAM_MANAGER_URL ??
+      "https://withnakama.com"
   ) {
-    this.cloudUrl = canonicalizeCloudUrl(cloudUrl);
     this.pollTimer.unref?.();
   }
 
