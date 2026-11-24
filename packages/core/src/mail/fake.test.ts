@@ -15,7 +15,9 @@ describe("sanitizeMailError", () => {
       )
     );
 
-    expect(message).toContain("Application-specific password");
+    expect(message).toBe(
+      "Invalid login: 534-5.7.9 Application-specific password required."
+    );
   });
 
   test.each([
@@ -23,6 +25,12 @@ describe("sanitizeMailError", () => {
     "abcd\tefgh\tijkl\tmnop",
     "abcdefghijklmnop",
     "ABCD1234efgh5678",
+    "abcd efgh ijklmnop",
+    "abcdefgh ijklmnop",
+    "abcd  efgh  ijkl  mnop",
+    "abcd-efgh-ijkl-mnop",
+    "ABCD EFGH IJKL MNOP",
+    "ab12 cd34 ef56 gh78",
   ])("redacts the app password %p", (secret) => {
     expect(sanitizeMailError(new Error(`Invalid credentials: ${secret}`))).toBe(
       "Invalid credentials: [REDACTED]"
@@ -33,6 +41,30 @@ describe("sanitizeMailError", () => {
     expect(
       sanitizeMailError(new Error("AUTH failed password abcd1234"))
     ).not.toContain("abcd1234");
+  });
+
+  test("redacts a spaced app password after the word password", () => {
+    expect(sanitizeMailError(new Error("password abcd efgh ijkl mnop"))).toBe(
+      "password=[REDACTED]"
+    );
+  });
+
+  test("redacts an app password after an underscore", () => {
+    expect(sanitizeMailError(new Error("pw_abcdefghijklmnop"))).toBe(
+      "pw_[REDACTED]"
+    );
+  });
+
+  test("redacts a password of only letters", () => {
+    expect(
+      sanitizeMailError(new Error("AUTH failed password hunterpass"))
+    ).toBe("AUTH failed password=[REDACTED]");
+  });
+
+  test("keeps text around the word password", () => {
+    const message = "535 your password must be changed";
+
+    expect(sanitizeMailError(new Error(message))).toBe(message);
   });
 
   test("keeps a longer token whole", () => {
