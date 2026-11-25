@@ -17,7 +17,9 @@ import type { MailMessage, MailReader, MailSender } from "../mail/types";
 import { MAX_EMAIL_BODY_BYTES } from "../mail/types";
 import { parseToolInput } from "./schema";
 
-const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Domain labels exclude "." so each dot has one match position; the older
+// `[^\s@]+\.[^\s@]+` form backtracked in quadratic time (CodeQL alert 52).
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 const folderSchema = z.string().trim().min(1).catch("INBOX").default("INBOX");
 
