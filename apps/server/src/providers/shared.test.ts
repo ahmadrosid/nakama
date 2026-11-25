@@ -295,6 +295,42 @@ describe("buildProviderHttpError", () => {
       ).status
     ).toBe(502);
   });
+
+  test("keeps the upstream reason that OpenRouter puts in error.metadata.raw", () => {
+    const reason =
+      "google/gemma-4-31b:free is temporarily rate-limited upstream";
+
+    const body = (raw: string) =>
+      JSON.stringify({
+        error: {
+          code: 429,
+          message: "Provider returned error",
+          metadata: { provider_name: "Google AI Studio", raw },
+        },
+      });
+
+    expect(
+      buildProviderHttpError("OpenRouter", 429, body(reason)).message
+    ).toContain(reason);
+    // Some upstreams send their own JSON error body as the raw string.
+    expect(
+      buildProviderHttpError(
+        "OpenRouter",
+        429,
+        body(JSON.stringify({ error: { message: reason } }))
+      ).message
+    ).toContain(reason);
+    // An HTML page from upstream is not a reason.
+    expect(
+      buildProviderHttpError("OpenRouter", 429, body("<html>busy</html>"))
+        .message
+    ).not.toContain("<html>");
+    // A long raw body does not reach the member in full.
+    expect(
+      buildProviderHttpError("OpenRouter", 429, body("x".repeat(5000))).message
+        .length
+    ).toBeLessThan(500);
+  });
 });
 
 function toolWith(parameters: ProviderJsonRecord): LlmToolDefinition {
