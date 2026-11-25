@@ -8,6 +8,23 @@ describe("sanitizeMailError", () => {
     );
   });
 
+  test("redacts a labeled credential across SMTP response lines", () => {
+    expect(
+      sanitizeMailError(new Error("AUTH failed password:\r\ntest-only"))
+    ).toBe("AUTH failed password=[REDACTED]");
+  });
+
+  test("still redacts a credential after the known Gmail hint", () => {
+    const hint =
+      "Invalid login: 534-5.7.9 Application-specific password required.";
+
+    expect(
+      sanitizeMailError(
+        new Error(hint + "\nAUTH failed password:\nfixture-only")
+      )
+    ).toBe(hint + "\nAUTH failed password=[REDACTED]");
+  });
+
   test("keeps Gmail's hint to use an app password", () => {
     const message = sanitizeMailError(
       new Error(
@@ -31,6 +48,7 @@ describe("sanitizeMailError", () => {
     "abcd-efgh-ijkl-mnop",
     "ABCD EFGH IJKL MNOP",
     "ab12 cd34 ef56 gh78",
+    "prefixpasswordxy",
   ])("redacts the app password %p", (secret) => {
     expect(sanitizeMailError(new Error(`Invalid credentials: ${secret}`))).toBe(
       "Invalid credentials: [REDACTED]"
@@ -61,9 +79,10 @@ describe("sanitizeMailError", () => {
     ).toBe("AUTH failed password=[REDACTED]");
   });
 
-  test("keeps text around the word password", () => {
-    const message = "535 your password must be changed";
-
+  test.each([
+    "535 your password must be changed",
+    "Invalid login: 535 your password must be changed",
+  ])("keeps a recognized password-change hint %p", (message) => {
     expect(sanitizeMailError(new Error(message))).toBe(message);
   });
 

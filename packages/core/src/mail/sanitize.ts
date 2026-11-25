@@ -1,15 +1,10 @@
 import { z } from "zod";
 
-// Four groups of four, joined by spaces, dashes or nothing. A match never
-// has the word "password" in its first 16 characters, so text such as
-// "specific password required" or "your password must" stays readable.
-const APP_PASSWORD =
-  /(?<![A-Za-z0-9])(?!(?:[A-Za-z0-9][\s-]*){0,8}password)[A-Za-z0-9]{4}(?:[\s-]*[A-Za-z0-9]{4}){3}(?![A-Za-z0-9])/gi;
+const KNOWN_PASSWORD_HINT =
+  /^(?:Invalid login: )?(?:534[- ]5\.7\.9 Application-specific password required|535 your password must be changed)\.?(?=\s|$)/i;
 
-// After "password", every value is a secret, except the words of a hint
-// such as "password required.".
-const PASSWORD_VALUE =
-  /password(?:[ \t]*[=:][ \t]*|[ \t]+(?![("'[]?(?:required|not|is|was|must|for|and|or|incorrect|invalid|expired)\b))\S+/gi;
+const APP_PASSWORD =
+  /(?<![A-Za-z0-9])(?!password\b)[A-Za-z0-9]{4}(?:[\s-]*[A-Za-z0-9]{4}){3}(?![A-Za-z0-9])/gi;
 
 export function sanitizeMailError<ErrorValue>(err: ErrorValue): string {
   const stringError = z.string().safeParse(err);
@@ -21,8 +16,13 @@ export function sanitizeMailError<ErrorValue>(err: ErrorValue): string {
         ? stringError.data
         : String(err);
 
-  return raw
+  const hint = raw.match(KNOWN_PASSWORD_HINT)?.[0] ?? "";
+
+  const redacted = raw
+    .slice(hint.length)
     .replace(/(?:AUTH=PLAIN|LOGIN)\s+\S+/gi, "[REDACTED]")
     .replace(APP_PASSWORD, "[REDACTED]")
-    .replace(PASSWORD_VALUE, "password=[REDACTED]");
+    .replace(/password[=:\s]+\S+/gi, "password=[REDACTED]");
+
+  return hint + redacted;
 }
