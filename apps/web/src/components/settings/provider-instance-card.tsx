@@ -462,12 +462,16 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
           group.models.some((model) => model.provider === "chatgpt")
       );
 
-    // A saved value that names this provider counts as-is: a MiniMax provider
-    // with no chat models has no group, so mapping through groups loses it.
+    // A saved value whose provider exists counts as-is: a provider with no
+    // chat models (MiniMax for image or video) has no group to map through.
+    const providerIds = new Set(
+      (modelsResponse?.providers ?? []).map((provider) => provider.id)
+    );
+
     const resolveSetting = (model: string) => {
       const direct = decodeModelSelection(model);
 
-      return direct?.providerId === instance.id
+      return direct && providerIds.has(direct.providerId)
         ? direct
         : decodeModelSelection(profileModelSelectionValue(model, groups));
     };
@@ -500,6 +504,7 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
     instance.id,
     instance.type,
     modelsResponse?.models,
+    modelsResponse?.providers,
     transcription?.model,
     videoGeneration?.model,
     vision?.model,

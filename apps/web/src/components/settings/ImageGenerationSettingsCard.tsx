@@ -389,13 +389,16 @@ export function VideoGenerationSettingsCard() {
     ? (videoGenerationSettings.model ?? null)
     : undefined;
 
+  const saved = useMemo(
+    () => (selection ? decodeModelSelection(selection) : null),
+    [selection]
+  );
+
   const choices = useMemo(() => {
     const minimaxProviders = (modelsResponse?.providers ?? []).filter(
       (provider) =>
         provider.type === "minimax" || provider.type === "minimax_cn"
     );
-
-    const saved = selection ? decodeModelSelection(selection) : null;
 
     const options: SettingsModelOption[] = [
       { label: "None", value: CLEAR_VIDEO_GENERATION_MODEL_VALUE },
@@ -442,15 +445,20 @@ export function VideoGenerationSettingsCard() {
     ];
 
     return options;
-  }, [modelsResponse?.providers, selection]);
+  }, [modelsResponse?.providers, saved, selection]);
+
+  const pickerValue = selection ?? CLEAR_VIDEO_GENERATION_MODEL_VALUE;
 
   const triggerLabel =
     selection === undefined
       ? "Loading…"
-      : selection === null
-        ? "None"
-        : (choices.find((choice) => choice.value === selection)?.label ??
-          "Unavailable model");
+      : (choices.find((choice) => choice.value === pickerValue)?.label ??
+        "Unavailable model");
+
+  // The add form is costly to keep mounted; it opens only with no MiniMax yet.
+  const canAddMinimax = choices.some(
+    (choice) => choice.value === ADD_MINIMAX_VALUE
+  );
 
   const saveModel = (model: string | null) => {
     setFormError(null);
@@ -496,7 +504,6 @@ export function VideoGenerationSettingsCard() {
 
           if (value.startsWith(CUSTOM_VIDEO_MODEL_PREFIX)) {
             const providerId = value.slice(CUSTOM_VIDEO_MODEL_PREFIX.length);
-            const saved = selection ? decodeModelSelection(selection) : null;
 
             setCustomModelId(
               saved?.providerId === providerId ? saved.modelId : ""
@@ -512,29 +519,31 @@ export function VideoGenerationSettingsCard() {
         }}
         options={choices}
         triggerLabel={triggerLabel}
-        value={selection ?? CLEAR_VIDEO_GENERATION_MODEL_VALUE}
+        value={pickerValue}
       />
-      <AddProviderDialog
-        key={addFormKey}
-        onAdded={(provider) => {
-          if (provider.type === "minimax" || provider.type === "minimax_cn") {
-            saveModel(
-              encodeModelSelection(
-                provider.id,
-                MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS[0].id
-              )
-            );
+      {canAddMinimax || addMinimaxOpen ? (
+        <AddProviderDialog
+          key={addFormKey}
+          onAdded={(provider) => {
+            if (provider.type === "minimax" || provider.type === "minimax_cn") {
+              saveModel(
+                encodeModelSelection(
+                  provider.id,
+                  MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS[0].id
+                )
+              );
 
-            return;
-          }
+              return;
+            }
 
-          toast("Provider added.");
-        }}
-        onClosed={() => setAddFormKey((key) => key + 1)}
-        onOpenChange={setAddMinimaxOpen}
-        open={addMinimaxOpen}
-        provider="minimax"
-      />
+            toast("Provider added.");
+          }}
+          onClosed={() => setAddFormKey((key) => key + 1)}
+          onOpenChange={setAddMinimaxOpen}
+          open={addMinimaxOpen}
+          provider="minimax"
+        />
+      ) : null}
       <Dialog
         onOpenChange={(open) => {
           if (!open) {

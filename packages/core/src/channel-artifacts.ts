@@ -70,10 +70,11 @@ function isWriteFileToolName(name: string): boolean {
   );
 }
 
-/** generate_video reports the same { path, mimeType, sizeBytes } result. */
-function isGenerateImageToolName(name: string): boolean {
-  return name === "generate_image" || name === "generate_video";
-}
+/** Tools whose result is one generated file: { path, mimeType, sizeBytes }. */
+const GENERATED_MEDIA_TOOL_NAMES = new Set([
+  "generate_image",
+  "generate_video",
+]);
 
 function getWriteFileResult(
   message: Extract<ChatMessage, { role: "tool" }>
@@ -281,7 +282,7 @@ function getGenerateImageResult(
 function artifactRefFromGenerateImage(
   message: Extract<ChatMessage, { role: "tool" }>
 ): ChannelArtifactRef | null {
-  if (!isGenerateImageToolName(message.name)) {
+  if (!GENERATED_MEDIA_TOOL_NAMES.has(message.name)) {
     return null;
   }
 

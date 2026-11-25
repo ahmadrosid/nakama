@@ -5,22 +5,21 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
-  findProviderInstance,
-  getProfileSoulDir,
+  buildToolExecutionContext,
+  fetchPublicHttps,
   NakamaApiError,
   normalizeBaseUrl,
-  type ProviderInstance,
   readBoundedBody,
   type ToolContext,
   type ToolDefinition,
   type UserConfig,
+  uniqueArtifactPath,
 } from "@nakama/core";
 import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { readApiKeyForInstance } from "../providers/create";
-import { decodeStoredModelSelection } from "../services/provider-instance-helpers";
-import { uniqueArtifactPath } from "./generate-image-tool";
+import { resolveConfiguredModelInstance } from "../services/provider-instance-helpers";
 
 const GENERATE_VIDEO_TOOL_NAME = "generate_video";
 
@@ -65,10 +64,9 @@ const VIDEO_MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 type VideoFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
-export interface ResolvedVideoGenerationSelection {
+interface ResolvedVideoGenerationSelection {
   apiKey: string;
   baseUrl: string;
-  instance: ProviderInstance;
   model: string;
 }
 
@@ -78,40 +76,32 @@ export interface ResolvedVideoGenerationSelection {
  */
 export function resolveVideoGenerationSelection(
   userConfig: UserConfig | null | undefined,
-  videoModel: string | null | undefined,
-  env: Record<string, string | undefined> = process.env
+  videoModel: string | null | undefined
 ): ResolvedVideoGenerationSelection | null {
-  const trimmed = videoModel?.trim();
+  const resolved = resolveConfiguredModelInstance(userConfig, videoModel, {
+    invalid: VIDEO_MODEL_INVALID_MESSAGE,
+    missingProvider: VIDEO_MODEL_INVALID_MESSAGE,
+  });
 
-  if (!trimmed) {
+  if (!resolved) {
     return null;
   }
 
-  const decoded = decodeStoredModelSelection(trimmed);
+  const { instance, modelId } = resolved;
 
-  const instance = decoded
-    ? findProviderInstance(userConfig, decoded.providerId)
-    : null;
-
-  if (
-    !(
-      decoded &&
-      instance &&
-      (instance.type === "minimax" || instance.type === "minimax_cn")
-    )
-  ) {
+  if (instance.type !== "minimax" && instance.type !== "minimax_cn") {
     throw new NakamaApiError(VIDEO_MODEL_INVALID_MESSAGE, 400);
   }
 
   // Said plainly, since the admin sees it on the Settings page as they type.
-  if (!VIDEO_MODEL_ID_PATTERN.test(decoded.modelId.trim())) {
+  if (!VIDEO_MODEL_ID_PATTERN.test(modelId)) {
     throw new NakamaApiError(
       "A model ID can have only letters, numbers, dots, dashes and underscores, up to 128 characters.",
       400
     );
   }
 
-  const apiKey = readApiKeyForInstance(instance, env)?.trim();
+  const apiKey = readApiKeyForInstance(instance, process.env)?.trim();
 
   if (!apiKey) {
     throw new NakamaApiError(
@@ -125,8 +115,7 @@ export function resolveVideoGenerationSelection(
     baseUrl: normalizeBaseUrl(
       instance.baseUrl?.trim() || defaultDiscoveryBaseUrl(instance.type) || ""
     ),
-    instance,
-    model: decoded.modelId.trim(),
+    model: modelId,
   };
 }
 
@@ -159,9 +148,6 @@ const RetrieveFileSchema = z.object({
 
 interface GenerateVideoInput {
   duration: number;
-  /** Test seam; defaults to global fetch. */
-  fetch?: VideoFetch;
-  pollIntervalMs?: number;
   prompt: string;
   resolution: string;
   selection: ResolvedVideoGenerationSelection;
@@ -175,9 +161,10 @@ interface GenerateVideoInput {
  * file from its download URL to `tempPath`. Returns the bytes written.
  */
 async function generateVideoWithMinimax(
-  input: GenerateVideoInput
+  input: GenerateVideoInput,
+  seams: Pick<GenerateVideoToolDeps, "download" | "fetch" | "pollIntervalMs">
 ): Promise<number> {
-  const fetchFn: VideoFetch = input.fetch ?? fetch;
+  const fetchFn: VideoFetch = seams.fetch ?? fetch;
   const deadline = AbortSignal.timeout(VIDEO_GENERATION_TIMEOUT_MS);
 
   const signal = input.signal
@@ -202,27 +189,15 @@ async function generateVideoWithMinimax(
     }
 
     const body = await readBoundedBody(response, MAX_JSON_BODY_BYTES);
-    let json: unknown;
 
     try {
-      json = JSON.parse(body.toString("utf8"));
+      return schema.parse(JSON.parse(body.toString("utf8")));
     } catch {
       throw new NakamaApiError(
         `Video generation returned an unexpected ${step} response.`,
         502
       );
     }
-
-    const parsed = schema.safeParse(json);
-
-    if (!parsed.success) {
-      throw new NakamaApiError(
-        `Video generation returned an unexpected ${step} response.`,
-        502
-      );
-    }
-
-    return parsed.data;
   };
 
   const assertOk = (baseResp: z.infer<typeof BaseRespSchema>, step: string) => {
@@ -273,7 +248,7 @@ async function generateVideoWithMinimax(
     let fileId: string | undefined;
 
     while (!fileId) {
-      await sleep(input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS, undefined, {
+      await sleep(seams.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS, undefined, {
         signal,
       });
 
@@ -316,20 +291,29 @@ async function generateVideoWithMinimax(
     assertOk(file.base_resp, "file");
     const downloadUrl = file.file?.download_url;
 
-    if (!downloadUrl?.startsWith("https://")) {
+    if (!downloadUrl) {
       throw new NakamaApiError(
         "Video generation returned no download URL.",
         502
       );
     }
 
-    const download = await fetchFn(downloadUrl, { signal });
+    // The URL comes from the provider's reply, so it goes through the same
+    // public-HTTPS checks as any other fetched URL.
+    const download = await (seams.download ?? fetchPublicHttps)(
+      downloadUrl,
+      signal
+    );
 
-    if (!(download.ok && download.body)) {
+    const declared = Number(download.headers.get("content-length"));
+
+    if (!(download.ok && download.body) || declared > MAX_VIDEO_BYTES) {
       await download.body?.cancel();
 
       throw new NakamaApiError(
-        `Video download failed (HTTP ${download.status}).`,
+        declared > MAX_VIDEO_BYTES
+          ? `Generated video exceeds the ${MAX_VIDEO_BYTES / (1024 * 1024)} MB size limit.`
+          : `Video download failed (HTTP ${download.status}).`,
         502
       );
     }
@@ -373,16 +357,14 @@ async function streamToFile(
       createWriteStream(targetPath, { flags: "wx" }),
       { signal }
     );
+
+    if (size === 0) {
+      throw new NakamaApiError("Video generation returned an empty file.", 502);
+    }
   } catch (error) {
     await unlink(targetPath).catch(() => undefined);
 
     throw error;
-  }
-
-  if (size === 0) {
-    await unlink(targetPath).catch(() => undefined);
-
-    throw new NakamaApiError("Video generation returned an empty file.", 502);
   }
 
   return size;
@@ -398,7 +380,9 @@ const GenerateVideoInputSchema = z.object({
 
 export interface GenerateVideoToolDeps {
   db: DatabaseAdapter;
-  /** Test seam; defaults to global fetch. */
+  /** Test seam for the file download; defaults to fetchPublicHttps. */
+  download?: (url: string, signal: AbortSignal) => Promise<Response>;
+  /** Test seam for MiniMax API calls; defaults to global fetch. */
   fetch?: VideoFetch;
   getUserConfig: () => UserConfig | null | undefined;
   pollIntervalMs?: number;
@@ -450,14 +434,13 @@ export function createGenerateVideoTool(
       type: "object",
     },
     async run(input, context) {
-      const parsed = GenerateVideoInputSchema.safeParse(input);
-
-      if (!parsed.success) {
-        return { error: "prompt is required." };
-      }
-
       try {
-        return await runGenerateVideoTool(parsed.data, context, deps);
+        return await runGenerateVideoTool(
+          // A non-object input parses to {}, which the prompt check reports.
+          GenerateVideoInputSchema.catch({}).parse(input),
+          context,
+          deps
+        );
       } catch (error) {
         if (error instanceof NakamaApiError) {
           return { error: error.message };
@@ -533,13 +516,10 @@ async function runGenerateVideoTool(
     return { error: VIDEO_MODEL_REQUIRED_MESSAGE };
   }
 
-  const workspaceRoot =
-    context.workspaceRoot?.trim() || getProfileSoulDir(orgId, profileId);
+  const { workspaceRoot } = buildToolExecutionContext(context);
 
-  if (!path.isAbsolute(workspaceRoot)) {
-    throw new Error(
-      "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
-    );
+  if (!workspaceRoot) {
+    return { error: "orgId and profileId are required." };
   }
 
   const artifactsDir = path.join(workspaceRoot, "artifacts");
@@ -550,16 +530,17 @@ async function runGenerateVideoTool(
   const wantedPath = path.join(artifactsDir, outputFilename(input.filename));
   const tempPath = path.join(artifactsDir, `.${randomUUID()}.mp4.part`);
 
-  const sizeBytes = await generateVideoWithMinimax({
-    duration,
-    fetch: deps.fetch,
-    pollIntervalMs: deps.pollIntervalMs,
-    prompt,
-    resolution,
-    selection,
-    signal: context.signal,
-    tempPath,
-  });
+  const sizeBytes = await generateVideoWithMinimax(
+    {
+      duration,
+      prompt,
+      resolution,
+      selection,
+      signal: context.signal,
+      tempPath,
+    },
+    deps
+  );
 
   const targetPath = await moveToFreeName(tempPath, wantedPath);
 

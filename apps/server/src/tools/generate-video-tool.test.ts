@@ -6,6 +6,7 @@ import type { ToolContext, UserConfig } from "@nakama/core";
 import { GENERATE_VIDEO_TOOL_ID } from "@nakama/core/tools/protected";
 import {
   createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
   mergeWorkspaceSettings,
   seedDatabase,
 } from "@nakama/db";
@@ -119,6 +120,20 @@ function fakeMinimax(
   return { calls, fetchFn };
 }
 
+/** The tool wired to a fake MiniMax, for API calls and the file download. */
+function toolFor(
+  db: DatabaseAdapter,
+  fetchFn: ReturnType<typeof fakeMinimax>["fetchFn"]
+) {
+  return createGenerateVideoTool({
+    db,
+    download: (url, signal) => fetchFn(url, { signal }),
+    fetch: fetchFn,
+    getUserConfig: () => minimaxConfig,
+    pollIntervalMs: 1,
+  });
+}
+
 describe("generate_video tool", () => {
   test("seedDatabase adds the tool and the resolver exposes it when assigned", async () => {
     const db = createInMemoryDatabaseAdapter();
@@ -159,12 +174,7 @@ describe("generate_video tool", () => {
 
     const { calls, fetchFn } = fakeMinimax();
 
-    const tool = createGenerateVideoTool({
-      db,
-      fetch: fetchFn,
-      getUserConfig: () => minimaxConfig,
-      pollIntervalMs: 1,
-    });
+    const tool = toolFor(db, fetchFn);
 
     const result = await tool.run(
       { duration: 10, prompt: "A cat surfs a wave" },
@@ -202,12 +212,7 @@ describe("generate_video tool", () => {
 
     const { fetchFn } = fakeMinimax({ status: "Fail" });
 
-    const tool = createGenerateVideoTool({
-      db,
-      fetch: fetchFn,
-      getUserConfig: () => minimaxConfig,
-      pollIntervalMs: 1,
-    });
+    const tool = toolFor(db, fetchFn);
 
     const result = await tool.run({ prompt: "A storm" }, context);
 
@@ -224,12 +229,7 @@ describe("generate_video tool", () => {
       createBody: { base_resp: { status_code: 1008, status_msg: "balance" } },
     });
 
-    const tool = createGenerateVideoTool({
-      db,
-      fetch: fetchFn,
-      getUserConfig: () => minimaxConfig,
-      pollIntervalMs: 1,
-    });
+    const tool = toolFor(db, fetchFn);
 
     expect(await tool.run({ prompt: "A storm" }, context)).toHaveProperty(
       "error"
@@ -241,11 +241,7 @@ describe("generate_video tool", () => {
     const { context, db } = await setup(null);
     const { calls, fetchFn } = fakeMinimax();
 
-    const tool = createGenerateVideoTool({
-      db,
-      fetch: fetchFn,
-      getUserConfig: () => minimaxConfig,
-    });
+    const tool = toolFor(db, fetchFn);
 
     expect(await tool.run({ prompt: "A storm" }, context)).toHaveProperty(
       "error"
@@ -257,11 +253,7 @@ describe("generate_video tool", () => {
     const { context, db } = await setup("p-minimax::MiniMax-Hailuo-2.3");
     const { calls, fetchFn } = fakeMinimax();
 
-    const tool = createGenerateVideoTool({
-      db,
-      fetch: fetchFn,
-      getUserConfig: () => minimaxConfig,
-    });
+    const tool = toolFor(db, fetchFn);
 
     expect(
       await tool.run(
@@ -327,17 +319,6 @@ describe("resolveVideoGenerationSelection", () => {
 });
 
 describe("generate_video edge cases", () => {
-  const toolFor = (
-    db: Awaited<ReturnType<typeof setup>>["db"],
-    fetchFn: ReturnType<typeof fakeMinimax>["fetchFn"]
-  ) =>
-    createGenerateVideoTool({
-      db,
-      fetch: fetchFn,
-      getUserConfig: () => minimaxConfig,
-      pollIntervalMs: 1,
-    });
-
   test("two parallel calls that want the same name both keep their clip", async () => {
     const { context, db, workspaceRoot } = await setup(
       "p-minimax::MiniMax-Hailuo-02"

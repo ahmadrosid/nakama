@@ -6,7 +6,7 @@ import type {
   ProviderModelOption,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { AppContext } from "@/context/app-context-shared";
 import {
@@ -73,6 +73,56 @@ const models: ProviderModelOption[] = [
   { id: "gpt-5", name: "GPT-5", provider: "openai", providerId: "openai" },
 ];
 
+/** Renders a settings card with the providers it needs; cleanup is queued. */
+async function mount(
+  card: ReactElement,
+  createProvider?: (
+    request: CreateProviderRequest
+  ) => Promise<CreateProviderResponse>
+) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  await act(async () => {
+    root.render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The add form reads only isAuthenticated from auth. */
+            { isAuthenticated: false } as AuthContextValue
+          }
+        >
+          <AppContext.Provider
+            value={
+              /* SAFETY: The add form reads only createProvider from the app context. */
+              {
+                createProvider:
+                  createProvider ?? (() => Promise.reject(new Error("unused"))),
+              } as never
+            }
+          >
+            {card}
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  return container;
+}
+
 async function renderCard(options: {
   createProvider?: (
     request: CreateProviderRequest
@@ -110,50 +160,12 @@ async function renderCard(options: {
       : Promise.resolve({ model: options.model });
   });
 
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
   cleanups.push(() => {
     getModels.mockRestore();
     getSettings.mockRestore();
-    act(() => root.unmount());
-    container.remove();
   });
 
-  await act(async () => {
-    root.render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <AuthContext.Provider
-          value={
-            /* SAFETY: The add form reads only isAuthenticated from auth. */
-            { isAuthenticated: false } as AuthContextValue
-          }
-        >
-          <AppContext.Provider
-            value={
-              /* SAFETY: The add form reads only createProvider from the app context. */
-              {
-                createProvider:
-                  options.createProvider ??
-                  (() => Promise.reject(new Error("unused"))),
-              } as never
-            }
-          >
-            <ImageGenerationSettingsCard />
-          </AppContext.Provider>
-        </AuthContext.Provider>
-      </QueryClientProvider>
-    );
-  });
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-
-  return container;
+  return mount(<ImageGenerationSettingsCard />, options.createProvider);
 }
 
 test.each([
@@ -373,49 +385,13 @@ async function renderVideoCard(model: string | null) {
     }
   );
 
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
   cleanups.push(() => {
     getModels.mockRestore();
     getSettings.mockRestore();
     save.mockRestore();
-    act(() => root.unmount());
-    container.remove();
   });
 
-  await act(async () => {
-    root.render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <AuthContext.Provider
-          value={
-            /* SAFETY: The add form reads only isAuthenticated from auth. */
-            { isAuthenticated: false } as AuthContextValue
-          }
-        >
-          <AppContext.Provider
-            value={
-              /* SAFETY: The add form reads only createProvider from the app context. */
-              {
-                createProvider: () => Promise.reject(new Error("unused")),
-              } as never
-            }
-          >
-            <VideoGenerationSettingsCard />
-          </AppContext.Provider>
-        </AuthContext.Provider>
-      </QueryClientProvider>
-    );
-  });
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-
-  return { container, saved };
+  return { container: await mount(<VideoGenerationSettingsCard />), saved };
 }
 
 test("a saved custom video model ID shows under the MiniMax provider", async () => {
