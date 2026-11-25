@@ -97,11 +97,18 @@ export function resolveVideoGenerationSelection(
     !(
       decoded &&
       instance &&
-      (instance.type === "minimax" || instance.type === "minimax_cn") &&
-      VIDEO_MODEL_ID_PATTERN.test(decoded.modelId.trim())
+      (instance.type === "minimax" || instance.type === "minimax_cn")
     )
   ) {
     throw new NakamaApiError(VIDEO_MODEL_INVALID_MESSAGE, 400);
+  }
+
+  // Said plainly, since the admin sees it on the Settings page as they type.
+  if (!VIDEO_MODEL_ID_PATTERN.test(decoded.modelId.trim())) {
+    throw new NakamaApiError(
+      "A model ID can have only letters, numbers, dots, dashes and underscores, up to 128 characters.",
+      400
+    );
   }
 
   const apiKey = readApiKeyForInstance(instance, env)?.trim();
