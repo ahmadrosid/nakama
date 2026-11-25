@@ -631,9 +631,13 @@ export function formatHttpErrorBody(
     const record = readRecord(nested);
     const message = readProviderString(record.message)?.trim() ?? "";
     const type = readProviderString(record.type)?.trim() ?? "";
+    const upstream = readUpstreamReason(readRecord(record.metadata).raw);
+
+    const reason =
+      upstream && upstream !== message ? `${message}: ${upstream}` : message;
 
     if (message) {
-      return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${message}`;
+      return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${reason}`;
     }
 
     const topLevelMessage = readProviderString(parsed.message)?.trim() ?? "";
@@ -646,6 +650,32 @@ export function formatHttpErrorBody(
   }
 
   return `${label} request failed (${status}): ${trimmed.slice(0, 500)}`;
+}
+
+const MAX_UPSTREAM_REASON_LENGTH = 300;
+
+/**
+ * OpenRouter answers "Provider returned error" and puts the upstream reason
+ * (often a rate limit on a free model) in `error.metadata.raw`, as plain text
+ * or as the upstream's own JSON body. HTML pages are not a reason.
+ */
+function readUpstreamReason<Value>(raw: Value): string | undefined {
+  const text = readProviderString(raw)?.trim();
+
+  if (!text || /^<!doctype\s+html|^<html[\s>]/i.test(text)) {
+    return undefined;
+  }
+
+  const parsed = parseJsonRecord(text);
+
+  const fromJson =
+    readProviderString(readRecord(parsed.error).message)?.trim() ||
+    readProviderString(parsed.message)?.trim();
+
+  const isJson = Object.keys(parsed).length > 0;
+  const reason = isJson ? fromJson : text;
+
+  return reason ? reason.slice(0, MAX_UPSTREAM_REASON_LENGTH) : undefined;
 }
 
 /** A provider answered but the answer is unusable. The user sees the message. */
