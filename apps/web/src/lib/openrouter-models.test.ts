@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeOpenRouterModels } from "./openrouter-models";
+import {
+  isOpenRouterModelType,
+  normalizeOpenRouterModels,
+} from "./openrouter-models";
 
 const fixture = {
   data: [
@@ -87,5 +90,44 @@ describe("normalizeOpenRouterModels", () => {
     expect(paid?.reasoning).toBe(false);
     expect(paid?.inputPerMillionUsd).toBe(0.5);
     expect(paid?.outputPerMillionUsd).toBe(2.5);
+  });
+});
+
+describe("isOpenRouterModelType", () => {
+  const rows = normalizeOpenRouterModels({
+    data: [
+      { id: "old/chat", name: "Old chat" },
+      {
+        architecture: { output_modalities: ["image", "text"] },
+        id: "g/image",
+        name: "Image",
+      },
+      {
+        architecture: { output_modalities: ["speech"] },
+        id: "x/tts",
+        name: "TTS",
+      },
+      {
+        architecture: { output_modalities: ["audio", "text"] },
+        id: "o/audio",
+        name: "Audio chat",
+      },
+      {
+        architecture: { output_modalities: ["video"] },
+        id: "v/video",
+        name: "Video",
+      },
+    ],
+  });
+
+  const ids = (type: Parameters<typeof isOpenRouterModelType>[1]) =>
+    rows.filter((row) => isOpenRouterModelType(row, type)).map((row) => row.id);
+
+  test("groups models by what they return", () => {
+    expect(ids("text")).toEqual(["o/audio", "g/image", "old/chat"]);
+    expect(ids("image")).toEqual(["g/image"]);
+    expect(ids("speech")).toEqual(["o/audio", "x/tts"]);
+    expect(ids("video")).toEqual(["v/video"]);
+    expect(ids("embeddings")).toEqual([]);
   });
 });

@@ -16,6 +16,7 @@ interface OpenRouterApiPricing {
 interface OpenRouterApiModel {
   architecture?: {
     input_modalities?: string[];
+    output_modalities?: string[];
   };
   context_length?: number;
   description?: string;
@@ -40,6 +41,8 @@ export interface OpenRouterModelRow {
   inputPerMillionUsd?: number;
   isFree: boolean;
   name: string;
+  /** What the model returns: text, image, video, speech, embeddings... */
+  outputModalities: string[];
   outputPerMillionUsd?: number;
   reasoning: boolean;
   tools: boolean;
@@ -114,6 +117,8 @@ function normalizeOpenRouterModel(
     id: entry.id,
     isFree: isOpenRouterModelFree(entry.pricing),
     name: entry.name,
+    // A catalog entry without the field predates non-text models.
+    outputModalities: entry.architecture?.output_modalities ?? ["text"],
     reasoning:
       supported.includes("reasoning") ||
       supported.includes("include_reasoning"),
@@ -121,6 +126,33 @@ function normalizeOpenRouterModel(
     vision: inputModalities.includes("image"),
     ...(perMillion ?? {}),
   };
+}
+
+export const OPENROUTER_MODEL_TYPES = [
+  { label: "Text", outputs: ["text"], value: "text" },
+  { label: "Image", outputs: ["image"], value: "image" },
+  { label: "Video", outputs: ["video"], value: "video" },
+  { label: "Speech", outputs: ["speech", "audio"], value: "speech" },
+  {
+    label: "Transcription",
+    outputs: ["transcription"],
+    value: "transcription",
+  },
+  { label: "Embeddings", outputs: ["embeddings"], value: "embeddings" },
+] as const;
+
+export type OpenRouterModelType =
+  (typeof OPENROUTER_MODEL_TYPES)[number]["value"];
+
+export function isOpenRouterModelType(
+  row: Pick<OpenRouterModelRow, "outputModalities">,
+  type: OpenRouterModelType
+): boolean {
+  const outputs = new Set<string>(
+    OPENROUTER_MODEL_TYPES.find((entry) => entry.value === type)?.outputs
+  );
+
+  return row.outputModalities.some((output) => outputs.has(output));
 }
 
 export function normalizeOpenRouterModels(
