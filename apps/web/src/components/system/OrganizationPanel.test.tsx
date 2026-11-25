@@ -17,7 +17,10 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
-import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import {
+  ProfilePlatformToolsSwitch,
+  ProfileSkillsSettingsSection,
+} from "@/components/profiles/ProfileSkillsSettingsSection";
 import { SidebarNotifications } from "@/components/SidebarNotifications";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
@@ -3580,6 +3583,7 @@ function ProfileBehaviorProbe() {
     <>
       <div data-profile-behavior>
         <ProfileSkillsSettingsSection profile={state.detail} />
+        <ProfilePlatformToolsSwitch profile={state.detail} />
       </div>
       <div data-org-profile-behavior>
         {(

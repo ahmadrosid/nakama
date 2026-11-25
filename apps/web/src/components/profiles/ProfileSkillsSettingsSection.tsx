@@ -17,25 +17,16 @@ import { useUpdateProfileMutation } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { isProfileOwner } from "@/lib/profiles";
 
-export function ProfileSkillsSettingsSection({
-  profile,
-  disabled = false,
-}: {
-  profile: ProfileDetail;
-  disabled?: boolean;
-}) {
+/** Org admins and the agent's owner can change its behavior switches. */
+function useProfileSettingSave(profile: ProfileDetail, disabled: boolean) {
   const { activeOrg, user } = useAuth();
   const updateMutation = useUpdateProfileMutation();
   const readOnly = disabled || Boolean(profile.sharedAgent);
-  const isOrgAdmin = activeOrg?.role === "admin";
 
-  if (!(activeOrg && (isOrgAdmin || isProfileOwner(profile, user?.id)))) {
-    return null;
-  }
-
-  const automationsEnabled = profile.automationsEnabled !== false;
-  const groupsEnabled = profile.groupsEnabled !== false;
-  const platformToolsEnabled = profile.platformToolsEnabled !== false;
+  const canEdit = Boolean(
+    activeOrg &&
+    (activeOrg.role === "admin" || isProfileOwner(profile, user?.id))
+  );
 
   const save = (input: UpdateProfileRequest) => {
     if (readOnly) {
@@ -48,6 +39,59 @@ export function ProfileSkillsSettingsSection({
       .catch((error) => toast(formatError(error)));
   };
 
+  return { canEdit, pending: updateMutation.isPending, readOnly, save };
+}
+
+/** Shown on the agent's Tools tab. Super Nakama has no switch. */
+export function ProfilePlatformToolsSwitch({
+  profile,
+  disabled = false,
+}: {
+  profile: ProfileDetail;
+  disabled?: boolean;
+}) {
+  const { canEdit, pending, readOnly, save } = useProfileSettingSave(
+    profile,
+    disabled
+  );
+
+  if (!canEdit || profile.isSuper) {
+    return null;
+  }
+
+  return (
+    <BehaviorSwitchSection
+      checked={profile.platformToolsEnabled !== false}
+      heading="Chat tools"
+      icon={<ToolsIcon size={18} />}
+      id="platform-tools"
+      label="Platform tools"
+      onChange={(platformToolsEnabled) => save({ platformToolsEnabled })}
+      pending={pending}
+      readOnly={readOnly}
+    />
+  );
+}
+
+export function ProfileSkillsSettingsSection({
+  profile,
+  disabled = false,
+}: {
+  profile: ProfileDetail;
+  disabled?: boolean;
+}) {
+  const { canEdit, pending, readOnly, save } = useProfileSettingSave(
+    profile,
+    disabled
+  );
+
+  if (!canEdit) {
+    return null;
+  }
+
+  const automationsEnabled = profile.automationsEnabled !== false;
+  const groupsEnabled = profile.groupsEnabled !== false;
+
   return (
     <div className="flex w-full flex-col gap-6">
       <BehaviorSwitchSection
@@ -58,7 +102,7 @@ export function ProfileSkillsSettingsSection({
         id="automations"
         label="Automations"
         onChange={(automationsEnabled) => save({ automationsEnabled })}
-        pending={updateMutation.isPending}
+        pending={pending}
         readOnly={readOnly}
       />
       {profile.isSuper ? (
@@ -70,21 +114,10 @@ export function ProfileSkillsSettingsSection({
           id="groups"
           label="Create groups"
           onChange={(groupsEnabled) => save({ groupsEnabled })}
-          pending={updateMutation.isPending}
+          pending={pending}
           readOnly={readOnly}
         />
-      ) : (
-        <BehaviorSwitchSection
-          checked={platformToolsEnabled}
-          heading="Chat tools"
-          icon={<ToolsIcon size={18} />}
-          id="platform-tools"
-          label="Platform tools"
-          onChange={(platformToolsEnabled) => save({ platformToolsEnabled })}
-          pending={updateMutation.isPending}
-          readOnly={readOnly}
-        />
-      )}
+      ) : null}
       <section
         aria-labelledby="profile-behavior-skills"
         className="flex flex-col gap-2"
