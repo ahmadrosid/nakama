@@ -5,6 +5,8 @@ import { queryKeys } from "@/lib/query-keys";
 interface OpenRouterApiPricing {
   completion?: string;
   image?: string;
+  image_output?: string;
+  image_token?: string;
   input_cache_read?: string;
   input_cache_write?: string;
   internal_reasoning?: string;
@@ -75,8 +77,11 @@ function openRouterPricingPerMillion(
 }
 
 function isOpenRouterModelFree(
-  pricing: OpenRouterApiPricing | undefined
+  entry: Pick<OpenRouterApiModel, "id" | "pricing">,
+  outputModalities: readonly string[]
 ): boolean {
+  const pricing = entry.pricing;
+
   if (!pricing) {
     return false;
   }
@@ -84,7 +89,21 @@ function isOpenRouterModelFree(
   const prompt = Number.parseFloat(pricing.prompt ?? "1");
   const completion = Number.parseFloat(pricing.completion ?? "1");
 
-  return prompt === 0 && completion === 0;
+  // Image models charge per image token: every price must be 0.
+  const pricedElsewhere = Object.values(pricing).some(
+    (price) => price !== undefined && Number.parseFloat(price) !== 0
+  );
+
+  if (prompt !== 0 || completion !== 0 || pricedElsewhere) {
+    return false;
+  }
+
+  // Video, music and speech models list 0 and charge per second or per
+  // clip outside the catalog, so only a :free id is free for them.
+  return (
+    outputModalities.every((output) => output === "text") ||
+    entry.id.endsWith(":free")
+  );
 }
 
 /** OpenRouter uses 2098-12-31 as a placeholder on live stealth/preview models. */
@@ -108,6 +127,8 @@ function normalizeOpenRouterModel(
   const inputModalities = entry.architecture?.input_modalities ?? [];
   const supported = entry.supported_parameters ?? [];
   const perMillion = openRouterPricingPerMillion(entry.pricing);
+  // A catalog entry without the field predates non-text models.
+  const outputModalities = entry.architecture?.output_modalities ?? ["text"];
 
   return {
     audio: inputModalities.includes("audio"),
@@ -115,10 +136,9 @@ function normalizeOpenRouterModel(
     deprecated: isOpenRouterModelDeprecated(entry.expiration_date),
     description: truncateDescription(entry.description ?? ""),
     id: entry.id,
-    isFree: isOpenRouterModelFree(entry.pricing),
+    isFree: isOpenRouterModelFree(entry, outputModalities),
     name: entry.name,
-    // A catalog entry without the field predates non-text models.
-    outputModalities: entry.architecture?.output_modalities ?? ["text"],
+    outputModalities,
     reasoning:
       supported.includes("reasoning") ||
       supported.includes("include_reasoning"),

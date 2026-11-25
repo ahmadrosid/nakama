@@ -131,3 +131,36 @@ describe("isOpenRouterModelType", () => {
     expect(ids("embeddings")).toEqual([]);
   });
 });
+
+test("a model with a hidden price is not free", () => {
+  const free = normalizeOpenRouterModels({
+    data: [
+      {
+        architecture: { output_modalities: ["image"] },
+        id: "bfl/flux",
+        name: "Flux",
+        pricing: {
+          completion: "0",
+          image_output: "0.00001",
+          prompt: "0",
+        },
+      },
+      {
+        architecture: { output_modalities: ["video"] },
+        id: "h/avatar",
+        name: "Avatar",
+        pricing: { completion: "0", prompt: "0" },
+      },
+      {
+        architecture: { output_modalities: ["speech"] },
+        id: "f/voice:free",
+        name: "Voice",
+        pricing: { completion: "0", prompt: "0" },
+      },
+    ],
+  })
+    .filter((row) => row.isFree)
+    .map((row) => row.id);
+
+  expect(free).toEqual(["f/voice:free"]);
+});
