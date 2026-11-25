@@ -11,6 +11,7 @@ import type {
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ReactNode, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
@@ -4642,4 +4643,62 @@ test("team users never receive direct links to parent sources", async () => {
   expect(
     container.querySelector('button[aria-label^="View shared skill"]')
   ).not.toBeNull();
+});
+
+test("selecting a new agent from the page keeps it while the URL catches up", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: {
+        enabled: false,
+        retry: false,
+        staleTime: Number.POSITIVE_INFINITY,
+      },
+    },
+  });
+
+  const first = {
+    ...sharedAgentInstance().profile,
+    id: "first",
+    name: "First",
+  };
+
+  delete first.sharedAgent;
+  const created = { ...first, id: "created", name: "Created" };
+  queries.setQueryData(queryKeys.profiles.all, [first]);
+
+  for (const profile of [first, created]) {
+    queries.setQueryData(queryKeys.profiles.detail(profile.id), profile);
+  }
+
+  let state!: ReturnType<typeof useProfilesPage>;
+
+  const { container, render } = mount(
+    queries,
+    undefined,
+    undefined,
+    { email: "admin@example.com", id: "admin", isPlatformAdmin: true },
+    <ProfileAssignmentsProbe
+      capture={(next) => {
+        state = next;
+      }}
+    />,
+    [],
+    "/profiles?profile=first"
+  );
+
+  await render({ ...organization("team-a"), role: "admin" });
+  expect(state.selectedId).toBe("first");
+
+  // The router moves the URL in a transition. The refetched list lands
+  // before it, as after a create, while the URL still names the old agent.
+  await act(async () => {
+    flushSync(() => state.setSelectedId("created"));
+    queries.setQueryData(queryKeys.profiles.all, [first, created]);
+    await settle();
+  });
+
+  expect(state.selectedId).toBe("created");
+  expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+    "/profiles?profile=created"
+  );
 });
