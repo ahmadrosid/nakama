@@ -5,6 +5,7 @@ import type {
   OrganizationSummary,
   ProfileResponse,
   ProfileSummary,
+  SkillProposal,
   SkillSummary,
   SoulStatusResponse,
   ToolResponse,
@@ -17,6 +18,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import { SidebarNotifications } from "@/components/SidebarNotifications";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { SOUL_FILES } from "@/components/soul-tools/soul-files";
@@ -27,6 +29,7 @@ import {
 } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
+import { NotificationsPage } from "@/pages/NotificationsPage";
 import { OrganizationPage } from "@/pages/OrganizationPage";
 import {
   ProfileConfigIdentitySection,
@@ -553,6 +556,145 @@ test("admin settings remain available and disappear after a role change", async 
   for (const read of reads) {
     expect(read).not.toHaveBeenCalled();
   }
+});
+
+test("a skill notification opens the profile's proposal and approval lowers the badge count", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const org = { ...organization("team-a"), role: "admin" as const };
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", org.id),
+    overview(org.id)
+  );
+  queries.setQueryData(queryKeys.automations.all, { automations: [] });
+  queries.setQueryData(queryKeys.orgMembers(org.id), { members: [] });
+  queries.setQueryData(queryKeys.orgMemory(org.id), { content: "" });
+  queries.setQueryData(queryKeys.orgMemoryProposals(org.id, "pending"), {
+    pendingCount: 0,
+    proposals: [],
+  });
+  queries.setQueryData(queryKeys.profiles.all, []);
+
+  const target: SkillProposal = {
+    action: "create",
+    content: "# Draft skill",
+    createdAt: "2026-11-21T00:00:00Z",
+    id: "proposal-a",
+    orgId: org.id,
+    patchNewString: null,
+    patchOldString: null,
+    profileId: "skill-target",
+    proposedByUserId: null,
+    relativePath: null,
+    reviewedAt: null,
+    reviewerUserId: null,
+    sessionId: null,
+    skillName: "target-draft",
+    status: "pending",
+  };
+
+  const other: SkillProposal = {
+    ...target,
+    id: "proposal-b",
+    profileId: "skill-other",
+    skillName: "other-draft",
+  };
+
+  let pending = [target, other];
+
+  const list = spyOn(client, "listSkillProposals").mockImplementation(
+    (_orgId, options) =>
+      Promise.resolve({
+        pendingCount: pending.length,
+        proposals: options?.profileId
+          ? pending.filter((item) => item.profileId === options.profileId)
+          : pending,
+      })
+  );
+
+  const approve = spyOn(client, "approveSkillProposal").mockImplementation(
+    (orgId, proposalId) => {
+      if (orgId !== org.id || proposalId !== target.id) {
+        throw new Error("Unexpected approval");
+      }
+
+      pending = [other];
+
+      return Promise.resolve({ proposal: { ...target, status: "approved" } });
+    }
+  );
+
+  const curator = spyOn(client, "getOrgSkillCuratorLatest").mockResolvedValue({
+    lastRunAt: null,
+    result: null,
+  });
+
+  cleanups.push(() => {
+    list.mockRestore();
+    approve.mockRestore();
+    curator.mockRestore();
+  });
+
+  const { container, render } = mount(
+    queries,
+    undefined,
+    undefined,
+    undefined,
+    <>
+      <SidebarNotifications collapsed={false} />
+      <Routes>
+        <Route element={<NotificationsPage />} path="/notifications" />
+        <Route element={<OrganizationPage />} path="/organization" />
+      </Routes>
+    </>,
+    [],
+    "/notifications"
+  );
+
+  await render(org);
+  expect(container.querySelector('[aria-label="2 need you"]')).not.toBeNull();
+
+  const notification = container.querySelector<HTMLAnchorElement>(
+    'a[href="/organization?skillProposals=proposals&profileId=skill-target"]'
+  );
+
+  expect(notification).not.toBeNull();
+  await act(async () => {
+    notification?.click();
+    await settle();
+  });
+  await act(settle);
+
+  expect(container.textContent).toContain("target-draft");
+  expect(container.textContent).not.toContain("other-draft");
+
+  const review = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Review"
+  );
+
+  expect(review).toBeDefined();
+  await act(async () => {
+    review?.click();
+    await settle();
+  });
+
+  const approveButton = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+  ].find((button) => button.textContent === "Approve");
+
+  expect(approveButton).toBeDefined();
+  await act(async () => {
+    approveButton?.click();
+    await settle();
+  });
+  await act(settle);
+
+  expect(container.querySelector('[aria-label="1 need you"]')).not.toBeNull();
+  expect(container.textContent).not.toContain("target-draft");
 });
 
 test("renders all published resource kinds and stored team counts", async () => {
