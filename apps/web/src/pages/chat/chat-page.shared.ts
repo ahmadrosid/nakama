@@ -428,11 +428,8 @@ export function messagesWithoutFailedTurn(
     return messages;
   }
 
-  let start = failedIndex;
-
-  if (messages[failedIndex - 1]?.role === "user") {
-    start = failedIndex - 1;
-  }
+  const start =
+    messages[failedIndex - 1]?.role === "user" ? failedIndex - 1 : failedIndex;
 
   return [...messages.slice(0, start), ...messages.slice(failedIndex + 1)];
 }

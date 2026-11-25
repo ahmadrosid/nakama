@@ -609,6 +609,8 @@ export function normalizeThinkingEffort(
     : "medium";
 }
 
+const HTML_PAGE = /^<!doctype\s+html|^<html[\s>]/i;
+
 export function formatHttpErrorBody(
   label: string,
   status: number,
@@ -620,7 +622,7 @@ export function formatHttpErrorBody(
     return `${label} request failed (${status}).`;
   }
 
-  if (/^<!doctype\s+html|^<html[\s>]/i.test(trimmed)) {
+  if (HTML_PAGE.test(trimmed)) {
     return `${label} request failed (${status}): received an HTML error page.`;
   }
 
@@ -631,12 +633,13 @@ export function formatHttpErrorBody(
     const record = readRecord(nested);
     const message = readProviderString(record.message)?.trim() ?? "";
     const type = readProviderString(record.type)?.trim() ?? "";
-    const upstream = readUpstreamReason(readRecord(record.metadata).raw);
-
-    const reason =
-      upstream && upstream !== message ? `${message}: ${upstream}` : message;
 
     if (message) {
+      const upstream = readUpstreamReason(readRecord(record.metadata).raw);
+
+      const reason =
+        upstream && upstream !== message ? `${message}: ${upstream}` : message;
+
       return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${reason}`;
     }
 
@@ -655,25 +658,23 @@ export function formatHttpErrorBody(
 const MAX_UPSTREAM_REASON_LENGTH = 300;
 
 /**
- * OpenRouter answers "Provider returned error" and puts the upstream reason
- * (often a rate limit on a free model) in `error.metadata.raw`, as plain text
- * or as the upstream's own JSON body. HTML pages are not a reason.
+ * Gateways such as OpenRouter answer "Provider returned error" and put the
+ * upstream reason (often a rate limit on a free model) in `error.metadata.raw`,
+ * as plain text or as the upstream's own JSON body. HTML pages are not a reason.
  */
 function readUpstreamReason<Value>(raw: Value): string | undefined {
   const text = readProviderString(raw)?.trim();
 
-  if (!text || /^<!doctype\s+html|^<html[\s>]/i.test(text)) {
+  if (!text || HTML_PAGE.test(text)) {
     return undefined;
   }
 
   const parsed = parseJsonRecord(text);
 
-  const fromJson =
-    readProviderString(readRecord(parsed.error).message)?.trim() ||
-    readProviderString(parsed.message)?.trim();
-
-  const isJson = Object.keys(parsed).length > 0;
-  const reason = isJson ? fromJson : text;
+  const reason = text.startsWith("{")
+    ? readProviderString(readRecord(parsed.error).message)?.trim() ||
+      readProviderString(parsed.message)?.trim()
+    : text;
 
   return reason ? reason.slice(0, MAX_UPSTREAM_REASON_LENGTH) : undefined;
 }
