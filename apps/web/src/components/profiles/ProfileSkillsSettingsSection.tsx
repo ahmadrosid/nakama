@@ -1,9 +1,13 @@
-import type { ProfileDetail } from "@nakama/core/contract";
+import type {
+  ProfileDetail,
+  UpdateProfileRequest,
+} from "@nakama/core/contract";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
 import { Clock01Icon, ToolsIcon, UserGroupIcon } from "hugeicons-react";
+import type { ReactNode } from "react";
 import { SettingIcon } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { ProfileSkillsCuratorConsolidateField } from "@/components/profiles/ProfileSkillsCuratorConsolidateField";
 import { ProfileSkillsPostTurnReviewField } from "@/components/profiles/ProfileSkillsPostTurnReviewField";
@@ -33,168 +37,54 @@ export function ProfileSkillsSettingsSection({
   const groupsEnabled = profile.groupsEnabled !== false;
   const platformToolsEnabled = profile.platformToolsEnabled !== false;
 
+  const save = (input: UpdateProfileRequest) => {
+    if (readOnly) {
+      return;
+    }
+
+    void updateMutation
+      .mutateAsync({ input, profileId: profile.id })
+      .then(() => toast("Saved."))
+      .catch((error) => toast(formatError(error)));
+  };
+
   return (
     <div className="flex w-full flex-col gap-6">
-      <section
-        aria-labelledby="profile-behavior-scheduling"
-        className="flex flex-col gap-2"
-      >
-        <h3 className="type-label" id="profile-behavior-scheduling">
-          Scheduling
-        </h3>
-        <Card className="w-full overflow-hidden shadow-none">
-          <CardContent className="p-0">
-            <div className="flex items-center justify-between gap-3 p-3 sm:px-4 sm:py-3">
-              <label
-                className="flex min-w-0 items-center gap-3 text-balance font-medium text-foreground text-sm"
-                htmlFor="profile-automations-enabled"
-              >
-                <SettingIcon checked={automationsEnabled}>
-                  <Clock01Icon size={18} />
-                </SettingIcon>
-                <span className="min-w-0">
-                  <span className="block">Automations</span>
-                  <span
-                    className="mt-1 block text-pretty font-normal text-muted-foreground text-xs"
-                    id="profile-automations-enabled-description"
-                  >
-                    Run this agent's tasks on a schedule.
-                  </span>
-                </span>
-              </label>
-              <div className="flex shrink-0 items-center gap-2">
-                {updateMutation.isPending ? <Spinner /> : null}
-                <Switch
-                  aria-describedby="profile-automations-enabled-description"
-                  aria-label="Automations"
-                  checked={automationsEnabled}
-                  disabled={readOnly}
-                  id="profile-automations-enabled"
-                  onCheckedChange={(automationsEnabled) => {
-                    if (readOnly) {
-                      return;
-                    }
-
-                    void updateMutation
-                      .mutateAsync({
-                        input: { automationsEnabled },
-                        profileId: profile.id,
-                      })
-                      .then(() => toast("Saved."))
-                      .catch((error) => toast(formatError(error)));
-                  }}
-                  size="sm"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-      {profile.isSuper ? null : (
-        <section
-          aria-labelledby="profile-behavior-platform-tools"
-          className="flex flex-col gap-2"
-        >
-          <h3 className="type-label" id="profile-behavior-platform-tools">
-            Chat tools
-          </h3>
-          <Card className="w-full overflow-hidden shadow-none">
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between gap-3 p-3 sm:px-4 sm:py-3">
-                <label
-                  className="flex min-w-0 items-center gap-3 text-balance font-medium text-foreground text-sm"
-                  htmlFor="profile-platform-tools-enabled"
-                >
-                  <SettingIcon checked={platformToolsEnabled}>
-                    <ToolsIcon size={18} />
-                  </SettingIcon>
-                  <span className="min-w-0">Platform tools</span>
-                </label>
-                <div className="flex shrink-0 items-center gap-2">
-                  {updateMutation.isPending ? <Spinner /> : null}
-                  <Switch
-                    aria-label="Platform tools"
-                    checked={platformToolsEnabled}
-                    disabled={readOnly}
-                    id="profile-platform-tools-enabled"
-                    onCheckedChange={(platformToolsEnabled) => {
-                      if (readOnly) {
-                        return;
-                      }
-
-                      void updateMutation
-                        .mutateAsync({
-                          input: { platformToolsEnabled },
-                          profileId: profile.id,
-                        })
-                        .then(() => toast("Saved."))
-                        .catch((error) => toast(formatError(error)));
-                    }}
-                    size="sm"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      )}
+      <BehaviorSwitchSection
+        checked={automationsEnabled}
+        description="Run this agent's tasks on a schedule."
+        heading="Scheduling"
+        icon={<Clock01Icon size={18} />}
+        id="automations"
+        label="Automations"
+        onChange={(automationsEnabled) => save({ automationsEnabled })}
+        pending={updateMutation.isPending}
+        readOnly={readOnly}
+      />
       {profile.isSuper ? (
-        <section
-          aria-labelledby="profile-behavior-groups"
-          className="flex flex-col gap-2"
-        >
-          <h3 className="type-label" id="profile-behavior-groups">
-            Groups
-          </h3>
-          <Card className="w-full overflow-hidden shadow-none">
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between gap-3 p-3 sm:px-4 sm:py-3">
-                <label
-                  className="flex min-w-0 items-center gap-3 text-balance font-medium text-foreground text-sm"
-                  htmlFor="profile-groups-enabled"
-                >
-                  <SettingIcon checked={groupsEnabled}>
-                    <UserGroupIcon size={18} />
-                  </SettingIcon>
-                  <span className="min-w-0">
-                    <span className="block">Create groups</span>
-                    <span
-                      className="mt-1 block text-pretty font-normal text-muted-foreground text-xs"
-                      id="profile-groups-enabled-description"
-                    >
-                      Let this agent create group chats for you.
-                    </span>
-                  </span>
-                </label>
-                <div className="flex shrink-0 items-center gap-2">
-                  {updateMutation.isPending ? <Spinner /> : null}
-                  <Switch
-                    aria-describedby="profile-groups-enabled-description"
-                    aria-label="Create groups"
-                    checked={groupsEnabled}
-                    disabled={readOnly}
-                    id="profile-groups-enabled"
-                    onCheckedChange={(groupsEnabled) => {
-                      if (readOnly) {
-                        return;
-                      }
-
-                      void updateMutation
-                        .mutateAsync({
-                          input: { groupsEnabled },
-                          profileId: profile.id,
-                        })
-                        .then(() => toast("Saved."))
-                        .catch((error) => toast(formatError(error)));
-                    }}
-                    size="sm"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      ) : null}
+        <BehaviorSwitchSection
+          checked={groupsEnabled}
+          description="Let this agent create group chats for you."
+          heading="Groups"
+          icon={<UserGroupIcon size={18} />}
+          id="groups"
+          label="Create groups"
+          onChange={(groupsEnabled) => save({ groupsEnabled })}
+          pending={updateMutation.isPending}
+          readOnly={readOnly}
+        />
+      ) : (
+        <BehaviorSwitchSection
+          checked={platformToolsEnabled}
+          heading="Chat tools"
+          icon={<ToolsIcon size={18} />}
+          id="platform-tools"
+          label="Platform tools"
+          onChange={(platformToolsEnabled) => save({ platformToolsEnabled })}
+          pending={updateMutation.isPending}
+          readOnly={readOnly}
+        />
+      )}
       <section
         aria-labelledby="profile-behavior-skills"
         className="flex flex-col gap-2"
@@ -226,5 +116,76 @@ export function ProfileSkillsSettingsSection({
         </Card>
       </section>
     </div>
+  );
+}
+
+function BehaviorSwitchSection({
+  checked,
+  description,
+  heading,
+  icon,
+  id,
+  label,
+  onChange,
+  pending,
+  readOnly,
+}: {
+  checked: boolean;
+  description?: string;
+  heading: string;
+  icon: ReactNode;
+  id: string;
+  label: string;
+  onChange: (checked: boolean) => void;
+  pending: boolean;
+  readOnly: boolean;
+}) {
+  const switchId = `profile-${id}-enabled`;
+  const descriptionId = description ? `${switchId}-description` : undefined;
+
+  return (
+    <section
+      aria-labelledby={`profile-behavior-${id}`}
+      className="flex flex-col gap-2"
+    >
+      <h3 className="type-label" id={`profile-behavior-${id}`}>
+        {heading}
+      </h3>
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="p-0">
+          <div className="flex items-center justify-between gap-3 p-3 sm:px-4 sm:py-3">
+            <label
+              className="flex min-w-0 items-center gap-3 text-balance font-medium text-foreground text-sm"
+              htmlFor={switchId}
+            >
+              <SettingIcon checked={checked}>{icon}</SettingIcon>
+              <span className="min-w-0">
+                <span className="block">{label}</span>
+                {description ? (
+                  <span
+                    className="mt-1 block text-pretty font-normal text-muted-foreground text-xs"
+                    id={descriptionId}
+                  >
+                    {description}
+                  </span>
+                ) : null}
+              </span>
+            </label>
+            <div className="flex shrink-0 items-center gap-2">
+              {pending ? <Spinner /> : null}
+              <Switch
+                aria-describedby={descriptionId}
+                aria-label={label}
+                checked={checked}
+                disabled={readOnly}
+                id={switchId}
+                onCheckedChange={onChange}
+                size="sm"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
   );
 }

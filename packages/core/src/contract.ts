@@ -3497,7 +3497,7 @@ export interface ToolContext {
    */
   forbidMemoryWrites?: boolean;
   /**
-   * When true (skill_manage is in the session tool list), write_file / edit_file / delete_file
+   * When true (skill_manage is in the session tool list, or platform tools are off), write_file / edit_file / delete_file
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;

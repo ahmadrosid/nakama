@@ -619,9 +619,6 @@ export class AgentService {
         await this.capabilityRevisionForProfile(orgId, profileId),
         await this.pluginCapabilityRevision(orgId),
         this.composioService?.revisionFor(orgId) ?? "",
-        // The switch changes the tool list, so an open chat is rebuilt.
-        (await this.db.getProfileForOrg(profileId, orgId))
-          ?.platformToolsEnabled !== false,
       ]),
   });
   readonly turns = new TurnRunner({
@@ -5310,7 +5307,11 @@ export class AgentService {
       meta
     );
 
-    if (request.model !== undefined) {
+    // Both change the chat itself, so open chats are rebuilt.
+    if (
+      request.model !== undefined ||
+      request.platformToolsEnabled !== undefined
+    ) {
       this.sessions.invalidateProfile(profileId);
     }
 
@@ -6531,6 +6532,7 @@ export class AgentService {
     }
 
     const limit = options.toolLimit;
+    const platformOff = platformToolsOff(profile, policy);
 
     const shared = profile.orgId
       ? await this.resolveSharedAgentProfile(profile.orgId, profile.id)
@@ -6851,9 +6853,7 @@ export class AgentService {
             // its own keeps the assigned-only tool and stays tool-free. With
             // platform tools off, it also gets only the assigned-only tool.
             channel:
-              limit ||
-              resolved.length === 0 ||
-              platformToolsOff(profile, policy)
+              limit || resolved.length === 0 || platformOff
                 ? undefined
                 : options.channel,
           }
@@ -6875,8 +6875,7 @@ export class AgentService {
     // print a fake tool call as plain text instead of doing the work.
     // An admin can also turn the groups off for chat turns, so the agent sees
     // only the tools assigned to it.
-    const hasOwnTools =
-      resolved.length > 0 && !platformToolsOff(profile, policy);
+    const hasOwnTools = resolved.length > 0 && !platformOff;
 
     if (hasOwnTools && policy.automation && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
@@ -7068,8 +7067,8 @@ export class AgentService {
     // Part of the "no tools" contract: session-history and channel-artifact
     // helpers are also platform groups, so a profile that resolved to zero
     // tools, or turned platform tools off, must not receive them either.
-    const withPlatformGroups =
-      tools.length > 0 && !platformToolsOff(profile, policy.tools);
+    const platformOff = platformToolsOff(profile, policy.tools);
+    const withPlatformGroups = tools.length > 0 && !platformOff;
 
     if (channel === "discord" && withPlatformGroups) {
       tools = [...tools, ...createSendDiscordArtifactTools()];
@@ -7171,10 +7170,6 @@ export class AgentService {
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
     const hasTodoTools = tools.some((tool) => tool.name === "todo_write");
 
-    const hasSessionHistory = tools.some(
-      (tool) => tool.name === "read_session_history"
-    );
-
     const toolContext = buildToolExecutionContext({
       agentDepth: policy.agentDepth,
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
@@ -7187,8 +7182,7 @@ export class AgentService {
       forbidMemoryWrites: cognito ? true : undefined,
       // With platform tools off there is no skill_manage, but skill files
       // still go through the write approval, never through file tools.
-      forbidProfileSkillMarkdownWrites:
-        hasSkillManage || platformToolsOff(profile, policy.tools),
+      forbidProfileSkillMarkdownWrites: hasSkillManage || platformOff,
       isPlatformAdmin: isPlatformAdmin || undefined,
       loadAttachment,
       onSkillCatalogChange: () => {
@@ -7254,7 +7248,7 @@ export class AgentService {
         );
 
         // The note names read_session_history, so a chat without it gets none.
-        return hasSessionHistory ? recovery : "";
+        return withPlatformGroups ? recovery : "";
       },
       channel,
       compaction,

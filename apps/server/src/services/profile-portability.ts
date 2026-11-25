@@ -1204,9 +1204,9 @@ function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
     isNullableString(meta.get("model")) &&
     isString(meta.get("name")) &&
     // Older packs have no switch; null is not a valid value.
-    (!meta.has("platformToolsEnabled") ||
-      (meta.get("platformToolsEnabled") !== null &&
-        isNullableBoolean(meta.get("platformToolsEnabled")))) &&
+    [undefined, true, false].some(
+      (value) => value === meta.get("platformToolsEnabled")
+    ) &&
     isStringArray(meta.get("profileSkillNames")) &&
     isNullableBoolean(meta.get("skillsCuratorConsolidateEnabled")) &&
     isNullableBoolean(meta.get("skillsPostTurnReview")) &&

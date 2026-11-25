@@ -233,79 +233,6 @@ describe("AgentService skill_manage injection", () => {
     expect(await names(off, "automation")).toContain("propose_org_memory");
   });
 
-  test("platformToolsEnabled false sends no read_session_history to the provider", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.upsertTool({
-      createdAt: new Date().toISOString(),
-      description: "Test tool",
-      handlerConfig: { modulePath: "test.js" },
-      handlerType: "javascript",
-      id: "tool_for_platform_session",
-      name: "test_tool",
-      updatedAt: new Date().toISOString(),
-    });
-
-    const sentTools = async (platformToolsEnabled?: boolean) => {
-      await db.upsertProfile({
-        ...createDefaultProfile(),
-        platformToolsEnabled,
-      });
-      await db.assignToolToProfile(
-        "profile_default",
-        "tool_for_platform_session"
-      );
-
-      const service = new AgentService(null, null, db);
-      let sent: string[] = [];
-
-      const answer = {
-        assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
-        content: "ok",
-        toolCalls: [],
-      };
-
-      const record = (input: GenerateChatInput) => {
-        sent = (input.tools ?? []).map((tool) => tool.name);
-
-        return Promise.resolve(answer);
-      };
-
-      Object.assign(service, {
-        _providerConfigured: true,
-        createHarnessForProfile: () => ({
-          provider: {
-            generateChat: record,
-            name: "openai",
-            streamChat: record,
-          },
-        }),
-      });
-
-      const sessionId = await service.createSession(
-        ORG_ID,
-        "web",
-        "profile_default",
-        "user_1",
-        { orgRole: "admin" }
-      );
-
-      await (
-        await service.sessions.get(sessionId, ORG_ID)
-      )?.send({
-        message: "hi",
-      });
-
-      return sent;
-    };
-
-    expect(await sentTools(false)).toEqual(["test_tool"]);
-
-    const unset = await sentTools(undefined);
-
-    expect(unset).toContain("read_session_history");
-    expect(unset).toContain("todo_write");
-  });
-
   test("turning platform tools off reaches an open chat and channel helpers", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());
@@ -378,6 +305,16 @@ describe("AgentService skill_manage injection", () => {
 
     expect(await send(web)).toEqual(["test_tool"]);
     expect(await send(discord)).toEqual(["test_tool"]);
+
+    const fresh = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { orgRole: "admin" }
+    );
+
+    expect(await send(fresh)).toEqual(["test_tool"]);
   });
 
   test("skips platform tool groups for a profile with no tools", async () => {
