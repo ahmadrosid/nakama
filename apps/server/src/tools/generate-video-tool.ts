@@ -19,7 +19,6 @@ import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import type { DatabaseAdapter } from "@nakama/db";
 import { z } from "zod";
 import { readApiKeyForInstance } from "../providers/create";
-import { isMinimaxVideoGenerationModel } from "../providers/models";
 import { decodeStoredModelSelection } from "../services/provider-instance-helpers";
 import { uniqueArtifactPath } from "./generate-image-tool";
 
@@ -58,6 +57,12 @@ const MINIMAX_STATUS_MESSAGES = new Map<number, string>([
   [2049, "MiniMax rejected the API key. Update it in Settings → AI Providers."],
 ]);
 
+/**
+ * Any model ID MiniMax serves, so a new Hailuo model needs no code change.
+ * The shape check keeps a typo or pasted text out of the request URL and body.
+ */
+const VIDEO_MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
 type VideoFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface ResolvedVideoGenerationSelection {
@@ -93,7 +98,7 @@ export function resolveVideoGenerationSelection(
       decoded &&
       instance &&
       (instance.type === "minimax" || instance.type === "minimax_cn") &&
-      isMinimaxVideoGenerationModel(decoded.modelId)
+      VIDEO_MODEL_ID_PATTERN.test(decoded.modelId.trim())
     )
   ) {
     throw new NakamaApiError(VIDEO_MODEL_INVALID_MESSAGE, 400);

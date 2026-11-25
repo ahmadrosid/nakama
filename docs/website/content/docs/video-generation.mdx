@@ -8,7 +8,7 @@ An agent with the `generate_video` tool can make a short video clip from a text 
 ## Setup
 
 1. Add a MiniMax or MiniMax (CN) provider in **Settings → AI Providers**. The key comes from that provider, or from `MINIMAX_API_KEY` (`MINIMAX_CN_API_KEY` for CN).
-2. In **Routing → Video generation model**, pick `Hailuo 2.3` or `Hailuo 02`. With no MiniMax provider yet, pick **MiniMax** to add one. After the key saves, the model is set to `Hailuo 2.3`.
+2. In **Routing → Video generation model**, pick `Hailuo 2.3` or `Hailuo 02`. For a newer MiniMax model, pick **Custom model ID…** and type its ID, for example `MiniMax-Hailuo-2.3`. With no MiniMax provider yet, pick **MiniMax** to add one. After the key saves, the model is set to `Hailuo 2.3`.
 3. Assign the `generate_video` tool to the agent in **Agent → Tools**. New agents do not get it by default.
 
 Only a platform admin can change the model. To turn video generation off, pick **None**.
@@ -32,7 +32,7 @@ Each clip is written under the profile workspace, in `artifacts/`. It appears in
 
 ## Limits
 
-- MiniMax Hailuo only, text to video only. No image-to-video yet.
+- MiniMax only, text to video only. No image-to-video yet, so a model that needs an image, such as `MiniMax-Hailuo-2.3-Fast`, fails.
 - One clip per call, up to 100 MB.
 - A clip that is not ready after 10 minutes fails with a timeout error that gives the MiniMax task ID. MiniMax can still finish and bill that clip. Stopping the chat stops the wait.
 - Nakama does not record video cost in usage. MiniMax bills each clip on its own account.

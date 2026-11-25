@@ -1029,7 +1029,7 @@ export const MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS = [
   { id: "MiniMax-H3-Image-Highspeed", name: "MiniMax H3 Image Highspeed" },
 ] as const;
 
-/** MiniMax text-to-video models (match server allowlist). */
+/** Suggested MiniMax text-to-video models; any other model ID can be typed in. */
 export const MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS = [
   { id: "MiniMax-Hailuo-2.3", name: "Hailuo 2.3" },
   { id: "MiniMax-Hailuo-02", name: "Hailuo 02" },

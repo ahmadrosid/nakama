@@ -292,8 +292,17 @@ describe("resolveVideoGenerationSelection", () => {
       resolveVideoGenerationSelection(config, "p-openai::MiniMax-Hailuo-2.3")
     ).toThrow();
     expect(() =>
-      resolveVideoGenerationSelection(minimaxConfig, "p-minimax::gpt-4o")
+      resolveVideoGenerationSelection(minimaxConfig, "p-minimax::bad model/id")
     ).toThrow();
+  });
+
+  test("accepts a model ID that is not a suggestion", () => {
+    expect(
+      resolveVideoGenerationSelection(
+        minimaxConfig,
+        "p-minimax::MiniMax-Hailuo-3"
+      )?.model
+    ).toBe("MiniMax-Hailuo-3");
   });
 
   test("uses the China base URL for a minimax_cn provider", () => {
@@ -452,7 +461,7 @@ describe("video generation settings route", () => {
         .videoGeneration.model;
 
     const bad = await call("PUT", "/v1/settings/video-generation", {
-      model: "p-minimax::gpt-4o",
+      model: "p-minimax::bad model/id",
     });
 
     expect(bad.status).toBe(400);

@@ -411,19 +411,6 @@ export function isMinimaxImageGenerationModel(modelId: string): boolean {
   return MINIMAX_IMAGE_GENERATION_MODEL_IDS.has(modelId.trim());
 }
 
-/**
- * MiniMax Hailuo text-to-video models. `MiniMax-Hailuo-2.3-Fast` is left out:
- * it takes an image, not a prompt alone.
- */
-const MINIMAX_VIDEO_GENERATION_MODEL_IDS = new Set([
-  "MiniMax-Hailuo-2.3",
-  "MiniMax-Hailuo-02",
-]);
-
-export function isMinimaxVideoGenerationModel(modelId: string): boolean {
-  return MINIMAX_VIDEO_GENERATION_MODEL_IDS.has(modelId.trim());
-}
-
 export function modelSupportsImageGeneration(
   modelId: string,
   provider: ProviderName

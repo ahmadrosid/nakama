@@ -15,7 +15,10 @@ import {
 } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { IMAGE_GENERATION_SELECTION } from "@/lib/models";
-import { ImageGenerationSettingsCard } from "./ImageGenerationSettingsCard";
+import {
+  ImageGenerationSettingsCard,
+  VideoGenerationSettingsCard,
+} from "./ImageGenerationSettingsCard";
 
 const cleanups: (() => void)[] = [];
 
@@ -344,4 +347,122 @@ test("picking MiniMax with no MiniMax provider adds one and saves its image mode
     }),
   ]);
   expect(save).toHaveBeenCalledWith("minimax-1::MiniMax-H3-Image");
+});
+
+async function renderVideoCard(model: string | null) {
+  const getModels = spyOn(client, "getModels").mockResolvedValue({
+    currentProviderId: "minimax",
+    displayName: null,
+    models: [],
+    provider: null,
+    providers: providers.filter((provider) => provider.id === "minimax"),
+  });
+
+  const getSettings = spyOn(
+    client,
+    "getVideoGenerationSettings"
+  ).mockResolvedValue({ model });
+
+  const saved: (string | null)[] = [];
+
+  const save = spyOn(client, "setVideoGenerationSettings").mockImplementation(
+    (next) => {
+      saved.push(next);
+
+      return Promise.resolve({ model: next });
+    }
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  cleanups.push(() => {
+    getModels.mockRestore();
+    getSettings.mockRestore();
+    save.mockRestore();
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  await act(async () => {
+    root.render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AuthContext.Provider
+          value={
+            /* SAFETY: The add form reads only isAuthenticated from auth. */
+            { isAuthenticated: false } as AuthContextValue
+          }
+        >
+          <AppContext.Provider
+            value={
+              /* SAFETY: The add form reads only createProvider from the app context. */
+              {
+                createProvider: () => Promise.reject(new Error("unused")),
+              } as never
+            }
+          >
+            <VideoGenerationSettingsCard />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    );
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  return { container, saved };
+}
+
+test("a saved custom video model ID shows under the MiniMax provider", async () => {
+  const { container } = await renderVideoCard("minimax::MiniMax-Hailuo-3");
+
+  expect(
+    container.querySelector('[aria-label="Video generation model model"]')
+      ?.textContent
+  ).toBe("MiniMax-Hailuo-3");
+});
+
+test("Custom model ID saves the typed video model", async () => {
+  const { container, saved } = await renderVideoCard(
+    "minimax::MiniMax-Hailuo-02"
+  );
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>(
+        '[aria-label="Video generation model model"]'
+      )
+      ?.click()
+  );
+
+  const custom = [
+    ...document.body.querySelectorAll<HTMLElement>("[cmdk-item]"),
+  ].find((item) => item.textContent === "Custom model ID…");
+
+  await act(async () => custom?.click());
+
+  const input = document.body.querySelector<HTMLInputElement>(
+    '[aria-label="Model ID"]'
+  );
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input),
+      "value"
+    )?.set?.call(input, "MiniMax-Hailuo-4");
+    const view = input?.ownerDocument.defaultView;
+
+    if (view) {
+      input?.dispatchEvent(new view.Event("input", { bubbles: true }));
+    }
+  });
+
+  await act(async () => input?.form?.requestSubmit());
+
+  expect(saved).toEqual(["minimax::MiniMax-Hailuo-4"]);
 });
