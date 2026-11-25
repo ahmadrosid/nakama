@@ -374,16 +374,10 @@ function summarizeReceiptOutput(
     return kind === "summarize" ? "Written" : truncateDisplay(text, 40);
   }
 
-  const number = readNumber(output);
+  const scalar = readNumber(output) ?? readBoolean(output);
 
-  if (number !== null) {
-    return String(number);
-  }
-
-  const boolean = readBoolean(output);
-
-  if (boolean !== null) {
-    return String(boolean);
+  if (scalar !== null) {
+    return String(scalar);
   }
 
   const record = readRecord(output);
@@ -443,16 +437,10 @@ function compactValue(value: unknown): string | null {
     return truncateDisplay(text, 48);
   }
 
-  const number = readNumber(value);
+  const scalar = readNumber(value) ?? readBoolean(value);
 
-  if (number !== null) {
-    return String(number);
-  }
-
-  const boolean = readBoolean(value);
-
-  if (boolean !== null) {
-    return String(boolean);
+  if (scalar !== null) {
+    return String(scalar);
   }
 
   return null;

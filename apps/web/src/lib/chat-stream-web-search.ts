@@ -5,7 +5,7 @@ import {
   type WebSearchToolState,
 } from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
-import { readRecord, readString } from "@/lib/json-readers";
+import { readRawString, readRecord, readString } from "@/lib/json-readers";
 
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 
@@ -124,14 +124,10 @@ function parseMcpTextContent(content: unknown): string | null {
 
   for (const entry of content) {
     const record = readRecord(entry);
+    const text = readString(record?.text);
 
-    if (
-      record?.type === "text" &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      typeof record.text === "string" &&
-      record.text.trim()
-    ) {
-      parts.push(record.text.trim());
+    if (record?.type === "text" && text) {
+      parts.push(text);
     }
   }
 
@@ -211,9 +207,10 @@ export function parseWebSearchSourcesFromResult(
   const record = readRecord(result);
 
   if (!record) {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof result === "string") {
-      return parseExaWebSearchTextResult(result);
+    const text = readRawString(result);
+
+    if (text !== null) {
+      return parseExaWebSearchTextResult(text);
     }
 
     return [];

@@ -1,6 +1,7 @@
 import type { ImageGenerationAspect } from "@/components/chat/ImageGeneration";
 import { toArtifactsRelativePath } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
+import { readRecord, readString } from "@/lib/json-readers";
 
 const GENERATE_IMAGE_TOOL_NAME = "generate_image";
 
@@ -18,24 +19,6 @@ export interface ImageGenerationToolState {
 const DEFAULT_PROMPT = "a calm mountain lake at dawn";
 
 const DEFAULT_SIZE = "1024x1024";
-
-// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-parameters -- This function validates external JSON fields before callers use them.
-function readRecord(value: unknown): Record<string, unknown> | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
-  return value as Record<string, unknown>;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser decodes a field from an external tool result.
-function readString(value: unknown): string | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
 
 export function isGenerateImageTool(tool: string | undefined): boolean {
   return tool === GENERATE_IMAGE_TOOL_NAME;

@@ -1,4 +1,4 @@
-type JsonValue = string | number | boolean | null | JsonValue[] | JsonRecord;
+import type { JsonValue } from "@nakama/core/contract";
 
 export type JsonRecord = { [key: string]: JsonValue };
 

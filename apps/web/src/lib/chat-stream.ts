@@ -4,10 +4,10 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ChatContextUsage,
-  ProfileSummary,
 } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import type { Dispatch, SetStateAction } from "react";
+import type { ProfileAvatarProfile } from "@/components/moodstone";
 import type { ChatStatus } from "@/lib/ai-ui-types";
 import type { ChatListItem } from "@/lib/chat-history";
 import { upsertStreamingToolMessage } from "@/lib/chat-stream-artifact";
@@ -235,16 +235,10 @@ export function isSubAgentTool(tool: string | undefined): boolean {
   return tool === "sub_agent";
 }
 
-type CreatedProfileSummary = Pick<
-  ProfileSummary,
-  "hasAvatar" | "id" | "isSuper" | "name" | "updatedAt"
-> &
-  Partial<Pick<ProfileSummary, "createdAt">>;
-
 export function parseProfileCreatedResult(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   result: unknown
-): CreatedProfileSummary | null {
+): ProfileAvatarProfile | null {
   const record = readRecord(result);
 
   if (!record) {
@@ -257,15 +251,11 @@ export function parseProfileCreatedResult(
     return null;
   }
 
-  const profileRecord = readRecord(record.profile);
+  const profile = readRecord(record.profile);
 
-  if (!profileRecord) {
+  if (!profile) {
     return null;
   }
-
-  // SAFETY: The checks below require every field the card reads; keep the
-  // original record so extra fields like createdAt survive for Moodstone.
-  const profile = profileRecord as Partial<CreatedProfileSummary>;
 
   const id = readRawString(profile.id);
   const name = readRawString(profile.name);
@@ -283,9 +273,21 @@ export function parseProfileCreatedResult(
     return null;
   }
 
-  // SAFETY: The checks above reject a profile unless every required field is
-  // present, so the same object now satisfies the full summary.
-  return profile as CreatedProfileSummary;
+  const parsed: ProfileAvatarProfile = {
+    hasAvatar,
+    id,
+    isSuper,
+    name,
+    updatedAt,
+  };
+
+  const createdAt = readRawString(profile.createdAt);
+
+  if (createdAt !== null) {
+    parsed.createdAt = createdAt;
+  }
+
+  return parsed;
 }
 
 export function parseGroupCreatedResult(
@@ -293,7 +295,7 @@ export function parseGroupCreatedResult(
   result: unknown
 ): { id: string; name: string } | null {
   const record = readRecord(result);
-  const group = record ? readRecord(record.group) : null;
+  const group = readRecord(record?.group);
 
   if (!record || record.type !== "group_created" || !group) {
     return null;

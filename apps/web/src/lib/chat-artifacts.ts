@@ -73,29 +73,18 @@ function getWriteFileResult(message: ChatListItem): JsonRecord | null {
   return readRecord(message.toolResult);
 }
 
-function isSuccessfulWrite(message: ChatListItem): boolean {
-  const result = getWriteFileResult(message);
-
-  if (!result) {
-    return false;
-  }
-
-  return (
-    readRawString(result.error) === null && readRawString(result.path) !== null
-  );
-}
-
 function resolvedWritePath(message: ChatListItem): string | null {
   const result = getWriteFileResult(message);
 
-  if (!result) {
+  if (!result || readRawString(result.error) !== null) {
     return null;
   }
 
-  const error = readRawString(result.error);
-  const path = readRawString(result.path);
+  return readRawString(result.path);
+}
 
-  return error === null && path !== null ? path : null;
+function isSuccessfulWrite(message: ChatListItem): boolean {
+  return resolvedWritePath(message) !== null;
 }
 
 function bytesWrittenFromMessage(message: ChatListItem): number {
@@ -153,8 +142,7 @@ export function isArtifactMetaSidecarTool(message: ChatListItem): boolean {
     return true;
   }
 
-  const result = readRecord(message.toolResult);
-  const resultPath = result ? readRawString(result.path) : null;
+  const resultPath = readRawString(readRecord(message.toolResult)?.path);
 
   if (resultPath !== null) {
     return (
@@ -301,9 +289,9 @@ function artifactRefFromGenerateImage(
     return null;
   }
 
-  const path = readRawString(result.path);
+  const path = readString(result.path);
 
-  if (path === null || !path.trim()) {
+  if (!path) {
     return null;
   }
 
@@ -319,7 +307,7 @@ function artifactRefFromGenerateImage(
     return null;
   }
 
-  const relativePath = toArtifactsRelativePath(path.trim());
+  const relativePath = toArtifactsRelativePath(path);
 
   if (!relativePath || isArtifactMetaRelativePath(relativePath)) {
     return null;
