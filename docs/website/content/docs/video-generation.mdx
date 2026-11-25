@@ -28,11 +28,11 @@ The model is not a parameter. It comes from **AI Providers**.
 
 ## Where the video goes
 
-Each clip is written under the profile workspace, in `artifacts/`. It appears in **Browse Files → Artifacts**, and web chat shows it as an artifact you can play. See [Artifacts and files](/artifacts).
+Each clip is written under the profile workspace, in `artifacts/`. It appears in **Browse Files → Artifacts**, and web chat shows it as an artifact you can play. Telegram, Discord and WhatsApp get it under the same size rules as other artifacts. See [Artifacts on channels](/artifacts#artifact-limits-and-channels).
 
 ## Limits
 
 - MiniMax Hailuo only, text to video only. No image-to-video yet.
 - One clip per call, up to 100 MB.
-- A clip that is not ready after 10 minutes fails with a timeout error. Stopping the chat stops the wait.
+- A clip that is not ready after 10 minutes fails with a timeout error that gives the MiniMax task ID. MiniMax can still finish and bill that clip. Stopping the chat stops the wait.
 - Nakama does not record video cost in usage. MiniMax bills each clip on its own account.

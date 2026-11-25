@@ -462,13 +462,21 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
           group.models.some((model) => model.provider === "chatgpt")
       );
 
+    // A saved value that names this provider counts as-is: a MiniMax provider
+    // with no chat models has no group, so mapping through groups loses it.
+    const resolveSetting = (model: string) => {
+      const direct = decodeModelSelection(model);
+
+      return direct?.providerId === instance.id
+        ? direct
+        : decodeModelSelection(profileModelSelectionValue(model, groups));
+    };
+
     // Manage marks the model each setting uses.
     const modelUsage: Record<string, string[]> = {};
 
     for (const [name, model] of settingModels) {
-      const resolved = model
-        ? decodeModelSelection(profileModelSelectionValue(model, groups))
-        : null;
+      const resolved = model ? resolveSetting(model) : null;
 
       if (resolved?.providerId === instance.id) {
         modelUsage[resolved.modelId] = [
@@ -483,11 +491,7 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
         return name === "Image generation model" && lastChatgpt ? [name] : [];
       }
 
-      const resolved = decodeModelSelection(
-        profileModelSelectionValue(model, groups)
-      );
-
-      return resolved?.providerId === instance.id ? [name] : [];
+      return resolveSetting(model)?.providerId === instance.id ? [name] : [];
     });
 
     return { modelUsage, usedBy };

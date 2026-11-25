@@ -70,8 +70,9 @@ function isWriteFileToolName(name: string): boolean {
   );
 }
 
+/** generate_video reports the same { path, mimeType, sizeBytes } result. */
 function isGenerateImageToolName(name: string): boolean {
-  return name === "generate_image";
+  return name === "generate_image" || name === "generate_video";
 }
 
 function getWriteFileResult(

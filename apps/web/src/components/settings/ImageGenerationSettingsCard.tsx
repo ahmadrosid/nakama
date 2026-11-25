@@ -366,7 +366,11 @@ export function VideoGenerationSettingsCard() {
   const saveMutation = useSaveVideoGenerationSettings();
   const [addMinimaxOpen, setAddMinimaxOpen] = useState(false);
   const [addFormKey, setAddFormKey] = useState(0);
-  const selection = videoGenerationSettings?.model ?? null;
+
+  // undefined until the saved model loads, so it does not read as None.
+  const selection = videoGenerationSettings
+    ? (videoGenerationSettings.model ?? null)
+    : undefined;
 
   const choices = useMemo(() => {
     const minimaxProviders = (modelsResponse?.providers ?? []).filter(
@@ -392,13 +396,17 @@ export function VideoGenerationSettingsCard() {
     return options;
   }, [modelsResponse?.providers]);
 
-  const triggerLabel = selection
-    ? (choices.find((choice) => choice.value === selection)?.label ?? selection)
-    : "None";
+  const triggerLabel =
+    selection === undefined
+      ? "Loading…"
+      : selection === null
+        ? "None"
+        : (choices.find((choice) => choice.value === selection)?.label ??
+          "Unavailable model");
 
   const saveModel = (model: string | null) => {
     setFormError(null);
-    const previous = selection;
+    const previous = selection ?? null;
 
     saveMutation.mutate(model, {
       onError: (error) => setFormError(formatError(error)),
@@ -426,7 +434,7 @@ export function VideoGenerationSettingsCard() {
     >
       <SettingsModelSelect
         ariaLabel="Video generation model"
-        disabled={saveMutation.isPending}
+        disabled={selection === undefined || saveMutation.isPending}
         onValueChange={(value) => {
           if (!value) {
             return;

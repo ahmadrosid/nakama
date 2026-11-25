@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, unlink } from "node:fs/promises";
+import { link, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -46,6 +47,16 @@ const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const MAX_JSON_BODY_BYTES = 256 * 1024;
 
 const DEFAULT_FILENAME = "generated-video.mp4";
+
+/** Plain messages for MiniMax `base_resp.status_code`; the raw text goes to the server log. */
+const MINIMAX_STATUS_MESSAGES = new Map<number, string>([
+  [1002, "MiniMax is rate limiting video requests. Try again in a minute."],
+  [1004, "MiniMax rejected the API key. Update it in Settings → AI Providers."],
+  [1008, "The MiniMax account has no balance left for video."],
+  [1026, "MiniMax flagged the prompt as sensitive. Change the prompt."],
+  [2013, "MiniMax rejected the video parameters."],
+  [2049, "MiniMax rejected the API key. Update it in Settings → AI Providers."],
+]);
 
 type VideoFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -143,12 +154,13 @@ interface GenerateVideoInput {
   resolution: string;
   selection: ResolvedVideoGenerationSelection;
   signal?: AbortSignal;
-  targetPath: string;
+  /** Where the download goes; the caller moves it to its final name. */
+  tempPath: string;
 }
 
 /**
  * MiniMax video is a task: create it, poll until it succeeds, then stream the
- * file from its download URL to `targetPath`. Returns the bytes written.
+ * file from its download URL to `tempPath`. Returns the bytes written.
  */
 async function generateVideoWithMinimax(
   input: GenerateVideoInput
@@ -178,7 +190,18 @@ async function generateVideoWithMinimax(
     }
 
     const body = await readBoundedBody(response, MAX_JSON_BODY_BYTES);
-    const parsed = schema.safeParse(JSON.parse(body.toString("utf8")));
+    let json: unknown;
+
+    try {
+      json = JSON.parse(body.toString("utf8"));
+    } catch {
+      throw new NakamaApiError(
+        `Video generation returned an unexpected ${step} response.`,
+        502
+      );
+    }
+
+    const parsed = schema.safeParse(json);
 
     if (!parsed.success) {
       throw new NakamaApiError(
@@ -191,13 +214,24 @@ async function generateVideoWithMinimax(
   };
 
   const assertOk = (baseResp: z.infer<typeof BaseRespSchema>, step: string) => {
-    if (baseResp?.status_code && baseResp.status_code !== 0) {
-      throw new NakamaApiError(
-        `Video generation failed at ${step}: ${baseResp.status_msg?.slice(0, 200) || `code ${baseResp.status_code}`}.`,
-        502
-      );
+    const code = baseResp?.status_code;
+
+    if (!code) {
+      return;
     }
+
+    console.warn(
+      `[generate_video] MiniMax ${step} failed: code ${code}: ${baseResp?.status_msg?.slice(0, 500) ?? ""}`
+    );
+
+    throw new NakamaApiError(
+      MINIMAX_STATUS_MESSAGES.get(code) ??
+        `MiniMax refused the video request (code ${code}). Check that the MiniMax plan includes video.`,
+      502
+    );
   };
+
+  let taskId: string | undefined;
 
   try {
     const created = await readJson(
@@ -218,7 +252,9 @@ async function generateVideoWithMinimax(
 
     assertOk(created.base_resp, "create");
 
-    if (!created.task_id) {
+    taskId = created.task_id;
+
+    if (!taskId) {
       throw new NakamaApiError("Video generation returned no task id.", 502);
     }
 
@@ -231,7 +267,7 @@ async function generateVideoWithMinimax(
 
       const task = await readJson(
         await fetchFn(
-          `${baseUrl}/query/video_generation?task_id=${encodeURIComponent(created.task_id)}`,
+          `${baseUrl}/query/video_generation?task_id=${encodeURIComponent(taskId)}`,
           { headers, signal }
         ),
         QueryTaskSchema,
@@ -286,11 +322,11 @@ async function generateVideoWithMinimax(
       );
     }
 
-    return await streamToFile(download.body, input.targetPath, signal);
+    return await streamToFile(download.body, input.tempPath, signal);
   } catch (error) {
     if (deadline.aborted && !input.signal?.aborted) {
       throw new NakamaApiError(
-        `Video generation timed out after ${VIDEO_GENERATION_TIMEOUT_MS / 60_000} minutes.`,
+        `Video generation timed out after ${VIDEO_GENERATION_TIMEOUT_MS / 60_000} minutes.${taskId ? ` MiniMax task ${taskId} may still finish; its file can be fetched later from MiniMax.` : ""}`,
         504
       );
     }
@@ -411,8 +447,18 @@ export function createGenerateVideoTool(
       try {
         return await runGenerateVideoTool(parsed.data, context, deps);
       } catch (error) {
+        if (error instanceof NakamaApiError) {
+          return { error: error.message };
+        }
+
+        if (context.signal?.aborted) {
+          return { error: "Video generation stopped." };
+        }
+
+        console.error("[generate_video] failed:", error);
+
         return {
-          error: error instanceof Error ? error.message : String(error),
+          error: "Video generation failed. The server log has the cause.",
         };
       }
     },
@@ -441,7 +487,8 @@ async function runGenerateVideoTool(
     };
   }
 
-  const duration = input.duration ?? 6;
+  // Models often send numbers as strings ("10").
+  const duration = input.duration === undefined ? 6 : Number(input.duration);
   const resolution = input.resolution?.trim().toUpperCase() || "768P";
 
   if (!VIDEO_GENERATION_DURATIONS.some((allowed) => allowed === duration)) {
@@ -486,20 +533,23 @@ async function runGenerateVideoTool(
   const artifactsDir = path.join(workspaceRoot, "artifacts");
   await mkdir(artifactsDir, { recursive: true });
 
-  const targetPath = await uniqueArtifactPath(
-    path.join(artifactsDir, outputFilename(input.filename))
-  );
+  // Each call downloads to its own hidden file and takes a free name only at
+  // the end, so two calls that want the same name cannot clash.
+  const wantedPath = path.join(artifactsDir, outputFilename(input.filename));
+  const tempPath = path.join(artifactsDir, `.${randomUUID()}.mp4.part`);
 
   const sizeBytes = await generateVideoWithMinimax({
-    duration: Number(duration),
+    duration,
     fetch: deps.fetch,
     pollIntervalMs: deps.pollIntervalMs,
     prompt,
     resolution,
     selection,
     signal: context.signal,
-    targetPath,
+    tempPath,
   });
+
+  const targetPath = await moveToFreeName(tempPath, wantedPath);
 
   await deps.db.upsertArtifactRecord({
     channel: context.channel ?? null,
@@ -519,12 +569,45 @@ async function runGenerateVideoTool(
   };
 }
 
+/**
+ * `link` fails when the name exists, so a name another call took between the
+ * check and the link is skipped instead of overwritten.
+ */
+async function moveToFreeName(
+  tempPath: string,
+  wantedPath: string
+): Promise<string> {
+  try {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = await uniqueArtifactPath(wantedPath);
+
+      try {
+        await link(tempPath, candidate);
+
+        return candidate;
+      } catch (error) {
+        if (
+          !(
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "EEXIST"
+          )
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error(`No free artifact name for ${wantedPath}`);
+  } finally {
+    await unlink(tempPath).catch(() => undefined);
+  }
+}
+
 function outputFilename(filename: string | undefined): string {
   const base = path.basename((filename?.trim() || "").replace(/\\/g, "/"));
+  // A leading dot would hide the file from the artifacts list.
+  const stem = path.basename(base, path.extname(base)).replace(/^\.+/, "");
 
-  if (!base || base === "." || base === "..") {
-    return DEFAULT_FILENAME;
-  }
-
-  return `${path.basename(base, path.extname(base))}.mp4`;
+  return stem ? `${stem}.mp4` : DEFAULT_FILENAME;
 }

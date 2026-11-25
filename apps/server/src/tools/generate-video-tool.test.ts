@@ -9,11 +9,18 @@ import {
   mergeWorkspaceSettings,
   seedDatabase,
 } from "@nakama/db";
+import { z } from "zod";
+import { createMinimalHonoApp } from "../http/test-app-helpers";
+import { setupFreshInstallSession } from "../http/test-session-helpers";
+import { AgentService } from "../services/agent-service";
 import { resolveToolsFromStorage } from "../services/tool-resolver";
+import { setupTestConfigDir } from "../test-config-dir";
 import {
   createGenerateVideoTool,
   resolveVideoGenerationSelection,
 } from "./generate-video-tool";
+
+setupTestConfigDir("nakama-generate-video-test-");
 
 const VIDEO_BYTES = Uint8Array.from([0, 0, 0, 24, 102, 116, 121, 112]);
 
@@ -61,7 +68,14 @@ async function setup(videoModel: string | null) {
 }
 
 /** Fake MiniMax: create → one Processing poll → Success → file → download. */
-function fakeMinimax(overrides: { status?: string; createBody?: object } = {}) {
+function fakeMinimax(
+  overrides: {
+    createBody?: object;
+    download?: () => Response;
+    onQuery?: () => void;
+    status?: string;
+  } = {}
+) {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   let polls = 0;
 
@@ -79,6 +93,7 @@ function fakeMinimax(overrides: { status?: string; createBody?: object } = {}) {
 
     if (url.includes("/query/video_generation")) {
       polls += 1;
+      overrides.onQuery?.();
 
       return Response.json({
         base_resp: { status_code: 0 },
@@ -95,7 +110,7 @@ function fakeMinimax(overrides: { status?: string; createBody?: object } = {}) {
     }
 
     if (url === "https://cdn.example/video.mp4") {
-      return new Response(VIDEO_BYTES);
+      return overrides.download?.() ?? new Response(VIDEO_BYTES);
     }
 
     return new Response("not found", { status: 404 });
@@ -299,5 +314,160 @@ describe("resolveVideoGenerationSelection", () => {
     );
 
     expect(selection?.baseUrl).toBe("https://api.minimaxi.com/v1");
+  });
+});
+
+describe("generate_video edge cases", () => {
+  const toolFor = (
+    db: Awaited<ReturnType<typeof setup>>["db"],
+    fetchFn: ReturnType<typeof fakeMinimax>["fetchFn"]
+  ) =>
+    createGenerateVideoTool({
+      db,
+      fetch: fetchFn,
+      getUserConfig: () => minimaxConfig,
+      pollIntervalMs: 1,
+    });
+
+  test("two parallel calls that want the same name both keep their clip", async () => {
+    const { context, db, workspaceRoot } = await setup(
+      "p-minimax::MiniMax-Hailuo-02"
+    );
+
+    const tool = toolFor(db, fakeMinimax().fetchFn);
+
+    const results = await Promise.all([
+      tool.run({ filename: "clip.mp4", prompt: "A" }, context),
+      tool.run({ filename: "clip.mp4", prompt: "B" }, context),
+    ]);
+
+    const SavedSchema = z.object({ path: z.string() });
+    const paths = results.map((result) => SavedSchema.parse(result).path);
+
+    expect(new Set(paths).size).toBe(2);
+
+    const files = await readdir(path.join(workspaceRoot, "artifacts"));
+
+    expect(files.sort()).toEqual(
+      paths.map((entry) => path.basename(entry)).sort()
+    );
+  });
+
+  test("a stopped chat ends the wait and leaves no file behind", async () => {
+    const { context, db, workspaceRoot } = await setup(
+      "p-minimax::MiniMax-Hailuo-02"
+    );
+
+    const controller = new AbortController();
+
+    const { fetchFn } = fakeMinimax({
+      onQuery: () => controller.abort(),
+      status: "Processing",
+    });
+
+    const result = await toolFor(db, fetchFn).run(
+      { prompt: "A storm" },
+      { ...context, signal: controller.signal }
+    );
+
+    expect(result).toEqual({ error: "Video generation stopped." });
+    expect(await readdir(path.join(workspaceRoot, "artifacts"))).toEqual([]);
+  });
+
+  test("a download over the size cap fails and leaves no file behind", async () => {
+    const { context, db, workspaceRoot } = await setup(
+      "p-minimax::MiniMax-Hailuo-02"
+    );
+
+    const chunk = new Uint8Array(1024 * 1024);
+    let sent = 0;
+
+    const { fetchFn } = fakeMinimax({
+      download: () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(stream) {
+              sent += 1;
+
+              if (sent > 101) {
+                stream.close();
+
+                return;
+              }
+
+              stream.enqueue(chunk);
+            },
+          })
+        ),
+    });
+
+    const result = await toolFor(db, fetchFn).run(
+      { prompt: "A storm" },
+      context
+    );
+
+    expect(result).toHaveProperty("error");
+    expect(await readdir(path.join(workspaceRoot, "artifacts"))).toEqual([]);
+  });
+
+  test("accepts a duration sent as a string", async () => {
+    const { context, db } = await setup("p-minimax::MiniMax-Hailuo-02");
+    const { calls, fetchFn } = fakeMinimax();
+
+    const result = await toolFor(db, fetchFn).run(
+      { duration: "10", prompt: "A storm" },
+      context
+    );
+
+    expect(result).toHaveProperty("path");
+    expect(JSON.parse(String(calls[0]?.init?.body)).duration).toBe(10);
+  });
+});
+
+describe("video generation settings route", () => {
+  test("a platform admin saves a valid model, a bad one is refused, and other settings keep it", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const agent = new AgentService(minimaxConfig, null, db);
+    const { app } = createMinimalHonoApp({ agent, databaseAdapter: db });
+    const session = await setupFreshInstallSession(app, db);
+
+    const call = (
+      method: string,
+      route: string,
+      body?: { model: string | null }
+    ) =>
+      app.fetch(
+        new Request(`http://localhost:4310${route}`, {
+          body: body === undefined ? undefined : JSON.stringify(body),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method,
+        })
+      );
+
+    const readModel = async () =>
+      (await (await call("GET", "/v1/settings/video-generation")).json())
+        .videoGeneration.model;
+
+    const bad = await call("PUT", "/v1/settings/video-generation", {
+      model: "p-minimax::gpt-4o",
+    });
+
+    expect(bad.status).toBe(400);
+    expect(await readModel()).toBeNull();
+
+    const good = await call("PUT", "/v1/settings/video-generation", {
+      model: "p-minimax::MiniMax-Hailuo-02",
+    });
+
+    expect(good.status).toBe(200);
+    expect(await readModel()).toBe("p-minimax::MiniMax-Hailuo-02");
+
+    expect(
+      (await call("PUT", "/v1/settings/vision", { model: null })).status
+    ).toBe(200);
+    expect(await readModel()).toBe("p-minimax::MiniMax-Hailuo-02");
   });
 });
