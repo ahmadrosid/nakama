@@ -11,6 +11,8 @@ import {
   useImageGenerationSettings,
   useModelsQuery,
   useSaveImageGenerationSettings,
+  useSaveVideoGenerationSettings,
+  useVideoGenerationSettings,
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
@@ -19,6 +21,7 @@ import {
   IMAGE_GENERATION_MODEL_OPTIONS,
   IMAGE_GENERATION_SELECTION,
   MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS,
+  MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS,
   profileModelLabel,
 } from "@/lib/models";
 
@@ -336,6 +339,121 @@ export function ImageGenerationSettingsCard() {
               encodeModelSelection(
                 provider.id,
                 MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS[0].id
+              )
+            );
+
+            return;
+          }
+
+          toast("Provider added.");
+        }}
+        onClosed={() => setAddFormKey((key) => key + 1)}
+        onOpenChange={setAddMinimaxOpen}
+        open={addMinimaxOpen}
+        provider="minimax"
+      />
+    </SettingsModelTile>
+  );
+}
+
+const CLEAR_VIDEO_GENERATION_MODEL_VALUE = "__video_generation_unset__";
+
+/** Video comes only from MiniMax Hailuo, so each MiniMax provider lists its models. */
+export function VideoGenerationSettingsCard() {
+  const [formError, setFormError] = useState<string | null>(null);
+  const { data: modelsResponse } = useModelsQuery();
+  const { data: videoGenerationSettings } = useVideoGenerationSettings();
+  const saveMutation = useSaveVideoGenerationSettings();
+  const [addMinimaxOpen, setAddMinimaxOpen] = useState(false);
+  const [addFormKey, setAddFormKey] = useState(0);
+  const selection = videoGenerationSettings?.model ?? null;
+
+  const choices = useMemo(() => {
+    const minimaxProviders = (modelsResponse?.providers ?? []).filter(
+      (provider) =>
+        provider.type === "minimax" || provider.type === "minimax_cn"
+    );
+
+    const options: SettingsModelOption[] = [
+      { label: "None", value: CLEAR_VIDEO_GENERATION_MODEL_VALUE },
+      ...minimaxProviders.flatMap((provider) =>
+        MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS.map((option) => ({
+          label: `${provider.label}: ${option.name}`,
+          name: option.name,
+          provider: { id: provider.id, label: provider.label },
+          value: encodeModelSelection(provider.id, option.id),
+        }))
+      ),
+      ...(minimaxProviders.length === 0
+        ? [{ label: "MiniMax", value: ADD_MINIMAX_VALUE }]
+        : []),
+    ];
+
+    return options;
+  }, [modelsResponse?.providers]);
+
+  const triggerLabel = selection
+    ? (choices.find((choice) => choice.value === selection)?.label ?? selection)
+    : "None";
+
+  const saveModel = (model: string | null) => {
+    setFormError(null);
+    const previous = selection;
+
+    saveMutation.mutate(model, {
+      onError: (error) => setFormError(formatError(error)),
+      onSuccess: (saved) => {
+        if (previous !== (saved.model ?? null)) {
+          toast("Video generation model changed.", 8000, {
+            label: "Undo",
+            onClick: () => saveMutation.mutate(previous),
+          });
+        }
+      },
+    });
+  };
+
+  return (
+    <SettingsModelTile
+      footer={
+        formError ? (
+          <p className="text-destructive text-xs" role="alert">
+            {formError}
+          </p>
+        ) : undefined
+      }
+      title="Video generation model"
+    >
+      <SettingsModelSelect
+        ariaLabel="Video generation model"
+        disabled={saveMutation.isPending}
+        onValueChange={(value) => {
+          if (!value) {
+            return;
+          }
+
+          if (value === ADD_MINIMAX_VALUE) {
+            setAddMinimaxOpen(true);
+
+            return;
+          }
+
+          saveModel(
+            value === CLEAR_VIDEO_GENERATION_MODEL_VALUE ? null : String(value)
+          );
+        }}
+        options={choices}
+        triggerLabel={triggerLabel}
+        value={selection ?? CLEAR_VIDEO_GENERATION_MODEL_VALUE}
+      />
+      <AddProviderDialog
+        key={addFormKey}
+        onAdded={(provider) => {
+          if (provider.type === "minimax" || provider.type === "minimax_cn") {
+            saveModel(
+              encodeModelSelection(
+                provider.id,
+                MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS[0].id
               )
             );
 

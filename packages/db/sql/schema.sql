@@ -654,6 +654,7 @@ CREATE TABLE IF NOT EXISTS workspace_settings (
   vision_model TEXT,
   transcription_model TEXT,
   image_model TEXT,
+  video_model TEXT,
   coding_agent_harnesses TEXT NOT NULL DEFAULT '[]',
   selected_coding_agent_harness TEXT,
   coding_agent_provider_passthrough INTEGER NOT NULL DEFAULT 1,

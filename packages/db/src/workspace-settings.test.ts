@@ -31,6 +31,7 @@ describe("workspace settings merge", () => {
         selectedCodingAgentHarness: null,
         transcriptionModel: null,
         updatedAt: "2026-01-01T00:00:00.000Z",
+        videoModel: null,
         visionModel: "vision",
       },
       {
@@ -54,6 +55,7 @@ describe("workspace settings merge", () => {
         selectedCodingAgentHarness: "coding-harness-codex",
         transcriptionModel: "whisper",
         updatedAt: "2026-01-01T00:00:00.000Z",
+        videoModel: null,
         visionModel: "vision",
       },
       {

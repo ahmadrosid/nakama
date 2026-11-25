@@ -1843,6 +1843,18 @@ export interface UpdateImageGenerationRequest {
   model: string | null;
 }
 
+export interface VideoGenerationSettings {
+  model: string | null;
+}
+
+export interface VideoGenerationSettingsResponse {
+  videoGeneration: VideoGenerationSettings;
+}
+
+export interface UpdateVideoGenerationRequest {
+  model: string | null;
+}
+
 /** Search back-end that replaces the provider-hosted `web_search` tool. */
 export type WebSearchProvider = "exa" | "firecrawl" | "serply" | "keenable";
 

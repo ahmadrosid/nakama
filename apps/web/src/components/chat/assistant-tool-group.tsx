@@ -37,6 +37,7 @@ import {
   SearchList01Icon,
   TaskEdit01Icon,
   Tick02Icon,
+  VideoAiIcon,
 } from "hugeicons-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -1608,6 +1609,7 @@ const TOOL_ICONS = new Map<string, typeof AiBrain01Icon>([
   ["edit_file", TaskEdit01Icon],
   ["email", Mail01Icon],
   ["generate_image", ImageAdd01Icon],
+  ["generate_video", VideoAiIcon],
   ["knowledge_base_search", PropertySearchIcon],
   ["load_skill", PuzzleIcon],
   ["read_file", BookOpen01Icon],

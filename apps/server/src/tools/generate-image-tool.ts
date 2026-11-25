@@ -337,7 +337,7 @@ export async function runGenerateImageTool(
   };
 }
 
-async function uniqueArtifactPath(filePath: string): Promise<string> {
+export async function uniqueArtifactPath(filePath: string): Promise<string> {
   if (!(await pathExists(filePath))) {
     return filePath;
   }

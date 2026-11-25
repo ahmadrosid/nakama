@@ -2110,6 +2110,12 @@ function migrateWorkspaceSettingsTable(db: Database): void {
     `);
   }
 
+  if (!columnNames.has("video_model")) {
+    db.exec(`
+      ALTER TABLE workspace_settings ADD COLUMN video_model TEXT;
+    `);
+  }
+
   if (!columnNames.has("coding_agent_harnesses")) {
     db.exec(`
       ALTER TABLE workspace_settings ADD COLUMN coding_agent_harnesses TEXT NOT NULL DEFAULT '[]';

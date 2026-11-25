@@ -68,7 +68,11 @@ function isWriteFileTool(message: ChatListItem): boolean {
 }
 
 function isGenerateImageTool(message: ChatListItem): boolean {
-  return message.role === "tool" && message.tool === "generate_image";
+  // generate_video reports the same { path, mimeType, sizeBytes } result.
+  return (
+    message.role === "tool" &&
+    (message.tool === "generate_image" || message.tool === "generate_video")
+  );
 }
 
 function getWriteFileResult(message: ChatListItem): WriteFileResult | null {
