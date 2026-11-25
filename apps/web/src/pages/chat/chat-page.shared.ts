@@ -412,7 +412,10 @@ export function findFailedRetryPrompt(
   );
 }
 
-/** Drop the failed assistant + its optimistic user prompt before re-sending. */
+/**
+ * Drop the failed assistant + its user prompt before re-sending. The send adds
+ * the prompt again, and the server reuses a saved unanswered prompt.
+ */
 export function messagesWithoutFailedTurn(
   messages: ChatListItem[],
   failedMessage: ChatListItem
@@ -425,12 +428,8 @@ export function messagesWithoutFailedTurn(
     return messages;
   }
 
-  let start = failedIndex;
-  const previous = messages[failedIndex - 1];
-
-  if (previous?.role === "user" && previous.historyIndex === undefined) {
-    start = failedIndex - 1;
-  }
+  const start =
+    messages[failedIndex - 1]?.role === "user" ? failedIndex - 1 : failedIndex;
 
   return [...messages.slice(0, start), ...messages.slice(failedIndex + 1)];
 }
