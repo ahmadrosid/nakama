@@ -2248,10 +2248,13 @@ export class AgentService {
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, userId);
 
+    // Group chats are owner-only, so their turns use the caller's live access.
+    const memberOnlyKnowledge = orgRole === "member" && kind !== "group_member";
+
     const knowledgeContext = this.knowledgeToolContext(
       orgId,
       profileId,
-      orgRole === "member" ? null : userId
+      memberOnlyKnowledge ? null : userId
     );
 
     const toolContext = buildToolExecutionContext({

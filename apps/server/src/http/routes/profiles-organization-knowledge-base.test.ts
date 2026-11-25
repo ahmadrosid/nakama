@@ -1055,7 +1055,7 @@ describe("published parent knowledge reads", () => {
     expect(await adminRead.text()).toContain("Root-only shared bytes");
   });
 
-  test("knowledge base search skips a root org shared document a member attached before the guard", async () => {
+  test("knowledge base search enforces root org access for chats and agent turns", async () => {
     const { db, profileService } = await setupPublishedKnowledge();
 
     const { document } =
@@ -1139,11 +1139,52 @@ describe("published parent knowledge reads", () => {
         expect(run.status).toBe("success");
       });
 
+    const searchInGroup = (userId: string) =>
+      searchFrom(async () => {
+        const run = await agent.runGroupTurn({
+          agentDepth: 1,
+          orgId: "org_other",
+          orgRole: "member",
+          profileId: profile.id,
+          sharedDir: getProfileSoulDir("org_other", profile.id),
+          task: "Find the shared bytes",
+          userId,
+        });
+
+        expect(run.status).toBe("success");
+      });
+
     expect(await searchInChat("web")).toEqual([]);
     expect(await searchInSubAgent({ orgRole: "member" })).toEqual([]);
+    expect(await searchInGroup("user_reader")).toEqual([]);
+
+    const now = new Date().toISOString();
+
+    await db.createUser({
+      id: "user_platform_admin",
+      email: "platform-admin@example.com",
+      createdAt: now,
+      updatedAt: now,
+      isPlatformAdmin: true,
+      passwordHash: "unused-test-hash",
+    });
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_other",
+      role: "member",
+      userId: "user_platform_admin",
+    });
+
+    expect(await searchInGroup("user_platform_admin")).toHaveLength(1);
+    expect(
+      await searchInSubAgent({
+        orgRole: "member",
+        userId: "user_platform_admin",
+      })
+    ).toEqual([]);
 
     await db.upsertOrgMember({
-      createdAt: new Date().toISOString(),
+      createdAt: now,
       orgId: "org_other",
       role: "admin",
       userId: "user_reader",
