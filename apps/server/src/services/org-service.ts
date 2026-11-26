@@ -603,6 +603,7 @@ export class OrgService {
       isSuper: false,
       model: source.model,
       name: source.name,
+      platformToolsEnabled: source.platformToolsEnabled !== false,
       publishedSoul: await this.readSharedAgentSoul(parent.id, source.id),
       systemPrompt: source.systemPrompt,
       thinkingEffort: source.thinkingEffort,

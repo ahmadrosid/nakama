@@ -29,7 +29,10 @@ import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ExportProfileDialog } from "@/components/profiles/ExportProfileDialog";
-import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import {
+  ProfilePlatformToolsSwitch,
+  ProfileSkillsSettingsSection,
+} from "@/components/profiles/ProfileSkillsSettingsSection";
 import { RegressionCasesList } from "@/components/regression-cases";
 import { SlackSettingsCard } from "@/components/SlackSettingsCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
@@ -311,7 +314,8 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             <ProfileSkillsSettingsSection disabled={busy} profile={detail} />
           </Tabs.Panel>
         ) : null}
-        <Tabs.Panel className="w-0 min-w-full" value="tools">
+        <Tabs.Panel className="w-0 min-w-full space-y-6" value="tools">
+          <ProfilePlatformToolsSwitch disabled={busy} profile={detail} />
           <ProfileConfigAssignmentsSection key={detail.id} state={state} />
         </Tabs.Panel>
         <Tabs.Panel className="w-0 min-w-full" value="mcp">

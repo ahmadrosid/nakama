@@ -116,6 +116,40 @@ describe("profile skillsWriteApproval auth", () => {
 
     expect(reviewBody.profile.skillsPostTurnReview).toBe(true);
 
+    const putSetting = (body: { platformToolsEnabled: boolean | string }) =>
+      app.fetch(
+        new Request(`${BASE}/v1/profiles/${profileId}`, {
+          body: JSON.stringify(body),
+          headers: orgAdminSession.headers(
+            { "X-CSRF-Token": orgAdminSession.csrfToken },
+            orgId
+          ),
+          method: "PUT",
+        })
+      );
+
+    const platformResp = await putSetting({ platformToolsEnabled: false });
+
+    expect(platformResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
+    const platformBody = (await platformResp.json()) as {
+      profile: { platformToolsEnabled: boolean };
+    };
+
+    expect(platformBody.profile.platformToolsEnabled).toBe(false);
+    expect(
+      (await databaseAdapter.getProfile(profileId))?.platformToolsEnabled
+    ).toBe(false);
+
+    // A string "true" must not turn the tools back on.
+    expect((await putSetting({ platformToolsEnabled: "true" })).status).toBe(
+      400
+    );
+    expect(
+      (await databaseAdapter.getProfile(profileId))?.platformToolsEnabled
+    ).toBe(false);
+
     const forbiddenResp = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}`, {
         body: JSON.stringify({ name: "Renamed", skillsWriteApproval: false }),
