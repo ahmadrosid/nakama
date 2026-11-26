@@ -65,6 +65,40 @@ export class ChannelsClient extends AutomationsClient {
     return response.token;
   }
 
+  /** Workers only: one Telegram message to the bot's Agent Group (#2509). */
+  postTelegramAgentGroupMessage(input: {
+    content: string;
+    orgId: string;
+    profileId: string;
+    sessionId: string | null;
+  }): Promise<{
+    replies: { author: string; content: string }[];
+    sessionId: string;
+  }> {
+    return this.request("/v1/internal/telegram/agent-group-messages", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  getTelegramAgentGroup(
+    profileId: string
+  ): Promise<{ groupId: string | null }> {
+    return this.request(
+      `/v1/settings/telegram/agent-group?profileId=${encodeURIComponent(profileId)}`
+    );
+  }
+
+  setTelegramAgentGroup(
+    profileId: string,
+    groupId: string | null
+  ): Promise<{ groupId: string | null }> {
+    return this.request(
+      `/v1/settings/telegram/agent-group?profileId=${encodeURIComponent(profileId)}`,
+      { body: JSON.stringify({ groupId }), method: "PUT" }
+    );
+  }
+
   async getTelegramSettings(
     profileId?: string
   ): Promise<TelegramSettingsResponse> {

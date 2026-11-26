@@ -2665,6 +2665,27 @@ export function registerModelRoutes(
       return errorResponse(message, 400);
     }
   });
+  app.get("/v1/settings/telegram/agent-group", async (c) =>
+    json(await agent.getTelegramAgentGroup(await channelOwner(c)))
+  );
+
+  app.put("/v1/settings/telegram/agent-group", async (c) => {
+    const owner = await channelOwner(c);
+
+    const { groupId } = await readJson(
+      c.req.raw,
+      z.object({ groupId: z.string().min(1).nullable() })
+    );
+
+    return json(
+      await agent.setTelegramAgentGroup(
+        owner,
+        getRequestAuth(c).user.id,
+        groupId
+      )
+    );
+  });
+
   app.get("/v1/settings/telegram/requests", async (c) =>
     json<TelegramAccessRequestsResponse>(
       await agent.getTelegramAccessRequests(await channelOwner(c))

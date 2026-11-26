@@ -1,6 +1,7 @@
 import type { UpdateTelegramSettingsRequest } from "@nakama/core/contract";
 import { useEffect, useRef, useState } from "react";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
+import { TelegramAgentGroupSelect } from "@/components/TelegramAgentGroupSelect";
 import { TelegramAllowedUsers } from "@/components/TelegramAllowedUsers";
 import { TelegramSettingsCardContent } from "@/components/telegram-settings-card-content";
 import {
@@ -293,7 +294,14 @@ function TelegramSettingsCardLoaded({
     />
   );
 
-  return content;
+  return card.configured ? (
+    <>
+      {content}
+      <TelegramAgentGroupSelect profileId={card.profileId} />
+    </>
+  ) : (
+    content
+  );
 }
 
 export function TelegramSettingsCard({

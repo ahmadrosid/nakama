@@ -187,6 +187,70 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("a bot that answers for an Agent Group posts there and names each reply", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const { calls, client, handler } = await createTestHandler(homeDir, {
+        config: {
+          ...TEST_CONFIG,
+          agentGroupId: "group_1",
+          owner: { orgId: "org_1", profileId: "alpha" },
+        },
+        getBotInfo: () => TEST_BOT_INFO,
+      });
+
+      const posted: unknown[] = [];
+      client.postTelegramAgentGroupMessage = async (input) => {
+        posted.push(input);
+
+        return {
+          replies: [
+            { author: "@writer", content: "draft ready" },
+            { author: "@editor", content: "looks good" },
+          ],
+          sessionId: "group_session_1",
+        };
+      };
+
+      const send = async (text: string) => {
+        const { ctx, replies } = createMessageContext({
+          chatId: -100_123,
+          chatType: "supergroup",
+          entities: [{ length: 6, offset: 0, type: "mention" }],
+          text,
+          userId: 42,
+        });
+
+        await handler(ctx);
+
+        return replies;
+      };
+
+      const replies = await send("@mybot @all write the launch post");
+
+      expect(replies.slice(-2)).toEqual([
+        "@writer: draft ready",
+        "@editor: looks good",
+      ]);
+      expect(calls.sendStream).toBe(0);
+
+      await send("@mybot @writer shorter");
+
+      expect(posted).toEqual([
+        expect.objectContaining({
+          orgId: "org_1",
+          profileId: "alpha",
+          sessionId: null,
+        }),
+        expect.objectContaining({ sessionId: "group_session_1" }),
+      ]);
+    });
+  });
+
   test("group topics create isolated sessions and fall back to the configured profile", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

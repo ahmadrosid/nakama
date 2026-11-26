@@ -716,6 +716,12 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     telegram: TelegramRichMessenger,
     attachUserText: string
   ): Promise<void> {
+    if (config.agentGroupId && config.owner) {
+      await replyFromAgentGroup(ctx, input, conversationKey, telegram);
+
+      return;
+    }
+
     const session = await resolveSession(conversationKey);
     const profileId = sessionStore.get(conversationKey)?.profileId;
 
@@ -866,6 +872,63 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         session,
         sessionStore,
       });
+    }
+  }
+
+  /** The bot answers for an Agent Group: every agent's reply, by handle. */
+  async function replyFromAgentGroup(
+    ctx: Context,
+    input: SendMessageInput,
+    conversationKey: string,
+    telegram: TelegramRichMessenger
+  ): Promise<void> {
+    const owner = config.owner!;
+
+    if (!input.message.trim()) {
+      await telegram.send(
+        "This bot answers for an Agent Group, which reads text only."
+      );
+
+      return;
+    }
+
+    // Kept apart from the agent's own sessions under its own key.
+    const key = `agent-group:${conversationKey}`;
+
+    const typingLoop = createTypingLoop(async () => {
+      await ctx.replyWithChatAction("typing");
+    });
+
+    try {
+      typingLoop.start();
+
+      const { replies, sessionId } = await client.postTelegramAgentGroupMessage(
+        {
+          content: input.message,
+          orgId: owner.orgId,
+          profileId: owner.profileId,
+          sessionId: sessionStore.get(key)?.sessionId ?? null,
+        }
+      );
+
+      sessionStore.set(key, {
+        profileId: owner.profileId,
+        sessionId,
+        updatedAt: new Date().toISOString(),
+      });
+      await sessionStore.save();
+
+      for (const reply of replies) {
+        await replyAsChat(telegram, `${reply.author}: ${reply.content}`);
+      }
+
+      if (replies.length === 0) {
+        await telegram.send("(no agent replied)");
+      }
+    } catch (error) {
+      await telegram.send(formatClientError(error));
+    } finally {
+      typingLoop.stop();
     }
   }
 

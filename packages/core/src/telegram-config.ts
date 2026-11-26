@@ -4,6 +4,7 @@ import {
   assertChannelPath,
   botTokenSecretRef,
   type ChannelConfigScope,
+  type ChannelOwner,
   claimChannelIdentity,
   createPairingCodeSecret,
   getChannelConfigDir,
@@ -25,6 +26,7 @@ import {
   pathExists,
   readDirectoryOrEmpty,
   readTextOrNull,
+  removeFile,
   writeTextFile,
 } from "./fs";
 import { getUserConfigDir } from "./user-config";
@@ -528,4 +530,62 @@ export function resolveTelegramConfigFromSources(options: {
       file?.profileId?.trim() ||
       DEFAULT_TELEGRAM_PROFILE_ID,
   };
+}
+
+/**
+ * The Agent Group a bot answers for instead of its own agent (#2509). Groups
+ * are private to the user who made them, so the target keeps that user: the
+ * group's turns run as them.
+ */
+export interface TelegramAgentGroupTarget {
+  groupId: string;
+  ownerUserId: string;
+}
+
+const agentGroupTargetSchema = z.object({
+  groupId: z.string().min(1),
+  ownerUserId: z.string().min(1),
+});
+
+function getTelegramAgentGroupPath(owner: ChannelOwner): string {
+  const path = join(getTelegramConfigDir(owner), "agent-group.json");
+  assertChannelPath(path);
+
+  return path;
+}
+
+export async function loadTelegramAgentGroup(
+  owner: ChannelOwner
+): Promise<TelegramAgentGroupTarget | null> {
+  const raw = await readTextOrNull(getTelegramAgentGroupPath(owner));
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return agentGroupTargetSchema.parse(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/** `null` points the bot back at its own agent. */
+export async function saveTelegramAgentGroup(
+  owner: ChannelOwner,
+  target: TelegramAgentGroupTarget | null
+): Promise<void> {
+  const path = getTelegramAgentGroupPath(owner);
+
+  if (!target) {
+    if (await pathExists(path)) {
+      await removeFile(path);
+    }
+
+    return;
+  }
+
+  await writeTextFile(path, JSON.stringify(target), {
+    ensureDir: getTelegramConfigDir(owner),
+  });
 }

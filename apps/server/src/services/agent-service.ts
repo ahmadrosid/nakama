@@ -177,6 +177,7 @@ import {
   loadEmailSettingsPublic,
   loadErrorTrackingSettingsPublic,
   loadSoulStack,
+  loadTelegramAgentGroup,
   loadTelegramConfigFile,
   loadTelegramSettingsPublic,
   loadUserConfig,
@@ -221,6 +222,7 @@ import {
   saveEmailConfig,
   saveErrorTrackingDsn,
   saveErrorTrackingTestResult,
+  saveTelegramAgentGroup,
   saveTelegramConfig,
   saveUserConfig,
   saveUserThinkingSettings,
@@ -239,6 +241,7 @@ import { findAgentQuestionnaireAnswers } from "@nakama/core/agent-questionnaire"
 import { isDocxFile, isLegacyDocFile } from "@nakama/core/artifact-mime";
 import {
   type ChannelConfigScope,
+  type ChannelOwner,
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
 import {
@@ -1454,6 +1457,38 @@ export class AgentService {
       ? this.channelWorkers.saveChannelConfig("telegram", orgId, save)
       : save();
   }
+  async getTelegramAgentGroup(
+    owner: ChannelOwner
+  ): Promise<{ groupId: string | null }> {
+    return { groupId: (await loadTelegramAgentGroup(owner))?.groupId ?? null };
+  }
+
+  /**
+   * Points the bot at one of the caller's Agent Groups, or back at its agent
+   * with `null`. The group's turns run as the caller, who owns it.
+   */
+  async setTelegramAgentGroup(
+    owner: ChannelOwner,
+    userId: string,
+    groupId: string | null
+  ): Promise<{ groupId: string | null }> {
+    if (groupId) {
+      this.groups.get(owner.orgId, userId, groupId);
+    }
+
+    const save = () =>
+      saveTelegramAgentGroup(
+        owner,
+        groupId ? { groupId, ownerUserId: userId } : null
+      );
+
+    await (this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("telegram", owner, save)
+      : save());
+
+    return { groupId };
+  }
+
   async startTelegramPairing(
     orgId: string,
     userId: string,

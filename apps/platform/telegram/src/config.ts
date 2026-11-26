@@ -2,9 +2,14 @@ import {
   type ChannelOwner,
   channelOwnerFromEnv,
 } from "@nakama/core/channel-config-shared";
-import { loadTelegramConfigFile } from "@nakama/core/telegram-config";
+import {
+  loadTelegramAgentGroup,
+  loadTelegramConfigFile,
+} from "@nakama/core/telegram-config";
 
 export interface TelegramBridgeConfig {
+  /** Set when the bot answers for an Agent Group instead of its agent. */
+  agentGroupId?: string | null;
   botToken: string;
   orgId?: string | null;
   owner?: ChannelOwner;
@@ -24,6 +29,7 @@ async function loadConfig(
   }
 
   return {
+    agentGroupId: (await loadTelegramAgentGroup(owner))?.groupId ?? null,
     botToken: config.botToken,
     orgId: owner.orgId,
     owner,

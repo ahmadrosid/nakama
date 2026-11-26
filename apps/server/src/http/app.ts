@@ -38,6 +38,7 @@ import { registerDataPortabilityRoutes } from "./routes/data-portability";
 import { registerGoogleMeetRoutes } from "./routes/google-meet";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerInternalCuratorRoutes } from "./routes/internal-curator";
+import { registerInternalTelegramAgentGroupRoutes } from "./routes/internal-telegram-agent-group";
 import {
   registerComputerRoutes,
   registerLlmRoutes,
@@ -450,6 +451,7 @@ export function createHonoApp(options: ServerOptions) {
 
   app.use("*", createAuthMiddleware(options));
   registerInternalAutomationRoutes(app, options);
+  registerInternalTelegramAgentGroupRoutes(app, options);
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
   registerAcpMcpRoutes(app);
