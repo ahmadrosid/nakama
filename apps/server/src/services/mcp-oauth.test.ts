@@ -111,7 +111,9 @@ describe("MCP browser authorization", () => {
     const stored = await db.getMcpServer(created.server.id);
     const grant = readMcpOAuthGrant(stored?.config);
     expect(grant?.tokens?.access_token).toBe(ACCESS_TOKEN);
-    expect(grant?.clientInformation?.client_id).toBe("fake-client-id");
+    expect(remote.clients.has(grant?.clientInformation?.client_id ?? "")).toBe(
+      true
+    );
     // Single use: the callback spent the state and the verifier.
     expect(grant?.state).toBeUndefined();
     expect(grant?.codeVerifier).toBeUndefined();
@@ -264,6 +266,51 @@ describe("MCP browser authorization", () => {
     expect(grant?.authorizationStartedAt).toBeUndefined();
     expect((await callback()).status).toBe(400);
     expect(remote.tokenRequests.length - before).toBe(1);
+
+    await manager.disconnectAll();
+  });
+
+  test("registers a new client when sign-in starts from another origin", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const manager = new McpClientManager();
+    const service = new McpService(db, manager);
+    const otherBaseUrl = "https://nakama.example.com";
+
+    const created = await service.createServer(
+      {
+        config: { url: remote.url },
+        connect: true,
+        name: "moved-origin",
+        transport: "http",
+      },
+      { callbackBaseUrl: CALLBACK_BASE_URL }
+    );
+
+    const firstClientId = new URL(
+      z.string().parse(created.authorizationUrl)
+    ).searchParams.get("client_id");
+
+    const restarted = await service.connectServer(created.server.id, {
+      callbackBaseUrl: otherBaseUrl,
+    });
+
+    const authorizationUrl = z.string().parse(restarted.authorizationUrl);
+    const authorizeParams = new URL(authorizationUrl).searchParams;
+    const clientId = z.string().parse(authorizeParams.get("client_id"));
+    const redirectUri = `${otherBaseUrl}/v1/mcp/oauth/callback/${created.server.id}`;
+
+    expect(clientId).not.toBe(firstClientId);
+    expect(remote.clients.get(clientId)).toEqual([redirectUri]);
+    expect(authorizeParams.get("redirect_uri")).toBe(redirectUri);
+
+    const completed = await service.completeOAuth(created.server.id, {
+      callbackBaseUrl: otherBaseUrl,
+      code: remote.issueCode(authorizationUrl),
+      state: z.string().parse(authorizeParams.get("state")),
+    });
+
+    expect(completed.server.status).toBe("connected");
+    expect(remote.tokenRequests.at(-1)?.get("client_id")).toBe(clientId);
 
     await manager.disconnectAll();
   });

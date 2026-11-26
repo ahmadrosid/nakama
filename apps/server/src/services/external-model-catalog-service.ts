@@ -6,7 +6,7 @@ type CatalogPayload = z.infer<typeof catalogPayloadSchema>;
 
 const CATALOG_URLS = {
   cerebras: "https://api.cerebras.ai/public/v1/models",
-  openrouter: "https://openrouter.ai/api/v1/models?output_modalities=text",
+  openrouter: "https://openrouter.ai/api/v1/models?output_modalities=all",
 } as const;
 
 export type ExternalModelCatalogId = keyof typeof CATALOG_URLS;

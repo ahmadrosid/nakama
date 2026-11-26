@@ -2,11 +2,10 @@ import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { isDocxFile, isLegacyDocFile } from "../artifact-mime";
-import { listArtifactsTool } from "../artifacts";
+import { listArtifactsTool, uniqueArtifactPath } from "../artifacts";
 import type { ImageAttachment, ToolContext, ToolDefinition } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
-import { pathExists } from "../fs";
 import { MAX_IMAGE_BYTES } from "../message-content";
 import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
@@ -156,28 +155,6 @@ function targetsArtifact(
 
 function artifactRemapKey(context: ToolContext, relativePath: string): string {
   return `${context.sessionId ?? "default"}:${normalizeArtifactPath(relativePath)}`;
-}
-
-async function uniqueArtifactPath(filePath: string): Promise<string> {
-  if (!(await pathExists(filePath))) {
-    return filePath;
-  }
-
-  const date = new Date().toISOString().slice(0, 10);
-  const directory = path.dirname(filePath);
-  const extension = path.extname(filePath);
-  const baseName = path.basename(filePath, extension);
-
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const suffix = attempt === 0 ? date : `${date}-${attempt + 1}`;
-    const candidate = path.join(directory, `${baseName}-${suffix}${extension}`);
-
-    if (!(await pathExists(candidate))) {
-      return candidate;
-    }
-  }
-
-  throw new Error(`Unable to find available artifact filename for ${filePath}`);
 }
 
 export function setDefaultFileGuardOptions(options: PathGuardOptions): void {

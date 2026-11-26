@@ -46,6 +46,7 @@ export function mergeWorkspaceSettings(
       patch.updatedAt,
       existing?.updatedAt ?? new Date().toISOString()
     ),
+    videoModel: pickDefined(patch.videoModel, existing?.videoModel ?? null),
     visionModel: pickDefined(patch.visionModel, existing?.visionModel ?? null),
   };
 }
