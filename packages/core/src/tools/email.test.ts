@@ -215,6 +215,25 @@ describe("email tool", () => {
     expect(result).toEqual({ error: "Invalid recipient email address." });
   });
 
+  test("rejects a long dotted recipient without slow backtracking", async () => {
+    const sender = createFakeMailSender();
+
+    const result = await runEmailTool(
+      {
+        action: "send",
+        subject: "Hello",
+        text: "Body",
+        to: `!@!.${"!.".repeat(100_000)}@`,
+      },
+      {
+        createSender: () => sender,
+        loadConfig: async () => completeConfig,
+      }
+    );
+
+    expect(result).toEqual({ error: "Invalid recipient email address." });
+  });
+
   test("requires text body for send", async () => {
     let senderCreated = false;
 

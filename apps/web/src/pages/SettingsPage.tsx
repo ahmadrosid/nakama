@@ -22,7 +22,10 @@ import {
   NakamaCloudCard,
 } from "@/components/settings/BrowserSessionsCard";
 import { DataPortabilityPanel } from "@/components/settings/DataPortabilityPanel";
-import { ImageGenerationSettingsCard } from "@/components/settings/ImageGenerationSettingsCard";
+import {
+  ImageGenerationSettingsCard,
+  VideoGenerationSettingsCard,
+} from "@/components/settings/ImageGenerationSettingsCard";
 import { MfaSettingsCard } from "@/components/settings/MfaSettingsCard";
 import { PlatformMfaSettingsCard } from "@/components/settings/PlatformMfaSettingsCard";
 import { ProviderSettingsCard } from "@/components/settings/ProviderSettingsCard";
@@ -367,6 +370,9 @@ export function LlmProvidersPage() {
             </div>
             <div id="image-generation">
               <ImageGenerationSettingsCard />
+            </div>
+            <div id="video-generation">
+              <VideoGenerationSettingsCard />
             </div>
             <div id="web-search">
               <WebSearchSettingsCard />

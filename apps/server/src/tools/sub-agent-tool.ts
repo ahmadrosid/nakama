@@ -111,6 +111,7 @@ export async function runSubAgentTool(
 
       return await agentService.runSubAgentPrompt({
         agentDepth: depth + 1,
+        canReadOrganizationKnowledge: context.canReadOrganizationKnowledge,
         clientOrigin: context.clientOrigin,
         context: scopedContext,
         onActivity: context.emitSubAgentActivity,

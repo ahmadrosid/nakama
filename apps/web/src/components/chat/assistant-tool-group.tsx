@@ -37,6 +37,7 @@ import {
   SearchList01Icon,
   TaskEdit01Icon,
   Tick02Icon,
+  VideoAiIcon,
 } from "hugeicons-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -58,7 +59,6 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
-import { readString } from "@/components/chat/web-search.shared";
 import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
 import { CodingAgentCommandLogo } from "@/components/coding-agent-logos";
 import { PluginSurface } from "@/components/PluginSurface";
@@ -100,6 +100,7 @@ import {
 import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
 import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
+import { readString } from "@/lib/json-readers";
 import { groupPath } from "@/lib/navigation";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
@@ -1608,6 +1609,7 @@ const TOOL_ICONS = new Map<string, typeof AiBrain01Icon>([
   ["edit_file", TaskEdit01Icon],
   ["email", Mail01Icon],
   ["generate_image", ImageAdd01Icon],
+  ["generate_video", VideoAiIcon],
   ["knowledge_base_search", PropertySearchIcon],
   ["load_skill", PuzzleIcon],
   ["read_file", BookOpen01Icon],

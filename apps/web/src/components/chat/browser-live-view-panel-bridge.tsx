@@ -2,10 +2,10 @@ import { Button } from "@nakama/ui/button";
 import { toast } from "@nakama/ui/toast";
 import { CheckmarkCircle01Icon, LockIcon } from "hugeicons-react";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { readRecord, readString } from "@/components/chat/web-search.shared";
 import { useChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import type { ChatListItem } from "@/lib/chat-history";
 import { client } from "@/lib/client";
+import { readRecord, readString } from "@/lib/json-readers";
 
 const PANEL_ID = "session-browser";
 

@@ -3,7 +3,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
@@ -42,6 +42,7 @@ function SkillApprovalTabButton({
 export function SkillsWriteApprovalOrgCard() {
   const { activeOrg, updateOrg } = useAuth();
   const [searchParams] = useSearchParams();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<SkillApprovalTab>("gate");
   const orgId = activeOrg?.id ?? null;
@@ -57,6 +58,7 @@ export function SkillsWriteApprovalOrgCard() {
   useEffect(() => {
     if (searchParams.get("skillProposals") === "proposals") {
       setActiveTab("proposals");
+      cardRef.current?.scrollIntoView({ block: "start" });
     }
   }, [searchParams]);
 
@@ -84,7 +86,10 @@ export function SkillsWriteApprovalOrgCard() {
   }
 
   return (
-    <Card className="w-full overflow-hidden shadow-none">
+    <Card
+      className="w-full scroll-mt-4 overflow-hidden shadow-none"
+      ref={cardRef}
+    >
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <p className="font-medium text-foreground text-sm">

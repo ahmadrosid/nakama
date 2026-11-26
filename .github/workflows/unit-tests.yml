@@ -326,7 +326,11 @@ jobs:
           mkdir -p .test-timings
           for suite in root web windows; do
             parts=(shards/*/"$suite".json)
-            [[ ${#parts[@]} -gt 0 ]] || parts=(<(echo '{"version":1,"files":{}}'))
+            # A real file: the parts are read twice, and a <(...) stream reads only once.
+            if [[ ${#parts[@]} -eq 0 ]]; then
+              echo '{"version":1,"files":{}}' > "empty-$suite.json"
+              parts=("empty-$suite.json")
+            fi
             jq -s '{version: 1, files: (map(.files) | add // {})}' "${parts[@]}" > ".test-timings/$suite.json"
             jq -r '.files | keys[]' ".test-timings/$suite.json" | sort > "ran-$suite.txt"
             echo "$suite: $(wc -l < "expected-$suite.txt") expected, $(wc -l < "ran-$suite.txt") ran"

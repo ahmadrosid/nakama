@@ -1,0 +1,38 @@
+---
+title: "Video generation"
+description: "Let an agent make short video clips with MiniMax Hailuo, where the files land, and the limits."
+---
+
+An agent with the `generate_video` tool can make a short video clip from a text prompt. The clip is saved as an MP4 artifact and shows up in chat like any other artifact.
+
+## Setup
+
+1. Add a MiniMax or MiniMax (CN) provider in **Settings → AI Providers**. The key comes from that provider, or from `MINIMAX_API_KEY` (`MINIMAX_CN_API_KEY` for CN).
+2. In **Routing → Video generation model**, pick `Hailuo 2.3` or `Hailuo 02`. For a newer MiniMax model, pick **Custom model ID…** and type its ID, for example `MiniMax-Hailuo-2.3`. With no MiniMax provider yet, pick **MiniMax** to add one. After the key saves, the model is set to `Hailuo 2.3`.
+3. Assign the `generate_video` tool to the agent in **Agent → Tools**. New agents do not get it by default.
+
+Only a platform admin can change the model. To turn video generation off, pick **None**.
+
+## Using it
+
+Ask in plain language. The agent calls `generate_video` with a prompt and, optionally, a duration, a resolution and a filename. A clip takes about 1 to 5 minutes to make.
+
+| Parameter | Required | Notes |
+| --- | --- | --- |
+| `prompt` | yes | What to show, up to 2000 characters. Camera moves can go in brackets, for example `[Push in]` |
+| `duration` | no | `6` (default) or `10` seconds |
+| `resolution` | no | `768P` (default) or `1080P`. `1080P` allows a 6 second clip only |
+| `filename` | no | Output name under `artifacts/`, defaults to `generated-video.mp4` |
+
+The model is not a parameter. It comes from **AI Providers**.
+
+## Where the video goes
+
+Each clip is written under the profile workspace, in `artifacts/`. It appears in **Browse Files → Artifacts**, and web chat shows it as an artifact you can play. Telegram, Discord and WhatsApp get it under the same size rules as other artifacts. See [Artifacts on channels](/artifacts#artifact-limits-and-channels).
+
+## Limits
+
+- MiniMax only, text to video only. No image-to-video yet, so a model that needs an image, such as `MiniMax-Hailuo-2.3-Fast`, fails.
+- One clip per call, up to 100 MB.
+- A clip that is not ready after 10 minutes fails with a timeout error that gives the MiniMax task ID. MiniMax can still finish and bill that clip. Stopping the chat stops the wait.
+- Nakama does not record video cost in usage. MiniMax bills each clip on its own account.

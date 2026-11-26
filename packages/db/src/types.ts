@@ -121,6 +121,8 @@ export interface StoredProfileRecord {
   orgId?: string | null;
   /** Member who created the agent. null for agents created by platform admins. */
   ownerUserId?: string | null;
+  /** false = chat turns get only the agent's own tools, no platform tools. Defaults to enabled. */
+  platformToolsEnabled?: boolean;
   /** Private agents (false) are visible only to their owner and admins. Defaults to shared. */
   sharedWithTeam?: boolean;
   /** null = inherit org default; true/false = force consolidate on/off for this profile */
@@ -304,6 +306,7 @@ export interface StoredWorkspaceSettingsRecord {
   selectedCodingAgentHarness: string | null;
   transcriptionModel: string | null;
   updatedAt: string;
+  videoModel: string | null;
   visionModel: string | null;
 }
 
