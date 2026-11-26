@@ -14,10 +14,10 @@ describe("sanitizeMailError", () => {
     ).toBe("AUTH failed password=[REDACTED]");
   });
 
-  test("still redacts a credential after the known Gmail hint", () => {
-    const hint =
-      "Invalid login: 534-5.7.9 Application-specific password required.";
-
+  test.each([
+    "Invalid login: 534-5.7.9 Application-specific password required.",
+    "Invalid login: 535-5.7.8 Username and Password not accepted",
+  ])("still redacts a credential after the Gmail hint %p", (hint) => {
     expect(
       sanitizeMailError(
         new Error(hint + "\nAUTH failed password:\nfixture-only")
@@ -35,6 +35,13 @@ describe("sanitizeMailError", () => {
     expect(message).toBe(
       "Invalid login: 534-5.7.9 Application-specific password required."
     );
+  });
+
+  test("keeps Gmail's wrong-password message", () => {
+    const message =
+      "Invalid login: 535-5.7.8 Username and Password not accepted";
+
+    expect(sanitizeMailError(new Error(message))).toBe(message);
   });
 
   test.each([

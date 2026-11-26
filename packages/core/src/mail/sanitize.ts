@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const KNOWN_PASSWORD_HINT =
-  /^(?:Invalid login: )?(?:534[- ]5\.7\.9 Application-specific password required|535 your password must be changed)\.?(?=\s|$)/i;
+  /^(?:Invalid login: )?(?:534[- ]5\.7\.9 Application-specific password required|535[- ]5\.7\.8 Username and Password not accepted|535 your password must be changed)\.?(?=\s|$)/i;
 
 const APP_PASSWORD =
   /(?<![A-Za-z0-9])(?!password\b)[A-Za-z0-9]{4}(?:[\s-]*[A-Za-z0-9]{4}){3}(?![A-Za-z0-9])/gi;
