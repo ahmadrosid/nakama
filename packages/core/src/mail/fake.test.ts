@@ -56,6 +56,7 @@ describe("sanitizeMailError", () => {
     "ABCD EFGH IJKL MNOP",
     "ab12 cd34 ef56 gh78",
     "prefixpasswordxy",
+    "password test only",
   ])("redacts the app password %p", (secret) => {
     expect(sanitizeMailError(new Error(`Invalid credentials: ${secret}`))).toBe(
       "Invalid credentials: [REDACTED]"
@@ -73,6 +74,15 @@ describe("sanitizeMailError", () => {
       "password=[REDACTED]"
     );
   });
+
+  test.each(["password ", "password=", "password:\r\n"])(
+    "redacts the whole app password after %p",
+    (label) => {
+      expect(sanitizeMailError(new Error(label + "abcd-efgh ijklmnop"))).toBe(
+        "password=[REDACTED]"
+      );
+    }
+  );
 
   test("redacts an app password after an underscore", () => {
     expect(sanitizeMailError(new Error("pw_abcdefghijklmnop"))).toBe(
