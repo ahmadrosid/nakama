@@ -48,3 +48,11 @@ export function useAuditEventCategories(
     queryKey: queryKeys.auditEventCategories(orgId),
   });
 }
+
+export function usePrunableAuditEvents(days: number, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryFn: () => client.countPrunableAuditEvents(days),
+    queryKey: queryKeys.auditEventsPrunable(days),
+  });
+}

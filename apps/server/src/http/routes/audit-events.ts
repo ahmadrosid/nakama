@@ -1,11 +1,17 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import {
+  AUDIT_EVENT_MAX_RETENTION_DAYS,
+  AUDIT_EVENT_RETENTION_DAYS,
+  mergeWorkspaceSettings,
+} from "@nakama/db";
 import type { Context } from "hono";
 import type { ServerOptions } from "../context";
 import {
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import { errorResponse, json } from "../shared";
+import { clientAddress } from "../rate-limit-middleware";
+import { errorResponse, json, readJson } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
 
 const auditEventSchema = z.object({
@@ -147,12 +153,127 @@ export function registerAuditEventRoutes(
         return errorResponse("Database not configured", 500);
       }
 
-      return json({
-        categories:
-          await options.databaseAdapter.listAuditEventCategories(orgId),
-      });
+      const categories =
+        await options.databaseAdapter.listAuditEventCategories(orgId);
+
+      if (path === "/v1/platform/audit-events") {
+        const settings = await options.databaseAdapter.getWorkspaceSettings();
+
+        return json({
+          categories,
+          retentionDays:
+            settings?.auditRetentionDays ?? AUDIT_EVENT_RETENTION_DAYS,
+        });
+      }
+
+      return json({ categories });
     });
   }
+
+  app.put("/v1/platform/audit-events/retention", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const { databaseAdapter } = options;
+
+    if (!databaseAdapter) {
+      return errorResponse("Database not configured", 500);
+    }
+
+    const body = await readJson(
+      c.req.raw,
+      z
+        .object({
+          retentionDays: z
+            .number()
+            .int()
+            .min(0)
+            .max(AUDIT_EVENT_MAX_RETENTION_DAYS),
+        })
+        .strict()
+    );
+
+    const existing = await databaseAdapter.getWorkspaceSettings();
+    await databaseAdapter.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(existing, {
+        auditRetentionDays: body.retentionDays,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+
+    return json({ retentionDays: body.retentionDays });
+  });
+
+  app.get("/v1/platform/audit-events/prunable", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const { databaseAdapter } = options;
+
+    if (!databaseAdapter) {
+      return errorResponse("Database not configured", 500);
+    }
+
+    const rawDays = c.req.query("days");
+    let days: number | undefined;
+
+    if (rawDays !== undefined) {
+      if (!/^\d+$/.test(rawDays)) {
+        return errorResponse(
+          `days must be an integer between 0 and ${AUDIT_EVENT_MAX_RETENTION_DAYS}`,
+          400
+        );
+      }
+
+      const parsedDays = Number(rawDays);
+
+      if (
+        !Number.isInteger(parsedDays) ||
+        parsedDays < 0 ||
+        parsedDays > AUDIT_EVENT_MAX_RETENTION_DAYS
+      ) {
+        return errorResponse(
+          `days must be an integer between 0 and ${AUDIT_EVENT_MAX_RETENTION_DAYS}`,
+          400
+        );
+      }
+
+      days = parsedDays;
+    }
+
+    return json(await databaseAdapter.countPrunableAuditEvents(days));
+  });
+
+  app.post("/v1/platform/audit-events/prune", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    const { databaseAdapter } = options;
+
+    if (!databaseAdapter) {
+      return errorResponse("Database not configured", 500);
+    }
+
+    const settings = await databaseAdapter.getWorkspaceSettings();
+
+    const retentionDays =
+      settings?.auditRetentionDays ?? AUDIT_EVENT_RETENTION_DAYS;
+
+    if (retentionDays <= 0) {
+      return errorResponse(
+        "Audit retention is off (0 days); nothing to prune",
+        400
+      );
+    }
+
+    const result = await databaseAdapter.pruneAuditEvents({
+      actorMode: auth.mode === "browser-session" ? "session" : "token",
+      actorUserId: auth.user.id,
+      clientIp: clientAddress(c, process.env.NAKAMA_TRUST_PROXY === "true"),
+      forwardedFor: c.req.header("x-forwarded-for") ?? null,
+      method: c.req.method,
+      requestId: c.get("requestId") ?? null,
+      route: c.req.path,
+      sessionId: auth.session?.id ?? null,
+      userAgent: c.req.header("user-agent")?.slice(0, 512) ?? null,
+    });
+
+    return json(result);
+  });
 
   // The chain covers the whole installation, so integrity checks stay a
   // platform-admin capability.

@@ -295,6 +295,8 @@ export interface StoredLlmUsageDailyStatsRecord {
 }
 
 export interface StoredWorkspaceSettingsRecord {
+  /** Days audit events are kept before pruning; 0 keeps every row forever. */
+  auditRetentionDays: number;
   /** Workspace-global interval for refreshing automation schedules and curator work. */
   automationWorkerPollIntervalMs: number;
   codingAgentHarnesses: StoredCodingAgentHarnessRecord[];
@@ -885,6 +887,24 @@ export type StoredAuditEvent = AuditEvent;
 
 export type AuditChainVerification = AuditChainVerificationResult;
 
+export interface PruneAuditEventsInput {
+  actorMode?: AuditActorMode | null;
+  actorUserId?: string | null;
+  clientIp?: string | null;
+  forwardedFor?: string | null;
+  method?: string | null;
+  requestId?: string | null;
+  route?: string | null;
+  sessionId?: string | null;
+  userAgent?: string | null;
+}
+
+export interface PruneAuditEventsResult {
+  deleted: number;
+  hasMore: boolean;
+  retentionDays: number;
+}
+
 /**
  * Write input for the audit ledger. Request context fields are optional:
  * internal writers (agent tool runs, provider connects) do not have them.
@@ -1056,6 +1076,9 @@ export interface DatabaseAdapter {
     profileId?: string
   ): Promise<number>;
   countProfileMcpAssignments(): Promise<number>;
+  countPrunableAuditEvents(
+    days?: number
+  ): Promise<{ days: number; rows: number }>;
   countUnreadAutomationRunsByOrg(
     userId: string,
     orgId: string
@@ -1660,6 +1683,9 @@ export interface DatabaseAdapter {
     workspaceFrom: string,
     workspaceTo: string
   ): Promise<void>;
+  pruneAuditEvents(
+    actor?: PruneAuditEventsInput
+  ): Promise<PruneAuditEventsResult>;
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;

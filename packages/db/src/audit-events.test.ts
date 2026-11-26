@@ -5,6 +5,7 @@ import {
   createSqliteMemoryAdapter,
 } from "./adapters/sqlite";
 import { migrateDatabase } from "./migrate";
+import { mergeWorkspaceSettings } from "./workspace-settings";
 
 describe("audit events", () => {
   test("stores append-only events and filters them", async () => {
@@ -385,5 +386,114 @@ describe("audit events", () => {
       brokenSeq: 2,
       ok: false,
     });
+  });
+
+  test("counts and manually prunes rows using configured retention days", async () => {
+    const database = new Database(":memory:");
+    migrateDatabase(database);
+    const adapter = createSqliteDatabaseAdapter(database);
+
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    const daysAgo = (days: number) =>
+      new Date(Date.now() - days * dayMs).toISOString();
+
+    await adapter.createAuditEvent({
+      action: "auth.login",
+      createdAt: daysAgo(60),
+      id: "audit_60d",
+      resourceType: "user",
+    });
+    await adapter.createAuditEvent({
+      action: "auth.login",
+      createdAt: daysAgo(45),
+      id: "audit_45d",
+      resourceType: "user",
+    });
+    await adapter.createAuditEvent({
+      action: "auth.login",
+      createdAt: daysAgo(10),
+      id: "audit_10d",
+      resourceType: "user",
+    });
+
+    // Under default 365-day retention, nothing is prunable and trigger blocks delete.
+    await expect(adapter.countPrunableAuditEvents()).resolves.toEqual({
+      days: 365,
+      rows: 0,
+    });
+    await expect(adapter.countPrunableAuditEvents(30)).resolves.toEqual({
+      days: 30,
+      rows: 2,
+    });
+    expect(() =>
+      database.exec("DELETE FROM audit_events WHERE id = 'audit_60d'")
+    ).toThrow();
+
+    // Update retention to 30 days and prune manually.
+    await adapter.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(await adapter.getWorkspaceSettings(), {
+        auditRetentionDays: 30,
+      })
+    );
+
+    const result = await adapter.pruneAuditEvents({
+      actorMode: "session",
+      actorUserId: "user_admin",
+      method: "POST",
+      route: "/v1/platform/audit-events/prune",
+    });
+
+    expect(result).toEqual({
+      deleted: 2,
+      hasMore: false,
+      retentionDays: 30,
+    });
+    await expect(adapter.countPrunableAuditEvents()).resolves.toEqual({
+      days: 30,
+      rows: 0,
+    });
+    await expect(adapter.verifyAuditChain()).resolves.toMatchObject({
+      checked: 2,
+      ok: true,
+    });
+  });
+
+  test("retention 0 disables pruning and blocks all deletes", async () => {
+    const database = new Database(":memory:");
+    migrateDatabase(database);
+    const adapter = createSqliteDatabaseAdapter(database);
+
+    await adapter.createAuditEvent({
+      action: "auth.login",
+      createdAt: "2020-01-01T00:00:00.000Z",
+      id: "audit_old_1",
+      resourceType: "user",
+    });
+    await adapter.createAuditEvent({
+      action: "auth.login",
+      createdAt: new Date().toISOString(),
+      id: "audit_new_2",
+      resourceType: "user",
+    });
+
+    await adapter.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(await adapter.getWorkspaceSettings(), {
+        auditRetentionDays: 0,
+      })
+    );
+
+    await expect(adapter.countPrunableAuditEvents()).resolves.toEqual({
+      days: 0,
+      rows: 0,
+    });
+    await expect(adapter.pruneAuditEvents()).resolves.toEqual({
+      deleted: 0,
+      hasMore: false,
+      retentionDays: 0,
+    });
+    expect(() =>
+      database.exec("DELETE FROM audit_events WHERE id = 'audit_old_1'")
+    ).toThrow();
   });
 });

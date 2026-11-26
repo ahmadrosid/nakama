@@ -22,6 +22,10 @@ export const INSTALLATION_AUDIT_ROUTES: ReadonlyArray<
   // Reading the whole audit trail is itself a sensitive read, so the export
   // lands in the same ledger, like tera-router's export that audits itself.
   ["GET /v1/platform/audit-events/export", ["audit.export", "audit"]],
+  [
+    "PUT /v1/platform/audit-events/retention",
+    ["settings.update", "setting", "audit-retention"],
+  ],
   ["POST /v1/auth/setup", ["auth.setup", "user"]],
   ["POST /v1/auth/login", ["auth.login", "user"]],
   ["POST /v1/auth/mfa/backup-codes", ["auth.backup_codes_regenerate", "user"]],

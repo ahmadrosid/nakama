@@ -82,6 +82,7 @@ export const queryKeys = {
     ["auditEventCategories", orgId] as const,
   auditEvents: (orgId: string, filters: string) =>
     ["auditEvents", orgId, filters] as const,
+  auditEventsPrunable: (days: number) => ["auditEventsPrunable", days] as const,
   auditEventsVerify: ["auditEventsVerify"] as const,
   nakamaUpgrade: ["system", "upgrade"] as const,
   nakamaVersion: ["system", "version"] as const,

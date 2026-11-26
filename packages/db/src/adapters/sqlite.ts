@@ -19,11 +19,7 @@ import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
-import {
-  AUDIT_EVENT_RETENTION_CUTOFF_SQL,
-  AUDIT_EVENT_RETENTION_DAYS,
-  migrateDatabase,
-} from "../migrate";
+import { AUDIT_EVENT_RETENTION_DAYS, migrateDatabase } from "../migrate";
 import type {
   BeginOrgTeamCreationInput,
   CompareAndSetOrgPluginStateInput,
@@ -31,6 +27,7 @@ import type {
   DatabaseAdapter,
   OrgMemoryProposalStatus,
   PluginPublishResult,
+  PruneAuditEventsInput,
   PublishOrgPluginReleaseInput,
   StoredArtifactOwnerRecord,
   StoredArtifactShareRecord,
@@ -329,6 +326,7 @@ interface LlmUsageDailyStatsRow {
 }
 
 interface WorkspaceSettingsRow {
+  audit_retention_days: number;
   automation_worker_poll_interval_ms: number;
   coding_agent_harnesses: string;
   coding_agent_provider_passthrough: number | null;
@@ -819,6 +817,9 @@ const AUDIT_PRUNE_EVERY_ROWS = 1000;
 /** Most rows one prune deletes. Twice the interval, so a backlog shrinks by
  * about one interval per prune even while new rows keep expiring. */
 const AUDIT_PRUNE_CHUNK_ROWS = 2 * AUDIT_PRUNE_EVERY_ROWS;
+
+/** Maximum chunks deleted in one manual prune request (caps lock hold at 50,000 rows). */
+const AUDIT_MANUAL_PRUNE_MAX_CHUNKS = 25;
 
 /** How long claim rows block replays before prune (also caps table growth). */
 const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -2423,6 +2424,7 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       selected_coding_agent_harness,
       coding_agent_provider_passthrough,
       automation_worker_poll_interval_ms,
+      audit_retention_days,
       updated_at
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2435,6 +2437,7 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
       coding_agent_provider_passthrough = excluded.coding_agent_provider_passthrough,
       automation_worker_poll_interval_ms = excluded.automation_worker_poll_interval_ms,
+      audit_retention_days = excluded.audit_retention_days,
       updated_at = excluded.updated_at
   `);
 
@@ -3114,11 +3117,11 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   // backlog drains a chunk per prune instead of stalling one append.
   // ponytail: a backlog bigger than the write rate drains slowly; move this
   // to a timer outside the request path if that ever matters.
-  const pruneAuditEventsStmt = db.prepare(`
+  const pruneAuditEventsStmt = db.prepare<unknown, [{ $days: number }]>(`
     DELETE FROM audit_events
     WHERE rowid IN (
       SELECT rowid FROM audit_events
-      WHERE created_at < ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
+      WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
         AND (seq IS NULL OR seq < COALESCE(
           (
             SELECT MIN(seq) FROM (
@@ -3127,7 +3130,7 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
               ORDER BY seq
               LIMIT ${AUDIT_PRUNE_CHUNK_ROWS + 1}
             )
-            WHERE created_at >= ${AUDIT_EVENT_RETENTION_CUTOFF_SQL}
+            WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
           ),
           (SELECT MAX(seq) FROM audit_events)
         ))
@@ -3135,6 +3138,30 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       LIMIT ${AUDIT_PRUNE_CHUNK_ROWS}
     )
   `);
+
+  const countPrunableAuditEventsStmt = db.prepare<
+    { count: number },
+    [{ $days: number }]
+  >(`
+    SELECT COUNT(*) AS count
+    FROM audit_events
+    WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
+      AND (seq IS NULL OR seq < COALESCE(
+        (
+          SELECT MIN(seq) FROM audit_events
+          WHERE seq IS NOT NULL
+            AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
+        ),
+        (SELECT MAX(seq) FROM audit_events)
+      ))
+  `);
+
+  function readAuditRetentionDays(): number {
+    return (
+      getWorkspaceSettingsStmt.get(WORKSPACE_SETTINGS_ID)
+        ?.audit_retention_days ?? AUDIT_EVENT_RETENTION_DAYS
+    );
+  }
 
   /** Appends one row to the hash chain. Call inside a transaction. */
   function appendAuditEvent(record: CreateAuditEventInput): number {
@@ -3201,7 +3228,13 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   /** Prunes rows past retention and records the prune in the chain itself. */
   function pruneExpiredAuditEvents(): void {
-    const deleted = pruneAuditEventsStmt.run().changes;
+    const retentionDays = readAuditRetentionDays();
+
+    if (retentionDays <= 0) {
+      return;
+    }
+
+    const deleted = pruneAuditEventsStmt.run({ $days: retentionDays }).changes;
 
     if (deleted > 0) {
       appendAuditEvent({
@@ -3209,7 +3242,7 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         actorMode: "system",
         createdAt: new Date().toISOString(),
         id: `audit_${crypto.randomUUID()}`,
-        metadata: { deleted, retentionDays: AUDIT_EVENT_RETENTION_DAYS },
+        metadata: { deleted, retentionDays },
         resourceType: "audit_event",
       });
     }
@@ -5314,6 +5347,19 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row?.count ?? 0;
     },
 
+    async countPrunableAuditEvents(days) {
+      const effectiveDays = days ?? readAuditRetentionDays();
+
+      if (effectiveDays <= 0) {
+        return { days: 0, rows: 0 };
+      }
+
+      const rows =
+        countPrunableAuditEventsStmt.get({ $days: effectiveDays })?.count ?? 0;
+
+      return { days: effectiveDays, rows };
+    },
+
     async countUnreadAutomationRunsByOrg(userId, orgId) {
       return countUnreadAutomationRunsByOrgStmt
         .all(userId, orgId, orgId)
@@ -7113,6 +7159,58 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async pruneAuditEvents(actor: PruneAuditEventsInput = {}) {
+      return db.transaction(() => {
+        const retentionDays = readAuditRetentionDays();
+
+        if (retentionDays <= 0) {
+          return { deleted: 0, hasMore: false, retentionDays };
+        }
+
+        let deleted = 0;
+
+        for (let chunk = 0; chunk < AUDIT_MANUAL_PRUNE_MAX_CHUNKS; chunk += 1) {
+          const changes = pruneAuditEventsStmt.run({
+            $days: retentionDays,
+          }).changes;
+
+          deleted += changes;
+
+          if (changes < AUDIT_PRUNE_CHUNK_ROWS) {
+            break;
+          }
+        }
+
+        const remaining =
+          countPrunableAuditEventsStmt.get({ $days: retentionDays })?.count ??
+          0;
+
+        if (deleted > 0) {
+          appendAuditEvent({
+            action: "audit.prune",
+            actorMode: actor.actorMode ?? "system",
+            actorUserId: actor.actorUserId ?? null,
+            clientIp: actor.clientIp ?? null,
+            createdAt: new Date().toISOString(),
+            forwardedFor: actor.forwardedFor ?? null,
+            id: `audit_${crypto.randomUUID()}`,
+            metadata: { deleted, retentionDays },
+            method: actor.method ?? null,
+            orgId: null,
+            outcome: "success",
+            requestId: actor.requestId ?? null,
+            resourceType: "audit_event",
+            route: actor.route ?? null,
+            sessionId: actor.sessionId ?? null,
+            status: 200,
+            userAgent: actor.userAgent ?? null,
+          });
+        }
+
+        return { deleted, hasMore: remaining > 0, retentionDays };
+      })();
+    },
+
     async publishOrgPluginRelease(input) {
       return publishOrgPluginReleaseTx(input);
     },
@@ -7693,6 +7791,7 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.selectedCodingAgentHarness,
         record.codingAgentProviderPassthrough === false ? 0 : 1,
         record.automationWorkerPollIntervalMs ?? 5 * 60 * 1000,
+        record.auditRetentionDays ?? AUDIT_EVENT_RETENTION_DAYS,
         record.updatedAt
       );
     },
@@ -8295,6 +8394,7 @@ function toWorkspaceSettingsRecord(
   row: WorkspaceSettingsRow
 ): StoredWorkspaceSettingsRecord {
   return {
+    auditRetentionDays: row.audit_retention_days,
     automationWorkerPollIntervalMs: row.automation_worker_poll_interval_ms,
     codingAgentHarnesses: parseCodingAgentHarnesses(row.coding_agent_harnesses),
     codingAgentProviderPassthrough: row.coding_agent_provider_passthrough !== 0,

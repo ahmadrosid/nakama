@@ -21,6 +21,11 @@ export {
 
 export * from "./local-client";
 
+export {
+  AUDIT_EVENT_MAX_RETENTION_DAYS,
+  AUDIT_EVENT_RETENTION_DAYS,
+} from "./migrate";
+
 export * from "./org-profiles";
 
 export * from "./seed";

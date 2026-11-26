@@ -976,6 +976,26 @@ export interface ListAuditEventsResponse {
 
 export interface AuditEventStats {
   categories: string[];
+  retentionDays?: number;
+}
+
+export interface AuditPrunableResult {
+  days: number;
+  rows: number;
+}
+
+export interface AuditPruneResult {
+  deleted: number;
+  hasMore: boolean;
+  retentionDays: number;
+}
+
+export interface UpdateAuditRetentionRequest {
+  retentionDays: number;
+}
+
+export interface AuditRetentionResponse {
+  retentionDays: number;
 }
 
 export interface AuditChainVerificationResult {

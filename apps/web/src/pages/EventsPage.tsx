@@ -25,11 +25,13 @@ import {
 } from "@nakama/ui/table";
 import {
   ArrowRight01Icon,
+  Delete02Icon,
   Download01Icon,
   RefreshIcon,
   Search01Icon,
 } from "hugeicons-react";
 import { useRef, useState } from "react";
+import { AuditPruneDialog } from "@/components/AuditPruneDialog";
 import { useAuth } from "@/context/use-auth";
 import {
   type AuditEventsFilters,
@@ -186,7 +188,12 @@ export function EventsPage() {
         <h1 className="text-lg font-semibold">
           {isPlatformAdmin ? "All events" : "Events"}
         </h1>
-        {isPlatformAdmin ? <PlatformAdminControls /> : null}
+        {isPlatformAdmin ? (
+          <PlatformAdminControls
+            onPruned={() => setOffset(0)}
+            savedRetentionDays={categoriesQuery.data?.retentionDays}
+          />
+        ) : null}
       </div>
 
       <EventsFilterBar
@@ -232,7 +239,14 @@ export function EventsPage() {
   );
 }
 
-function PlatformAdminControls() {
+function PlatformAdminControls({
+  onPruned,
+  savedRetentionDays,
+}: {
+  onPruned: () => void;
+  savedRetentionDays: number | undefined;
+}) {
+  const [pruneOpen, setPruneOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
   const [verification, setVerification] =
@@ -300,6 +314,16 @@ function PlatformAdminControls() {
         </span>
       ) : null}
       <Button
+        onClick={() => {
+          setPruneOpen(true);
+        }}
+        size="sm"
+        variant="destructive"
+      >
+        <Delete02Icon aria-hidden className="size-4" />
+        Prune
+      </Button>
+      <Button
         disabled={verifying}
         onClick={() => {
           void verifyChain();
@@ -321,6 +345,12 @@ function PlatformAdminControls() {
         <Download01Icon aria-hidden className="size-4" />
         Export
       </Button>
+      <AuditPruneDialog
+        onOpenChange={setPruneOpen}
+        onPruned={onPruned}
+        open={pruneOpen}
+        savedDays={savedRetentionDays}
+      />
     </div>
   );
 }

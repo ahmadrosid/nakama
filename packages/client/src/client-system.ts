@@ -1,6 +1,9 @@
 import type {
   AuditChainVerificationResult,
   AuditEventStats,
+  AuditPrunableResult,
+  AuditPruneResult,
+  AuditRetentionResponse,
   AutomationWorkerSettingsResponse,
   BackupStatusResponse,
   ChatgptOAuthDeviceCompleteRequest,
@@ -28,6 +31,7 @@ import type {
   RestoreDataImportResponse,
   SetupRestoreDataImportResponse,
   SystemStatusResponse,
+  UpdateAuditRetentionRequest,
   UpdateAutomationWorkerSettingsRequest,
   UpdateProviderRequest,
   UpdateProviderResponse,
@@ -189,6 +193,34 @@ export class SystemClient extends NakamaClientCore {
 
   exportAuditEventsResponse(): Promise<Response> {
     return this.fetchRaw("/v1/platform/audit-events/export");
+  }
+
+  async updateAuditRetention(
+    retentionDays: number
+  ): Promise<AuditRetentionResponse> {
+    return this.request<AuditRetentionResponse>(
+      "/v1/platform/audit-events/retention",
+      {
+        body: JSON.stringify({
+          retentionDays,
+        } satisfies UpdateAuditRetentionRequest),
+        method: "PUT",
+      }
+    );
+  }
+
+  async countPrunableAuditEvents(days?: number): Promise<AuditPrunableResult> {
+    const query = days === undefined ? "" : `?days=${encodeURIComponent(days)}`;
+
+    return this.request<AuditPrunableResult>(
+      `/v1/platform/audit-events/prunable${query}`
+    );
+  }
+
+  async pruneAuditEvents(): Promise<AuditPruneResult> {
+    return this.request<AuditPruneResult>("/v1/platform/audit-events/prune", {
+      method: "POST",
+    });
   }
 
   async exportUserData(userId: string): Promise<{
