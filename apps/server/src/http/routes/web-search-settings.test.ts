@@ -110,7 +110,7 @@ describe("web search settings route", () => {
     });
   });
 
-  test("a platform admin saves You.com without a key", async () => {
+  test("You.com without a key is not configured", async () => {
     const { app, databaseAdapter } = await createApp();
     const session = await setupFreshInstallSession(app, databaseAdapter);
 
@@ -128,8 +128,8 @@ describe("web search settings route", () => {
     expect(saved.status).toBe(200);
 
     expect(await saved.json()).toMatchObject({
-      configured: true,
-      endpoint: "https://api.you.com/v1/agents/search",
+      configured: false,
+      endpoint: "https://ydc-index.io/v1/search",
       provider: "youcom",
       source: "missing",
     });

@@ -143,7 +143,7 @@ Org admins configure these from **Settings → Agent tools → Tools**.
 
 Requires an OpenAI or Anthropic provider with a configured API key, or an Exa, Firecrawl, Serply, Keenable or You.com search back-end.
 
-Org admins can point `web_search` at an external search API from **Settings → Agent tools → AI Providers → Web search**: pick **Exa**, **Firecrawl**, **Serply**, **Keenable** or **You.com**, then supply the API key when the provider needs one. Keenable and You.com also run without a key; a key lifts their limits. You.com's keyless path is about 100 searches a day. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
+Org admins can point `web_search` at an external search API from **Settings → Agent tools → AI Providers → Web search**: pick **Exa**, **Firecrawl**, **Serply**, **Keenable** or **You.com**, then supply the API key. Keenable also runs without a key on a shared per-IP rate limit that all organizations on the install use; a key lifts that limit. The key is stored as a secret and is only ever returned masked.
 
 Leave the provider on **Built-in** to keep using the model provider's own hosted search.
 

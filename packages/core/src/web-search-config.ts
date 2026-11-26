@@ -26,7 +26,7 @@ export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
     firecrawl: "https://api.firecrawl.dev/v2/search",
     keenable: "https://api.keenable.ai/v1/search",
     serply: "https://api.serply.io/v1/search",
-    youcom: "https://api.you.com/v1/agents/search",
+    youcom: "https://ydc-index.io/v1/search",
   };
 
 export const WEB_SEARCH_PROVIDER_ENV_NAMES: Record<WebSearchProvider, string> =
@@ -99,12 +99,8 @@ export function isWebSearchConfigComplete(
     return false;
   }
 
-  // Keenable and You.com answer without a key; a key only lifts their limits.
-  return (
-    config.provider === "keenable" ||
-    config.provider === "youcom" ||
-    Boolean(config.apiKey.trim())
-  );
+  // Keenable answers without a key; a key only lifts its rate limits.
+  return config.provider === "keenable" || Boolean(config.apiKey.trim());
 }
 
 function parseWebSearchSection(

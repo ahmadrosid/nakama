@@ -165,17 +165,17 @@ describe("web search config", () => {
     );
   });
 
-  test("uses You.com without a key and still needs one for Exa", async () => {
+  test("needs a key for You.com", async () => {
     await useTempConfigDir();
 
     const saved = await saveWebSearchConfig({ provider: "youcom" });
 
-    expect(saved.configured).toBe(true);
-    expect(saved.endpoint).toBe("https://api.you.com/v1/agents/search");
-    expect(WEB_SEARCH_PROVIDER_LABELS.youcom).toBe("You.com");
+    expect(saved.configured).toBe(false);
+    expect(saved.endpoint).toBe("https://ydc-index.io/v1/search");
+
+    process.env.YDC_API_KEY = "ydc-secret-key-1234";
+
+    expect((await loadWebSearchSettingsPublic()).configured).toBe(true);
     expect(isWebSearchProvider("youcom")).toBe(true);
-    expect((await saveWebSearchConfig({ provider: "exa" })).configured).toBe(
-      false
-    );
   });
 });

@@ -69,7 +69,7 @@ function useWebSearchSettingsForm() {
 
   // Keenable runs without a key, so a key is optional and only lifts its rate
   // limits; `configured` alone does not mean one is saved.
-  const keyOptional = provider === "keenable" || provider === "youcom";
+  const keyOptional = provider === "keenable";
 
   const keyAlreadySaved =
     settings?.provider === provider &&

@@ -133,46 +133,16 @@ function buildRequest(
     };
   }
 
-  // You.com answers without a key at the agents search URL. A YDC_API_KEY
-  // moves the call to the keyed Search API.
+  // You.com's Search API takes a JSON POST with X-API-Key.
   if (config.provider === "youcom") {
-    const keylessUrl = "https://api.you.com/v1/agents/search";
-    const keyedUrl = "https://ydc-index.io/v1/search";
-    const count = String(MAX_RESULTS);
     headers["user-agent"] = "youdotcom-integration/ahmadrosid-nakama";
-
-    if (config.apiKey) {
-      headers["x-api-key"] = config.apiKey;
-
-      const url =
-        !config.endpoint || config.endpoint === keylessUrl
-          ? keyedUrl
-          : config.endpoint;
-
-      return {
-        body: JSON.stringify({ count: MAX_RESULTS, query }),
-        headers,
-        method: "POST",
-        url,
-      };
-    }
-
-    const base =
-      !config.endpoint || config.endpoint === keyedUrl
-        ? keylessUrl
-        : config.endpoint;
-
-    const url = new URL(base);
-    url.searchParams.set("query", query);
-    url.searchParams.set("count", count);
+    headers["x-api-key"] = config.apiKey;
 
     return {
-      headers: {
-        accept: "application/json",
-        "user-agent": "youdotcom-integration/ahmadrosid-nakama",
-      },
-      method: "GET",
-      url: url.toString(),
+      body: JSON.stringify({ count: MAX_RESULTS, query }),
+      headers,
+      method: "POST",
+      url: config.endpoint,
     };
   }
 
@@ -246,24 +216,22 @@ function toResult(entry: JsonValue): CustomWebSearchResult | null {
     return null;
   }
 
-  const snippetParts: string[] = [];
+  // You.com puts query passages on `snippets` (deprecated) or
+  // `contents.highlights`; join whichever is present.
+  const contents = readRecord(record.contents ?? null);
 
-  if (Array.isArray(record.snippets)) {
-    for (const entry of record.snippets) {
-      const part = readString(entry);
-
-      if (part) {
-        snippetParts.push(part);
-      }
-    }
-  }
-
-  const snippets = snippetParts.join(" ") || undefined;
+  const passages = [
+    ...(Array.isArray(record.snippets) ? record.snippets : []),
+    ...(Array.isArray(contents?.highlights) ? contents.highlights : []),
+  ]
+    .flatMap((part) => readString(part) ?? [])
+    .join(" ");
 
   const snippet =
     readString(record.snippet) ??
     readString(record.description) ??
-    (snippets || undefined) ??
+    (passages || undefined) ??
+    readString(contents?.markdown) ??
     readString(record.text) ??
     readString(record.markdown) ??
     readString(record.content);
