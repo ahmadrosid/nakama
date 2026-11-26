@@ -63,17 +63,6 @@ function streamChunk<ErrorValue>(
   })}\r\n\r\n`;
 }
 
-function streamError<ErrorValue>(error: ErrorValue): string {
-  return `data:${JSON.stringify({
-    choices: [],
-    created: 1_700_000_000,
-    error,
-    id: "chunk-error",
-    model: "anthropic/claude-sonnet-4-6",
-    object: "chat.completion.chunk",
-  })}\r\n\r\n`;
-}
-
 describe("createOpenRouterProvider", () => {
   test("reads text parts from structured chat and text responses", async () => {
     const provider = createOpenRouterProvider({

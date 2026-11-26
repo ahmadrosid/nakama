@@ -6,7 +6,6 @@ import { Tick02Icon } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 import { WIDE_ARTIFACT_PANEL_WIDTH } from "@/components/chat/artifact-attachment-panel-body.shared";
 import { clampAttachmentPanelWidth } from "@/components/chat/attachment-panel-width";
-import { readRecord, readString } from "@/components/chat/web-search.shared";
 import { PluginSurface } from "@/components/PluginSurface";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
@@ -18,6 +17,7 @@ import {
 } from "@/hooks/use-plugins";
 import type { ChatListItem } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
+import { readRecord, readString } from "@/lib/json-readers";
 import { canAccessSystemPage } from "@/lib/navigation";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { LocalPluginInstaller } from "@/pages/plugins/local-plugin-installer";

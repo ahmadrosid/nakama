@@ -563,7 +563,7 @@ describe("OrgService", () => {
 
   describe("webhook secrets of a member who loses access", () => {
     async function setup() {
-      const { authService, databaseAdapter, orgService } = createOrgService();
+      const { databaseAdapter, orgService } = createOrgService();
 
       const created = await orgService.createOrganization({
         admin: {
@@ -4125,6 +4125,7 @@ if __name__ == "__main__":
         automationsEnabled: false,
         model: "shared-provider::shared-model",
         name: "Updated template",
+        platformToolsEnabled: false,
         skillsPostTurnReview: false,
         skillsWriteApproval: false,
         systemPrompt: "Updated instructions",
@@ -4147,6 +4148,7 @@ if __name__ == "__main__":
         model: "shared-provider::shared-model",
         name: "Updated template",
         orgId: "org_team_a",
+        platformToolsEnabled: false,
         thinkingEffort: "high",
         thinkingEnabled: true,
         updatedAt: profile.updatedAt,

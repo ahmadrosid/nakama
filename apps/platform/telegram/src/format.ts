@@ -9,28 +9,6 @@ export function prepareTelegramFallbackReply(text: string): string {
   return renderTelegramPlainText(text);
 }
 
-function splitLongParagraph(paragraph: string, maxChars: number): string[] {
-  const chunks: string[] = [];
-  let remaining = paragraph;
-
-  while (remaining.length > maxChars) {
-    let splitAt = remaining.lastIndexOf(" ", maxChars);
-
-    if (splitAt <= 0) {
-      splitAt = maxChars;
-    }
-
-    chunks.push(remaining.slice(0, splitAt).trimEnd());
-    remaining = remaining.slice(splitAt).trimStart();
-  }
-
-  if (remaining.length > 0) {
-    chunks.push(remaining);
-  }
-
-  return chunks;
-}
-
 export type TelegramTodoRunState =
   | "working"
   | "completed"

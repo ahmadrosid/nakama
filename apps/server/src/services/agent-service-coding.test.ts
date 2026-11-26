@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   type AgentChannel,
   ensureBundledSkillFiles,
+  type GenerateChatInput,
   type ToolDefinition,
 } from "@nakama/core";
 import type { StoredProfileRecord } from "@nakama/db";
@@ -168,6 +169,152 @@ describe("AgentService skill_manage injection", () => {
     expect(workflow).not.toContain("ask_user_question");
     expect(workflow).not.toContain("todo_write");
     expect(workflow).not.toContain("create_automation");
+  });
+
+  test("platformToolsEnabled false leaves only the profile's own tools on chat turns", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_platform_switch",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile("profile_default", "tool_for_platform_switch");
+
+    const service = new AgentService(null, null, db);
+    service.setAutomationTools([
+      // SAFETY: This test controls the fixture shape at this boundary.
+      { name: "create_automation" } as ToolDefinition,
+    ]);
+
+    // SAFETY: This test checks the profile tool resolver for its fixture.
+    const resolve =
+      privateServiceAccess<AgentServiceProfileToolsAccess>(
+        service
+      ).resolveProfileTools.bind(service);
+
+    const on = createDefaultProfile();
+    const off = { ...on, platformToolsEnabled: false };
+
+    const names = async (profile: StoredProfileRecord, kind: TurnKind) =>
+      (await resolve(profile, kind, { channel: "web" })).map(
+        (tool) => tool.name
+      );
+
+    for (const kind of ["chat", "branch", "cognito"] as const) {
+      expect(await names(off, kind)).toEqual(["test_tool"]);
+      expect(await names(on, kind)).toContain("todo_write");
+    }
+
+    // A rerun replays a chat, so it gets the chat's tools.
+    expect(await names(off, "regression_rerun")).toEqual(["test_tool"]);
+    expect(await names(on, "regression_rerun")).toContain("propose_org_memory");
+
+    // Super Nakama has no switch.
+    expect(await names({ ...off, isSuper: true }, "chat")).toEqual(
+      await names({ ...on, isSuper: true }, "chat")
+    );
+
+    // Unattended turns ignore the switch.
+    for (const kind of [
+      "automation",
+      "child",
+      "group_member",
+      "plugin_workflow",
+      "sub_agent",
+    ] as const) {
+      expect(await names(off, kind)).toEqual(await names(on, kind));
+    }
+
+    expect(await names(off, "automation")).toContain("propose_org_memory");
+  });
+
+  test("turning platform tools off reaches an open chat and channel helpers", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_platform_open_chat",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile(
+      "profile_default",
+      "tool_for_platform_open_chat"
+    );
+
+    const service = new AgentService(null, null, db);
+    let sent: string[] = [];
+
+    const record = (input: GenerateChatInput) => {
+      sent = (input.tools ?? []).map((tool) => tool.name);
+
+      return Promise.resolve({
+        assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
+        content: "ok",
+        toolCalls: [],
+      });
+    };
+
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: { generateChat: record, name: "openai", streamChat: record },
+      }),
+    });
+
+    const send = async (sessionId: string) => {
+      await (
+        await service.sessions.get(sessionId, ORG_ID)
+      )?.send({
+        message: "hi",
+      });
+
+      return sent;
+    };
+
+    const web = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { orgRole: "admin" }
+    );
+
+    const discord = await service.createSession(
+      ORG_ID,
+      "discord",
+      "profile_default",
+      "user_1",
+      { orgRole: "admin" }
+    );
+
+    expect(await send(web)).toContain("todo_write");
+    expect(await send(discord)).toContain("read_session_history");
+
+    await service.updateProfile(ORG_ID, "profile_default", {
+      platformToolsEnabled: false,
+    });
+
+    expect(await send(web)).toEqual(["test_tool"]);
+    expect(await send(discord)).toEqual(["test_tool"]);
+
+    const fresh = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { orgRole: "admin" }
+    );
+
+    expect(await send(fresh)).toEqual(["test_tool"]);
   });
 
   test("skips platform tool groups for a profile with no tools", async () => {

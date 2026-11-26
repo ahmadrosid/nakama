@@ -29,13 +29,6 @@ interface TestCreateProfileInput {
   name: string;
 }
 
-interface TestHandlerConfig {
-  modulePath: string;
-  requiresApiKey?: boolean;
-}
-
-const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
-
 const ORG_ID = "org_test";
 
 const SESSION_ID = "session_test";

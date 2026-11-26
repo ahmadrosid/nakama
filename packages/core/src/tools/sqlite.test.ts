@@ -83,6 +83,58 @@ describe("sqlite tool", () => {
     }
   });
 
+  test.each(["-- report\n", "/* report */ "])(
+    "returns query rows after a SQL comment %s",
+    async (comment) => {
+      const result = await runSqliteTool(
+        { params: [42], sql: comment + "SELECT ? AS answer" },
+        { orgId: "org_test" },
+        { databasePath: ":memory:" }
+      );
+
+      expect(result).toEqual({
+        columns: ["answer"],
+        rows: [{ answer: 42 }],
+      });
+    }
+  );
+
+  test("returns inserted rows and saves the write with RETURNING", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nakama-sqlite-returning-"));
+    const databasePath = join(dir, "workflow-data.sqlite");
+
+    try {
+      await runSqliteTool(
+        { sql: "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)" },
+        { orgId: "org_test" },
+        { databasePath }
+      );
+
+      const inserted = await runSqliteTool(
+        {
+          params: ["alpha"],
+          sql: "INSERT INTO items (name) VALUES (?) RETURNING id, name",
+        },
+        { orgId: "org_test" },
+        { databasePath }
+      );
+
+      expect(inserted).toEqual({
+        columns: ["id", "name"],
+        rows: [{ id: 1, name: "alpha" }],
+      });
+      expect(
+        await runSqliteTool(
+          { sql: "SELECT id, name FROM items" },
+          { orgId: "org_test" },
+          { databasePath }
+        )
+      ).toEqual(inserted);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   test("rejects ATTACH and multiple statements", async () => {
     await expect(
       runSqliteTool(

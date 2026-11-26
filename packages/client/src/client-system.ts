@@ -281,23 +281,6 @@ export class SystemClient extends NakamaClientCore {
     );
   }
 
-  async listLegacyChannels(): Promise<
-    Array<{ platform: "telegram" | "discord" | "whatsapp"; global: boolean }>
-  > {
-    return this.request("/v1/settings/channel-legacy");
-  }
-
-  async claimLegacyChannel(
-    platform: string,
-    global: boolean,
-    profileId: string
-  ): Promise<{ ok: boolean }> {
-    return this.request(
-      `/v1/settings/channel-legacy/claim?profileId=${encodeURIComponent(profileId)}`,
-      { body: JSON.stringify({ global, platform }), method: "POST" }
-    );
-  }
-
   async startWorker(
     name: string,
     profileId?: string

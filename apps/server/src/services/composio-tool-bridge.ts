@@ -77,26 +77,11 @@ function notConnectedError(toolkitSlug: string): ComposioToolErrorResult {
   };
 }
 
-interface ComposioConnectAccountInput {
-  toolkit_slug: string;
-}
-
 interface SearchableAction {
   description: string;
   name: string;
   slug: string;
   toolkitSlug: string;
-}
-
-interface ComposioSearchActionsInput {
-  query: string;
-  toolkit_slug?: string;
-}
-
-interface ComposioInvokeActionInput {
-  action_slug: string;
-  arguments: Record<string, JsonValue>;
-  toolkit_slug: string;
 }
 
 type JsonValue =

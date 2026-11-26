@@ -1,5 +1,6 @@
 import { toArtifactsRelativePath } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
+import { readRawString, readRecord } from "@/lib/json-readers";
 import {
   parseStreamingArtifactToolInput,
   type StreamingArtifactToolInput,
@@ -63,24 +64,14 @@ function isContentArtifactTool(tool: string | undefined): boolean {
 }
 
 function relativePathFromCompletedTool(message: ChatListItem): string | null {
-  // SAFETY: The branch checks that the tool result is a non-null object.
-  const result =
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof message.toolResult === "object" && message.toolResult !== null
-      ? (message.toolResult as { path?: string; error?: string })
-      : null;
+  const result = readRecord(message.toolResult);
+  const path = readRawString(result?.path);
 
-  if (
-    !result ||
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof result.error === "string" ||
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof result.path !== "string"
-  ) {
+  if (!result || readRawString(result.error) !== null || path === null) {
     return null;
   }
 
-  const relativePath = toArtifactsRelativePath(result.path);
+  const relativePath = toArtifactsRelativePath(path);
 
   if (!relativePath || relativePath.includes(".nakama-meta")) {
     return null;
