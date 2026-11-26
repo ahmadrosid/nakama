@@ -72,6 +72,10 @@ export const RESOURCES_AUDIT_ROUTES: ReadonlyArray<
     ["profile.avatar", "profile", ":profileId"],
   ],
   [
+    "DELETE /v1/profiles/:profileId/avatar",
+    ["profile.avatar", "profile", ":profileId"],
+  ],
+  [
     "PUT /v1/profiles/:profileId/acp-settings/:configId",
     ["profile.acp_settings", "profile", ":profileId"],
   ],
@@ -162,6 +166,14 @@ export const RESOURCES_AUDIT_ROUTES: ReadonlyArray<
   ["POST /v1/tools", ["tool.create", "tool"]],
   [
     "PUT /v1/tools/:toolId/credentials",
+    ["tool.credentials_update", "tool", ":toolId"],
+  ],
+  [
+    "DELETE /v1/tools/:toolId/credentials",
+    ["tool.credentials_update", "tool", ":toolId"],
+  ],
+  [
+    "POST /v1/tools/:toolId/credentials/use-stored",
     ["tool.credentials_update", "tool", ":toolId"],
   ],
   ["DELETE /v1/tools/:toolId", ["tool.delete", "tool", ":toolId"]],

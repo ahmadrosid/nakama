@@ -2,7 +2,6 @@ import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,6 +24,8 @@ const DEFAULT_RETENTION_DAYS = 365;
 
 const MAX_RETENTION_DAYS = 3650;
 
+const MIN_RETENTION_DAYS = 90;
+
 const COUNT_FORMAT = new Intl.NumberFormat();
 
 function formatRowsLabel(count: number): string {
@@ -40,7 +41,9 @@ function parseRetentionDays(raw: string): number | null {
 
   const parsed = Number(trimmed);
 
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= MAX_RETENTION_DAYS
+  return Number.isInteger(parsed) &&
+    (parsed === 0 || parsed >= MIN_RETENTION_DAYS) &&
+    parsed <= MAX_RETENTION_DAYS
     ? parsed
     : null;
 }
@@ -216,10 +219,6 @@ function AuditPruneForm({
     <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
       <DialogHeader>
         <DialogTitle>Prune audit log</DialogTitle>
-        <DialogDescription>
-          Rows past retention are pruned automatically during new writes. Prune
-          updates the window and cleans older rows now.
-        </DialogDescription>
       </DialogHeader>
 
       <FormField
@@ -233,7 +232,7 @@ function AuditPruneForm({
           >
             {valid
               ? "0 keeps every row forever."
-              : `Enter a whole number from 0 to ${MAX_RETENTION_DAYS}.`}
+              : `Enter 0, or a whole number from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}.`}
           </p>
         }
         id="audit-retention-days"
@@ -260,11 +259,6 @@ function AuditPruneForm({
           rows={preview.data?.rows ?? 0}
         />
       ) : null}
-
-      <p className="text-muted-foreground text-xs">
-        Verify keeps working after a prune: it checks the chain from the oldest
-        kept row.
-      </p>
 
       {error ? (
         <p className="text-destructive text-sm" role="alert">

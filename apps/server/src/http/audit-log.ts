@@ -12,7 +12,8 @@ export function createAuditLogMiddleware(
 ): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     // The last non-middleware match is the handler's pattern, known before it
-    // runs, so requests that auth middleware rejects are still classified.
+    // runs, so requests that org middleware rejects are still classified.
+    // Auth middleware runs first, so a request it rejects is not recorded.
     const handler = matchedRoutes(c).findLast(
       (route) => route.method !== "ALL"
     );

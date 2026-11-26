@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
   AUDIT_EVENT_MAX_RETENTION_DAYS,
+  AUDIT_EVENT_MIN_RETENTION_DAYS,
   AUDIT_EVENT_RETENTION_DAYS,
   mergeWorkspaceSettings,
 } from "@nakama/db";
@@ -186,7 +187,10 @@ export function registerAuditEventRoutes(
             .number()
             .int()
             .min(0)
-            .max(AUDIT_EVENT_MAX_RETENTION_DAYS),
+            .max(AUDIT_EVENT_MAX_RETENTION_DAYS)
+            .refine(
+              (days) => days === 0 || days >= AUDIT_EVENT_MIN_RETENTION_DAYS
+            ),
         })
         .strict()
     );

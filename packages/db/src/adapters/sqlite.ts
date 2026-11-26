@@ -19,7 +19,11 @@ import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
-import { AUDIT_EVENT_RETENTION_DAYS, migrateDatabase } from "../migrate";
+import {
+  AUDIT_EVENT_MIN_RETENTION_DAYS,
+  AUDIT_EVENT_RETENTION_DAYS,
+  migrateDatabase,
+} from "../migrate";
 import type {
   BeginOrgTeamCreationInput,
   CompareAndSetOrgPluginStateInput,
@@ -796,7 +800,7 @@ type AuditEventFilter = Record<`$${string}`, number | string | null>;
 const AUDIT_EVENT_FILTER_SQL = `WHERE ($orgId IS NULL OR org_id = $orgId)
       AND ($action IS NULL OR action = $action)
       AND ($outcome IS NULL OR outcome = $outcome)
-      AND ($category IS NULL OR action = $category OR action LIKE ($category || '.%'))
+      AND ($category IS NULL OR action = $category OR action LIKE ($categoryLike || '.%') ESCAPE '\\')
       AND (
         $search IS NULL
         OR action LIKE $search ESCAPE '\\'
@@ -3157,7 +3161,7 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
 
   function readAuditRetentionDays(): number {
-    return (
+    return clampAuditRetentionDays(
       getWorkspaceSettingsStmt.get(WORKSPACE_SETTINGS_ID)
         ?.audit_retention_days ?? AUDIT_EVENT_RETENTION_DAYS
     );
@@ -3291,15 +3295,21 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     LIMIT ?
   `);
 
-  const exportAuditEventsStmt = db.prepare<AuditEventRow, SQLQueryBindings[]>(`
+  // Keyset pages by rowid (insertion order), so no statement stays open
+  // while a slow export client reads, and two exports cannot share a cursor.
+  const exportAuditEventsStmt = db.prepare<
+    AuditEventRow & { row_id: number },
+    SQLQueryBindings[]
+  >(`
     SELECT
-      id, actor_user_id, org_id, action, resource_type, resource_id,
+      rowid AS row_id, id, actor_user_id, org_id, action, resource_type, resource_id,
       metadata, request_id, created_at,
       outcome, status, method, route, session_id, actor_mode,
       client_ip, forwarded_for, user_agent, seq, prev_hash, hash
     FROM audit_events
-    WHERE (? IS NULL OR org_id = ?)
-    ORDER BY created_at ASC, seq ASC
+    WHERE (? IS NULL OR org_id = ?) AND rowid > ?
+    ORDER BY rowid
+    LIMIT ?
   `);
 
   const createBrowserSessionStmt = db.prepare(`
@@ -5348,7 +5358,10 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async countPrunableAuditEvents(days) {
-      const effectiveDays = days ?? readAuditRetentionDays();
+      const effectiveDays =
+        days === undefined
+          ? readAuditRetentionDays()
+          : clampAuditRetentionDays(days);
 
       if (effectiveDays <= 0) {
         return { days: 0, rows: 0 };
@@ -6514,13 +6527,12 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       // Wrap in wildcards and escape LIKE metacharacters, so a user-supplied
       // search behaves as a plain substring match.
-      const search = options.search
-        ? `%${options.search.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
-        : null;
+      const search = options.search ? `%${escapeLike(options.search)}%` : null;
 
       const filter: AuditEventFilter = {
         $action: action,
         $category: category,
+        $categoryLike: category === null ? null : escapeLike(category),
         $limit: options.limit ?? 100,
         $offset: options.offset ?? 0,
         $orgId: orgId,
@@ -6674,19 +6686,21 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const orgId = options.orgId ?? null;
       const batchSize = options.batchSize ?? 500;
 
-      let batch: StoredAuditEvent[] = [];
+      let cursor = 0;
 
-      for (const row of exportAuditEventsStmt.iterate(orgId, orgId)) {
-        batch.push(toAuditEventRecord(row));
+      while (true) {
+        const rows = exportAuditEventsStmt.all(orgId, orgId, cursor, batchSize);
 
-        if (batch.length >= batchSize) {
-          yield batch;
-          batch = [];
+        if (rows.length === 0) {
+          return;
         }
-      }
 
-      if (batch.length > 0) {
-        yield batch;
+        cursor = rows[rows.length - 1].row_id;
+        yield rows.map(toAuditEventRecord);
+
+        if (rows.length < batchSize) {
+          return;
+        }
       }
     },
 
@@ -8741,6 +8755,16 @@ function toAuditEventRecord(row: AuditEventRow): StoredAuditEvent {
     status: row.status,
     userAgent: row.user_agent,
   };
+}
+
+/** Non-zero retention never drops below the minimum window; 0 means off. */
+function clampAuditRetentionDays(days: number): number {
+  return days > 0 ? Math.max(days, AUDIT_EVENT_MIN_RETENTION_DAYS) : days;
+}
+
+/** Escapes LIKE metacharacters for use with `ESCAPE '\\'`. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 /**

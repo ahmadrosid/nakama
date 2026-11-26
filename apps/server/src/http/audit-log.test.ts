@@ -606,3 +606,63 @@ describe("audit event API", () => {
     ]);
   });
 });
+
+describe("installation-wide audit events", () => {
+  test("stay out of the admin's active org ledger", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+
+    const createResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({ name: "Scope Org", slug: "scope-org" }),
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "POST",
+      })
+    );
+
+    // SAFETY: The test checks this response against the endpoint contract.
+    const created = (await createResponse.json()) as {
+      organization: { id: string };
+    };
+
+    const activeOrg = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: created.organization.id }),
+        headers: {
+          ...session.headers({ "X-CSRF-Token": session.csrfToken }),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(activeOrg.status).toBe(200);
+
+    // Settings routes pass the org check, so the active org is known here.
+    // The setting is installation-wide, so the row must not carry that org.
+    await app.fetch(
+      new Request("http://localhost:4310/v1/settings/timezone", {
+        body: JSON.stringify({}),
+        headers: {
+          ...session.headers({ "X-CSRF-Token": session.csrfToken }),
+          "Content-Type": "application/json",
+          "X-Org-Id": created.organization.id,
+        },
+        method: "PUT",
+      })
+    );
+
+    const events = (
+      await databaseAdapter.listAuditEvents({ action: "settings.update" })
+    ).events;
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.orgId).toBeNull();
+  });
+});

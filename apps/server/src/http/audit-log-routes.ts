@@ -21,37 +21,8 @@ export type AuditRule = readonly [
 ];
 
 /**
- * Security-event coverage checklist:
- * - authentication: setup, login success/failure, logout, password change and
- *   reset, MFA/passkey enrollment and removal, token rotation
- * - authorization: organization/member/invite lifecycle and role changes
- * - configuration: providers, skills, tools, automations, plugins, MCP
- *   servers, notification destinations, integrations, and installation
- *   settings
- * - sensitive resources: profile/org CRUD, export/import, session lifecycle,
- *   memory edits, artifact and shared-resource publication, tool runs
- *
- * Keyed by `METHOD route-pattern` exactly as the route is registered, so a
- * renamed route fails the coverage test instead of silently going unaudited.
- * Add a rule here whenever a new route joins one of those classes. Agent tool
- * calls inside a chat turn are recorded by the agent service (`tool.call`),
- * not by a route rule. Rows past the retention window are pruned
- * (`AUDIT_EVENT_RETENTION_DAYS`). Deliberately unaudited: chat message text
- * and LLM text/computer calls (hot path, like
- * tera-router's gateway), previews and connection tests (no state change),
- * push presence and user-context writes (client state), meet extension
- * control (ephemeral), automation drafts and read-state marks. Request bodies
- * are intentionally never recorded, so credentials cannot enter metadata.
- */
-export const AUDIT_ROUTES = new Map<string, AuditRule>([
-  ...INSTALLATION_AUDIT_ROUTES,
-  ...ORGS_AUDIT_ROUTES,
-  ...RESOURCES_AUDIT_ROUTES,
-]);
-
-/**
  * Classifies a request by the route pattern Hono matched. Params are read
- * from the path itself, because a request rejected by auth middleware never
+ * from the path itself, because a request rejected by org middleware never
  * reaches the handler that would populate `c.req.param()`.
  */
 export function describeAuditEvent(
@@ -106,3 +77,33 @@ function decodePathPart(value: string): string {
     return value;
   }
 }
+
+/**
+ * Security-event coverage checklist:
+ * - authentication: setup, login success/failure, logout, password change and
+ *   reset, MFA/passkey enrollment and removal, token rotation
+ * - authorization: organization/member/invite lifecycle and role changes
+ * - configuration: providers, skills, tools, automations, plugins, MCP
+ *   servers, notification destinations, integrations, and installation
+ *   settings
+ * - sensitive resources: profile/org CRUD, export/import, session lifecycle,
+ *   memory edits, artifact and shared-resource publication, tool runs
+ *
+ * Keyed by `METHOD route-pattern` exactly as the route is registered, so a
+ * renamed route, or a new mutating route with no rule, fails the coverage test
+ * instead of silently going unaudited.
+ * Add a rule here whenever a new route joins one of those classes. Agent tool
+ * calls inside a chat turn are recorded by the agent service (`tool.call`),
+ * not by a route rule. Rows past the retention window are pruned
+ * (`AUDIT_EVENT_RETENTION_DAYS`). Deliberately unaudited: chat message text
+ * and LLM text/computer calls (hot path, like
+ * tera-router's gateway), previews and connection tests (no state change),
+ * push presence and user-context writes (client state), meet extension
+ * control (ephemeral), automation drafts and read-state marks. Request bodies
+ * are intentionally never recorded, so credentials cannot enter metadata.
+ */
+export const AUDIT_ROUTES = new Map<string, AuditRule>([
+  ...INSTALLATION_AUDIT_ROUTES,
+  ...ORGS_AUDIT_ROUTES,
+  ...RESOURCES_AUDIT_ROUTES,
+]);

@@ -11,27 +11,33 @@ export const INSTALLATION_AUDIT_ROUTES: ReadonlyArray<
   // This server's own Nakama Cloud sign-in: it changes the default provider.
   [
     "POST /v1/nakama-cloud/sign-in",
-    ["provider.nakama_cloud_sign_in", "provider", "nakama-cloud"],
+    ["provider.nakama_cloud_sign_in", "provider", "nakama-cloud", null],
   ],
   [
     "DELETE /v1/nakama-cloud",
-    ["provider.nakama_cloud_sign_out", "provider", "nakama-cloud"],
+    ["provider.nakama_cloud_sign_out", "provider", "nakama-cloud", null],
   ],
-  ["POST /v1/system/upgrade", ["system.upgrade", "installation"]],
-  ["PUT /v1/system/web-public-url", ["system.update", "installation"]],
+  ["POST /v1/system/upgrade", ["system.upgrade", "installation", null, null]],
+  [
+    "PUT /v1/system/web-public-url",
+    ["system.update", "installation", null, null],
+  ],
   // Reading the whole audit trail is itself a sensitive read, so the export
   // lands in the same ledger, like tera-router's export that audits itself.
-  ["GET /v1/platform/audit-events/export", ["audit.export", "audit"]],
+  [
+    "GET /v1/platform/audit-events/export",
+    ["audit.export", "audit", null, null],
+  ],
   [
     "PUT /v1/platform/audit-events/retention",
-    ["settings.update", "setting", "audit-retention"],
+    ["settings.update", "setting", "audit-retention", null],
   ],
   ["POST /v1/auth/setup", ["auth.setup", "user"]],
   ["POST /v1/auth/login", ["auth.login", "user"]],
   ["POST /v1/auth/mfa/backup-codes", ["auth.backup_codes_regenerate", "user"]],
   ["POST /v1/auth/mfa/passkey/verify", ["auth.passkey_register", "user"]],
   ["POST /v1/auth/mfa/passkey/disable", ["auth.passkey_disable", "user"]],
-  ["PUT /v1/settings/mfa", ["settings.update", "setting", "mfa"]],
+  ["PUT /v1/settings/mfa", ["settings.update", "setting", "mfa", null]],
   ["POST /v1/auth/mfa/totp/verify", ["auth.mfa_totp_enable", "user"]],
   ["POST /v1/auth/mfa/disable", ["auth.mfa_disable", "user"]],
   ["PATCH /v1/auth/me", ["account.update", "user"]],
@@ -56,62 +62,108 @@ export const INSTALLATION_AUDIT_ROUTES: ReadonlyArray<
     "DELETE /v1/auth/users/:userId/sessions",
     ["session.revoke_all", "user", ":userId", null],
   ],
-  ["POST /v1/auth/setup/import/restore", ["data.import", "installation"]],
+  [
+    "POST /v1/auth/setup/import/restore",
+    ["data.import", "installation", null, null],
+  ],
   [
     "POST /v1/workers/:name/clear-logs",
-    ["worker.clear_logs", "worker", ":name"],
+    ["worker.clear_logs", "worker", ":name", null],
   ],
-  ["POST /v1/providers", ["provider.create", "provider"]],
+  ["POST /v1/providers", ["provider.create", "provider", null, null]],
   [
     "PATCH /v1/providers/:providerId",
-    ["provider.update", "provider", ":providerId"],
+    ["provider.update", "provider", ":providerId", null],
   ],
   [
     "POST /v1/providers/:providerId/default",
-    ["provider.update", "provider", ":providerId"],
+    ["provider.update", "provider", ":providerId", null],
   ],
   [
     "DELETE /v1/providers/:providerId",
-    ["provider.delete", "provider", ":providerId"],
+    ["provider.delete", "provider", ":providerId", null],
   ],
   [
     "PUT /v1/providers/:providerId/secret",
-    ["provider.update", "provider", ":providerId"],
+    ["provider.update", "provider", ":providerId", null],
+  ],
+  [
+    "DELETE /v1/providers/:providerId/secret",
+    ["provider.update", "provider", ":providerId", null],
+  ],
+  [
+    "POST /v1/providers/:providerId/secret/use-stored",
+    ["provider.update", "provider", ":providerId", null],
   ],
   [
     "POST /v1/xai-oauth/device/complete",
-    ["provider.oauth_complete", "provider", "xai"],
+    ["provider.oauth_complete", "provider", "xai", null],
   ],
   [
     "POST /v1/chatgpt-oauth/device/complete",
-    ["provider.oauth_complete", "provider", "chatgpt"],
+    ["provider.oauth_complete", "provider", "chatgpt", null],
   ],
-  ["PUT /v1/settings/provider", ["settings.update", "setting", "provider"]],
-  ["PUT /v1/settings/timezone", ["settings.update", "setting", "timezone"]],
-  ["PUT /v1/settings/thinking", ["settings.update", "setting", "thinking"]],
-  ["PUT /v1/settings/vision", ["settings.update", "setting", "vision"]],
+  [
+    "PUT /v1/settings/provider",
+    ["settings.update", "setting", "provider", null],
+  ],
+  [
+    "PUT /v1/settings/timezone",
+    ["settings.update", "setting", "timezone", null],
+  ],
+  [
+    "PUT /v1/settings/thinking",
+    ["settings.update", "setting", "thinking", null],
+  ],
+  ["PUT /v1/settings/vision", ["settings.update", "setting", "vision", null]],
+  [
+    "PUT /v1/settings/video-generation",
+    ["settings.update", "setting", "video-generation", null],
+  ],
   [
     "PUT /v1/settings/transcription",
-    ["settings.update", "setting", "transcription"],
+    ["settings.update", "setting", "transcription", null],
   ],
   [
     "PUT /v1/settings/image-generation",
-    ["settings.update", "setting", "image-generation"],
+    ["settings.update", "setting", "image-generation", null],
   ],
-  ["PUT /v1/settings/email", ["settings.update", "setting", "email"]],
-  ["PUT /v1/settings/email/secret", ["settings.update", "setting", "email"]],
-  ["PUT /v1/settings/web-search", ["settings.update", "setting", "web-search"]],
+  ["PUT /v1/settings/email", ["settings.update", "setting", "email", null]],
+  [
+    "PUT /v1/settings/email/secret",
+    ["settings.update", "setting", "email", null],
+  ],
+  [
+    "DELETE /v1/settings/email/secret",
+    ["settings.update", "setting", "email", null],
+  ],
+  [
+    "POST /v1/settings/email/secret/use-stored",
+    ["settings.update", "setting", "email", null],
+  ],
+  [
+    "PUT /v1/settings/web-search",
+    ["settings.update", "setting", "web-search", null],
+  ],
   [
     "PUT /v1/settings/web-search/secret",
-    ["settings.update", "setting", "web-search"],
+    ["settings.update", "setting", "web-search", null],
+  ],
+  [
+    "DELETE /v1/settings/web-search/secret",
+    ["settings.update", "setting", "web-search", null],
+  ],
+  [
+    "POST /v1/settings/web-search/secret/use-stored",
+    ["settings.update", "setting", "web-search", null],
   ],
   [
     "PUT /v1/settings/agent-browser",
-    ["settings.update", "setting", "agent-browser"],
+    ["settings.update", "setting", "agent-browser", null],
   ],
   [
     "POST /v1/settings/agent-browser/install",
-    ["settings.agent_browser_install", "setting", "agent-browser"],
+    ["settings.agent_browser_install", "setting", "agent-browser", null],
   ],
   [
     "POST /v1/settings/channel-legacy/claim",
@@ -152,14 +204,25 @@ export const INSTALLATION_AUDIT_ROUTES: ReadonlyArray<
     "POST /v1/settings/slack/handshake",
     ["channel.pairing", "channel", "slack"],
   ],
-  ["PUT /v1/settings/composio", ["settings.update", "setting", "composio"]],
+  [
+    "PUT /v1/settings/composio",
+    ["settings.update", "setting", "composio", null],
+  ],
   [
     "PUT /v1/settings/composio/secret",
-    ["settings.update", "setting", "composio"],
+    ["settings.update", "setting", "composio", null],
+  ],
+  [
+    "DELETE /v1/settings/composio/secret",
+    ["settings.update", "setting", "composio", null],
+  ],
+  [
+    "POST /v1/settings/composio/secret/use-stored",
+    ["settings.update", "setting", "composio", null],
   ],
   [
     "PUT /v1/settings/error-tracking",
-    ["settings.update", "setting", "error-tracking"],
+    ["settings.update", "setting", "error-tracking", null],
   ],
   ["PUT /v1/settings/whatsapp", ["settings.update", "setting", "whatsapp"]],
   [
@@ -177,12 +240,15 @@ export const INSTALLATION_AUDIT_ROUTES: ReadonlyArray<
   ["PUT /v1/settings/teams", ["settings.update", "setting", "teams"]],
   [
     "PUT /v1/settings/automation-worker",
-    ["settings.update", "setting", "automation-worker"],
+    ["settings.update", "setting", "automation-worker", null],
   ],
   [
     "PUT /v1/settings/coding-harnesses",
-    ["settings.update", "setting", "coding-harnesses"],
+    ["settings.update", "setting", "coding-harnesses", null],
   ],
-  ["GET /v1/platform/data/export", ["data.export", "installation"]],
-  ["POST /v1/platform/data/import/restore", ["data.import", "installation"]],
+  ["GET /v1/platform/data/export", ["data.export", "installation", null, null]],
+  [
+    "POST /v1/platform/data/import/restore",
+    ["data.import", "installation", null, null],
+  ],
 ];

@@ -143,6 +143,62 @@ describe("audit events", () => {
     });
   });
 
+  test("category filter treats LIKE wildcards as literal text", async () => {
+    const adapter = createSqliteMemoryAdapter();
+
+    await adapter.createAuditEvent({
+      action: "auth.login",
+      createdAt: "2026-09-12T01:00:00.000Z",
+      id: "audit_cat_1",
+      resourceType: "user",
+    });
+
+    expect((await adapter.listAuditEvents({ category: "%" })).total).toBe(0);
+    expect((await adapter.listAuditEvents({ category: "a_th" })).total).toBe(0);
+    expect((await adapter.listAuditEvents({ category: "auth" })).total).toBe(1);
+  });
+
+  test("two exports read at the same time each get every row once", async () => {
+    const adapter = createSqliteMemoryAdapter();
+
+    for (let index = 0; index < 5; index += 1) {
+      await adapter.createAuditEvent({
+        action: "auth.login",
+        createdAt: `2026-09-12T0${index}:00:00.000Z`,
+        id: `audit_export_${index}`,
+        resourceType: "user",
+      });
+    }
+
+    const first = adapter.exportAuditEvents({ batchSize: 2 });
+    const second = adapter.exportAuditEvents({ batchSize: 2 });
+    const firstIds: string[] = [];
+    const secondIds: string[] = [];
+
+    // Interleave pulls, as two slow downloads would.
+    for (;;) {
+      const a = await first.next();
+      const b = await second.next();
+
+      if (!a.done) {
+        firstIds.push(...a.value.map((event) => event.id));
+      }
+
+      if (!b.done) {
+        secondIds.push(...b.value.map((event) => event.id));
+      }
+
+      if (a.done && b.done) {
+        break;
+      }
+    }
+
+    const expected = [0, 1, 2, 3, 4].map((index) => `audit_export_${index}`);
+
+    expect(firstIds).toEqual(expected);
+    expect(secondIds).toEqual(expected);
+  });
+
   test("chains events and verifies integrity", async () => {
     const adapter = createSqliteMemoryAdapter();
 
@@ -400,14 +456,14 @@ describe("audit events", () => {
 
     await adapter.createAuditEvent({
       action: "auth.login",
-      createdAt: daysAgo(60),
-      id: "audit_60d",
+      createdAt: daysAgo(200),
+      id: "audit_200d",
       resourceType: "user",
     });
     await adapter.createAuditEvent({
       action: "auth.login",
-      createdAt: daysAgo(45),
-      id: "audit_45d",
+      createdAt: daysAgo(150),
+      id: "audit_150d",
       resourceType: "user",
     });
     await adapter.createAuditEvent({
@@ -422,18 +478,18 @@ describe("audit events", () => {
       days: 365,
       rows: 0,
     });
-    await expect(adapter.countPrunableAuditEvents(30)).resolves.toEqual({
-      days: 30,
+    await expect(adapter.countPrunableAuditEvents(90)).resolves.toEqual({
+      days: 90,
       rows: 2,
     });
     expect(() =>
-      database.exec("DELETE FROM audit_events WHERE id = 'audit_60d'")
+      database.exec("DELETE FROM audit_events WHERE id = 'audit_200d'")
     ).toThrow();
 
-    // Update retention to 30 days and prune manually.
+    // Update retention to 90 days and prune manually.
     await adapter.upsertWorkspaceSettings(
       mergeWorkspaceSettings(await adapter.getWorkspaceSettings(), {
-        auditRetentionDays: 30,
+        auditRetentionDays: 90,
       })
     );
 
@@ -447,12 +503,18 @@ describe("audit events", () => {
     expect(result).toEqual({
       deleted: 2,
       hasMore: false,
-      retentionDays: 30,
+      retentionDays: 90,
     });
     await expect(adapter.countPrunableAuditEvents()).resolves.toEqual({
-      days: 30,
+      days: 90,
       rows: 0,
     });
+    // A shorter window is raised to the 90-day minimum.
+    await expect(adapter.countPrunableAuditEvents(1)).resolves.toEqual({
+      days: 90,
+      rows: 0,
+    });
+
     await expect(adapter.verifyAuditChain()).resolves.toMatchObject({
       checked: 2,
       ok: true,

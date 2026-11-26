@@ -74,7 +74,7 @@ test("platform admin updates retention, previews prunable rows, and prunes", asy
   const fetchApp: AppFetch = app;
 
   const dayMs = 24 * 60 * 60 * 1000;
-  const oldTimestamp = new Date(Date.now() - 45 * dayMs).toISOString();
+  const oldTimestamp = new Date(Date.now() - 150 * dayMs).toISOString();
 
   await databaseAdapter.createAuditEvent({
     action: "auth.login",
@@ -98,15 +98,15 @@ test("platform admin updates retention, previews prunable rows, and prunes", asy
   expect(initialStats.status).toBe(200);
   expect(await initialStats.json()).toMatchObject({ retentionDays: 365 });
 
-  const preview30 = await app.fetch(
+  const preview90 = await app.fetch(
     new Request(
-      "http://localhost:4310/v1/platform/audit-events/prunable?days=30",
+      "http://localhost:4310/v1/platform/audit-events/prunable?days=90",
       { headers: session.headers() }
     )
   );
 
-  expect(preview30.status).toBe(200);
-  expect(await preview30.json()).toEqual({ days: 30, rows: 1 });
+  expect(preview90.status).toBe(200);
+  expect(await preview90.json()).toEqual({ days: 90, rows: 1 });
 
   const invalidPreview = await app.fetch(
     new Request(
@@ -117,6 +117,7 @@ test("platform admin updates retention, previews prunable rows, and prunes", asy
 
   expect(invalidPreview.status).toBe(400);
 
+  // Below the 90-day minimum, so an admin cannot wipe recent history.
   const update30 = await app.fetch(
     new Request("http://localhost:4310/v1/platform/audit-events/retention", {
       body: JSON.stringify({ retentionDays: 30 }),
@@ -128,8 +129,21 @@ test("platform admin updates retention, previews prunable rows, and prunes", asy
     })
   );
 
-  expect(update30.status).toBe(200);
-  expect(await update30.json()).toEqual({ retentionDays: 30 });
+  expect(update30.status).toBe(400);
+
+  const update90 = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/audit-events/retention", {
+      body: JSON.stringify({ retentionDays: 90 }),
+      headers: {
+        ...session.headers({ "X-CSRF-Token": session.csrfToken }),
+        "Content-Type": "application/json",
+      },
+      method: "PUT",
+    })
+  );
+
+  expect(update90.status).toBe(200);
+  expect(await update90.json()).toEqual({ retentionDays: 90 });
 
   const pruned = await app.fetch(
     new Request("http://localhost:4310/v1/platform/audit-events/prune", {
@@ -142,7 +156,7 @@ test("platform admin updates retention, previews prunable rows, and prunes", asy
   expect(await pruned.json()).toEqual({
     deleted: 1,
     hasMore: false,
-    retentionDays: 30,
+    retentionDays: 90,
   });
 
   const update0 = await app.fetch(

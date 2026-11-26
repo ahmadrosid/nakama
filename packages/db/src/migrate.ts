@@ -14,6 +14,12 @@ export const AUDIT_EVENT_RETENTION_DAYS = 365;
 /** Maximum configurable audit retention window in days. */
 export const AUDIT_EVENT_MAX_RETENTION_DAYS = 3650;
 
+/**
+ * Shortest window a non-zero retention can use, so an admin session cannot
+ * shrink retention and prune recent history in one step.
+ */
+export const AUDIT_EVENT_MIN_RETENTION_DAYS = 90;
+
 export function migrateDatabase(db: Database): void {
   applyBootstrapSchema(db);
 
@@ -400,7 +406,7 @@ function migrateAuditEventsChainColumns(db: Database): void {
     BEGIN
       SELECT RAISE(ABORT, 'audit_events are append-only')
       WHERE COALESCE((SELECT audit_retention_days FROM workspace_settings WHERE id = '${WORKSPACE_SETTINGS_ID}'), ${AUDIT_EVENT_RETENTION_DAYS}) <= 0
-         OR OLD.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || COALESCE((SELECT audit_retention_days FROM workspace_settings WHERE id = '${WORKSPACE_SETTINGS_ID}'), ${AUDIT_EVENT_RETENTION_DAYS}) || ' days');
+         OR OLD.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || MAX(COALESCE((SELECT audit_retention_days FROM workspace_settings WHERE id = '${WORKSPACE_SETTINGS_ID}'), ${AUDIT_EVENT_RETENTION_DAYS}), ${AUDIT_EVENT_MIN_RETENTION_DAYS}) || ' days');
     END;
   `);
 }
