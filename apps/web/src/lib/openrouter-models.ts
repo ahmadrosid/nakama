@@ -5,6 +5,8 @@ import { queryKeys } from "@/lib/query-keys";
 interface OpenRouterApiPricing {
   completion?: string;
   image?: string;
+  image_output?: string;
+  image_token?: string;
   input_cache_read?: string;
   input_cache_write?: string;
   internal_reasoning?: string;
@@ -16,6 +18,7 @@ interface OpenRouterApiPricing {
 interface OpenRouterApiModel {
   architecture?: {
     input_modalities?: string[];
+    output_modalities?: string[];
   };
   context_length?: number;
   description?: string;
@@ -40,6 +43,8 @@ export interface OpenRouterModelRow {
   inputPerMillionUsd?: number;
   isFree: boolean;
   name: string;
+  /** What the model returns: text, image, video, speech, embeddings... */
+  outputModalities: string[];
   outputPerMillionUsd?: number;
   reasoning: boolean;
   tools: boolean;
@@ -72,8 +77,11 @@ function openRouterPricingPerMillion(
 }
 
 function isOpenRouterModelFree(
-  pricing: OpenRouterApiPricing | undefined
+  entry: Pick<OpenRouterApiModel, "id" | "pricing">,
+  outputModalities: readonly string[]
 ): boolean {
+  const pricing = entry.pricing;
+
   if (!pricing) {
     return false;
   }
@@ -81,7 +89,21 @@ function isOpenRouterModelFree(
   const prompt = Number.parseFloat(pricing.prompt ?? "1");
   const completion = Number.parseFloat(pricing.completion ?? "1");
 
-  return prompt === 0 && completion === 0;
+  // Image models charge per image token: every price must be 0.
+  const pricedElsewhere = Object.values(pricing).some(
+    (price) => price !== undefined && Number.parseFloat(price) !== 0
+  );
+
+  if (prompt !== 0 || completion !== 0 || pricedElsewhere) {
+    return false;
+  }
+
+  // Video, music and speech models list 0 and charge per second or per
+  // clip outside the catalog, so only a :free id is free for them.
+  return (
+    outputModalities.every((output) => output === "text") ||
+    entry.id.endsWith(":free")
+  );
 }
 
 /** OpenRouter uses 2098-12-31 as a placeholder on live stealth/preview models. */
@@ -105,6 +127,8 @@ function normalizeOpenRouterModel(
   const inputModalities = entry.architecture?.input_modalities ?? [];
   const supported = entry.supported_parameters ?? [];
   const perMillion = openRouterPricingPerMillion(entry.pricing);
+  // A catalog entry without the field predates non-text models.
+  const outputModalities = entry.architecture?.output_modalities ?? ["text"];
 
   return {
     audio: inputModalities.includes("audio"),
@@ -112,8 +136,9 @@ function normalizeOpenRouterModel(
     deprecated: isOpenRouterModelDeprecated(entry.expiration_date),
     description: truncateDescription(entry.description ?? ""),
     id: entry.id,
-    isFree: isOpenRouterModelFree(entry.pricing),
+    isFree: isOpenRouterModelFree(entry, outputModalities),
     name: entry.name,
+    outputModalities,
     reasoning:
       supported.includes("reasoning") ||
       supported.includes("include_reasoning"),
@@ -121,6 +146,33 @@ function normalizeOpenRouterModel(
     vision: inputModalities.includes("image"),
     ...(perMillion ?? {}),
   };
+}
+
+export const OPENROUTER_MODEL_TYPES = [
+  { label: "Text", outputs: ["text"], value: "text" },
+  { label: "Image", outputs: ["image"], value: "image" },
+  { label: "Video", outputs: ["video"], value: "video" },
+  { label: "Speech", outputs: ["speech", "audio"], value: "speech" },
+  {
+    label: "Transcription",
+    outputs: ["transcription"],
+    value: "transcription",
+  },
+  { label: "Embeddings", outputs: ["embeddings"], value: "embeddings" },
+] as const;
+
+export type OpenRouterModelType =
+  (typeof OPENROUTER_MODEL_TYPES)[number]["value"];
+
+export function isOpenRouterModelType(
+  row: Pick<OpenRouterModelRow, "outputModalities">,
+  type: OpenRouterModelType
+): boolean {
+  const outputs = new Set<string>(
+    OPENROUTER_MODEL_TYPES.find((entry) => entry.value === type)?.outputs
+  );
+
+  return row.outputModalities.some((output) => outputs.has(output));
 }
 
 export function normalizeOpenRouterModels(

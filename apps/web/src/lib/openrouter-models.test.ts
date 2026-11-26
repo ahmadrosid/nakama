@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeOpenRouterModels } from "./openrouter-models";
+import {
+  isOpenRouterModelType,
+  normalizeOpenRouterModels,
+} from "./openrouter-models";
 
 const fixture = {
   data: [
@@ -88,4 +91,76 @@ describe("normalizeOpenRouterModels", () => {
     expect(paid?.inputPerMillionUsd).toBe(0.5);
     expect(paid?.outputPerMillionUsd).toBe(2.5);
   });
+});
+
+describe("isOpenRouterModelType", () => {
+  const rows = normalizeOpenRouterModels({
+    data: [
+      { id: "old/chat", name: "Old chat" },
+      {
+        architecture: { output_modalities: ["image", "text"] },
+        id: "g/image",
+        name: "Image",
+      },
+      {
+        architecture: { output_modalities: ["speech"] },
+        id: "x/tts",
+        name: "TTS",
+      },
+      {
+        architecture: { output_modalities: ["audio", "text"] },
+        id: "o/audio",
+        name: "Audio chat",
+      },
+      {
+        architecture: { output_modalities: ["video"] },
+        id: "v/video",
+        name: "Video",
+      },
+    ],
+  });
+
+  const ids = (type: Parameters<typeof isOpenRouterModelType>[1]) =>
+    rows.filter((row) => isOpenRouterModelType(row, type)).map((row) => row.id);
+
+  test("groups models by what they return", () => {
+    expect(ids("text")).toEqual(["o/audio", "g/image", "old/chat"]);
+    expect(ids("image")).toEqual(["g/image"]);
+    expect(ids("speech")).toEqual(["o/audio", "x/tts"]);
+    expect(ids("video")).toEqual(["v/video"]);
+    expect(ids("embeddings")).toEqual([]);
+  });
+});
+
+test("a model with a hidden price is not free", () => {
+  const free = normalizeOpenRouterModels({
+    data: [
+      {
+        architecture: { output_modalities: ["image"] },
+        id: "bfl/flux",
+        name: "Flux",
+        pricing: {
+          completion: "0",
+          image_output: "0.00001",
+          prompt: "0",
+        },
+      },
+      {
+        architecture: { output_modalities: ["video"] },
+        id: "h/avatar",
+        name: "Avatar",
+        pricing: { completion: "0", prompt: "0" },
+      },
+      {
+        architecture: { output_modalities: ["speech"] },
+        id: "f/voice:free",
+        name: "Voice",
+        pricing: { completion: "0", prompt: "0" },
+      },
+    ],
+  })
+    .filter((row) => row.isFree)
+    .map((row) => row.id);
+
+  expect(free).toEqual(["f/voice:free"]);
 });
