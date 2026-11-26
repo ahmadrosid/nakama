@@ -119,7 +119,12 @@ export async function runKnowledgeBaseSearch(
     resolveWorkspaceRoot(
       options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
     ),
-    resolveOrganizationSearchTarget(orgId, profileId, parsed.filename ?? null),
+    resolveOrganizationSearchTarget(
+      orgId,
+      profileId,
+      parsed.filename ?? null,
+      context.canReadOrganizationKnowledge
+    ),
     resolveProfileSearchTarget(orgId, profileId, parsed.filename ?? null),
     resolveParentSearchTarget(context, parsed.filename ?? null),
   ]);
@@ -340,14 +345,18 @@ async function resolveProfileSearchTarget(
 async function resolveOrganizationSearchTarget(
   orgId: string,
   profileId: string,
-  filename: string | null
+  filename: string | null,
+  canRead: ToolContext["canReadOrganizationKnowledge"]
 ): Promise<SearchTarget> {
   const root = getOrgKnowledgeBaseDir(orgId);
+  const sharedDocumentIds = await getProfileSharedDocumentIds(orgId, profileId);
 
-  const [sharedDocumentIds, organizationDocuments] = await Promise.all([
-    getProfileSharedDocumentIds(orgId, profileId),
-    listOrganizationKnowledgeBaseDocuments(orgId),
-  ]);
+  if (sharedDocumentIds.length === 0 || !(await canRead?.())) {
+    return { kind: "missing", root, scope: "organization", unreadable: [] };
+  }
+
+  const organizationDocuments =
+    await listOrganizationKnowledgeBaseDocuments(orgId);
 
   // Guard against stale profile references: never search the organization root
   // when no currently listed organization document is attached to this profile.

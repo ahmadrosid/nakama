@@ -1,4 +1,8 @@
-import { NakamaApiError, type ProfileResponse } from "@nakama/core";
+import {
+  canReadOrgSharedSet,
+  NakamaApiError,
+  type ProfileResponse,
+} from "@nakama/core";
 import type { Context } from "hono";
 import { getRequestAuth, type RequestAuthContext } from "./shared";
 import type { AppEnv } from "./types";
@@ -39,11 +43,7 @@ export function requireRootOrgSharedSetAccess(
   auth: RequestAuthContext,
   organization: { parentOrgId?: string | null } | null | undefined
 ): void {
-  if (
-    !organization?.parentOrgId &&
-    auth.orgRole !== "admin" &&
-    !auth.isPlatformAdmin
-  ) {
+  if (!canReadOrgSharedSet(auth, organization)) {
     throw new NakamaApiError("Not found", 404);
   }
 }
