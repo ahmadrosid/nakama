@@ -13,6 +13,7 @@ import {
   ensureBashToolDefinition,
   ensureBrowserToolDefinitions,
   ensureGenerateImageToolDefinition,
+  ensureGenerateVideoToolDefinition,
   ensureOrgSuperNakamaProfiles,
   ensureSaveArtifactToolDefinition,
   ensureSessionToolDefinitions,
@@ -43,6 +44,7 @@ const SUPPORTED_TOOL_HANDLER_TYPES = new Set([
   "python",
   "sub_agent",
   "generate_image",
+  "generate_video",
   "save_artifact",
   "session",
   "browser",
@@ -63,6 +65,7 @@ export async function seedDatabase(
   await ensureBrowserToolDefinitions(db);
   await ensureBashToolDefinition(db);
   await ensureGenerateImageToolDefinition(db);
+  await ensureGenerateVideoToolDefinition(db);
   await ensureSaveArtifactToolDefinition(db);
   await ensurePreinstalledMcpServers(db);
   await ensureLocalClientAccess(db);

@@ -33,6 +33,7 @@ const BROWSER_TOOLS = createBrowserTools();
 export type ServerToolOverrides = {
   googleMeet?: ToolDefinition[];
   generateImage?: ToolDefinition | null;
+  generateVideo?: ToolDefinition | null;
   saveArtifact?: ToolDefinition | null;
   session?: ToolDefinition[];
   subAgent?: ToolDefinition | null;
@@ -156,6 +157,7 @@ async function resolveStoredTool(
     record.handlerType === "bash" ||
     record.handlerType === "sub_agent" ||
     record.handlerType === "generate_image" ||
+    record.handlerType === "generate_video" ||
     record.handlerType === "save_artifact" ||
     record.handlerType === "session" ||
     record.handlerType === "browser"
@@ -194,6 +196,10 @@ function buildServerTools(
 
   if (overrides.generateImage) {
     map.set(overrides.generateImage.name, overrides.generateImage);
+  }
+
+  if (overrides.generateVideo) {
+    map.set(overrides.generateVideo.name, overrides.generateVideo);
   }
 
   if (overrides.saveArtifact) {
