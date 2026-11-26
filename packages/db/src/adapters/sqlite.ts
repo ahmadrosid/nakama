@@ -2427,7 +2427,7 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       audit_retention_days,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
