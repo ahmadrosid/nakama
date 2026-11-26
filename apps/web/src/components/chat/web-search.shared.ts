@@ -20,27 +20,6 @@ export interface WebFetchToolState {
   status: "running" | "done";
 }
 
-type JsonValue = string | number | boolean | null | JsonValue[] | JsonRecord;
-
-export type JsonRecord = { [key: string]: JsonValue };
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts provider JSON at the boundary.
-export function readRecord(value: unknown): JsonRecord | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Check the provider JSON shape before using it.
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  // SAFETY: Tool results and provider responses contain JSON objects.
-  return value as JsonRecord;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts provider JSON at the boundary.
-export function readString(value: unknown): string | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Check the provider JSON value before using it.
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 export function normalizeSourceUrl(url: string) {
   const trimmed = url.trim();
   const href = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;

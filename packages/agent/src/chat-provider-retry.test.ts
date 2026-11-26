@@ -377,4 +377,40 @@ describe("agent chat provider retry", () => {
       { content: "Done", role: "assistant" },
     ]);
   });
+
+  async function failThenResend(resend: string) {
+    const rateLimited = new NakamaApiError(
+      "OpenRouter request failed (429): Provider returned error",
+      502
+    );
+
+    const { provider } = createFlakyProvider(
+      [rateLimited, rateLimited],
+      ["Recovered"]
+    );
+
+    const session = createAgentChatSession({ provider });
+
+    await expect(
+      session.sendStream("Hello", { onChunk() {} })
+    ).rejects.toBeInstanceOf(NakamaApiError);
+    await session.sendStream(resend, { onChunk() {} });
+
+    return session.getHistory();
+  }
+
+  test("a resend of the same failed prompt reuses it instead of adding a copy", async () => {
+    expect(await failThenResend("Hello")).toEqual([
+      { content: "Hello", role: "user" },
+      { content: "Recovered", role: "assistant" },
+    ]);
+  });
+
+  test("a different prompt after a failed turn still adds a new message", async () => {
+    expect(await failThenResend("Hi again")).toEqual([
+      { content: "Hello", role: "user" },
+      { content: "Hi again", role: "user" },
+      { content: "Recovered", role: "assistant" },
+    ]);
+  });
 });

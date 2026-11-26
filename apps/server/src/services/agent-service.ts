@@ -503,6 +503,21 @@ const SHARED_HISTORY_CHANNELS: readonly AgentChannel[] = [
   "whatsapp",
 ];
 
+/**
+ * The profile turned platform tools off and this kind of turn obeys it.
+ * Super Nakama works through its own tools, so it has no switch.
+ */
+function platformToolsOff(
+  profile: StoredProfileRecord,
+  policy: ReturnType<typeof turnPolicy>["tools"]
+): boolean {
+  return Boolean(
+    policy?.profileOptOut &&
+    !profile.isSuper &&
+    profile.platformToolsEnabled === false
+  );
+}
+
 function isSharedHistory(record: StoredSessionRecord): boolean {
   return SHARED_HISTORY_CHANNELS.some((channel) => channel === record.channel);
 }
@@ -5320,7 +5335,11 @@ export class AgentService {
       meta
     );
 
-    if (request.model !== undefined) {
+    // Both change the chat itself, so open chats are rebuilt.
+    if (
+      request.model !== undefined ||
+      request.platformToolsEnabled !== undefined
+    ) {
       this.sessions.invalidateProfile(profileId);
     }
 
@@ -6541,6 +6560,7 @@ export class AgentService {
     }
 
     const limit = options.toolLimit;
+    const platformOff = platformToolsOff(profile, policy);
 
     const shared = profile.orgId
       ? await this.resolveSharedAgentProfile(profile.orgId, profile.id)
@@ -6858,9 +6878,12 @@ export class AgentService {
           composioService,
           {
             // The web tool is always offered, so a profile with no tools of
-            // its own keeps the assigned-only tool and stays tool-free.
+            // its own keeps the assigned-only tool and stays tool-free. With
+            // platform tools off, it also gets only the assigned-only tool.
             channel:
-              limit || resolved.length === 0 ? undefined : options.channel,
+              limit || resolved.length === 0 || platformOff
+                ? undefined
+                : options.channel,
           }
         )),
         ...(await buildComposioToolDefinitions(
@@ -6878,7 +6901,9 @@ export class AgentService {
     // admin who stripped every tool from a profile actually gets an empty tool
     // list on chat turns — injecting 16 helpers here makes small local models
     // print a fake tool call as plain text instead of doing the work.
-    const hasOwnTools = resolved.length > 0;
+    // An admin can also turn the groups off for chat turns, so the agent sees
+    // only the tools assigned to it.
+    const hasOwnTools = resolved.length > 0 && !platformOff;
 
     if (hasOwnTools && policy.automation && this.automationTools.length > 0) {
       resolved = [...resolved, ...this.automationTools];
@@ -7067,11 +7092,17 @@ export class AgentService {
       userId,
     });
 
-    if (channel === "discord" && tools.length > 0) {
+    // Part of the "no tools" contract: session-history and channel-artifact
+    // helpers are also platform groups, so a profile that resolved to zero
+    // tools, or turned platform tools off, must not receive them either.
+    const platformOff = platformToolsOff(profile, policy.tools);
+    const withPlatformGroups = tools.length > 0 && !platformOff;
+
+    if (channel === "discord" && withPlatformGroups) {
       tools = [...tools, ...createSendDiscordArtifactTools()];
     }
 
-    if (channel === "whatsapp" && tools.length > 0) {
+    if (channel === "whatsapp" && withPlatformGroups) {
       tools = [...tools, sendWhatsAppArtifactTool];
     }
 
@@ -7128,10 +7159,7 @@ export class AgentService {
       sessionId
     );
 
-    // Part of the "no tools" contract: session-history and channel-artifact
-    // helpers are also platform groups, so a profile that resolved to zero
-    // tools must not receive them either.
-    if (tools.length > 0) {
+    if (withPlatformGroups) {
       tools = [
         ...tools,
         createReadSessionHistoryTool(this.db, orgId, sessionId),
@@ -7168,6 +7196,7 @@ export class AgentService {
     });
 
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
+    const hasTodoTools = tools.some((tool) => tool.name === "todo_write");
 
     const toolContext = buildToolExecutionContext({
       agentDepth: policy.agentDepth,
@@ -7179,13 +7208,20 @@ export class AgentService {
         (tool) => tool.name === SAVE_ARTIFACT_TOOL_NAME
       ),
       forbidMemoryWrites: cognito ? true : undefined,
-      forbidProfileSkillMarkdownWrites: hasSkillManage,
+      // With platform tools off there is no skill_manage, but skill files
+      // still go through the write approval, never through file tools.
+      forbidProfileSkillMarkdownWrites: hasSkillManage || platformOff,
       isPlatformAdmin: isPlatformAdmin || undefined,
       loadAttachment,
       onSkillCatalogChange: () => {
         this.sessions.invalidateSession(sessionId);
       },
       openTodosReminder: async () => {
+        // Without todo_write the model cannot close the todos.
+        if (!hasTodoTools) {
+          return null;
+        }
+
         const plan = await this.agentTodoState.formatForPrompt(sessionId);
 
         return plan
@@ -7227,12 +7263,20 @@ export class AgentService {
     }
 
     const session = createAgentChatSession(harness, {
-      archiveHistory: (history) => {
+      archiveHistory: async (history) => {
         if (this.sessions.peek(sessionId) !== persistedSession) {
           throw new Error("Session changed during compaction. Try again.");
         }
 
-        return archiveSessionHistory(this.db, orgId, sessionId, history);
+        const recovery = await archiveSessionHistory(
+          this.db,
+          orgId,
+          sessionId,
+          history
+        );
+
+        // The note names read_session_history, so a chat without it gets none.
+        return withPlatformGroups ? recovery : "";
       },
       channel,
       compaction,
@@ -7344,8 +7388,9 @@ export class AgentService {
           )
         );
 
-        const todoContext =
-          await this.agentTodoState.formatForPrompt(sessionId);
+        const todoContext = hasTodoTools
+          ? await this.agentTodoState.formatForPrompt(sessionId)
+          : "";
 
         if (todoContext.trim()) {
           parts.push(todoContext.trim());

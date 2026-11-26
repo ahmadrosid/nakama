@@ -65,7 +65,6 @@ import { DocumentAttachmentPreview } from "@/components/chat/document-attachment
 import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { PluginDrafts } from "@/components/chat/PluginDraftCard";
-import { readRecord, readString } from "@/components/chat/web-search.shared";
 import { useAuth } from "@/context/use-auth";
 import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useProfileQuery } from "@/hooks/use-app-queries";
@@ -101,6 +100,7 @@ import {
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
+import { readRecord, readString } from "@/lib/json-readers";
 import { canManageAgent } from "@/lib/profiles";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";

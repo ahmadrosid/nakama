@@ -609,6 +609,8 @@ export function normalizeThinkingEffort(
     : "medium";
 }
 
+const HTML_PAGE = /^<!doctype\s+html|^<html[\s>]/i;
+
 export function formatHttpErrorBody(
   label: string,
   status: number,
@@ -620,7 +622,7 @@ export function formatHttpErrorBody(
     return `${label} request failed (${status}).`;
   }
 
-  if (/^<!doctype\s+html|^<html[\s>]/i.test(trimmed)) {
+  if (HTML_PAGE.test(trimmed)) {
     return `${label} request failed (${status}): received an HTML error page.`;
   }
 
@@ -633,7 +635,12 @@ export function formatHttpErrorBody(
     const type = readProviderString(record.type)?.trim() ?? "";
 
     if (message) {
-      return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${message}`;
+      const upstream = readUpstreamReason(readRecord(record.metadata).raw);
+
+      const reason =
+        upstream && upstream !== message ? `${message}: ${upstream}` : message;
+
+      return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${reason}`;
     }
 
     const topLevelMessage = readProviderString(parsed.message)?.trim() ?? "";
@@ -646,6 +653,30 @@ export function formatHttpErrorBody(
   }
 
   return `${label} request failed (${status}): ${trimmed.slice(0, 500)}`;
+}
+
+const MAX_UPSTREAM_REASON_LENGTH = 300;
+
+/**
+ * Gateways such as OpenRouter answer "Provider returned error" and put the
+ * upstream reason (often a rate limit on a free model) in `error.metadata.raw`,
+ * as plain text or as the upstream's own JSON body. HTML pages are not a reason.
+ */
+function readUpstreamReason<Value>(raw: Value): string | undefined {
+  const text = readProviderString(raw)?.trim();
+
+  if (!text || HTML_PAGE.test(text)) {
+    return undefined;
+  }
+
+  const parsed = parseJsonRecord(text);
+
+  const reason = text.startsWith("{")
+    ? readProviderString(readRecord(parsed.error).message)?.trim() ||
+      readProviderString(parsed.message)?.trim()
+    : text;
+
+  return reason ? reason.slice(0, MAX_UPSTREAM_REASON_LENGTH) : undefined;
 }
 
 /** A provider answered but the answer is unusable. The user sees the message. */

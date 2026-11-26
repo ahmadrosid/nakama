@@ -17,7 +17,10 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
-import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import {
+  ProfilePlatformToolsSwitch,
+  ProfileSkillsSettingsSection,
+} from "@/components/profiles/ProfileSkillsSettingsSection";
 import { SidebarNotifications } from "@/components/SidebarNotifications";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
@@ -3580,6 +3583,7 @@ function ProfileBehaviorProbe() {
     <>
       <div data-profile-behavior>
         <ProfileSkillsSettingsSection profile={state.detail} />
+        <ProfilePlatformToolsSwitch profile={state.detail} />
       </div>
       <div data-org-profile-behavior>
         {(
@@ -3630,7 +3634,7 @@ test.each([
     ...container.querySelectorAll<HTMLButtonElement>("button"),
   ].filter((button) => button.textContent === "Use org default");
 
-  expect(switches).toHaveLength(7);
+  expect(switches).toHaveLength(8);
   expect(reset).toHaveLength(6);
 
   for (const control of [...switches, ...reset]) {
@@ -3651,10 +3655,11 @@ test.each([
 
     expect(update).not.toHaveBeenCalled();
   } else {
-    expect(update).toHaveBeenCalledTimes(7);
+    expect(update).toHaveBeenCalledTimes(8);
 
     for (const field of [
       "automationsEnabled",
+      "platformToolsEnabled",
       "skillsWriteApproval",
       "skillsPostTurnReview",
       "skillsCuratorConsolidateEnabled",
@@ -3669,7 +3674,7 @@ test.each([
       });
     }
 
-    expect(update).toHaveBeenCalledTimes(13);
+    expect(update).toHaveBeenCalledTimes(14);
 
     for (const field of [
       "skillsWriteApproval",
@@ -3712,7 +3717,7 @@ test("open behavior controls become read-only when ownership changes", async () 
     ...container.querySelectorAll<HTMLButtonElement>('[role="switch"]'),
   ];
 
-  expect(controls).toHaveLength(7);
+  expect(controls).toHaveLength(8);
 
   for (const control of controls) {
     expect(control.disabled).toBe(true);
