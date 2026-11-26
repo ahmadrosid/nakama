@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import * as core from "@nakama/core";
 import {
   attachSharedKnowledgeBaseDocument,
   type GenerateChatInput,
@@ -10,7 +11,10 @@ import {
   getOrgKnowledgeBaseDir,
   getProfileSoulDir,
 } from "@nakama/core";
-import { runKnowledgeBaseSearch } from "@nakama/core/tools/knowledge-base-search";
+import {
+  knowledgeBaseSearchTool,
+  runKnowledgeBaseSearch,
+} from "@nakama/core/tools/knowledge-base-search";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
 import { AgentService } from "../../services/agent-service";
@@ -1049,6 +1053,158 @@ describe("published parent knowledge reads", () => {
 
     expect(adminRead.status).toBe(200);
     expect(await adminRead.text()).toContain("Root-only shared bytes");
+  });
+
+  test("knowledge base search enforces root org access for chats and agent turns", async () => {
+    const { db, profileService } = await setupPublishedKnowledge();
+
+    const { document } =
+      await profileService.uploadOrganizationKnowledgeBaseDocument(
+        "org_other",
+        textDocument("Root-only shared bytes")
+      );
+
+    const { profile } = await profileService.createProfile(
+      "org_other",
+      { name: "Member agent" },
+      { ownerUserId: "user_reader", sharedWithTeam: false }
+    );
+
+    // Attached before the attach route required a root org admin.
+    await attachSharedKnowledgeBaseDocument(
+      "org_other",
+      profile.id,
+      document.id
+    );
+
+    const agent = new AgentService(null, null, db);
+
+    Object.assign(agent, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: {
+          name: "openai",
+          streamChat: () =>
+            Promise.resolve({
+              assistantMessage: { content: "Done", role: "assistant" },
+              content: "Done",
+              toolCalls: [],
+            }),
+        },
+      }),
+      resolveProfileTools: () => Promise.resolve([]),
+    });
+
+    using buildContext = spyOn(core, "buildToolExecutionContext");
+
+    // Searches with the context the action builds.
+    const searchFrom = async (action: () => Promise<void>) => {
+      const before = buildContext.mock.calls.length;
+      await action();
+      expect(buildContext.mock.calls.length).toBeGreaterThan(before);
+
+      const result = await knowledgeBaseSearchTool.run(
+        { query: "Root-only shared" },
+        buildContext.mock.calls.at(-1)![0]
+      );
+
+      return result.matches.filter((match) => match.scope === "organization");
+    };
+
+    const searchInChat = (channel: "telegram" | "web") =>
+      searchFrom(async () => {
+        const sessionId = await agent.createSession(
+          "org_other",
+          channel,
+          profile.id,
+          "user_reader"
+        );
+
+        expect(await agent.sessions.get(sessionId, "org_other")).not.toBeNull();
+      });
+
+    const searchInSubAgent = (
+      input: Partial<Parameters<AgentService["runSubAgentPrompt"]>[0]>
+    ) =>
+      searchFrom(async () => {
+        const run = await agent.runSubAgentPrompt({
+          agentDepth: 1,
+          orgId: "org_other",
+          profileId: profile.id,
+          task: "Find the shared bytes",
+          userId: "user_reader",
+          ...input,
+        });
+
+        expect(run.status).toBe("success");
+      });
+
+    const searchInGroup = (userId: string) =>
+      searchFrom(async () => {
+        const run = await agent.runGroupTurn({
+          agentDepth: 1,
+          orgId: "org_other",
+          orgRole: "member",
+          profileId: profile.id,
+          sharedDir: getProfileSoulDir("org_other", profile.id),
+          task: "Find the shared bytes",
+          userId,
+        });
+
+        expect(run.status).toBe("success");
+      });
+
+    expect(await searchInChat("web")).toEqual([]);
+    expect(await searchInSubAgent({ orgRole: "member" })).toEqual([]);
+    expect(await searchInGroup("user_reader")).toEqual([]);
+
+    const now = new Date().toISOString();
+
+    await db.createUser({
+      id: "user_platform_admin",
+      email: "platform-admin@example.com",
+      createdAt: now,
+      updatedAt: now,
+      isPlatformAdmin: true,
+      passwordHash: "unused-test-hash",
+    });
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_other",
+      role: "member",
+      userId: "user_platform_admin",
+    });
+
+    expect(await searchInGroup("user_platform_admin")).toHaveLength(1);
+    expect(
+      await searchInSubAgent({
+        orgRole: "member",
+        userId: "user_platform_admin",
+      })
+    ).toEqual([]);
+
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_other",
+      role: "admin",
+      userId: "user_reader",
+    });
+
+    // The admin's own chat and sub-agent find it.
+    expect(await searchInChat("web")).toHaveLength(1);
+    expect(await searchInSubAgent({ orgRole: "admin" })).toHaveLength(1);
+
+    // Members can read a shared chat, and a member-level run answers to them.
+    expect(await searchInChat("telegram")).toEqual([]);
+    expect(await searchInSubAgent({ orgRole: "member" })).toEqual([]);
+
+    // A sub-agent keeps the check of the chat that started it.
+    expect(
+      await searchInSubAgent({
+        canReadOrganizationKnowledge: async () => false,
+        orgRole: "admin",
+      })
+    ).toEqual([]);
   });
 
   test("parent admins read published documents in parent context with live publication checks", async () => {

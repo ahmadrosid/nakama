@@ -146,6 +146,7 @@ import {
   buildThinkingProviderOptions,
   buildToolExecutionContext,
   buildUserContextStatus,
+  canReadOrgSharedSet,
   chatgptOAuthNeedsRefresh,
   cloudflareBaseUrlFromAccountId,
   composeKnowledgeBaseCatalog,
@@ -2238,6 +2239,8 @@ export class AgentService {
         | "sessionId"
         | "sharedDir"
       >;
+      /** A sub-agent keeps the check of the chat that started it. */
+      canReadOrganizationKnowledge?: ToolContext["canReadOrganizationKnowledge"];
       deliveryChannel?: AutomationDeliveryChannel;
       extraTools?: ToolDefinition[];
       initialHistory?: (
@@ -2288,10 +2291,22 @@ export class AgentService {
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, userId);
 
+    // Group chats are owner-only, so their turns use the caller's live access.
+    const memberOnlyKnowledge = orgRole === "member" && kind !== "group_member";
+
+    const knowledgeContext = this.knowledgeToolContext(
+      orgId,
+      profileId,
+      memberOnlyKnowledge ? null : userId
+    );
+
     const toolContext = buildToolExecutionContext({
       ...input.context,
-      ...this.knowledgeToolContext(orgId, profileId),
+      ...knowledgeContext,
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
+      canReadOrganizationKnowledge:
+        input.canReadOrganizationKnowledge ??
+        knowledgeContext.canReadOrganizationKnowledge,
       orgId,
       orgRole: orgRole ?? undefined,
       profileId,
@@ -2423,9 +2438,30 @@ export class AgentService {
     return partitionTools(tools).localTools;
   }
 
-  private knowledgeToolContext(orgId: string, profileId: string): ToolContext {
+  /**
+   * `userId` is the person the answers go to. Without one, the tools get
+   * member access, as a shared chat or a member-level run should.
+   */
+  private knowledgeToolContext(
+    orgId: string,
+    profileId: string,
+    userId?: string | null
+  ): ToolContext {
     return {
       ...this.memoryBackend.toolContext(orgId, profileId),
+      // Read on each search, so a role change applies to an open chat.
+      canReadOrganizationKnowledge: async () => {
+        const [organization, user, member] = await Promise.all([
+          this.db.getOrganizationById(orgId),
+          userId ? this.db.getUserById(userId) : null,
+          userId ? this.db.getOrgMember(orgId, userId) : null,
+        ]);
+
+        return canReadOrgSharedSet(
+          { isPlatformAdmin: user?.isPlatformAdmin, orgRole: member?.role },
+          organization
+        );
+      },
       listPublishedKnowledgeDocuments: async () => {
         await this.requireProfile(orgId, profileId);
 
@@ -2658,6 +2694,7 @@ export class AgentService {
     let turnActive = true;
 
     const { chat, close } = await this.openOneShotChat(kind, {
+      canReadOrganizationKnowledge: input.canReadOrganizationKnowledge,
       context: {
         agentDepth: input.agentDepth,
         clientOrigin: input.clientOrigin,
@@ -7196,13 +7233,15 @@ export class AgentService {
     });
 
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
+    const { isPrivate } = await this.sessionHistoryPrivacy(record);
     const hasTodoTools = tools.some((tool) => tool.name === "todo_write");
 
     const toolContext = buildToolExecutionContext({
       agentDepth: policy.agentDepth,
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       channel,
-      ...this.knowledgeToolContext(orgId, profileId),
+      // Team members can read a shared chat's history.
+      ...this.knowledgeToolContext(orgId, profileId, isPrivate ? userId : null),
       codingWorkspaceRoot: codingRoot,
       forbidArtifactFileWrites: tools.some(
         (tool) => tool.name === SAVE_ARTIFACT_TOOL_NAME
