@@ -1,12 +1,11 @@
 import {
   dedupeSources,
   normalizeSourceUrl,
-  readRecord,
-  readString,
   type WebFetchToolState,
   type WebSearchSource,
 } from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
+import { readRawString, readRecord, readString } from "@/lib/json-readers";
 
 function formatDisplayUrlFromHref(url: string): string {
   try {
@@ -91,14 +90,10 @@ function parseMcpTextContent(content: unknown): string | null {
 
   for (const entry of content) {
     const record = readRecord(entry);
+    const text = readString(record?.text);
 
-    if (
-      record?.type === "text" &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-      typeof record.text === "string" &&
-      record.text.trim()
-    ) {
-      parts.push(record.text.trim());
+    if (record?.type === "text" && text) {
+      parts.push(text);
     }
   }
 
@@ -189,9 +184,10 @@ export function parseWebFetchSourcesFromResult(
   const record = readRecord(result);
 
   if (!record) {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof result === "string") {
-      return parseExaWebFetchTextResult(result);
+    const text = readRawString(result);
+
+    if (text !== null) {
+      return parseExaWebFetchTextResult(text);
     }
 
     return [];
