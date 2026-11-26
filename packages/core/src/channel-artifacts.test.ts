@@ -334,6 +334,41 @@ describe("extractPairedTurnArtifacts", () => {
     ]);
   });
 
+  test("extracts successful generate_video tool results", () => {
+    expect(
+      extractPairedTurnArtifacts([
+        { content: "make a clip", role: "user" },
+        assistantWithToolCalls([
+          {
+            arguments: { prompt: "a boat" },
+            id: "tool_vid",
+            name: "generate_video",
+          },
+        ]),
+        toolMessage({
+          id: "tool_vid",
+          input: { prompt: "a boat" },
+          name: "generate_video",
+          result: {
+            mimeType: "video/mp4",
+            model: "MiniMax-Hailuo-02",
+            path: "artifacts/boat.mp4",
+            sizeBytes: 4096,
+          },
+        }),
+        { content: "Here is your clip.", role: "assistant" },
+      ])
+    ).toEqual([
+      {
+        filename: "boat.mp4",
+        mimeType: "video/mp4",
+        path: "boat.mp4",
+        savedAt: "",
+        sizeBytes: 4096,
+      },
+    ]);
+  });
+
   test("ignores failed generate_image tool results", () => {
     expect(
       extractPairedTurnArtifacts([
