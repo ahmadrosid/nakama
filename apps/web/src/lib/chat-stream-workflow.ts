@@ -6,6 +6,13 @@ import type {
   WorkflowStep,
 } from "@nakama/core/contract";
 import { formatSessionRelativeTime } from "@/lib/chat-history";
+import {
+  readBoolean,
+  readNumber,
+  readRawString,
+  readRecord,
+  readString,
+} from "@/lib/json-readers";
 import { countWords } from "@/lib/pasted-text";
 
 export function isRunWorkflowTool(tool: string | undefined): boolean {
@@ -34,16 +41,14 @@ function parseListWorkflowsResult(result: unknown): ListedWorkflow[] {
   }
 
   return result.flatMap((item) => {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
+    const record = readRecord(item);
+
+    if (!record) {
       return [];
     }
 
-    // SAFETY: The enclosing parser checks the value before this conversion.
-    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
-    const record = item as Record<string, unknown>;
-    const name = readTrimmedString(record.name);
-    const id = readTrimmedString(record.id);
+    const name = readString(record.name);
+    const id = readString(record.id);
 
     if (!(name && id)) {
       return [];
@@ -51,14 +56,12 @@ function parseListWorkflowsResult(result: unknown): ListedWorkflow[] {
 
     return [
       {
-        description: readTrimmedString(record.description) ?? "",
+        description: readString(record.description) ?? "",
         enabled: record.enabled !== false,
         id,
-        lastRunAt: readTrimmedString(record.lastRunAt),
+        lastRunAt: readString(record.lastRunAt),
         name,
-        stepCount:
-          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-          typeof record.stepCount === "number" ? record.stepCount : null,
+        stepCount: readNumber(record.stepCount),
       },
     ];
   });
@@ -108,10 +111,7 @@ export function parseWorkflowId(
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   input?: Record<string, unknown>
 ): string | null {
-  const value = input?.workflowId;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  return readString(input?.workflowId);
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
@@ -120,14 +120,11 @@ export function parseRunWorkflowResult(result: unknown): {
   run: WorkflowRunRecord | null;
   status: "completed" | "failed" | "skipped" | null;
 } | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
+  const record = readRecord(result);
+
+  if (!record) {
     return null;
   }
-
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
-  const record = result as Record<string, unknown>;
 
   const status =
     record.status === "completed" ||
@@ -139,7 +136,7 @@ export function parseRunWorkflowResult(result: unknown): {
   const run = isWorkflowRunRecord(record.run) ? record.run : null;
 
   return {
-    name: readTrimmedString(record.name),
+    name: readString(record.name),
     run,
     status,
   };
@@ -365,36 +362,37 @@ function summarizeReceiptOutput(
     return kind === "summarize" ? "Written" : "Done";
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof output === "string") {
-    const heading = output.match(/^#+\s+(.+)$/m);
+  const text = readRawString(output);
+
+  if (text !== null) {
+    const heading = text.match(/^#+\s+(.+)$/m);
 
     if (heading?.[1]) {
       return truncateDisplay(heading[1].replaceAll(/[*_`]/g, ""), 40);
     }
 
-    return kind === "summarize" ? "Written" : truncateDisplay(output, 40);
+    return kind === "summarize" ? "Written" : truncateDisplay(text, 40);
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof output === "number" || typeof output === "boolean") {
-    return String(output);
+  const scalar = readNumber(output) ?? readBoolean(output);
+
+  if (scalar !== null) {
+    return String(scalar);
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof output === "object" && !Array.isArray(output)) {
-    // SAFETY: The enclosing parser checks the value before this conversion.
-    // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
-    const record = output as Record<string, unknown>;
+  const record = readRecord(output);
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof record.content === "string" && record.content.trim()) {
-      return formatWordCountLabel(record.content);
+  if (record) {
+    const content = readRawString(record.content);
+
+    if (content && content.trim()) {
+      return formatWordCountLabel(content);
     }
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof record.output === "string" && record.output.trim()) {
-      return summarizeReceiptOutput(kind, record.output);
+    const nested = readRawString(record.output);
+
+    if (nested && nested.trim()) {
+      return summarizeReceiptOutput(kind, nested);
     }
 
     if (record.ok === true) {
@@ -406,22 +404,13 @@ function summarizeReceiptOutput(
 }
 
 function isWorkflowRunRecord(value: unknown): value is WorkflowRunRecord {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  // SAFETY: The enclosing parser checks the value before this conversion.
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
-  const record = value as Record<string, unknown>;
+  const record = readRecord(value);
 
   return (
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof record.id === "string" &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof record.workflowId === "string" &&
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    typeof record.status === "string"
+    record !== null &&
+    readRawString(record.id) !== null &&
+    readRawString(record.workflowId) !== null &&
+    readRawString(record.status) !== null
   );
 }
 
@@ -430,13 +419,10 @@ function firstStringValue(
   input: Record<string, unknown> | null | undefined
 ): string | null {
   for (const key of ["url", "query", "path", "command"]) {
-    const value = input?.[key];
+    const value = readString(input?.[key]);
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-    if (typeof value === "string" && value.trim()) {
-      return key === "url"
-        ? formatHost(value.trim())
-        : truncateDisplay(value.trim(), 32);
+    if (value) {
+      return key === "url" ? formatHost(value) : truncateDisplay(value, 32);
     }
   }
 
@@ -445,14 +431,16 @@ function firstStringValue(
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
 function compactValue(value: unknown): string | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof value === "string") {
-    return truncateDisplay(value, 48);
+  const text = readRawString(value);
+
+  if (text !== null) {
+    return truncateDisplay(text, 48);
   }
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
+  const scalar = readNumber(value) ?? readBoolean(value);
+
+  if (scalar !== null) {
+    return String(scalar);
   }
 
   return null;
@@ -464,12 +452,6 @@ function formatHost(value: string): string {
   } catch {
     return truncateDisplay(value, 32);
   }
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
-function readTrimmedString(value: unknown): string | null {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function formatWordCountLabel(text: string): string {

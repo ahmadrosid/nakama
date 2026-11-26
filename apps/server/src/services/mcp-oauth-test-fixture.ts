@@ -29,6 +29,7 @@ export function startOAuthProtectedMcpServer() {
   }
 
   const tokenRequests: URLSearchParams[] = [];
+  const clients = new Map<string, string[]>();
 
   const challenges = new Map<
     string,
@@ -60,14 +61,15 @@ export function startOAuthProtectedMcpServer() {
 
       if (url.pathname === "/register" && request.method === "POST") {
         const registration = z
-          .record(z.string(), z.json())
+          .object({ redirect_uris: z.array(z.string()) })
+          .catchall(z.json())
           .parse(await request.json());
 
+        const clientId = `fake-client-${clients.size + 1}`;
+        clients.set(clientId, registration.redirect_uris);
+
         return Response.json(
-          {
-            ...registration,
-            client_id: "fake-client-id",
-          },
+          { ...registration, client_id: clientId },
           { status: 201 }
         );
       }
@@ -89,6 +91,16 @@ export function startOAuthProtectedMcpServer() {
               .update(parameters.get("code_verifier") ?? "")
               .digest("base64url") !== expected.challenge ||
             parameters.get("redirect_uri") !== expected.redirectUri)
+        ) {
+          return Response.json({ error: "invalid_grant" }, { status: 400 });
+        }
+
+        // Like a real provider: the redirect must be one the client registered.
+        const redirectUri = parameters.get("redirect_uri");
+
+        if (
+          redirectUri &&
+          !clients.get(parameters.get("client_id") ?? "")?.includes(redirectUri)
         ) {
           return Response.json({ error: "invalid_grant" }, { status: 400 });
         }
@@ -144,6 +156,7 @@ export function startOAuthProtectedMcpServer() {
   });
 
   return {
+    clients,
     issueCode(authorizationUrl: string) {
       const params = new URL(authorizationUrl).searchParams;
       const code = `issued-${params.get("state")}`;
