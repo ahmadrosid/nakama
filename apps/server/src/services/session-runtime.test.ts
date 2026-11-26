@@ -316,6 +316,26 @@ describe("SessionRuntime", () => {
     expect(runtime.peek("a")).toBeUndefined();
     expect(runtime.peek("b")).toBeDefined();
   });
+
+  test("rebuilds only the cognito chats of one profile", async () => {
+    const { builds, runtime } = setup();
+    await runtime.openCognito(record("c1"), ORG_ID);
+    await runtime.openCognito(
+      record("c2", { profileId: "profile_other" }),
+      ORG_ID
+    );
+    const first = runtime.peek("c1");
+    const other = runtime.peek("c2");
+    const built = builds.length;
+
+    runtime.invalidateProfile("profile_default");
+    await runtime.get("c1", ORG_ID);
+    await runtime.get("c2", ORG_ID);
+
+    expect(runtime.peek("c1")).not.toBe(first);
+    expect(runtime.peek("c2")).toBe(other);
+    expect(builds).toHaveLength(built + 1);
+  });
 });
 
 describe("sessionKind", () => {

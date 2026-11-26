@@ -317,6 +317,72 @@ describe("AgentService skill_manage injection", () => {
     expect(await send(fresh)).toEqual(["test_tool"]);
   });
 
+  test("turning platform tools off reaches an open cognito chat", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    await db.upsertTool({
+      createdAt: new Date().toISOString(),
+      description: "Test tool",
+      handlerConfig: { modulePath: "test.js" },
+      handlerType: "javascript",
+      id: "tool_for_platform_cognito",
+      name: "test_tool",
+      updatedAt: new Date().toISOString(),
+    });
+    await db.assignToolToProfile(
+      "profile_default",
+      "tool_for_platform_cognito"
+    );
+
+    const service = new AgentService(null, null, db);
+    let sent: string[] = [];
+
+    const record = (input: GenerateChatInput) => {
+      sent = (input.tools ?? []).map((tool) => tool.name);
+
+      return Promise.resolve({
+        assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
+        content: "ok",
+        toolCalls: [],
+      });
+    };
+
+    Object.assign(service, {
+      _providerConfigured: true,
+      createHarnessForProfile: () => ({
+        provider: { generateChat: record, name: "openai", streamChat: record },
+      }),
+    });
+
+    const send = async (sessionId: string) => {
+      await (
+        await service.sessions.get(sessionId, ORG_ID, { forNewTurn: true })
+      )?.send({ message: "hi" });
+
+      return sent;
+    };
+
+    const cognito = await service.createSession(
+      ORG_ID,
+      "web",
+      "profile_default",
+      "user_1",
+      { cognito: true, orgRole: "admin" }
+    );
+
+    expect(await send(cognito)).toContain("todo_write");
+
+    await service.updateProfile(ORG_ID, "profile_default", {
+      platformToolsEnabled: false,
+    });
+
+    expect(await send(cognito)).toEqual(["test_tool"]);
+    // The rebuild keeps the conversation.
+    expect(
+      (await service.sessions.get(cognito, ORG_ID))?.getHistory().length
+    ).toBeGreaterThanOrEqual(4);
+  });
+
   test("skips platform tool groups for a profile with no tools", async () => {
     const db = createInMemoryDatabaseAdapter();
     await db.upsertProfile(createDefaultProfile());

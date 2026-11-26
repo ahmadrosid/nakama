@@ -277,6 +277,14 @@ export class SessionRuntime {
         this.chats.delete(sessionId);
       }
     }
+
+    // A cognito chat has no row to rebuild from, so it is marked out of date
+    // and the next turn rebuilds it with its history.
+    for (const entry of this.cognito.values()) {
+      if (entry.record.profileId === profileId) {
+        entry.revision = undefined;
+      }
+    }
   }
 
   invalidateSession(sessionId: string): void {
