@@ -1,4 +1,13 @@
 import type { ProviderInstanceSummary } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
 import { toast } from "@nakama/ui/toast";
 import { useEffect, useMemo, useState } from "react";
 import { AddProviderDialog } from "@/components/settings/ProviderSettingsCard";
@@ -11,14 +20,18 @@ import {
   useImageGenerationSettings,
   useModelsQuery,
   useSaveImageGenerationSettings,
+  useSaveVideoGenerationSettings,
+  useVideoGenerationSettings,
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
+  decodeModelSelection,
   encodeModelSelection,
   groupModelsByProvider,
   IMAGE_GENERATION_MODEL_OPTIONS,
   IMAGE_GENERATION_SELECTION,
   MINIMAX_IMAGE_GENERATION_MODEL_OPTIONS,
+  MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS,
   profileModelLabel,
 } from "@/lib/models";
 
@@ -349,6 +362,236 @@ export function ImageGenerationSettingsCard() {
         open={addMinimaxOpen}
         provider="minimax"
       />
+    </SettingsModelTile>
+  );
+}
+
+const CLEAR_VIDEO_GENERATION_MODEL_VALUE = "__video_generation_unset__";
+
+/** `__video_custom__:<providerId>` opens the model ID form for that provider. */
+const CUSTOM_VIDEO_MODEL_PREFIX = "__video_custom__:";
+
+/** Video comes only from MiniMax Hailuo, so each MiniMax provider lists its models. */
+export function VideoGenerationSettingsCard() {
+  const [formError, setFormError] = useState<string | null>(null);
+  const { data: modelsResponse } = useModelsQuery();
+  const { data: videoGenerationSettings } = useVideoGenerationSettings();
+  const saveMutation = useSaveVideoGenerationSettings();
+  const [addMinimaxOpen, setAddMinimaxOpen] = useState(false);
+  const [addFormKey, setAddFormKey] = useState(0);
+
+  const [customProviderId, setCustomProviderId] = useState<string | null>(null);
+
+  const [customModelId, setCustomModelId] = useState("");
+
+  // undefined until the saved model loads, so it does not read as None.
+  const selection = videoGenerationSettings
+    ? (videoGenerationSettings.model ?? null)
+    : undefined;
+
+  const saved = useMemo(
+    () => (selection ? decodeModelSelection(selection) : null),
+    [selection]
+  );
+
+  const choices = useMemo(() => {
+    const minimaxProviders = (modelsResponse?.providers ?? []).filter(
+      (provider) =>
+        provider.type === "minimax" || provider.type === "minimax_cn"
+    );
+
+    const options: SettingsModelOption[] = [
+      { label: "None", value: CLEAR_VIDEO_GENERATION_MODEL_VALUE },
+      ...minimaxProviders.flatMap((provider) => {
+        const group = { id: provider.id, label: provider.label };
+
+        const suggested = MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS.map(
+          (option) => ({
+            label: `${provider.label}: ${option.name}`,
+            name: option.name,
+            provider: group,
+            value: encodeModelSelection(provider.id, option.id),
+          })
+        );
+
+        // A saved model ID that is not a suggestion stays pickable.
+        const savedCustom =
+          saved?.providerId === provider.id &&
+          !suggested.some((option) => option.value === selection)
+            ? [
+                {
+                  label: `${provider.label}: ${saved.modelId}`,
+                  name: saved.modelId,
+                  provider: group,
+                  value: encodeModelSelection(provider.id, saved.modelId),
+                },
+              ]
+            : [];
+
+        return [
+          ...suggested,
+          ...savedCustom,
+          {
+            label: `${provider.label}: Custom model ID…`,
+            name: "Custom model ID…",
+            provider: group,
+            value: `${CUSTOM_VIDEO_MODEL_PREFIX}${provider.id}`,
+          },
+        ];
+      }),
+      ...(minimaxProviders.length === 0
+        ? [{ label: "MiniMax", value: ADD_MINIMAX_VALUE }]
+        : []),
+    ];
+
+    return options;
+  }, [modelsResponse?.providers, saved, selection]);
+
+  const pickerValue = selection ?? CLEAR_VIDEO_GENERATION_MODEL_VALUE;
+
+  const triggerLabel =
+    selection === undefined
+      ? "Loading…"
+      : (choices.find((choice) => choice.value === pickerValue)?.label ??
+        "Unavailable model");
+
+  // The add form is costly to keep mounted; it opens only with no MiniMax yet.
+  const canAddMinimax = choices.some(
+    (choice) => choice.value === ADD_MINIMAX_VALUE
+  );
+
+  const saveModel = (model: string | null) => {
+    setFormError(null);
+    const previous = selection ?? null;
+
+    saveMutation.mutate(model, {
+      onError: (error) => setFormError(formatError(error)),
+      onSuccess: (saved) => {
+        if (previous !== (saved.model ?? null)) {
+          toast("Video generation model changed.", 8000, {
+            label: "Undo",
+            onClick: () => saveMutation.mutate(previous),
+          });
+        }
+      },
+    });
+  };
+
+  return (
+    <SettingsModelTile
+      footer={
+        formError ? (
+          <p className="text-destructive text-xs" role="alert">
+            {formError}
+          </p>
+        ) : undefined
+      }
+      title="Video generation model"
+    >
+      <SettingsModelSelect
+        ariaLabel="Video generation model"
+        disabled={selection === undefined || saveMutation.isPending}
+        onValueChange={(value) => {
+          if (!value) {
+            return;
+          }
+
+          if (value === ADD_MINIMAX_VALUE) {
+            setAddMinimaxOpen(true);
+
+            return;
+          }
+
+          if (value.startsWith(CUSTOM_VIDEO_MODEL_PREFIX)) {
+            const providerId = value.slice(CUSTOM_VIDEO_MODEL_PREFIX.length);
+
+            setCustomModelId(
+              saved?.providerId === providerId ? saved.modelId : ""
+            );
+            setCustomProviderId(providerId);
+
+            return;
+          }
+
+          saveModel(
+            value === CLEAR_VIDEO_GENERATION_MODEL_VALUE ? null : String(value)
+          );
+        }}
+        options={choices}
+        triggerLabel={triggerLabel}
+        value={pickerValue}
+      />
+      {canAddMinimax || addMinimaxOpen ? (
+        <AddProviderDialog
+          key={addFormKey}
+          onAdded={(provider) => {
+            if (provider.type === "minimax" || provider.type === "minimax_cn") {
+              saveModel(
+                encodeModelSelection(
+                  provider.id,
+                  MINIMAX_VIDEO_GENERATION_MODEL_OPTIONS[0].id
+                )
+              );
+
+              return;
+            }
+
+            toast("Provider added.");
+          }}
+          onClosed={() => setAddFormKey((key) => key + 1)}
+          onOpenChange={setAddMinimaxOpen}
+          open={addMinimaxOpen}
+          provider="minimax"
+        />
+      ) : null}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setCustomProviderId(null);
+          }
+        }}
+        open={customProviderId !== null}
+      >
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <form
+            className="grid gap-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const modelId = customModelId.trim();
+
+              if (!(customProviderId && modelId)) {
+                return;
+              }
+
+              saveModel(encodeModelSelection(customProviderId, modelId));
+              setCustomProviderId(null);
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Custom model ID</DialogTitle>
+            </DialogHeader>
+            <Input
+              aria-label="Model ID"
+              autoFocus
+              onChange={(event) => setCustomModelId(event.target.value)}
+              placeholder="MiniMax-Hailuo-2.3"
+              value={customModelId}
+            />
+            <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+              <Button
+                onClick={() => setCustomProviderId(null)}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button disabled={!customModelId.trim()} type="submit">
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </SettingsModelTile>
   );
 }

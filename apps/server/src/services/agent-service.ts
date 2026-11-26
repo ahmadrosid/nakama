@@ -121,6 +121,7 @@ import type {
   UpdateThinkingRequest,
   UpdateTranscriptionRequest,
   UpdateUserContextRequest,
+  UpdateVideoGenerationRequest,
   UpdateVisionRequest,
   UpdateWebSearchSettingsRequest,
   UpdateWhatsAppSettingsRequest,
@@ -128,6 +129,7 @@ import type {
   UploadOrganizationKnowledgeBaseResponse,
   UserConfig,
   UserContextStatusResponse,
+  VideoGenerationSettingsResponse,
   VisionSettings,
   VisionSettingsResponse,
   WebSearchProvider,
@@ -311,6 +313,7 @@ import {
 } from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
 import { formatImageMentionContext } from "../tools/generate-image-tool";
+import { resolveVideoGenerationSelection } from "../tools/generate-video-tool";
 import { groupMemoryTool } from "../tools/group-memory-tool";
 import {
   createOrgMemoryTools,
@@ -1193,6 +1196,31 @@ export class AgentService {
     }
 
     return { imageGeneration };
+  }
+
+  async getVideoGenerationSettings(): Promise<VideoGenerationSettingsResponse> {
+    const stored = await this.db.getWorkspaceSettings();
+
+    return { videoGeneration: { model: stored?.videoModel ?? null } };
+  }
+
+  async setVideoGenerationSettings(
+    input: UpdateVideoGenerationRequest
+  ): Promise<VideoGenerationSettingsResponse> {
+    const model = input.model?.trim() || null;
+
+    // Same check a generate call runs, so a bad pick fails here, unsaved.
+    resolveVideoGenerationSelection(this.userConfig, model);
+
+    const existing = await this.db.getWorkspaceSettings();
+    await this.db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(existing, {
+        updatedAt: new Date().toISOString(),
+        videoModel: model,
+      })
+    );
+
+    return { videoGeneration: { model } };
   }
 
   async generateImage(

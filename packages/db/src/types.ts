@@ -306,6 +306,7 @@ export interface StoredWorkspaceSettingsRecord {
   selectedCodingAgentHarness: string | null;
   transcriptionModel: string | null;
   updatedAt: string;
+  videoModel: string | null;
   visionModel: string | null;
 }
 
