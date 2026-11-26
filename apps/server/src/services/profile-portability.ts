@@ -435,6 +435,7 @@ export async function importProfilePack(
     name,
     orgId,
     ownerUserId,
+    platformToolsEnabled: manifest.meta.platformToolsEnabled !== false,
     sharedWithTeam: ownerUserId === null,
     skillsCuratorConsolidateEnabled:
       manifest.meta.skillsCuratorConsolidateEnabled,
@@ -714,6 +715,7 @@ async function buildProfilePackMeta(
     mcpServerNames: mcpServers.map((server) => server.name).sort(),
     model: profile.model,
     name: profile.name,
+    platformToolsEnabled: profile.platformToolsEnabled !== false,
     profileSkillNames: profileSkillNames.sort(),
     skillsCuratorConsolidateEnabled:
       profile.skillsCuratorConsolidateEnabled ?? null,
@@ -1201,6 +1203,10 @@ function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
     isStringArray(meta.get("mcpServerNames")) &&
     isNullableString(meta.get("model")) &&
     isString(meta.get("name")) &&
+    // Older packs have no switch; null is not a valid value.
+    [undefined, true, false].some(
+      (value) => value === meta.get("platformToolsEnabled")
+    ) &&
     isStringArray(meta.get("profileSkillNames")) &&
     isNullableBoolean(meta.get("skillsCuratorConsolidateEnabled")) &&
     isNullableBoolean(meta.get("skillsPostTurnReview")) &&

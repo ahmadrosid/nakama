@@ -601,7 +601,18 @@ async function sendMessage(
   }
 
   const userMessage = getUserMessageText(userContent);
-  history.push({ content: userContent, role: "user" });
+  const unanswered = history.at(-1);
+
+  // A failed turn leaves its prompt saved with no reply. Sending the same
+  // text again (Retry) answers that prompt instead of saving a second copy.
+  // Only a text prompt can match: a parts array is a new array every send.
+  const isResendOfUnanswered =
+    unanswered?.role === "user" && unanswered.content === userContent;
+
+  if (!isResendOfUnanswered) {
+    history.push({ content: userContent, role: "user" });
+  }
+
   await options.onUserMessage?.();
 
   const multimodalTurn =
