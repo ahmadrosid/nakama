@@ -134,12 +134,19 @@ describe("failed turn retry helpers", () => {
     ]);
   });
 
-  test("keeps a persisted user message when stripping a failed marker", () => {
+  test("strips a saved prompt too, because the retry sends it again", () => {
     const failed = assistant("429", { failed: true, id: "failed" });
-    const messages = [user("persisted", { historyIndex: 0 }), failed];
+
+    const messages = [
+      user("earlier", { historyIndex: 0 }),
+      assistant("reply", { historyIndex: 1 }),
+      user("retry me", { historyIndex: 2 }),
+      failed,
+    ];
 
     expect(messagesWithoutFailedTurn(messages, failed)).toEqual([
-      user("persisted", { historyIndex: 0 }),
+      user("earlier", { historyIndex: 0 }),
+      assistant("reply", { historyIndex: 1 }),
     ]);
   });
 });

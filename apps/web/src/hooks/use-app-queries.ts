@@ -155,6 +155,17 @@ export const useImageGenerationSettings = imageGenerationSettings.useSettings;
 
 export const useSaveImageGenerationSettings = imageGenerationSettings.useSave;
 
+const videoGenerationSettings = createSettingsHooks({
+  mutationFn: (model: string | null) =>
+    client.setVideoGenerationSettings(model),
+  queryFn: () => client.getVideoGenerationSettings(),
+  queryKey: queryKeys.videoGenerationSettings,
+});
+
+export const useVideoGenerationSettings = videoGenerationSettings.useSettings;
+
+export const useSaveVideoGenerationSettings = videoGenerationSettings.useSave;
+
 const transcriptionSettings = createSettingsHooks({
   mutationFn: (model: string | null) => client.setTranscriptionSettings(model),
   queryFn: () => client.getTranscriptionSettings(),

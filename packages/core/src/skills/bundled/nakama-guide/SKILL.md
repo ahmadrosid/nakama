@@ -74,6 +74,7 @@ Use this map when the user asks where something is in Nakama. Do not guess from 
 | User asks | Answer |
 |---|---|
 | Set the image generation model | Settings → AI Providers (`/settings/providers`), card **Image generation**. Platform admin only. With ChatGPT signed in, no model is needed; **Off** turns images off. The agent also needs the `generate_image` tool (Agent → Tools); new agents have it |
+| Set the video generation model | Settings → AI Providers (`/settings/providers`), **Routing → Video generation model**. Platform admin only. Needs a MiniMax provider. The agent also needs the `generate_video` tool (Agent → Tools); new agents do not get it |
 | Set voice message transcription | Settings → AI Providers, card **Audio transcription model**. Platform admin only |
 | Let a text-only model read images | Settings → AI Providers, card **Image parsing model**. Platform admin only |
 | Add or fix an API key, reconnect ChatGPT or Grok | Settings → AI Providers. Platform admin only |
