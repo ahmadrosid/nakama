@@ -183,7 +183,7 @@
         "croner": "^11.0.1",
         "docx": "^9.15.2",
         "fflate": "^0.8.3",
-        "imapflow": "^2.10.2",
+        "imapflow": "^2.12.2",
         "mailparser": "^3.9.36",
         "marked": "^18.0.13",
         "node-html-markdown": "^1.3.0",
@@ -1257,7 +1257,7 @@
 
     "@xmldom/xmldom": ["@xmldom/xmldom@0.8.15", "", {}, "sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA=="],
 
-    "@zone-eu/mailsplit": ["@zone-eu/mailsplit@5.4.30", "", { "dependencies": { "libbase64": "1.4.1", "libmime": "5.6.4", "libqp": "3.0.1" } }, "sha512-qN0KT6/ziAFvo5TzscaqpurIJaJQEXPPtqBZnpyhiGrACOKLDVMV6Lm57kXt5e/8zZUWoYiSC8oKl/aewtrJDQ=="],
+    "@zone-eu/mailsplit": ["@zone-eu/mailsplit@5.4.31", "", { "dependencies": { "libbase64": "1.4.1", "libmime": "5.6.5", "libqp": "3.0.2" } }, "sha512-P031SeyobwXE/aZf1f/hN9RZm/t8ZSibCUYA7Us6Fory4b1p5HxNEA08YcfTynkPnvJ3nFjMFguwSp30TXc4Tw=="],
 
     "abbrev": ["abbrev@5.0.0", "", {}, "sha512-/XrFJgzQQQHpti1raDJC6m4ws6aNktmjBlhk8Fdlk7LwCEuDoieEJJY9OFHjfiFJFFRM2tK+Ky/IsfbbmlMu1w=="],
 
@@ -1929,7 +1929,7 @@
 
     "ignore-walk": ["ignore-walk@9.0.0", "", { "dependencies": { "minimatch": "^10.0.3" } }, "sha512-tCBEZV2z2FNpIDl2vrhiWzIHzs4qOAuIDEO85eS02vZ3L1U3P56qpPL8GuGGAijDktAEaq2swMkO/Fmbo7YmfQ=="],
 
-    "imapflow": ["imapflow@2.10.2", "", { "dependencies": { "@zone-eu/mailsplit": "5.4.30", "encoding-japanese": "2.5.0", "iconv-lite": "0.7.3", "libbase64": "1.4.1", "libmime": "5.6.4", "libqp": "3.0.1", "pino": "10.3.1", "socks": "2.8.10" } }, "sha512-KI9tW4KXMz8KuZoSLGwLkXLUH39me38/vYZBL/eyh2CjHVDBFUj1QuqqfzeHJOIj1VwAZ4jL4zoVKppM7cXfrw=="],
+    "imapflow": ["imapflow@2.12.2", "", { "dependencies": { "@zone-eu/mailsplit": "5.4.31", "encoding-japanese": "2.5.0", "iconv-lite": "0.7.3", "libbase64": "1.4.1", "libmime": "5.6.5", "libqp": "3.0.2", "pino": "10.3.1", "socks": "2.8.11" } }, "sha512-GnccN3rytpmsbEriYi3R1gLqWnXH2Dp4iAWYcY3sAUNRZ2zpBz8qSB0YSDTa58NSeTA6VGlAPMfbauQo0gnUGA=="],
 
     "import-in-the-middle": ["import-in-the-middle@3.5.1", "", { "dependencies": { "cjs-module-lexer": "^2.2.0", "es-module-lexer": "^3.0.2", "module-details-from-path": "^1.0.4" } }, "sha512-mPKuL8bPQzecui2KK6Gb+M8JvJoHnhS1FeYGa22QopBmlevF5F0FE6ued/B5EgHDeIoMTONIpDWWFKUPOG0DBQ=="],
 
@@ -2079,9 +2079,9 @@
 
     "libbase64": ["libbase64@1.4.1", "", {}, "sha512-Nyh3H90B3gRtrcxIe56Ayy7635J0jmh6AbxbQgQae8wrSPQMH5wFqJChiMTB13yKG512L3YspbA5DzumhFTITA=="],
 
-    "libmime": ["libmime@5.6.4", "", { "dependencies": { "encoding-japanese": "2.5.0", "iconv-lite": "0.7.3", "libbase64": "1.4.1", "libqp": "3.0.1" } }, "sha512-QWiiwq3ujIUSsCCjFDldDN7FfXuLYSTnEln0oeYfOjgqyVlRV6WQ3UyJ/paguoz8Ynxy1s7k3kh6xomS3bJkCw=="],
+    "libmime": ["libmime@5.6.5", "", { "dependencies": { "encoding-japanese": "2.5.0", "iconv-lite": "0.7.3", "libbase64": "1.4.1", "libqp": "3.0.2" } }, "sha512-2mbKYlwUP2mWys7kUE0MBHNdOndOe++8TIdmGXtt/hMYWSgbjHkSIXyC4jCpVSc/sAox3GSxWn1dSmyiQimLNA=="],
 
-    "libqp": ["libqp@3.0.1", "", {}, "sha512-7QZxpPX25pga1WiMueduWxmrHMVBFrZPH6ZUaozGYa/H98JH6NVBSET3qVw+4NxzoraIW7rJ81YxSU9IalvCpg=="],
+    "libqp": ["libqp@3.0.2", "", {}, "sha512-24oL5vCMpFd6lGLbD3vPrmcAEGFScDPX9eARY8TXsRVBSde93xP2iG7+8pg5M56Yiu9Uy14hCVN1E+yj5LMtyQ=="],
 
     "libsignal": ["libsignal@6.0.0", "", { "dependencies": { "curve25519-js": "^0.0.4", "protobufjs": "^7.5.5" } }, "sha512-d/5V3YFtDljbFMufz4ncyUYGYhJl+vzAe+c2EFFBQ6bz1h8Q3IOMEGXYMzlibU60I+e8GagMMpji18iez3P1hA=="],
 
@@ -2723,7 +2723,7 @@
 
     "smol-toml": ["smol-toml@1.9.1", "", {}, "sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ=="],
 
-    "socks": ["socks@2.8.10", "", { "dependencies": { "ip-address": "^10.1.1", "smart-buffer": "^4.2.0" } }, "sha512-e0VyvkVTwVYViNovRkZ9aodhxVlyoMn7eJhVUPxZ+eK9P/7CBkxvvsBOHqFPEH416726W8tLXXXjKwqgTErrCQ=="],
+    "socks": ["socks@2.8.11", "", { "dependencies": { "ip-address": "^10.1.1", "smart-buffer": "^4.2.0" } }, "sha512-2H/uQ7+SNP0hK16RorTak0mWrFoqo4AnAVGSUl2dT07obgWdWt9grml+VDl1LklgUOPWM4Abo0u86Cvp8vFjYw=="],
 
     "socks-proxy-agent": ["socks-proxy-agent@10.1.0", "", { "dependencies": { "agent-base": "9.0.0", "debug": "^4.3.4", "socks": "^2.8.3" } }, "sha512-WlMj/67cEJ6MDI1OcsnjuYKDNDoyPCCYZ249kuuXPiMDw9F8PXkVaQ7YWu3siTydfQ/4BEZcvGzu+aYvz7dDCQ=="],
 
