@@ -19,7 +19,7 @@
     "compression": "1.8.2"
   },
   "dependencies": {
-    "fumadocs-core": "^16.19.3",
+    "fumadocs-core": "^16.19.7",
     "fumadocs-mdx": "^15.6.3",
     "fumadocs-ui": "^16.19.3",
     "hugeicons-react": "^0.4.0",
