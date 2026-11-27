@@ -180,6 +180,51 @@ function useWebSearchSettingsForm() {
   };
 }
 
+function apiKeyPlaceholder({
+  keyAlreadySaved,
+  keyOptional,
+  managedByEnvironment,
+}: {
+  keyAlreadySaved: boolean;
+  keyOptional: boolean;
+  managedByEnvironment: boolean;
+}): string {
+  if (managedByEnvironment) {
+    return "Managed by environment";
+  }
+
+  if (keyAlreadySaved) {
+    return "Saved";
+  }
+
+  return keyOptional ? "Optional, for higher rate limits" : "Paste API key";
+}
+
+function ApiKeyVisibilityToggle({
+  visible,
+  onToggle,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <InputGroupAddon align="inline-end">
+      <InputGroupButton
+        aria-label={visible ? "Hide API key" : "Show API key"}
+        onClick={onToggle}
+        size="icon-xs"
+        type="button"
+      >
+        {visible ? (
+          <ViewOffIcon className="size-4" />
+        ) : (
+          <ViewIcon className="size-4" />
+        )}
+      </InputGroupButton>
+    </InputGroupAddon>
+  );
+}
+
 function WebSearchApiKeyFields({
   apiKey,
   keyAlreadySaved,
@@ -214,33 +259,19 @@ function WebSearchApiKeyFields({
             disabled={pending || managedByEnvironment}
             id="web-search-api-key"
             onChange={(event) => onApiKeyChange(event.target.value)}
-            placeholder={
-              managedByEnvironment
-                ? "Managed by environment"
-                : keyAlreadySaved
-                  ? "Saved"
-                  : keyOptional
-                    ? "Optional, for higher rate limits"
-                    : "Paste API key"
-            }
+            placeholder={apiKeyPlaceholder({
+              keyAlreadySaved,
+              keyOptional,
+              managedByEnvironment,
+            })}
             type={showApiKey ? "text" : "password"}
             value={apiKey}
           />
           {managedByEnvironment ? null : (
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                onClick={() => setShowApiKey((current) => !current)}
-                size="icon-xs"
-                type="button"
-              >
-                {showApiKey ? (
-                  <ViewOffIcon className="size-4" />
-                ) : (
-                  <ViewIcon className="size-4" />
-                )}
-              </InputGroupButton>
-            </InputGroupAddon>
+            <ApiKeyVisibilityToggle
+              onToggle={() => setShowApiKey((current) => !current)}
+              visible={showApiKey}
+            />
           )}
         </InputGroup>
         <Button
