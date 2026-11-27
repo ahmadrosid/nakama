@@ -137,7 +137,7 @@
         "@streamdown/math": "^1.0.2",
         "@streamdown/mermaid": "^1.0.3",
         "@tanstack/react-query": "^5.104.1",
-        "croner": "^10.0.1",
+        "croner": "^11.0.1",
         "fflate": "^0.8.3",
         "hashvatar": "^0.1.2",
         "hugeicons-react": "^0.4.0",
@@ -180,7 +180,7 @@
       "dependencies": {
         "@firecrawl/anydoc": "0.2.4",
         "@vscode/ripgrep": "^1.18.0",
-        "croner": "^10.0.1",
+        "croner": "^11.0.1",
         "docx": "^9.15.2",
         "fflate": "^0.8.3",
         "imapflow": "^2.10.2",
@@ -1451,7 +1451,7 @@
 
     "cose-base": ["cose-base@1.0.3", "", { "dependencies": { "layout-base": "^1.0.0" } }, "sha512-s9whTXInMSgAp/NVXVNuVxVKzGH2qck3aQlVHxDCdAEPgtMKwc4Wq6/QKhgdEdgbLSi9rBTAcPoRa6JpiG4ksg=="],
 
-    "croner": ["croner@10.0.1", "", {}, "sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g=="],
+    "croner": ["croner@11.0.1", "", {}, "sha512-/fmHcoczPy5cMcmJ6ex7J7LAwb545V1dNmRrdDGP3hwStg/06IYP56YgBySCSdWGDz2PJYQyDukaR8b8R5o2HA=="],
 
     "cross-dirname": ["cross-dirname@0.1.0", "", {}, "sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q=="],
 
