@@ -53,7 +53,7 @@
     "@oven/bun-darwin-aarch64": "1.4.5-canary.20261120.1",
     "@oven/bun-darwin-x64": "1.4.5-canary.20261120.1",
     "@oven/bun-linux-aarch64": "1.4.5-canary.20261120.1",
-    "@oven/bun-linux-x64": "1.4.5-canary.20261120.1",
+    "@oven/bun-linux-x64": "1.4.5",
     "@oven/bun-windows-x64": "1.4.5-canary.20261120.1",
     "@oxlint/plugins": "1.87.0",
     "@types/bun": "^1.4.4",
