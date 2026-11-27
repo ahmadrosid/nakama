@@ -9,7 +9,7 @@
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.110.1",
     "@agentclientprotocol/codex-acp": "2.10.0",
-    "@firecrawl/anydoc": "0.2.4",
+    "@firecrawl/anydoc": "0.2.5",
     "@vscode/ripgrep": "1.18.0",
     "opencode-ai": "1.19.6",
     "pm2": "7.1.2",
