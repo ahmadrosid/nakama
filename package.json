@@ -53,14 +53,14 @@
     "@oven/bun-darwin-aarch64": "1.4.5-canary.20261120.1",
     "@oven/bun-darwin-x64": "1.4.5-canary.20261120.1",
     "@oven/bun-linux-aarch64": "1.4.5-canary.20261120.1",
-    "@oven/bun-linux-x64": "1.4.5-canary.20261120.1",
+    "@oven/bun-linux-x64": "1.4.5",
     "@oven/bun-windows-x64": "1.4.5-canary.20261120.1",
     "@oxlint/plugins": "1.87.0",
     "@types/bun": "^1.4.4",
     "husky": "^9.1.7",
     "jscpd": "5.4.2",
     "knip": "6.44.1",
-    "react-doctor": "0.9.18",
+    "react-doctor": "0.9.23",
     "ultracite": "8.2.1"
   },
   "patchedDependencies": {

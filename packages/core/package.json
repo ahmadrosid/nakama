@@ -86,10 +86,10 @@
   "dependencies": {
     "@firecrawl/anydoc": "0.2.4",
     "@vscode/ripgrep": "^1.18.0",
-    "croner": "^10.0.1",
+    "croner": "^11.0.1",
     "docx": "^9.15.2",
     "fflate": "^0.8.3",
-    "imapflow": "^2.10.2",
+    "imapflow": "^2.12.2",
     "mailparser": "^3.9.36",
     "marked": "^18.0.13",
     "node-html-markdown": "^1.3.0",
