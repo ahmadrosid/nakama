@@ -1,7 +1,4 @@
-import type {
-  SkillCuratorRunResult,
-  UpdateOrganizationRequest,
-} from "@nakama/core/contract";
+import type { SkillCuratorRunResult } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
@@ -14,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { AuthContextValue } from "@/context/auth-context-shared";
+import { updateOrgFlag } from "@/components/settings/update-org-flag";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
@@ -48,23 +45,6 @@ type PollIntervalState = {
   orgId: string;
   value: number | null;
 };
-
-export async function updateOrgFlag(
-  updateOrg: AuthContextValue["updateOrg"],
-  orgId: string,
-  patch: UpdateOrganizationRequest,
-  setBusyOrgId: Dispatch<SetStateAction<string | null>>
-): Promise<void> {
-  setBusyOrgId(orgId);
-
-  try {
-    await updateOrg(orgId, patch);
-  } catch (error) {
-    toast(formatError(error));
-  } finally {
-    setBusyOrgId((busyOrgId) => (busyOrgId === orgId ? null : busyOrgId));
-  }
-}
 
 async function updatePollInterval(
   value: number,

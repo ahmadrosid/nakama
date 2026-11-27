@@ -7,11 +7,11 @@
     "zod": "4.6.6"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "0.107.3",
-    "@agentclientprotocol/codex-acp": "2.7.0",
-    "@firecrawl/anydoc": "0.2.4",
+    "@agentclientprotocol/claude-agent-acp": "0.110.1",
+    "@agentclientprotocol/codex-acp": "2.10.0",
+    "@firecrawl/anydoc": "0.2.5",
     "@vscode/ripgrep": "1.18.0",
-    "opencode-ai": "1.19.5",
+    "opencode-ai": "1.19.6",
     "pm2": "7.1.2",
     "sharp": "0.35.5"
   }
