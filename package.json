@@ -60,7 +60,7 @@
     "husky": "^9.1.7",
     "jscpd": "5.4.2",
     "knip": "6.44.1",
-    "react-doctor": "0.9.18",
+    "react-doctor": "0.9.23",
     "ultracite": "8.2.1"
   },
   "patchedDependencies": {
