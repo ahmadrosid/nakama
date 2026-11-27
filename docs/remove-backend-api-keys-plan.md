@@ -1,6 +1,6 @@
 # Remove backend API keys and app-user scope
 
-Status: implementation plan only. No product code has changed.
+Status: implemented in #1583. Kept as the design and review record.
 
 ## Goal
 
