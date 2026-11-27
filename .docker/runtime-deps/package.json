@@ -11,7 +11,7 @@
     "@agentclientprotocol/codex-acp": "2.7.0",
     "@firecrawl/anydoc": "0.2.4",
     "@vscode/ripgrep": "1.18.0",
-    "opencode-ai": "1.19.5",
+    "opencode-ai": "1.19.6",
     "pm2": "7.1.2",
     "sharp": "0.35.5"
   }
