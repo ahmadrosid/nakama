@@ -189,6 +189,10 @@ function providerLabel(providerName: ProviderName): string {
     return "Standard Compute";
   }
 
+  if (providerName === "synap") {
+    return "Synap";
+  }
+
   if (providerName === "vercel_ai_gateway") {
     return "Vercel AI Gateway";
   }

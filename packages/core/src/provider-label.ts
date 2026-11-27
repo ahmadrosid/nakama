@@ -31,6 +31,7 @@ const BUILTIN_LABELS: Record<
   qwen: "Qwen (DashScope)",
   qwen_cn: "Qwen (DashScope CN)",
   standardcompute: "Standard Compute",
+  synap: "Synap",
   together: "Together AI",
   vercel_ai_gateway: "Vercel AI Gateway",
   xai: "xAI Grok",

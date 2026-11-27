@@ -32,6 +32,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "groq",
   "cheaper_inference",
   "standardcompute",
+  "synap",
   "together",
   "xiaomi",
   "meta",
@@ -79,6 +80,7 @@ export function parseProviderName(
     normalized === "groq" ||
     normalized === "cheaper_inference" ||
     normalized === "standardcompute" ||
+    normalized === "synap" ||
     normalized === "together" ||
     normalized === "xiaomi" ||
     normalized === "meta" ||
@@ -154,6 +156,8 @@ export function apiKeyEnvVarForProvider(
       return "CHEAPER_INFERENCE_API_KEY";
     case "standardcompute":
       return "STANDARDCOMPUTE_API_KEY";
+    case "synap":
+      return "SYNAP_API_KEY";
     case "together":
       return "TOGETHER_API_KEY";
     case "xiaomi":
