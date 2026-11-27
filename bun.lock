@@ -9,7 +9,7 @@
         "@oven/bun-darwin-aarch64": "1.4.5-canary.20261120.1",
         "@oven/bun-darwin-x64": "1.4.5-canary.20261120.1",
         "@oven/bun-linux-aarch64": "1.4.5-canary.20261120.1",
-        "@oven/bun-linux-x64": "1.4.5-canary.20261120.1",
+        "@oven/bun-linux-x64": "1.4.5",
         "@oven/bun-windows-x64": "1.4.5-canary.20261120.1",
         "@oxlint/plugins": "1.87.0",
         "@types/bun": "^1.4.4",
@@ -725,7 +725,7 @@
 
     "@oven/bun-linux-aarch64": ["@oven/bun-linux-aarch64@1.4.5-canary.20261120.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-SrxL7YlYt+hKr6AnKEWKR/dmcnJppx+sn3fDkTRm2JOijKjlFTV3hC5aLwwxpbCn+SUtB3bs8qejWTpJBifAMg=="],
 
-    "@oven/bun-linux-x64": ["@oven/bun-linux-x64@1.4.5-canary.20261120.1", "", { "os": "linux", "cpu": "x64" }, "sha512-WeORe6WhB0QEhPu739WCWKFswaplOIoP21RgEk3NmHC5gNOOKmHMiQZuy29bnEwtGqQ8LuBZ+SI57RHxbOhfZQ=="],
+    "@oven/bun-linux-x64": ["@oven/bun-linux-x64@1.4.5", "", { "os": "linux", "cpu": "x64" }, "sha512-IWX9BELoGHAUtMonkeSaNaZwXzRk+oDw6Mk+HBFXd3KHYIBNBsIGRupMZPcgNoDbJpLu6gAJjIoIVPZtt1aJ1g=="],
 
     "@oven/bun-windows-x64": ["@oven/bun-windows-x64@1.4.5-canary.20261120.1", "", { "os": "win32", "cpu": "x64" }, "sha512-tekkM05MRHeosfwWD26hKJ1c9HB4qmQqQkjPfBQhFAljPoA1hj5N5YqPSNYtgRWn69tPJv7mnnzyDJLE3gLOyQ=="],
 
