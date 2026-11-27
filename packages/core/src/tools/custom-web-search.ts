@@ -133,6 +133,19 @@ function buildRequest(
     };
   }
 
+  // You.com's Search API takes a JSON POST with X-API-Key.
+  if (config.provider === "youcom") {
+    headers["user-agent"] = "youdotcom-integration/ahmadrosid-nakama";
+    headers["x-api-key"] = config.apiKey;
+
+    return {
+      body: JSON.stringify({ count: MAX_RESULTS, query }),
+      headers,
+      method: "POST",
+      url: config.endpoint,
+    };
+  }
+
   if (config.provider === "exa") {
     headers["x-api-key"] = config.apiKey;
 
@@ -158,7 +171,7 @@ function buildRequest(
   };
 }
 
-/** Exa puts hits on `results`; Firecrawl on `data.web`. */
+/** Exa puts hits on `results`; Firecrawl on `data.web`; You.com on `results.web`. */
 function findResultArray(payload: JsonValue): JsonValue[] {
   const record = readRecord(payload);
 
@@ -171,6 +184,16 @@ function findResultArray(payload: JsonValue): JsonValue[] {
 
     if (Array.isArray(candidate) && candidate.length > 0) {
       return candidate;
+    }
+  }
+
+  const nestedResults = record.results;
+
+  if (nestedResults !== undefined) {
+    const nested = findResultArray(nestedResults);
+
+    if (nested.length > 0) {
+      return nested;
     }
   }
 
@@ -193,9 +216,22 @@ function toResult(entry: JsonValue): CustomWebSearchResult | null {
     return null;
   }
 
+  // You.com puts query passages on `snippets` (deprecated) or
+  // `contents.highlights`; join whichever is present.
+  const contents = readRecord(record.contents ?? null);
+
+  const passages = [
+    ...(Array.isArray(record.snippets) ? record.snippets : []),
+    ...(Array.isArray(contents?.highlights) ? contents.highlights : []),
+  ]
+    .flatMap((part) => readString(part) ?? [])
+    .join(" ");
+
   const snippet =
     readString(record.snippet) ??
     readString(record.description) ??
+    (passages || undefined) ??
+    readString(contents?.markdown) ??
     readString(record.text) ??
     readString(record.markdown) ??
     readString(record.content);

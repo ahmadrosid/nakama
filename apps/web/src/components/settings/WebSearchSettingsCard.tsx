@@ -32,6 +32,7 @@ const PROVIDER_PRESETS: Array<{
   { label: "Firecrawl", value: "firecrawl" },
   { label: "Serply", value: "serply" },
   { label: "Keenable", value: "keenable" },
+  { label: "You.com", value: "youcom" },
 ];
 
 function useSavedHint() {
@@ -180,6 +181,55 @@ function useWebSearchSettingsForm() {
   };
 }
 
+function apiKeyPlaceholder({
+  keyAlreadySaved,
+  keyOptional,
+  managedByEnvironment,
+}: {
+  keyAlreadySaved: boolean;
+  keyOptional: boolean;
+  managedByEnvironment: boolean;
+}): string {
+  if (managedByEnvironment) {
+    return "Managed by environment";
+  }
+
+  if (keyAlreadySaved) {
+    return "Saved";
+  }
+
+  if (keyOptional) {
+    return "Optional, for higher rate limits";
+  }
+
+  return "Paste API key";
+}
+
+function ApiKeyVisibilityButton({
+  showApiKey,
+  onToggle,
+}: {
+  showApiKey: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <InputGroupAddon align="inline-end">
+      <InputGroupButton
+        aria-label={showApiKey ? "Hide API key" : "Show API key"}
+        onClick={onToggle}
+        size="icon-xs"
+        type="button"
+      >
+        {showApiKey ? (
+          <ViewOffIcon className="size-4" />
+        ) : (
+          <ViewIcon className="size-4" />
+        )}
+      </InputGroupButton>
+    </InputGroupAddon>
+  );
+}
+
 function WebSearchApiKeyFields({
   apiKey,
   keyAlreadySaved,
@@ -199,6 +249,10 @@ function WebSearchApiKeyFields({
 }) {
   const [showApiKey, setShowApiKey] = useState(false);
 
+  const canSave =
+    !(pending || managedByEnvironment) &&
+    Boolean(apiKey.trim() || keyAlreadySaved || keyOptional);
+
   return (
     <div className="space-y-2">
       <label
@@ -214,42 +268,24 @@ function WebSearchApiKeyFields({
             disabled={pending || managedByEnvironment}
             id="web-search-api-key"
             onChange={(event) => onApiKeyChange(event.target.value)}
-            placeholder={
-              managedByEnvironment
-                ? "Managed by environment"
-                : keyAlreadySaved
-                  ? "Saved"
-                  : keyOptional
-                    ? "Optional, for higher rate limits"
-                    : "Paste API key"
-            }
+            placeholder={apiKeyPlaceholder({
+              keyAlreadySaved,
+              keyOptional,
+              managedByEnvironment,
+            })}
             type={showApiKey ? "text" : "password"}
             value={apiKey}
           />
           {managedByEnvironment ? null : (
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                onClick={() => setShowApiKey((current) => !current)}
-                size="icon-xs"
-                type="button"
-              >
-                {showApiKey ? (
-                  <ViewOffIcon className="size-4" />
-                ) : (
-                  <ViewIcon className="size-4" />
-                )}
-              </InputGroupButton>
-            </InputGroupAddon>
+            <ApiKeyVisibilityButton
+              onToggle={() => setShowApiKey((current) => !current)}
+              showApiKey={showApiKey}
+            />
           )}
         </InputGroup>
         <Button
           className="min-w-[4.5rem] shrink-0"
-          disabled={
-            pending ||
-            managedByEnvironment ||
-            !(apiKey.trim() || keyAlreadySaved || keyOptional)
-          }
+          disabled={!canSave}
           id="btn-web-search-save"
           onClick={onSave}
           size="sm"

@@ -17,6 +17,7 @@ export const WEB_SEARCH_PROVIDERS = [
   "firecrawl",
   "serply",
   "keenable",
+  "youcom",
 ] as const satisfies readonly WebSearchProvider[];
 
 export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
@@ -25,6 +26,7 @@ export const WEB_SEARCH_PROVIDER_ENDPOINTS: Record<WebSearchProvider, string> =
     firecrawl: "https://api.firecrawl.dev/v2/search",
     keenable: "https://api.keenable.ai/v1/search",
     serply: "https://api.serply.io/v1/search",
+    youcom: "https://ydc-index.io/v1/search",
   };
 
 export const WEB_SEARCH_PROVIDER_ENV_NAMES: Record<WebSearchProvider, string> =
@@ -33,6 +35,7 @@ export const WEB_SEARCH_PROVIDER_ENV_NAMES: Record<WebSearchProvider, string> =
     firecrawl: "FIRECRAWL_API_KEY",
     keenable: "KEENABLE_API_KEY",
     serply: "SERPLY_API_KEY",
+    youcom: "YDC_API_KEY",
   };
 
 export const WEB_SEARCH_PROVIDER_LABELS: Record<WebSearchProvider, string> = {
@@ -40,6 +43,7 @@ export const WEB_SEARCH_PROVIDER_LABELS: Record<WebSearchProvider, string> = {
   firecrawl: "Firecrawl",
   keenable: "Keenable",
   serply: "Serply",
+  youcom: "You.com",
 };
 
 export interface WebSearchConfigFile {

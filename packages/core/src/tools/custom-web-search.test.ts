@@ -320,6 +320,41 @@ describe("createCustomWebSearchTool", () => {
     expect(captured[0]?.url).toBe("https://api.keenable.ai/v1/search");
     expect(captured[0]?.headers["x-api-key"]).toBe("keenable-key");
   });
+
+  test("needs a key for You.com", () => {
+    expect(
+      createCustomWebSearchTool(
+        config({
+          apiKey: "",
+          endpoint: "https://ydc-index.io/v1/search",
+          provider: "youcom",
+        })
+      )
+    ).toBeNull();
+  });
+
+  test("sends a You.com key to the keyed search endpoint", async () => {
+    const captured: CapturedRequest[] = [];
+    stubFetch({ body: { results: { web: [] } } }, captured);
+
+    const tool = createCustomWebSearchTool(
+      config({
+        apiKey: "ydc-key",
+        endpoint: "https://ydc-index.io/v1/search",
+        provider: "youcom",
+      })
+    );
+
+    await tool?.run({ query: "bun release" }, {});
+
+    expect(captured[0]?.method).toBe("POST");
+    expect(captured[0]?.url).toBe("https://ydc-index.io/v1/search");
+    expect(captured[0]?.headers["x-api-key"]).toBe("ydc-key");
+    expect(captured[0]?.headers["user-agent"]).toBe(
+      "youdotcom-integration/ahmadrosid-nakama"
+    );
+    expect(captured[0]?.body).toEqual({ count: 5, query: "bun release" });
+  });
 });
 
 describe("parseCustomWebSearchResults", () => {
@@ -343,6 +378,45 @@ describe("parseCustomWebSearchResults", () => {
       "Three",
       "Four",
       "Five",
+    ]);
+  });
+
+  test("reads You.com contents.highlights when description is empty", () => {
+    const results = parseCustomWebSearchResults({
+      results: {
+        web: [
+          {
+            contents: { highlights: ["First passage.", "Second passage."] },
+            description: "",
+            title: "Bun",
+            url: "https://bun.sh",
+          },
+        ],
+      },
+    });
+
+    expect(results[0]?.snippet).toBe("First passage. Second passage.");
+  });
+
+  test("reads You.com results.web and joins snippets", () => {
+    const results = parseCustomWebSearchResults({
+      results: {
+        web: [
+          {
+            snippets: ["First passage.", "Second passage."],
+            title: "Bun",
+            url: "https://bun.sh",
+          },
+        ],
+      },
+    });
+
+    expect(results).toEqual([
+      {
+        snippet: "First passage. Second passage.",
+        title: "Bun",
+        url: "https://bun.sh",
+      },
     ]);
   });
 });

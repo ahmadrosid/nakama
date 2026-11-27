@@ -29,6 +29,7 @@ describe("web search config", () => {
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.SERPLY_API_KEY;
     delete process.env.KEENABLE_API_KEY;
+    delete process.env.YDC_API_KEY;
   });
 
   async function useTempConfigDir(): Promise<void> {
@@ -162,5 +163,19 @@ describe("web search config", () => {
     expect((await saveWebSearchConfig({ provider: "exa" })).configured).toBe(
       false
     );
+  });
+
+  test("needs a key for You.com", async () => {
+    await useTempConfigDir();
+
+    const saved = await saveWebSearchConfig({ provider: "youcom" });
+
+    expect(saved.configured).toBe(false);
+    expect(saved.endpoint).toBe("https://ydc-index.io/v1/search");
+
+    process.env.YDC_API_KEY = "ydc-secret-key-1234";
+
+    expect((await loadWebSearchSettingsPublic()).configured).toBe(true);
+    expect(isWebSearchProvider("youcom")).toBe(true);
   });
 });
