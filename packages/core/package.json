@@ -86,7 +86,7 @@
   "dependencies": {
     "@firecrawl/anydoc": "0.2.4",
     "@vscode/ripgrep": "^1.18.0",
-    "croner": "^10.0.1",
+    "croner": "^11.0.1",
     "docx": "^9.15.2",
     "fflate": "^0.8.3",
     "imapflow": "^2.10.2",
