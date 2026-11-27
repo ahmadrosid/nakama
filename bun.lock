@@ -104,7 +104,7 @@
         "@nakama/agent": "workspace:*",
         "@nakama/core": "workspace:*",
         "@nakama/db": "workspace:*",
-        "@openrouter/sdk": "^1.5.34",
+        "@openrouter/sdk": "^1.5.133",
         "@simplewebauthn/server": "^14.1.0",
         "fflate": "^0.8.3",
         "hono": "^4.13.17",
@@ -701,7 +701,7 @@
 
     "@openai/codex-win32-x64": ["@openai/codex@0.165.0-win32-x64", "", { "os": "win32", "cpu": "x64" }, "sha512-f5LMyugPSnAovnTnR1N+SNHSTfWZ+ym5A4H3zZHz/zhuMGMGZD8IxUdlSUlEbiENYyPXrJ8G3Jh+CLyzTfQB6Q=="],
 
-    "@openrouter/sdk": ["@openrouter/sdk@1.5.34", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-LAcWpwGXD2xdQDDrC+flHRWHHNgkh7rFpptQfRsABuOGkUfsiyKcEdCgQsKb2L59kluTMuxBGMTmlLh91qfScw=="],
+    "@openrouter/sdk": ["@openrouter/sdk@1.5.133", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-qKFZB7gUt+R9DHmfqLBlUuG8rk4R38S5fjGQlK5oobalmcYfHsnQP9vbTFLEg21qn2C5LGkhj9idIaPNH9YGrw=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 
