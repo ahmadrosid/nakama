@@ -488,6 +488,8 @@ export interface ProfilePackMeta {
   mcpServerNames: string[];
   model: string | null;
   name: string;
+  /** Missing in packs exported before the switch existed; means on. */
+  platformToolsEnabled?: boolean;
   profileSkillNames: string[];
   sharedAgent?: {
     publicationId: string;
@@ -1865,6 +1867,18 @@ export interface UpdateImageGenerationRequest {
   model: string | null;
 }
 
+export interface VideoGenerationSettings {
+  model: string | null;
+}
+
+export interface VideoGenerationSettingsResponse {
+  videoGeneration: VideoGenerationSettings;
+}
+
+export interface UpdateVideoGenerationRequest {
+  model: string | null;
+}
+
 /** Search back-end that replaces the provider-hosted `web_search` tool. */
 export type WebSearchProvider = "exa" | "firecrawl" | "serply" | "keenable";
 
@@ -2483,6 +2497,8 @@ export interface ProfileSummary {
   name: string;
   /** Member who created the agent. null for agents created by platform admins. */
   ownerUserId?: string | null;
+  /** false = chat turns get only the agent's own tools, no platform tools. */
+  platformToolsEnabled?: boolean;
   sharedAgent?: {
     available: boolean;
     publicationId: string;
@@ -2832,6 +2848,7 @@ export interface UpdateProfileRequest {
   groupsEnabled?: boolean;
   model?: string | null;
   name?: string;
+  platformToolsEnabled?: boolean;
   /** Owner or admin: false keeps the agent private to its owner. */
   sharedWithTeam?: boolean;
   skillsCuratorConsolidateEnabled?: boolean | null;
@@ -3486,6 +3503,8 @@ export interface ToolContext {
   ) => Promise<() => Promise<void>>;
   automationId?: string;
   automationRunId?: string;
+  /** Checks live access to organization documents attached to this profile. */
+  canReadOrganizationKnowledge?: () => Promise<boolean>;
   /** Session channel when known (used for interactive-only tool gates). */
   channel?: AgentChannel;
   /** Browser origin for OAuth callbacks during this tool run. */
@@ -3514,7 +3533,7 @@ export interface ToolContext {
    */
   forbidMemoryWrites?: boolean;
   /**
-   * When true (skill_manage is in the session tool list), write_file / edit_file / delete_file
+   * When true (skill_manage is in the session tool list, or platform tools are off), write_file / edit_file / delete_file
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;

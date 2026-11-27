@@ -54,6 +54,7 @@ import {
   TRANSCRIPTION_MODEL_OPTIONS,
 } from "@/lib/models";
 import {
+  isOpenRouterModelType,
   type OpenRouterModelRow,
   openRouterModelsQueryOptions,
 } from "@/lib/openrouter-models";
@@ -1157,10 +1158,12 @@ const KEY_URLS: Partial<Record<TranscriptionProvider["type"], string>> = {
 type ModelOption = { id: string; name: string };
 
 // Router entries may send audio to a text-only model, and batch copies
-// answer later, so neither can transcribe on request.
+// answer later, so neither can transcribe on request. Transcription goes
+// through chat, so the model must return text.
 function isOpenRouterTranscriber(row: OpenRouterModelRow) {
   return (
     row.audio &&
+    isOpenRouterModelType(row, "text") &&
     !row.deprecated &&
     !row.id.startsWith("openrouter/") &&
     !row.id.endsWith(":batch")

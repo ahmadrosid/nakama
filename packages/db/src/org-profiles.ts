@@ -9,6 +9,7 @@ import {
   BUILTIN_TOOL_IDS,
   CLOSE_SESSION_TOOL_ID,
   GENERATE_IMAGE_TOOL_ID,
+  GENERATE_VIDEO_TOOL_ID,
   LIST_PROFILE_SESSIONS_TOOL_ID,
   READ_PROFILE_SESSION_TOOL_ID,
   SAVE_ARTIFACT_TOOL_ID,
@@ -217,6 +218,24 @@ export async function ensureGenerateImageToolDefinition(
     handlerType: "generate_image",
     id: GENERATE_IMAGE_TOOL_ID,
     name: "generate_image",
+    updatedAt: now,
+  });
+}
+
+export async function ensureGenerateVideoToolDefinition(
+  db: DatabaseAdapter
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db.getTool(GENERATE_VIDEO_TOOL_ID);
+
+  await db.upsertTool({
+    createdAt: existing?.createdAt ?? now,
+    description:
+      "Generate a short video clip from a text prompt using the workspace video model. Saves an MP4 under artifacts/.",
+    handlerConfig: {},
+    handlerType: "generate_video",
+    id: GENERATE_VIDEO_TOOL_ID,
+    name: "generate_video",
     updatedAt: now,
   });
 }

@@ -63,6 +63,7 @@ export const queryKeys = {
   },
   health: ["health"] as const,
   imageGenerationSettings: ["imageGeneration", "settings"] as const,
+  videoGenerationSettings: ["videoGeneration", "settings"] as const,
   knowledgeBase: {
     organization: (orgId: string) =>
       ["knowledgeBase", "organization", orgId] as const,

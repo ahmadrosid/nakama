@@ -127,8 +127,24 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
     };
   }
 
+  /**
+   * A client registered for another callback origin cannot authorize this
+   * one, so a new sign-in registers again (#2620). A live grant keeps its
+   * client: the refresh token belongs to it.
+   */
   clientInformation(): OAuthClientInformationFull | undefined {
-    return this.grant.clientInformation;
+    const client = this.grant.clientInformation;
+
+    if (
+      client &&
+      !this.grant.tokens &&
+      Array.isArray(client.redirect_uris) &&
+      !client.redirect_uris.includes(this.redirectUrl)
+    ) {
+      return;
+    }
+
+    return client;
   }
 
   async saveClientInformation(

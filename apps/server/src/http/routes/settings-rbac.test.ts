@@ -233,6 +233,11 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
     method: "PUT",
     path: "/v1/settings/image-generation",
   },
+  {
+    body: { model: null },
+    method: "PUT",
+    path: "/v1/settings/video-generation",
+  },
   { body: { apiKey: "c" }, method: "PUT", path: "/v1/settings/composio" },
   {
     body: { apiKey: "exa-key", provider: "exa" },

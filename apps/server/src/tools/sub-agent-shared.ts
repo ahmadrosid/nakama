@@ -1,4 +1,4 @@
-import type { OrgRole } from "@nakama/core";
+import type { OrgRole, ToolContext } from "@nakama/core";
 import type { AgentGroupMemoryChange } from "@nakama/core/agent-groups";
 
 export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 300_000;
@@ -13,6 +13,7 @@ const TRUNCATION_MARKER = "\n...[truncated]";
 
 export interface SubAgentRunInput {
   agentDepth: number;
+  canReadOrganizationKnowledge?: ToolContext["canReadOrganizationKnowledge"];
   clientOrigin?: string;
   context?: string;
   onActivity?: (label: string) => void;

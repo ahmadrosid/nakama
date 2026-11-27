@@ -57,6 +57,7 @@ import type { AppEnv, HonoApp } from "../types";
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
   "automationsEnabled",
   "groupsEnabled",
+  "platformToolsEnabled",
   "skillsWriteApproval",
   "skillsPostTurnReview",
 ]);
@@ -273,7 +274,7 @@ export function registerProfileRoutes(
     .openapi("CreateProfileRequest");
 
   const updateProfileSchema = z
-    .object({})
+    .object({ platformToolsEnabled: z.boolean().optional() })
     .passthrough()
     .openapi("UpdateProfileRequest");
 

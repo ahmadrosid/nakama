@@ -129,6 +129,7 @@ import {
 } from "./tools/automation-tools";
 import { isTenantBashEnabled } from "./tools/bash-config";
 import { createGenerateImageTool } from "./tools/generate-image-tool";
+import { createGenerateVideoTool } from "./tools/generate-video-tool";
 import { createSaveArtifactTool } from "./tools/save-artifact-tool";
 import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
@@ -295,6 +296,10 @@ agent.setServerTools({
         pricingContext: { providerInstance },
       });
     },
+  }),
+  generateVideo: createGenerateVideoTool({
+    db: database.adapter,
+    getUserConfig: () => agent.getUserConfig(),
   }),
   googleMeet: googleMeetService.tools(),
   saveArtifact: createSaveArtifactTool({ db: database.adapter }),

@@ -132,7 +132,7 @@ export async function runSqliteTool(
 
     const statement = db.query(sql);
 
-    if (isRowsStatement(sql)) {
+    if (statement.columnNames.length > 0) {
       const rows: SqliteRow[] = [];
       let chars = 0;
 
@@ -179,10 +179,6 @@ function assertSafeSql(sql: string): string {
   }
 
   return body;
-}
-
-function isRowsStatement(sql: string): boolean {
-  return /^(WITH|SELECT|EXPLAIN|PRAGMA|VALUES)\b/i.test(sql);
 }
 
 const WORKFLOW_SQLITE_TABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;

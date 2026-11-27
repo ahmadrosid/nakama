@@ -36,6 +36,7 @@ import {
   useImageGenerationSettings,
   useModelsQuery,
   useTranscriptionSettings,
+  useVideoGenerationSettings,
   useVisionSettings,
 } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
@@ -438,6 +439,7 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
   const { data: vision } = useVisionSettings();
   const { data: transcription } = useTranscriptionSettings();
   const { data: imageGeneration } = useImageGenerationSettings();
+  const { data: videoGeneration } = useVideoGenerationSettings();
 
   return useMemo(() => {
     const groups = groupModelsByProvider(modelsResponse?.models ?? []);
@@ -447,6 +449,7 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
       ["Image parsing model", vision?.model],
       ["Audio transcription model", transcription?.model],
       ["Image generation model", imageGeneration?.model],
+      ["Video generation model", videoGeneration?.model],
     ];
 
     // With no model saved, images come from a connected ChatGPT. Removing the
@@ -459,13 +462,25 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
           group.models.some((model) => model.provider === "chatgpt")
       );
 
+    // A saved value whose provider exists counts as-is: a provider with no
+    // chat models (MiniMax for image or video) has no group to map through.
+    const providerIds = new Set(
+      (modelsResponse?.providers ?? []).map((provider) => provider.id)
+    );
+
+    const resolveSetting = (model: string) => {
+      const direct = decodeModelSelection(model);
+
+      return direct && providerIds.has(direct.providerId)
+        ? direct
+        : decodeModelSelection(profileModelSelectionValue(model, groups));
+    };
+
     // Manage marks the model each setting uses.
     const modelUsage: Record<string, string[]> = {};
 
     for (const [name, model] of settingModels) {
-      const resolved = model
-        ? decodeModelSelection(profileModelSelectionValue(model, groups))
-        : null;
+      const resolved = model ? resolveSetting(model) : null;
 
       if (resolved?.providerId === instance.id) {
         modelUsage[resolved.modelId] = [
@@ -480,11 +495,7 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
         return name === "Image generation model" && lastChatgpt ? [name] : [];
       }
 
-      const resolved = decodeModelSelection(
-        profileModelSelectionValue(model, groups)
-      );
-
-      return resolved?.providerId === instance.id ? [name] : [];
+      return resolveSetting(model)?.providerId === instance.id ? [name] : [];
     });
 
     return { modelUsage, usedBy };
@@ -493,7 +504,9 @@ function useProviderSettingUsage(instance: ProviderInstanceSummary) {
     instance.id,
     instance.type,
     modelsResponse?.models,
+    modelsResponse?.providers,
     transcription?.model,
+    videoGeneration?.model,
     vision?.model,
   ]);
 }

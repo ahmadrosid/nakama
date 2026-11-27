@@ -185,6 +185,7 @@ interface ProfileRow {
   name: string;
   org_id: string | null;
   owner_user_id: string | null;
+  platform_tools_enabled: number;
   shared_with_team: number;
   skills_curator_consolidate_enabled: number | null;
   skills_post_turn_review: number | null;
@@ -320,6 +321,7 @@ interface WorkspaceSettingsRow {
   selected_coding_agent_harness: string | null;
   transcription_model: string | null;
   updated_at: string;
+  video_model: string | null;
   vision_model: string | null;
 }
 
@@ -1178,6 +1180,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default,
       automations_enabled,
       groups_enabled,
+      platform_tools_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1188,7 +1191,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -1200,6 +1203,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default = excluded.is_default,
       automations_enabled = excluded.automations_enabled,
       groups_enabled = excluded.groups_enabled,
+      platform_tools_enabled = excluded.platform_tools_enabled,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
@@ -1223,6 +1227,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default,
       automations_enabled,
       groups_enabled,
+      platform_tools_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1233,7 +1238,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO NOTHING
   `);
 
@@ -1249,6 +1254,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     record.isDefault ? 1 : 0,
     record.automationsEnabled === false ? 0 : 1,
     record.groupsEnabled === false ? 0 : 1,
+    record.platformToolsEnabled === false ? 0 : 1,
     record.skillsWriteApproval == null
       ? null
       : record.skillsWriteApproval
@@ -2367,17 +2373,19 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       vision_model,
       transcription_model,
       image_model,
+      video_model,
       coding_agent_harnesses,
       selected_coding_agent_harness,
       coding_agent_provider_passthrough,
       automation_worker_poll_interval_ms,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
       image_model = excluded.image_model,
+      video_model = excluded.video_model,
       coding_agent_harnesses = excluded.coding_agent_harnesses,
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
       coding_agent_provider_passthrough = excluded.coding_agent_provider_passthrough,
@@ -7437,6 +7445,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.visionModel,
         record.transcriptionModel,
         record.imageModel,
+        record.videoModel ?? null,
         JSON.stringify(record.codingAgentHarnesses),
         record.selectedCodingAgentHarness,
         record.codingAgentProviderPassthrough === false ? 0 : 1,
@@ -7551,6 +7560,7 @@ function toProfileRecord(row: ProfileRow): StoredProfileRecord {
     name: row.name,
     orgId: row.org_id ?? null,
     ownerUserId: row.owner_user_id ?? null,
+    platformToolsEnabled: row.platform_tools_enabled !== 0,
     sharedWithTeam: row.shared_with_team !== 0,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled == null
@@ -8051,6 +8061,7 @@ function toWorkspaceSettingsRecord(
       row.selected_coding_agent_harness?.trim() || null,
     transcriptionModel: row.transcription_model?.trim() || null,
     updatedAt: row.updated_at,
+    videoModel: row.video_model?.trim() || null,
     visionModel: row.vision_model?.trim() || null,
   };
 }

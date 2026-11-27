@@ -41,6 +41,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateAutomationsEnabledColumn);
   atomic(migrateGroupsEnabledColumn);
+  atomic(migratePlatformToolsEnabledColumn);
   atomic(migrateSkillsCuratorColumns);
   atomic(migrateLlmUsageQuotaColumns);
   atomic(migrateOrgLlmMonthlyQuotaTable);
@@ -1205,6 +1206,20 @@ function migrateGroupsEnabledColumn(db: Database): void {
   }
 }
 
+function migratePlatformToolsEnabledColumn(db: Database): void {
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(profiles)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "platform_tools_enabled")) {
+    db.exec(
+      "ALTER TABLE profiles ADD COLUMN platform_tools_enabled INTEGER NOT NULL DEFAULT 1;"
+    );
+  }
+}
+
 function migrateSkillsPostTurnReviewColumns(db: Database): void {
   const orgColumns = db
     .prepare<{ name: string }, SQLQueryBindings[]>(
@@ -2110,6 +2125,12 @@ function migrateWorkspaceSettingsTable(db: Database): void {
   if (!columnNames.has("image_model")) {
     db.exec(`
       ALTER TABLE workspace_settings ADD COLUMN image_model TEXT;
+    `);
+  }
+
+  if (!columnNames.has("video_model")) {
+    db.exec(`
+      ALTER TABLE workspace_settings ADD COLUMN video_model TEXT;
     `);
   }
 

@@ -2,7 +2,8 @@ import { Card } from "@nakama/ui/card";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import { ArrowDown01Icon } from "hugeicons-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { SkillsCuratorOrgCard } from "@/components/settings/SkillsCuratorOrgCard";
 import { SkillsPostTurnReviewOrgCard } from "@/components/settings/SkillsPostTurnReviewOrgCard";
 import { SkillsWriteApprovalOrgCard } from "@/components/settings/SkillsWriteApprovalOrgCard";
@@ -59,8 +60,17 @@ const PRESETS: {
 
 export function SkillsLearningOrgCard() {
   const { activeOrg, updateOrg } = useAuth();
+  const location = useLocation();
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (
+      new URLSearchParams(location.search).get("skillProposals") === "proposals"
+    ) {
+      setOpen(true);
+    }
+  }, [location]);
 
   if (!activeOrg || activeOrg.role !== "admin") {
     return null;
