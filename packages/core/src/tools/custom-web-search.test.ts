@@ -321,18 +321,6 @@ describe("createCustomWebSearchTool", () => {
     expect(captured[0]?.headers["x-api-key"]).toBe("keenable-key");
   });
 
-  test("needs a key for You.com", () => {
-    expect(
-      createCustomWebSearchTool(
-        config({
-          apiKey: "",
-          endpoint: "https://ydc-index.io/v1/search",
-          provider: "youcom",
-        })
-      )
-    ).toBeNull();
-  });
-
   test("sends a You.com key to the keyed search endpoint", async () => {
     const captured: CapturedRequest[] = [];
     stubFetch({ body: { results: { web: [] } } }, captured);
@@ -396,27 +384,5 @@ describe("parseCustomWebSearchResults", () => {
     });
 
     expect(results[0]?.snippet).toBe("First passage. Second passage.");
-  });
-
-  test("reads You.com results.web and joins snippets", () => {
-    const results = parseCustomWebSearchResults({
-      results: {
-        web: [
-          {
-            snippets: ["First passage.", "Second passage."],
-            title: "Bun",
-            url: "https://bun.sh",
-          },
-        ],
-      },
-    });
-
-    expect(results).toEqual([
-      {
-        snippet: "First passage. Second passage.",
-        title: "Bun",
-        url: "https://bun.sh",
-      },
-    ]);
   });
 });

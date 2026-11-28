@@ -187,19 +187,16 @@ function findResultArray(payload: JsonValue): JsonValue[] {
     }
   }
 
-  const nestedResults = record.results;
-
-  if (nestedResults !== undefined) {
-    const nested = findResultArray(nestedResults);
+  for (const key of ["results", "data"]) {
+    const nested =
+      record[key] === undefined ? [] : findResultArray(record[key]);
 
     if (nested.length > 0) {
       return nested;
     }
   }
 
-  const data = record.data;
-
-  return data === undefined ? [] : findResultArray(data);
+  return [];
 }
 
 function toResult(entry: JsonValue): CustomWebSearchResult | null {
@@ -216,22 +213,17 @@ function toResult(entry: JsonValue): CustomWebSearchResult | null {
     return null;
   }
 
-  // You.com puts query passages on `snippets` (deprecated) or
-  // `contents.highlights`; join whichever is present.
-  const contents = readRecord(record.contents ?? null);
+  // You.com puts query passages on `contents.highlights`.
+  const highlights = readRecord(record.contents ?? null)?.highlights;
 
-  const passages = [
-    ...(Array.isArray(record.snippets) ? record.snippets : []),
-    ...(Array.isArray(contents?.highlights) ? contents.highlights : []),
-  ]
-    .flatMap((part) => readString(part) ?? [])
-    .join(" ");
+  const passages = Array.isArray(highlights)
+    ? highlights.flatMap((part) => readString(part) ?? []).join(" ")
+    : "";
 
   const snippet =
     readString(record.snippet) ??
     readString(record.description) ??
     (passages || undefined) ??
-    readString(contents?.markdown) ??
     readString(record.text) ??
     readString(record.markdown) ??
     readString(record.content);
