@@ -5377,7 +5377,7 @@ export class AgentService {
       request.model !== undefined ||
       request.platformToolsEnabled !== undefined
     ) {
-      this.sessions.invalidateProfile(profileId);
+      await this.sessions.invalidateProfile(profileId);
     }
 
     return response;
@@ -5394,7 +5394,7 @@ export class AgentService {
       request
     );
 
-    this.sessions.invalidateProfile(profileId);
+    await this.sessions.invalidateProfile(profileId);
 
     return result;
   }
@@ -5402,7 +5402,7 @@ export class AgentService {
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
     await this.profileService.deleteProfile(orgId, profileId);
 
-    this.sessions.invalidateProfile(profileId, { clear: true });
+    await this.sessions.invalidateProfile(profileId, { clear: true });
   }
 
   async listTools(orgId: string): Promise<ListToolsResponse> {

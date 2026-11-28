@@ -110,6 +110,8 @@ export class SessionRuntime {
     { orgId: string; run: Promise<AgentChatSession | null> }
   >();
   private readonly isTurnActive: (sessionId: string) => boolean;
+  /** Counts invalidations, so a build that one overtook stays out of date. */
+  private invalidations = 0;
 
   constructor(private readonly deps: SessionRuntimeDeps) {
     this.cognito = new EphemeralSessionStore(deps.onCognitoEnd);
@@ -164,7 +166,7 @@ export class SessionRuntime {
     const revision = await this.deps.revisionFor(orgId, record.profileId);
 
     if (entry) {
-      if ((entry.revision ?? "") !== revision) {
+      if (entry.revision !== revision) {
         await this.rebuildCognito(entry, orgId, revision);
       }
 
@@ -205,14 +207,16 @@ export class SessionRuntime {
       throw new NakamaApiError("Session channel is invalid.", 400);
     }
 
+    const started = this.invalidations;
     const revision = await this.deps.revisionFor(orgId, record.profileId);
+    const session = await this.build(record, orgId, channel, "cognito", []);
 
     await this.cognito.set({
       attachmentIds: new Set(),
       lastActiveAt: Date.now(),
       record,
-      revision,
-      session: await this.build(record, orgId, channel, "cognito", []),
+      revision: started === this.invalidations ? revision : undefined,
+      session,
     });
   }
 
@@ -255,19 +259,31 @@ export class SessionRuntime {
     this.chats.delete(sessionId);
   }
 
-  /** Cognito chats survive unless asked: their history lives nowhere else. */
+  /**
+   * Cognito chats survive unless asked: their history lives nowhere else.
+   * They are marked out of date, so the next turn rebuilds them.
+   */
   invalidateAll({ cognito = false }: { cognito?: boolean } = {}): void {
+    this.invalidations += 1;
     this.chats.clear();
 
     if (cognito) {
       this.cognito.clear();
+
+      return;
+    }
+
+    for (const entry of this.cognito.values()) {
+      entry.revision = undefined;
     }
   }
 
-  invalidateProfile(
+  async invalidateProfile(
     profileId: string,
     { clear = false }: { clear?: boolean } = {}
-  ): void {
+  ): Promise<void> {
+    this.invalidations += 1;
+
     for (const [sessionId, cached] of this.chats) {
       if (cached.profileId === profileId) {
         if (clear) {
@@ -279,10 +295,16 @@ export class SessionRuntime {
     }
 
     // A cognito chat has no row to rebuild from, so it is marked out of date
-    // and the next turn rebuilds it with its history.
-    for (const entry of this.cognito.values()) {
-      if (entry.record.profileId === profileId) {
-        entry.revision = undefined;
+    // and the next turn rebuilds it with its history. With `clear` it ends.
+    for (const entry of [...this.cognito.values()]) {
+      if (entry.record.profileId !== profileId) {
+        continue;
+      }
+
+      entry.revision = undefined;
+
+      if (clear) {
+        await this.cognito.delete(entry.record.id);
       }
     }
   }
@@ -365,6 +387,8 @@ export class SessionRuntime {
       throw new NakamaApiError("Session refresh failed. Try again.", 503);
     }
 
+    const started = this.invalidations;
+
     entry.session = await this.build(
       { ...entry.record, ...settings },
       orgId,
@@ -373,7 +397,7 @@ export class SessionRuntime {
       [...entry.session.getHistory()]
     );
     Object.assign(entry.record, settings);
-    entry.revision = revision;
+    entry.revision = started === this.invalidations ? revision : undefined;
     await this.cognito.set(entry);
   }
 
