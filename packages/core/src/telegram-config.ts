@@ -565,7 +565,13 @@ export async function loadTelegramAgentGroup(
 
   try {
     return agentGroupTargetSchema.parse(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    // The bot then answers as its agent, and the settings show "This agent".
+    console.error(
+      `Ignored a broken Telegram agent-group.json for ${owner.orgId}/${owner.profileId}`,
+      error
+    );
+
     return null;
   }
 }

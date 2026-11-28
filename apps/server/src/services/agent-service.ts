@@ -229,6 +229,7 @@ import {
   saveUserTimezone,
   saveWebSearchConfig,
   saveWhatsAppConfig,
+  type TelegramAgentGroupTarget,
   toMailboxConfig,
   transcribeAudio,
   USER_CONTEXT_TEMPLATE,
@@ -1460,7 +1461,44 @@ export class AgentService {
   async getTelegramAgentGroup(
     owner: ChannelOwner
   ): Promise<{ groupId: string | null }> {
-    return { groupId: (await loadTelegramAgentGroup(owner))?.groupId ?? null };
+    return {
+      groupId: (await this.telegramAgentGroupTarget(owner))?.groupId ?? null,
+    };
+  }
+
+  /**
+   * The bot's Agent Group while it still works. A target whose group is gone,
+   * or whose owner left the org, is removed: the bot then answers as its
+   * agent again, and the settings show that.
+   */
+  async telegramAgentGroupTarget(
+    owner: ChannelOwner
+  ): Promise<TelegramAgentGroupTarget | null> {
+    const target = await loadTelegramAgentGroup(owner);
+
+    if (!target) {
+      return null;
+    }
+
+    const { groupId, ownerUserId } = target;
+
+    const [member, user] = await Promise.all([
+      this.db.getOrgMember(owner.orgId, ownerUserId),
+      this.db.getUserById(ownerUserId),
+    ]);
+
+    if (
+      member &&
+      user &&
+      !user.disabledAt &&
+      this.groups.list(owner.orgId, ownerUserId).some((g) => g.id === groupId)
+    ) {
+      return target;
+    }
+
+    await saveTelegramAgentGroup(owner, null);
+
+    return null;
   }
 
   /**

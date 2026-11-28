@@ -65,19 +65,43 @@ export class ChannelsClient extends AutomationsClient {
     return response.token;
   }
 
-  /** Workers only: one Telegram message to the bot's Agent Group (#2509). */
-  postTelegramAgentGroupMessage(input: {
-    content: string;
+  /**
+   * Workers only: the group session of a Telegram chat (#2509). Returns
+   * `sessionId` while it still exists, and a new session otherwise.
+   */
+  openTelegramAgentGroupSession(input: {
     orgId: string;
     profileId: string;
     sessionId: string | null;
-  }): Promise<{
+    title: string;
+  }): Promise<{ sessionId: string }> {
+    return this.request("/v1/internal/telegram/agent-group-sessions", {
+      body: JSON.stringify(input),
+      method: "POST",
+      signal: AbortSignal.timeout(10_000),
+    });
+  }
+
+  /**
+   * Workers only: one Telegram message to the bot's Agent Group. Answers when
+   * every agent has replied; aborting `signal` stops the run.
+   */
+  postTelegramAgentGroupMessage(
+    input: {
+      content: string;
+      orgId: string;
+      profileId: string;
+      sessionId: string;
+    },
+    signal: AbortSignal
+  ): Promise<{
+    failed: boolean;
     replies: { author: string; content: string }[];
-    sessionId: string;
   }> {
     return this.request("/v1/internal/telegram/agent-group-messages", {
       body: JSON.stringify(input),
       method: "POST",
+      signal,
     });
   }
 
