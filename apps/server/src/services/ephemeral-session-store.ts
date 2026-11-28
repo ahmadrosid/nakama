@@ -60,6 +60,10 @@ export class EphemeralSessionStore {
     return undefined;
   }
 
+  values(): IterableIterator<EphemeralSession> {
+    return this.entries.values();
+  }
+
   clear(): void {
     this.entries.clear();
   }
