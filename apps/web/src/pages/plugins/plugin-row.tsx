@@ -129,7 +129,13 @@ export function PluginRow({
   updateVersion,
 }: PluginRowProps) {
   return (
-    <li className={detail ? "min-w-0" : "min-w-0 px-4 py-3.5"}>
+    <li
+      className={
+        detail
+          ? "min-w-0"
+          : "relative min-w-0 py-3.5 after:absolute after:right-0 after:bottom-0 after:left-13 after:border-border after:border-b last:after:hidden"
+      }
+    >
       <div className="flex flex-wrap items-center gap-3">
         <PluginIdentity
           catalogDescription={catalogDescription}

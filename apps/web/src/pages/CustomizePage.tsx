@@ -4,7 +4,7 @@ import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight01Icon } from "hugeicons-react";
+import { ArrowRight01Icon, Search01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { IntegrationsTabs } from "@/components/IntegrationsTabs";
@@ -236,15 +236,22 @@ export function SkillsPage() {
     );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto min-w-0 max-w-4xl space-y-6">
       <IntegrationsTabs>
-        <Input
-          aria-label="Search skills"
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search skills"
-          type="search"
-          value={search}
-        />
+        <div className="relative w-full">
+          <Search01Icon
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search skills"
+            className="pl-9"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search skills"
+            type="search"
+            value={search}
+          />
+        </div>
       </IntegrationsTabs>
       {isLoading && <p role="status">Loading skills…</p>}
       {error && (
@@ -261,81 +268,79 @@ export function SkillsPage() {
         </p>
       )}
       {filtered.length > 0 && (
-        <Card className="overflow-hidden shadow-none">
-          <CardContent className="divide-y divide-border p-0">
-            {filtered.map((skill) => (
-              <div
-                className="relative flex items-center gap-3 py-3 pr-10 pl-4 hover:bg-accent/50"
-                key={skill.id}
+        <div>
+          {filtered.map((skill) => (
+            <div
+              className="relative flex items-center gap-3 border-border border-b py-3.5 pr-7 last:border-b-0"
+              key={skill.id}
+            >
+              <Link
+                className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
+                to={`${skillDetailPath(skill.id)}?from=skills`}
               >
-                <Link
-                  className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
-                  to={`${skillDetailPath(skill.id)}?from=skills`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="break-words font-medium">
-                        {skill.name}
-                      </span>
-                      {!skill.enabled && (
-                        <span className="text-muted-foreground text-xs">
-                          Disabled
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <ArrowRight01Icon
-                    aria-hidden
-                    className="absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
-                  />
-                </Link>
-                <div className="flex max-w-1/2 flex-wrap items-center justify-end gap-2 text-xs">
-                  <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-                    {skillSourceLabel(skill)}
-                  </span>
-                  {profilesError ? (
-                    <button
-                      className="text-destructive underline"
-                      onClick={() => void refetchProfiles()}
-                      type="button"
-                    >
-                      Couldn’t load profile assignments. Retry
-                    </button>
-                  ) : profiles ? (
-                    <>
-                      {profilesBySkill.has(skill.id) && (
-                        <div className="order-first flex -space-x-2">
-                          {(profilesBySkill.get(skill.id) ?? []).map(
-                            (profile) => (
-                              <Link
-                                aria-label={`Open ${profile.name}`}
-                                className="relative rounded-full ring-2 ring-card hover:z-10 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring"
-                                key={profile.id}
-                                title={profile.name}
-                                to={profilePath(profile.id)}
-                              >
-                                <ProfileAvatar profile={profile} size="xxs" />
-                              </Link>
-                            )
-                          )}
-                        </div>
-                      )}
-                      {!profilesBySkill.has(skill.id) && (
-                        <span className="text-muted-foreground">
-                          Not assigned to any profile
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground" role="status">
-                      Loading profile assignments…
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="break-words font-medium">
+                      {skill.name}
                     </span>
-                  )}
+                    {!skill.enabled && (
+                      <span className="text-muted-foreground text-xs">
+                        Disabled
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <ArrowRight01Icon
+                  aria-hidden
+                  className="absolute top-1/2 right-0 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+              </Link>
+              <div className="flex max-w-1/2 flex-wrap items-center justify-end gap-2 text-xs">
+                <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+                  {skillSourceLabel(skill)}
+                </span>
+                {profilesError ? (
+                  <button
+                    className="text-destructive underline"
+                    onClick={() => void refetchProfiles()}
+                    type="button"
+                  >
+                    Couldn’t load profile assignments. Retry
+                  </button>
+                ) : profiles ? (
+                  <>
+                    {profilesBySkill.has(skill.id) && (
+                      <div className="order-first flex -space-x-2">
+                        {(profilesBySkill.get(skill.id) ?? []).map(
+                          (profile) => (
+                            <Link
+                              aria-label={`Open ${profile.name}`}
+                              className="relative rounded-full ring-2 ring-background hover:z-10 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring"
+                              key={profile.id}
+                              title={profile.name}
+                              to={profilePath(profile.id)}
+                            >
+                              <ProfileAvatar profile={profile} size="xxs" />
+                            </Link>
+                          )
+                        )}
+                      </div>
+                    )}
+                    {!profilesBySkill.has(skill.id) && (
+                      <span className="text-muted-foreground">
+                        Not assigned to any profile
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-muted-foreground" role="status">
+                    Loading profile assignments…
+                  </span>
+                )}
               </div>
-            ))}
-          </CardContent>
-        </Card>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

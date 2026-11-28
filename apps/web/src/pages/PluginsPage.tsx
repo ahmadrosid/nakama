@@ -65,9 +65,10 @@ export function PluginsPage() {
   const accessData = isPlatformAdmin ? agentAccess.data : undefined;
   const [query, setQuery] = useState("");
   const [folderOpen, setFolderOpen] = useState(false);
+  const canInstallHere = canInstallPackages && Boolean(orgId);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const addSource = searchParams.get(PLUGIN_ADD_PARAM);
-  const canInstallHere = canInstallPackages && Boolean(orgId);
 
   // The Add menu lives in the shared tabs, so it reaches this page by URL.
   useEffect(() => {
@@ -238,7 +239,10 @@ export function PluginsPage() {
     : groupPluginIds(visiblePluginIds, official, releases);
 
   return (
-    <div className="mx-auto min-w-0 max-w-3xl space-y-6">
+    <div
+      className="mx-auto min-w-0 max-w-4xl space-y-10 data-[detail=true]:max-w-3xl data-[detail=true]:space-y-6"
+      data-detail={Boolean(selectedPluginId)}
+    >
       <PluginPageHeader
         detail={Boolean(selectedPluginId)}
         error={dialog ? null : errorMessage}
@@ -264,19 +268,9 @@ export function PluginsPage() {
         groups.map((group) => (
           <section className="space-y-3" key={group.title ?? "all"}>
             {group.title ? (
-              <h2 className="type-section-title font-medium text-muted-foreground">
-                {group.title}
-              </h2>
+              <h2 className="font-medium text-base">{group.title}</h2>
             ) : null}
-            <ul
-              className={
-                selectedPluginId
-                  ? "min-w-0"
-                  : "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card text-card-foreground"
-              }
-            >
-              {group.ids.map(renderRow)}
-            </ul>
+            <ul className="min-w-0">{group.ids.map(renderRow)}</ul>
           </section>
         ))
       )}
