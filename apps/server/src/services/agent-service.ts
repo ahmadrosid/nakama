@@ -7270,10 +7270,33 @@ export class AgentService {
       orgId,
       orgRole: orgRole ?? undefined,
       profileId,
-      recordSessionToolStep:
-        !cognito && (channel === "web" || channel === "cli")
-          ? async (step) => {
-              // executeToolCall logs a thrown error with its cause.
+      recordSessionToolStep: cognito
+        ? undefined
+        : async (step) => {
+            // Every tool run lands in the audit trail, on every channel.
+            // Audit failures must never break the chat turn.
+            try {
+              await this.db.createAuditEvent({
+                action: "tool.call",
+                actorMode: "agent",
+                actorUserId: userId ?? null,
+                createdAt: new Date().toISOString(),
+                id: `audit_${crypto.randomUUID()}`,
+                metadata: { channel, profileId, sessionId },
+                orgId,
+                outcome: step.outcome === "success" ? "success" : "failure",
+                resourceId: step.toolName.slice(0, 128),
+                resourceType: "tool",
+              });
+            } catch (error) {
+              console.warn(
+                "Audit event for tool call skipped:",
+                error instanceof Error ? error.message : error
+              );
+            }
+
+            // executeToolCall logs a thrown error with its cause.
+            if (channel === "web" || channel === "cli") {
               const saved = await this.db.appendSessionStep({
                 ...step,
                 actor: "agent",
@@ -7289,7 +7312,7 @@ export class AgentService {
                 );
               }
             }
-          : undefined,
+          },
       recordTurnUsage: this.turnUsageRecorderFor(orgId),
       sessionId,
       trackEphemeralAttachment,

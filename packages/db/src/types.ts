@@ -2,6 +2,8 @@ import type {
   AcpAgentConfig,
   AgentQuestionnaire,
   AgentTodo,
+  AuditChainVerificationResult,
+  AuditEvent,
   ChatMessage,
   JsonSchema,
   OrgPluginLifecycleState,
@@ -293,6 +295,8 @@ export interface StoredLlmUsageDailyStatsRecord {
 }
 
 export interface StoredWorkspaceSettingsRecord {
+  /** Days audit events are kept before pruning; 0 keeps every row forever. */
+  auditRetentionDays: number;
   /** Workspace-global interval for refreshing automation schedules and curator work. */
   automationWorkerPollIntervalMs: number;
   codingAgentHarnesses: StoredCodingAgentHarnessRecord[];
@@ -876,16 +880,54 @@ export interface StoredSessionStep {
   toolName: string;
 }
 
-export interface StoredAuditEvent {
+/** Who performed an audited action. See `AuditEvent["actorMode"]`. */
+export type AuditActorMode = NonNullable<AuditEvent["actorMode"]>;
+
+export type StoredAuditEvent = AuditEvent;
+
+export type AuditChainVerification = AuditChainVerificationResult;
+
+export interface PruneAuditEventsInput {
+  actorMode?: AuditActorMode | null;
+  actorUserId?: string | null;
+  clientIp?: string | null;
+  forwardedFor?: string | null;
+  method?: string | null;
+  requestId?: string | null;
+  route?: string | null;
+  sessionId?: string | null;
+  userAgent?: string | null;
+}
+
+export interface PruneAuditEventsResult {
+  deleted: number;
+  hasMore: boolean;
+  retentionDays: number;
+}
+
+/**
+ * Write input for the audit ledger. Request context fields are optional:
+ * internal writers (agent tool runs, provider connects) do not have them.
+ */
+export interface CreateAuditEventInput {
   action: string;
-  actorUserId: string | null;
+  actorMode?: AuditActorMode | null;
+  actorUserId?: string | null;
+  clientIp?: string | null;
   createdAt: string;
+  forwardedFor?: string | null;
   id: string;
-  metadata: Record<string, boolean | null | number | string>;
-  orgId: string | null;
-  requestId: string | null;
-  resourceId: string | null;
+  metadata?: Record<string, boolean | null | number | string>;
+  method?: string | null;
+  orgId?: string | null;
+  outcome?: "success" | "failure";
+  requestId?: string | null;
+  resourceId?: string | null;
   resourceType: string;
+  route?: string | null;
+  sessionId?: string | null;
+  status?: number | null;
+  userAgent?: string | null;
 }
 
 export interface StoredAutomationWebhookSecret {
@@ -1034,6 +1076,9 @@ export interface DatabaseAdapter {
     profileId?: string
   ): Promise<number>;
   countProfileMcpAssignments(): Promise<number>;
+  countPrunableAuditEvents(
+    days?: number
+  ): Promise<{ days: number; rows: number }>;
   countUnreadAutomationRunsByOrg(
     userId: string,
     orgId: string
@@ -1043,7 +1088,7 @@ export interface DatabaseAdapter {
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
   /** Append-only insert. Adapters must not expose update/delete for this table. */
-  createAuditEvent(record: StoredAuditEvent): Promise<void>;
+  createAuditEvent(record: CreateAuditEventInput): Promise<void>;
 
   createBrowserSession(record: StoredBrowserSessionRecord): Promise<void>;
   createMfaBackupCode(record: StoredMfaBackupCode): Promise<void>;
@@ -1150,6 +1195,12 @@ export interface DatabaseAdapter {
     passwordHash: string;
     updatedAt: string;
   }): Promise<boolean>;
+
+  /** Yields the whole trail oldest first, in batches, without loading it all. */
+  exportAuditEvents(options?: {
+    batchSize?: number;
+    orgId?: string;
+  }): AsyncGenerator<StoredAuditEvent[], void, unknown>;
   /**
    * Settles runs left `running` by a process that exited mid-run. Only a
    * `finally` in the owning process completes a run, so a kill leaves the row
@@ -1414,12 +1465,18 @@ export interface DatabaseAdapter {
     sessionId: string
   ): Promise<StoredAttachmentRecord[]>;
 
+  /** Distinct `domain` prefixes of recorded actions, for filter dropdowns. */
+  listAuditEventCategories(orgId?: string): Promise<string[]>;
+
   listAuditEvents(options?: {
     action?: string;
+    category?: string;
     limit?: number;
     offset?: number;
     orgId?: string;
-  }): Promise<StoredAuditEvent[]>;
+    outcome?: string;
+    search?: string;
+  }): Promise<{ events: StoredAuditEvent[]; total: number }>;
   listAutomationRunSteps(
     runId: string
   ): Promise<StoredAutomationRunStepRecord[]>;
@@ -1626,6 +1683,9 @@ export interface DatabaseAdapter {
     workspaceFrom: string,
     workspaceTo: string
   ): Promise<void>;
+  pruneAuditEvents(
+    actor?: PruneAuditEventsInput
+  ): Promise<PruneAuditEventsResult>;
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
@@ -1885,4 +1945,11 @@ export interface DatabaseAdapter {
   upsertTool(record: StoredToolRecord): Promise<void>;
   upsertWorkflow(record: StoredWorkflowRecord): Promise<void>;
   upsertWorkspaceSettings(record: StoredWorkspaceSettingsRecord): Promise<void>;
+
+  /**
+   * Walks the hash chain and reports the first broken link, if any. Detects
+   * accidental corruption only: the hash is unkeyed, so a writer of the
+   * database file can rewrite the chain and still pass.
+   */
+  verifyAuditChain(): Promise<AuditChainVerification>;
 }

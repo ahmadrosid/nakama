@@ -463,7 +463,8 @@ test("a finished sign-in is in the audit log: it changed the default provider", 
   expect((await fetch(back)).status).toBe(200);
 
   expect(
-    await db.listAuditEvents({ action: "provider.nakama_cloud_connect" })
+    (await db.listAuditEvents({ action: "provider.nakama_cloud_connect" }))
+      .events
   ).toMatchObject([
     {
       metadata: { cloudUrl: cloud.url },

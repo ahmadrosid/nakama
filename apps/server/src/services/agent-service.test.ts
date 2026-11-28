@@ -402,3 +402,110 @@ describe("AgentService documents from earlier turns", () => {
     expect(await callsCarryingTheDocument(false)).toEqual([true, true]);
   });
 });
+
+describe("AgentService audit trail", () => {
+  setupTestConfigDir("nakama-audit-tool-call-");
+
+  test("chat tool runs land in the audit trail", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const profile = createDefaultProfile();
+    await db.upsertProfile(profile);
+    await db.createUser({
+      createdAt: profile.createdAt,
+      email: "member@example.com",
+      id: "member",
+      passwordHash: "test",
+      updatedAt: profile.updatedAt,
+    });
+    await db.upsertOrgMember({
+      createdAt: profile.createdAt,
+      orgId: TEST_ORG_ID,
+      role: "member",
+      userId: "member",
+    });
+
+    const server = {
+      cachedTools: [{ description: "Read a file", name: "read_file" }],
+      config: { url: "https://example.invalid/mcp" },
+      createdAt: profile.createdAt,
+      enabled: true,
+      id: "mcp_audit",
+      lastError: null,
+      name: "files",
+      orgId: TEST_ORG_ID,
+      status: "connected" as const,
+      transport: "http" as const,
+      updatedAt: profile.updatedAt,
+    };
+
+    await db.upsertMcpServer(server);
+    await db.assignMcpServerToProfile(profile.id, server.id);
+
+    const mcp = new McpService(db, new McpClientManager());
+
+    using _call = spyOn(mcp, "callTool").mockImplementation(async () => ({
+      ok: true,
+    }));
+
+    let turn = 0;
+
+    const provider: ProviderClient = {
+      async generateChat(input) {
+        turn += 1;
+
+        const done = input.messages.some(
+          (message) =>
+            message.role === "tool" && message.name === "files__read_file"
+        );
+
+        const toolCalls: ToolCall[] = done
+          ? []
+          : [{ arguments: {}, id: `call_${turn}`, name: "files__read_file" }];
+
+        const content = done ? "Done" : "";
+
+        return {
+          assistantMessage: { content, role: "assistant", toolCalls },
+          content,
+          toolCalls,
+        };
+      },
+      generateText: async () => ({ content: "unused" }),
+      name: "openai",
+      async streamChat(input, handlers) {
+        const result = await this.generateChat(input);
+        handlers.onChunk(result.content);
+
+        return result;
+      },
+    };
+
+    const agent = new AgentService(null, null, db);
+    agent.setMcpService(mcp);
+    Object.assign(agent, { createHarnessForProfile: () => ({ provider }) });
+
+    const sessionId = await agent.createSession(
+      TEST_ORG_ID,
+      "web",
+      profile.id,
+      "member",
+      { orgRole: "member" }
+    );
+
+    const session = (await agent.sessions.get(sessionId, TEST_ORG_ID))!;
+    await session.send("Read a file");
+
+    const events = (await db.listAuditEvents({ action: "tool.call" })).events;
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      action: "tool.call",
+      actorMode: "agent",
+      actorUserId: "member",
+      orgId: TEST_ORG_ID,
+      outcome: "success",
+      resourceId: "files__read_file",
+      resourceType: "tool",
+    });
+  });
+});

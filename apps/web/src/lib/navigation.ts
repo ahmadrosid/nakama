@@ -2,6 +2,7 @@ import {
   BrainIcon,
   Bug01Icon,
   Building03Icon,
+  Clock01Icon,
   CodeIcon,
   Coins01Icon,
   DashboardSquare01Icon,
@@ -28,6 +29,7 @@ export type PageId =
   | "chat"
   | "composio"
   | "customize"
+  | "events"
   | "usage"
   | "files"
   | "profiles"
@@ -136,6 +138,12 @@ const NAV_GROUPS: NavGroup[] = [
         "Members, memory, and org settings",
         Building03Icon
       ),
+      navItem(
+        "events",
+        "Events",
+        "Audit trail of security and configuration actions",
+        Clock01Icon
+      ),
     ],
     label: "Organization",
   },
@@ -185,6 +193,7 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "composio",
   "automations",
   "customize",
+  "events",
 ];
 
 /** Plugins is a tab of Connections, so it lights up the Connections item. */
@@ -253,6 +262,11 @@ export function canOpenPage(pageId: PageId, access: PageAccess): boolean {
 
   if (pageId === "organization" || pageId === "files") {
     return canAccessOrganizationPage(access.isPlatformAdmin, access.orgRole);
+  }
+
+  // The Events page reads the org ledger, which the API gives to org admins.
+  if (pageId === "events") {
+    return access.isPlatformAdmin || access.orgRole === "admin";
   }
 
   if (
@@ -491,6 +505,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   chat: "/chat",
   composio: "/connectors",
   customize: "/settings",
+  events: "/events",
   files: "/files",
   "google-meet": "/google-meet",
   groups: "/groups",

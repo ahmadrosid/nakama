@@ -74,6 +74,8 @@ const OrganizationPage = lazyPage(
   "OrganizationPage"
 );
 
+const EventsPage = lazyPage(() => import("@/pages/EventsPage"), "EventsPage");
+
 const ProfileChannelSettingsPage = lazyPage(
   () => import("@/pages/profiles/profile-config-tab"),
   "ProfileChannelSettingsPage"
@@ -336,6 +338,7 @@ function AppShell() {
                     path="/settings/connections/:section"
                   />
                   <Route element={<OrganizationPage />} path="/organization" />
+                  <Route element={<EventsPage />} path="/events" />
                   <Route
                     element={<TeamDetailPage />}
                     path="/organization/teams/:teamId"
