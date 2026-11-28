@@ -311,10 +311,70 @@ describe("SessionRuntime", () => {
     await runtime.get("a", ORG_ID);
     await runtime.get("b", ORG_ID);
 
-    runtime.invalidateProfile("profile_default");
+    await runtime.invalidateProfile("profile_default");
 
     expect(runtime.peek("a")).toBeUndefined();
     expect(runtime.peek("b")).toBeDefined();
+  });
+
+  test("rebuilds only the cognito chats of one profile", async () => {
+    const { builds, runtime } = setup();
+    await runtime.openCognito(record("c1"), ORG_ID);
+    await runtime.openCognito(
+      record("c2", { profileId: "profile_other" }),
+      ORG_ID
+    );
+    const first = runtime.peek("c1");
+    const other = runtime.peek("c2");
+    const built = builds.length;
+
+    await runtime.invalidateProfile("profile_default");
+    await runtime.get("c1", ORG_ID);
+    await runtime.get("c2", ORG_ID);
+
+    expect(runtime.peek("c1")).not.toBe(first);
+    expect(runtime.peek("c2")).toBe(other);
+    expect(builds).toHaveLength(built + 1);
+  });
+
+  test("rebuilds a cognito chat after invalidateAll and keeps its history", async () => {
+    const { builds, runtime } = setup();
+    await runtime.openCognito(record("c1"), ORG_ID);
+    const first = runtime.peek("c1");
+    const built = builds.length;
+
+    runtime.invalidateAll();
+    await runtime.get("c1", ORG_ID);
+
+    expect(runtime.peek("c1")).not.toBe(first);
+    expect(builds).toHaveLength(built + 1);
+  });
+
+  test("ends the cognito chats of a deleted profile", async () => {
+    const { ended, runtime } = setup();
+    await runtime.openCognito(record("c1"), ORG_ID);
+    await runtime.openCognito(
+      record("c2", { profileId: "profile_other" }),
+      ORG_ID
+    );
+
+    await runtime.invalidateProfile("profile_default", { clear: true });
+
+    expect(ended).toEqual(["c1"]);
+    expect(runtime.isCognito("c1")).toBe(false);
+    expect(runtime.isCognito("c2")).toBe(true);
+  });
+
+  test("a cognito chat opened across an invalidation is rebuilt", async () => {
+    const { builds, runtime } = setup();
+    const opening = runtime.openCognito(record("c1"), ORG_ID);
+
+    await runtime.invalidateProfile("profile_default");
+    await opening;
+    const built = builds.length;
+    await runtime.get("c1", ORG_ID);
+
+    expect(builds).toHaveLength(built + 1);
   });
 });
 
