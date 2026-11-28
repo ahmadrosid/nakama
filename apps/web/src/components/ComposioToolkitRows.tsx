@@ -249,44 +249,45 @@ function ComposioToolkitRow({
   const lastError = userConnection?.lastError ?? orgToolkit?.lastError ?? null;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-      <ComposioToolkitLogo logoUrl={catalog.logoUrl} name={catalog.name} />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
+    <div className="group flex items-center gap-4">
+      <ComposioToolkitLogo
+        className="size-9 rounded-lg"
+        logoUrl={catalog.logoUrl}
+        name={catalog.name}
+      />
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 border-border border-b py-3.5 group-last:border-b-0">
+        <div className="min-w-0 flex-1">
           <p
             className="truncate font-medium text-foreground text-sm"
             title={catalog.description ?? catalog.name}
           >
             {catalog.name}
           </p>
-          <span className="shrink-0 font-mono text-2xs text-muted-foreground">
-            {catalog.slug}
-          </span>
+          <ComposioToolkitRowStatus
+            lastError={lastError}
+            orgEnabled={orgEnabled}
+            userStatus={userStatus}
+          />
         </div>
-        <ComposioToolkitRowStatus
-          lastError={lastError}
+
+        <ComposioToolkitRowActions
+          assignedProfileIds={assignedProfileIds}
+          busy={busy}
+          catalogName={catalog.name}
+          catalogSlug={catalog.slug}
+          isOrgAdmin={isOrgAdmin}
+          onConnect={onConnect}
+          onDisable={onDisable}
+          onDisconnect={onDisconnect}
+          onEnable={onEnable}
+          onSync={onSync}
+          onToggleProfile={onToggleProfile}
           orgEnabled={orgEnabled}
+          orgToolkitId={orgToolkit?.id}
+          profiles={profiles}
           userStatus={userStatus}
         />
       </div>
-
-      <ComposioToolkitRowActions
-        assignedProfileIds={assignedProfileIds}
-        busy={busy}
-        catalogName={catalog.name}
-        catalogSlug={catalog.slug}
-        isOrgAdmin={isOrgAdmin}
-        onConnect={onConnect}
-        onDisable={onDisable}
-        onDisconnect={onDisconnect}
-        onEnable={onEnable}
-        onSync={onSync}
-        onToggleProfile={onToggleProfile}
-        orgEnabled={orgEnabled}
-        orgToolkitId={orgToolkit?.id}
-        profiles={profiles}
-        userStatus={userStatus}
-      />
     </div>
   );
 }
@@ -324,7 +325,7 @@ export function ComposioToolkitRowList({
   rows: ToolkitRowModel[];
 }) {
   return (
-    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+    <div>
       {rows.map((row) => (
         <ComposioToolkitRow
           {...handlers}
@@ -349,28 +350,36 @@ export function ComposioToolkitTile({
   onEnable: (slug: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card py-2.5 pr-2.5 pl-3">
-      <ComposioToolkitLogo logoUrl={catalog.logoUrl} name={catalog.name} />
-      <div className="min-w-0 flex-1">
-        <p
-          className="truncate font-medium text-foreground text-sm"
-          title={catalog.description ?? catalog.name}
+    <div className="flex items-center gap-4">
+      <ComposioToolkitLogo
+        className="size-9 rounded-lg"
+        logoUrl={catalog.logoUrl}
+        name={catalog.name}
+      />
+      <div className="flex min-w-0 flex-1 items-center gap-3 border-border border-b py-3.5">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-foreground text-sm">
+            {catalog.name}
+          </p>
+          {catalog.description ? (
+            <p
+              className="truncate text-muted-foreground text-sm"
+              title={catalog.description}
+            >
+              {catalog.description}
+            </p>
+          ) : null}
+        </div>
+        <Button
+          disabled={busy}
+          onClick={() => onEnable(catalog.slug)}
+          size="sm"
+          type="button"
+          variant="outline"
         >
-          {catalog.name}
-        </p>
-        <p className="truncate font-mono text-2xs text-muted-foreground">
-          {catalog.slug}
-        </p>
+          Enable
+        </Button>
       </div>
-      <Button
-        disabled={busy}
-        onClick={() => onEnable(catalog.slug)}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        Enable
-      </Button>
     </div>
   );
 }

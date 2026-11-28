@@ -1,52 +1,102 @@
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
+import { Add01Icon, ArrowDown01Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
-import { Link, useMatch } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
-import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
+import {
+  canManagePluginReleases,
+  canOpenPage,
+  PAGE_PATHS,
+} from "@/lib/navigation";
 
 const INTEGRATION_TABS = [
-  { label: "Connectors", path: PAGE_PATHS.composio },
-  { label: "Plugins", path: PAGE_PATHS["plugin-management"] },
+  { id: "composio", label: "Connectors" },
+  { id: "plugin-management", label: "Plugins" },
+  { id: "skills", label: "Skills" },
 ] as const;
 
+/** The Plugins page opens the matching install dialog when it sees this param. */
+export const PLUGIN_ADD_PARAM = "add";
+
 /**
- * Connectors and Plugins share one sidebar item; this switches between them.
- * `children` (the page's search and actions) sits on the same row.
+ * Connectors, Plugins and Skills share one sidebar item; this switches between
+ * them. `children` (the page's search) fills the row. The Add menu sits after
+ * the tabs on each of them.
  */
 export function IntegrationsTabs({ children }: { children: ReactNode }) {
   const { activeOrg, user } = useAuth();
-  const onConnectors = useMatch(PAGE_PATHS.composio) !== null;
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
-  if (!canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role)) {
-    return <div className="flex items-center gap-3">{children}</div>;
-  }
+  const access = {
+    isPlatformAdmin: user?.isPlatformAdmin === true,
+    orgRole: activeOrg?.role,
+  };
+
+  const canAddPlugin =
+    canManagePluginReleases(access.isPlatformAdmin) && Boolean(activeOrg);
+
+  const addPlugin = (source: "folder" | "npm") =>
+    navigate(
+      `${PAGE_PATHS["plugin-management"]}?${PLUGIN_ADD_PARAM}=${source}`
+    );
+
+  const tabs = INTEGRATION_TABS.filter((tab) => canOpenPage(tab.id, access));
 
   return (
-    <div className="flex flex-wrap items-end gap-x-6 gap-y-3 border-border border-b">
-      <nav aria-label="Connections" className="flex gap-6">
-        {INTEGRATION_TABS.map((tab) => {
-          const active = (tab.path === PAGE_PATHS.composio) === onConnectors;
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="min-w-0 flex-1 basis-64">{children}</div>
+      {tabs.length > 1 ? (
+        <nav
+          aria-label="Connections"
+          className="flex rounded-lg bg-muted p-0.5"
+        >
+          {tabs.map((tab) => {
+            const path = PAGE_PATHS[tab.id];
+            const active = pathname === path || pathname.startsWith(`${path}/`);
 
-          return (
-            <Link
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "-mb-px border-b-2 py-3 text-sm",
-                active
-                  ? "border-foreground font-medium text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-              key={tab.path}
-              to={tab.path}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="order-first flex w-full items-center gap-3 sm:order-none sm:ml-auto sm:w-auto sm:pb-2">
-        {children}
-      </div>
+            return (
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm",
+                  active
+                    ? "bg-background font-medium text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                key={tab.id}
+                to={path}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
+      {canAddPlugin ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button />}>
+            <Add01Icon aria-hidden="true" className="size-4" />
+            Add
+            <ArrowDown01Icon aria-hidden="true" className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={() => addPlugin("folder")}>
+              Plugin made by an agent
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => addPlugin("npm")}>
+              Plugin from npm package
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }

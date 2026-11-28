@@ -196,9 +196,9 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "events",
 ];
 
-/** Plugins is a tab of Connections, so it lights up the Connections item. */
+/** Plugins and Skills are tabs of Connections, so they light up the Connections item. */
 export function sidebarPageId(page: PageId): PageId {
-  return page === "plugin-management" ? "composio" : page;
+  return page === "plugin-management" || page === "skills" ? "composio" : page;
 }
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
