@@ -4,8 +4,8 @@ import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight01Icon, Search01Icon } from "hugeicons-react";
-import { useState } from "react";
+import { ArrowRight01Icon, BrainIcon, Search01Icon } from "hugeicons-react";
+import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 import { IntegrationsTabs } from "@/components/IntegrationsTabs";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -235,8 +235,10 @@ export function SkillsPage() {
         left.name.localeCompare(right.name)
     );
 
+  const skillsBySource = Map.groupBy(filtered, skillSourceLabel);
+
   return (
-    <div className="mx-auto min-w-0 max-w-4xl space-y-6">
+    <div className="mx-auto min-w-0 max-w-4xl space-y-10">
       <IntegrationsTabs>
         <div className="relative w-full">
           <Search01Icon
@@ -267,81 +269,114 @@ export function SkillsPage() {
           {query ? "No matching skills." : "No skills available."}
         </p>
       )}
-      {filtered.length > 0 && (
-        <div>
-          {filtered.map((skill) => (
-            <div
-              className="relative flex items-center gap-3 border-border border-b py-3.5 pr-7 last:border-b-0"
-              key={skill.id}
-            >
-              <Link
-                className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
-                to={`${skillDetailPath(skill.id)}?from=skills`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="break-words font-medium">
-                      {skill.name}
-                    </span>
-                    {!skill.enabled && (
-                      <span className="text-muted-foreground text-xs">
-                        Disabled
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ArrowRight01Icon
-                  aria-hidden
-                  className="absolute top-1/2 right-0 size-4 -translate-y-1/2 text-muted-foreground"
+      {[...skillsBySource].map(([source, sourceSkills]) => (
+        <section className="space-y-3" key={source}>
+          <h2 className="font-medium text-base">{source}</h2>
+          <ul className="min-w-0">
+            {sourceSkills.map((skill) => (
+              <SkillRow key={skill.id} skill={skill}>
+                <SkillProfiles
+                  assigned={profilesBySkill.get(skill.id)}
+                  error={Boolean(profilesError)}
+                  loaded={Boolean(profiles)}
+                  onRetry={() => void refetchProfiles()}
                 />
-              </Link>
-              <div className="flex max-w-1/2 flex-wrap items-center justify-end gap-2 text-xs">
-                <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-                  {skillSourceLabel(skill)}
-                </span>
-                {profilesError ? (
-                  <button
-                    className="text-destructive underline"
-                    onClick={() => void refetchProfiles()}
-                    type="button"
-                  >
-                    Couldn’t load profile assignments. Retry
-                  </button>
-                ) : profiles ? (
-                  <>
-                    {profilesBySkill.has(skill.id) && (
-                      <div className="order-first flex -space-x-2">
-                        {(profilesBySkill.get(skill.id) ?? []).map(
-                          (profile) => (
-                            <Link
-                              aria-label={`Open ${profile.name}`}
-                              className="relative rounded-full ring-2 ring-background hover:z-10 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring"
-                              key={profile.id}
-                              title={profile.name}
-                              to={profilePath(profile.id)}
-                            >
-                              <ProfileAvatar profile={profile} size="xxs" />
-                            </Link>
-                          )
-                        )}
-                      </div>
-                    )}
-                    {!profilesBySkill.has(skill.id) && (
-                      <span className="text-muted-foreground">
-                        Not assigned to any profile
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-muted-foreground" role="status">
-                    Loading profile assignments…
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+              </SkillRow>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SkillRow({
+  children,
+  skill,
+}: {
+  children: ReactNode;
+  skill: SkillSummary;
+}) {
+  return (
+    <li className="relative flex min-w-0 flex-wrap items-center gap-3 py-3.5 after:absolute after:right-0 after:bottom-0 after:left-13 after:border-border after:border-b last:after:hidden">
+      <div className="relative flex min-w-0 flex-1 items-center gap-3">
+        <Link
+          aria-label={`View details for ${skill.name}`}
+          className="absolute inset-0 rounded-md hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
+          to={`${skillDetailPath(skill.id)}?from=skills`}
+        />
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground">
+          <BrainIcon aria-hidden className="size-5" strokeWidth={1.75} />
         </div>
-      )}
+        <div className="min-w-0 flex-1">
+          <h3 className="break-words font-medium text-sm">
+            {skill.name}
+            {!skill.enabled && (
+              <span className="ml-2 font-normal text-muted-foreground text-xs">
+                Disabled
+              </span>
+            )}
+          </h3>
+          <p className="mt-0.5 line-clamp-1 break-words pr-6 text-muted-foreground text-sm">
+            {skill.description}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center text-xs">{children}</div>
+    </li>
+  );
+}
+
+function SkillProfiles({
+  assigned,
+  error,
+  loaded,
+  onRetry,
+}: {
+  assigned: ProfileSummary[] | undefined;
+  error: boolean;
+  loaded: boolean;
+  onRetry(): void;
+}) {
+  if (error) {
+    return (
+      <button
+        className="text-destructive underline"
+        onClick={onRetry}
+        type="button"
+      >
+        Couldn’t load profile assignments. Retry
+      </button>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <span className="text-muted-foreground" role="status">
+        Loading profile assignments…
+      </span>
+    );
+  }
+
+  if (!assigned) {
+    return (
+      <span className="text-muted-foreground">Not assigned to any profile</span>
+    );
+  }
+
+  return (
+    <div className="flex -space-x-2">
+      {assigned.map((profile) => (
+        <Link
+          aria-label={`Open ${profile.name}`}
+          className="relative rounded-full ring-2 ring-background hover:z-10 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring"
+          key={profile.id}
+          title={profile.name}
+          to={profilePath(profile.id)}
+        >
+          <ProfileAvatar profile={profile} size="xxs" />
+        </Link>
+      ))}
     </div>
   );
 }
