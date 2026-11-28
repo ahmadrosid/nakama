@@ -50,6 +50,7 @@ import {
   saveSlackConfig,
   validateSlackTokens,
 } from "@nakama/core/slack-config";
+import { TELEGRAM_AGENT_GROUP_GONE } from "@nakama/core/telegram-config";
 import { THINKING_EFFORTS } from "@nakama/core/thinking-effort";
 import type { Context, MiddlewareHandler } from "hono";
 import {
@@ -87,6 +88,7 @@ import {
   readOptionalJson,
 } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
+import { GROUP_MESSAGE_CHARS } from "./agent-groups";
 
 function providerIdentity(provider: ProviderInstanceSummary) {
   return {
@@ -97,9 +99,6 @@ function providerIdentity(provider: ProviderInstanceSummary) {
     type: provider.type,
   };
 }
-
-/** The same cap as a message typed in the web group chat. */
-const TELEGRAM_GROUP_MESSAGE_CHARS = 8000;
 
 /** Longest time one Telegram message may keep a group run going. */
 const TELEGRAM_GROUP_RUN_MS = 15 * 60_000;
@@ -2673,7 +2672,11 @@ export function registerModelRoutes(
     }
   });
   app.get("/v1/settings/telegram/agent-group", async (c) =>
-    json(await agent.getTelegramAgentGroup(await channelOwner(c)))
+    json({
+      groupId:
+        (await agent.telegramAgentGroupTarget(await channelOwner(c)))
+          ?.groupId ?? null,
+    })
   );
 
   app.put("/v1/settings/telegram/agent-group", async (c) => {
@@ -2701,30 +2704,46 @@ export function registerModelRoutes(
     profileId: z.string().min(1),
   });
 
-  // The worker keeps the session id before the run, so a restart or a failed
-  // turn continues the same group chat.
-  app.post("/v1/internal/telegram/agent-group-sessions", async (c) => {
+  /** The body and the bot's target, or the response that refuses the worker. */
+  const readTelegramGroupPost = async <
+    T extends z.infer<typeof telegramGroupBotSchema>,
+  >(
+    c: Context<AppEnv>,
+    schema: z.ZodType<T>
+  ) => {
     const auth = c.get("auth");
 
     if (!auth || auth.mode !== "local-token") {
       return errorResponse("Authentication required", 401);
     }
 
-    const { orgId, profileId, sessionId, title } = await readJson(
-      c.req.raw,
+    const body = await readJson(c.req.raw, schema);
+    const target = await agent.telegramAgentGroupTarget(body);
+
+    return target
+      ? { body, target }
+      : errorResponse("This bot does not answer for an Agent Group.", 409, {
+          code: TELEGRAM_AGENT_GROUP_GONE,
+        });
+  };
+
+  // The worker keeps the session id before the run, so a restart or a failed
+  // turn continues the same group chat.
+  app.post("/v1/internal/telegram/agent-group-sessions", async (c) => {
+    const post = await readTelegramGroupPost(
+      c,
       telegramGroupBotSchema.extend({
         sessionId: z.string().min(1).nullable(),
-        title: z.string().max(TELEGRAM_GROUP_MESSAGE_CHARS),
+        title: z.string().max(GROUP_MESSAGE_CHARS),
       })
     );
 
-    const target = await agent.telegramAgentGroupTarget({ orgId, profileId });
-
-    if (!target) {
-      return errorResponse("This bot does not answer for an Agent Group.", 409);
+    if (post instanceof Response) {
+      return post;
     }
 
-    const { groupId, ownerUserId } = target;
+    const { orgId, sessionId, title } = post.body;
+    const { groupId, ownerUserId } = post.target;
 
     const known = sessionId
       ? getGroupSession(orgId, ownerUserId, groupId, sessionId)
@@ -2737,27 +2756,20 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/internal/telegram/agent-group-messages", async (c) => {
-    const auth = c.get("auth");
-
-    if (!auth || auth.mode !== "local-token") {
-      return errorResponse("Authentication required", 401);
-    }
-
-    const { content, orgId, profileId, sessionId } = await readJson(
-      c.req.raw,
+    const post = await readTelegramGroupPost(
+      c,
       telegramGroupBotSchema.extend({
-        content: z.string().trim().min(1).max(TELEGRAM_GROUP_MESSAGE_CHARS),
+        content: z.string().trim().min(1).max(GROUP_MESSAGE_CHARS),
         sessionId: z.string().min(1),
       })
     );
 
-    const target = await agent.telegramAgentGroupTarget({ orgId, profileId });
-
-    if (!target) {
-      return errorResponse("This bot does not answer for an Agent Group.", 409);
+    if (post instanceof Response) {
+      return post;
     }
 
-    const { groupId, ownerUserId } = target;
+    const { content, orgId, sessionId } = post.body;
+    const { groupId, ownerUserId } = post.target;
 
     // A disconnect (the worker's /stop, its deadline or a restart) and the
     // deadline here both stop the run.

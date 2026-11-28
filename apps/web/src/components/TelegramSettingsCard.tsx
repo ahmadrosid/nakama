@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
 import { TelegramAllowedUsers } from "@/components/TelegramAllowedUsers";
 import { TelegramSettingsCardContent } from "@/components/telegram-settings-card-content";
+import { useAuth } from "@/context/use-auth";
 import { useAgentGroupsQuery } from "@/hooks/use-agent-groups";
 import {
   useChannelProfileId,
@@ -22,6 +23,7 @@ import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { useStartWorker } from "@/hooks/use-worker-actions";
 import { client, formatError } from "@/lib/client";
 import type { AllowedTelegramUser } from "@/lib/parse-allowed-telegram-users";
+import { queryKeys } from "@/lib/query-keys";
 
 interface TelegramSettingsCardProps {
   embedded?: boolean;
@@ -34,17 +36,27 @@ const ANSWER_AS_AGENT = "agent";
 /** Who the bot answers as: its own agent, or one of the caller's Agent Groups. */
 function TelegramAgentGroupSelect({ profileId }: { profileId: string }) {
   const queryClient = useQueryClient();
-  const queryKey = ["telegram-agent-group", profileId];
+  const { activeOrg } = useAuth();
+  const api = client.forOrg(activeOrg?.id ?? null);
+
+  // Under the Telegram settings key, like the card's other queries.
+  const queryKey = [
+    ...queryKeys.telegram.settings,
+    "agent-group",
+    activeOrg?.id,
+    profileId,
+  ];
+
   const groups = useAgentGroupsQuery();
 
   const target = useQuery({
-    queryFn: () => client.getTelegramAgentGroup(profileId),
+    queryFn: () => api.getTelegramAgentGroup(profileId),
     queryKey,
   });
 
   const save = useMutation({
     mutationFn: (groupId: string | null) =>
-      client.setTelegramAgentGroup(profileId, groupId),
+      api.setTelegramAgentGroup(profileId, groupId),
     onSuccess: (data) => queryClient.setQueryData(queryKey, data),
   });
 

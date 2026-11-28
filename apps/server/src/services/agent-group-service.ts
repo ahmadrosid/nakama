@@ -466,15 +466,10 @@ export class AgentGroupService {
     const before = this.runs.get(sessionId);
     const from = before?.said.length ?? 0;
     const failures = before?.failures ?? 0;
-    const posted = this.post(orgId, userId, groupId, sessionId, content);
-    const run = this.runs.get(sessionId);
+    void this.post(orgId, userId, groupId, sessionId, content);
 
-    if (!run) {
-      await posted;
-
-      return { failed: false, replies: [] };
-    }
-
+    // SAFETY: post() joins the active run or registers a new one before it returns.
+    const run = this.runs.get(sessionId)!;
     const stop = () => halt(run);
 
     if (signal.aborted) {
@@ -484,7 +479,7 @@ export class AgentGroupService {
     }
 
     try {
-      await Promise.all([posted, run.done]);
+      await run.done;
     } finally {
       signal.removeEventListener("abort", stop);
     }

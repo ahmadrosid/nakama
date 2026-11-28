@@ -266,8 +266,11 @@ describe("Telegram bot in front of an Agent Group", () => {
 
     expect((await postFromBot("hello", sessionId)).status).toBe(409);
     expect(
-      await agent.getTelegramAgentGroup({ orgId: ORG_ID, profileId: "alpha" })
-    ).toEqual({ groupId: null });
+      await agent.telegramAgentGroupTarget({
+        orgId: ORG_ID,
+        profileId: "alpha",
+      })
+    ).toBeNull();
 
     // A target saved by someone who is no longer in the org.
     const theirs = createAgentGroup(ORG_ID, "left_org", "Theirs", ["alpha"]);

@@ -44,6 +44,7 @@ import {
 import {
   hasActiveHandshakeCode,
   looksLikePairingCode,
+  TELEGRAM_AGENT_GROUP_GONE,
 } from "@nakama/core/telegram-config";
 import {
   renderTelegramPlainText,
@@ -623,8 +624,6 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
           );
 
           return;
-
-        default:
       }
     }
 
@@ -939,15 +938,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       await telegram.send(
         "This bot answers for an Agent Group, which reads text only. Your attachment was not sent."
       );
+    } else if (!content) {
+      await telegram.send(
+        "This bot answers for an Agent Group, which reads text only."
+      );
     }
 
     if (!content) {
-      if (!(input.images?.length || input.documents?.length)) {
-        await telegram.send(
-          "This bot answers for an Agent Group, which reads text only."
-        );
-      }
-
       return true;
     }
 
@@ -1005,7 +1002,10 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     } catch (error) {
       if (signal.aborted) {
         await telegram.send("Stopped.");
-      } else if (error instanceof NakamaApiError && error.status === 409) {
+      } else if (
+        error instanceof NakamaApiError &&
+        error.code === TELEGRAM_AGENT_GROUP_GONE
+      ) {
         agentGroupGone = true;
         await telegram.send(
           "This bot's Agent Group is not available. Its agent answers now."

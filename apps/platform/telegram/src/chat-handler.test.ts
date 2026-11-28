@@ -15,7 +15,10 @@ import {
 } from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core/contract";
-import { listTelegramAccessRequests } from "@nakama/core/telegram-config";
+import {
+  listTelegramAccessRequests,
+  TELEGRAM_AGENT_GROUP_GONE,
+} from "@nakama/core/telegram-config";
 import type { Context } from "grammy";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
@@ -208,13 +211,15 @@ describe("createChatHandler group chats", () => {
     );
 
     const opened: (string | null)[] = [];
-    let sessions = 0;
 
     created.client.openTelegramAgentGroupSession = async (input) => {
       opened.push(input.sessionId);
-      sessions += input.sessionId ? 0 : 1;
 
-      return { sessionId: input.sessionId ?? `group_session_${sessions}` };
+      return {
+        sessionId:
+          input.sessionId ??
+          `group_session_${opened.filter((id) => id === null).length}`,
+      };
     };
 
     const posted: { content: string; sessionId: string }[] = [];
@@ -327,7 +332,9 @@ describe("createChatHandler group chats", () => {
       const { calls, client, send } = await createGroupBot(homeDir);
 
       client.openTelegramAgentGroupSession = async () => {
-        throw new NakamaApiError("no group", 409);
+        throw new NakamaApiError("no group", 409, undefined, undefined, {
+          code: TELEGRAM_AGENT_GROUP_GONE,
+        });
       };
 
       await send("@mybot hello");

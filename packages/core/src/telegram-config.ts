@@ -542,6 +542,9 @@ export interface TelegramAgentGroupTarget {
   ownerUserId: string;
 }
 
+/** The API error code when a bot's Agent Group target is gone or was never set. */
+export const TELEGRAM_AGENT_GROUP_GONE = "TELEGRAM_AGENT_GROUP_GONE";
+
 const agentGroupTargetSchema = z.object({
   groupId: z.string().min(1),
   ownerUserId: z.string().min(1),

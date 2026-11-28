@@ -349,6 +349,7 @@ import {
   saveAgentBrowserConfig,
 } from "./agent-browser-service";
 import { AgentGroupService } from "./agent-group-service";
+import { getAgentGroup } from "./agent-group-store";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentTodoState } from "./agent-todo-state";
 import {
@@ -1458,14 +1459,6 @@ export class AgentService {
       ? this.channelWorkers.saveChannelConfig("telegram", orgId, save)
       : save();
   }
-  async getTelegramAgentGroup(
-    owner: ChannelOwner
-  ): Promise<{ groupId: string | null }> {
-    return {
-      groupId: (await this.telegramAgentGroupTarget(owner))?.groupId ?? null,
-    };
-  }
-
   /**
    * The bot's Agent Group while it still works. A target whose group is gone,
    * or whose owner left the org, is removed: the bot then answers as its
@@ -1491,7 +1484,7 @@ export class AgentService {
       member &&
       user &&
       !user.disabledAt &&
-      this.groups.list(owner.orgId, ownerUserId).some((g) => g.id === groupId)
+      getAgentGroup(owner.orgId, ownerUserId, groupId)
     ) {
       return target;
     }
