@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { IntegrationsTabs } from "@/components/IntegrationsTabs";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
 import { useOrgPlugins } from "@/hooks/use-plugins";
@@ -236,13 +237,15 @@ export function SkillsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <Input
-        aria-label="Search skills"
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search skills"
-        type="search"
-        value={search}
-      />
+      <IntegrationsTabs>
+        <Input
+          aria-label="Search skills"
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search skills"
+          type="search"
+          value={search}
+        />
+      </IntegrationsTabs>
       {isLoading && <p role="status">Loading skills…</p>}
       {error && (
         <div className="space-y-2" role="alert">

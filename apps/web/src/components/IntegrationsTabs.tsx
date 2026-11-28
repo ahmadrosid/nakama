@@ -1,17 +1,18 @@
 import { cn } from "@nakama/ui/utils";
 import type { ReactNode } from "react";
-import { Link, useMatch } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
-import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
+import { canOpenPage, PAGE_PATHS } from "@/lib/navigation";
 
 const INTEGRATION_TABS = [
-  { label: "Connectors", path: PAGE_PATHS.composio },
-  { label: "Plugins", path: PAGE_PATHS["plugin-management"] },
+  { id: "composio", label: "Connectors" },
+  { id: "plugin-management", label: "Plugins" },
+  { id: "skills", label: "Skills" },
 ] as const;
 
 /**
- * Connectors and Plugins share one sidebar item; this switches between them.
- * `children` (the page's search) fills the row, `actions` sit after the tabs.
+ * Connectors, Plugins and Skills share one sidebar item; this switches between
+ * them. `children` (the page's search) fills the row, `actions` sit after the tabs.
  */
 export function IntegrationsTabs({
   actions,
@@ -21,23 +22,26 @@ export function IntegrationsTabs({
   children: ReactNode;
 }) {
   const { activeOrg, user } = useAuth();
-  const onConnectors = useMatch(PAGE_PATHS.composio) !== null;
+  const { pathname } = useLocation();
 
-  const showTabs = canAccessSystemPage(
-    user?.isPlatformAdmin === true,
-    activeOrg?.role
-  );
+  const access = {
+    isPlatformAdmin: user?.isPlatformAdmin === true,
+    orgRole: activeOrg?.role,
+  };
+
+  const tabs = INTEGRATION_TABS.filter((tab) => canOpenPage(tab.id, access));
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="min-w-0 flex-1 basis-64">{children}</div>
-      {showTabs ? (
+      {tabs.length > 1 ? (
         <nav
           aria-label="Connections"
           className="flex rounded-lg bg-muted p-0.5"
         >
-          {INTEGRATION_TABS.map((tab) => {
-            const active = (tab.path === PAGE_PATHS.composio) === onConnectors;
+          {tabs.map((tab) => {
+            const path = PAGE_PATHS[tab.id];
+            const active = pathname === path || pathname.startsWith(`${path}/`);
 
             return (
               <Link
@@ -48,8 +52,8 @@ export function IntegrationsTabs({
                     ? "bg-background font-medium text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
-                key={tab.path}
-                to={tab.path}
+                key={tab.id}
+                to={path}
               >
                 {tab.label}
               </Link>
