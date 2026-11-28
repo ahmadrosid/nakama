@@ -270,7 +270,12 @@ export function PluginsPage() {
             {group.title ? (
               <h2 className="font-medium text-base">{group.title}</h2>
             ) : null}
-            <ul className="min-w-0">{group.ids.map(renderRow)}</ul>
+            <ul
+              className="grid min-w-0 gap-x-10 data-[detail=true]:block sm:grid-cols-2"
+              data-detail={Boolean(selectedPluginId)}
+            >
+              {group.ids.map(renderRow)}
+            </ul>
           </section>
         ))
       )}

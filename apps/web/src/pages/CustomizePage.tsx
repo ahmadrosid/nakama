@@ -272,7 +272,7 @@ export function SkillsPage() {
       {[...skillsBySource].map(([source, sourceSkills]) => (
         <section className="space-y-3" key={source}>
           <h2 className="font-medium text-base">{source}</h2>
-          <ul className="min-w-0">
+          <ul className="grid min-w-0 gap-x-10 sm:grid-cols-2">
             {sourceSkills.map((skill) => (
               <SkillRow key={skill.id} skill={skill}>
                 <SkillProfiles
@@ -298,7 +298,7 @@ function SkillRow({
   skill: SkillSummary;
 }) {
   return (
-    <li className="relative flex min-w-0 flex-wrap items-center gap-3 py-3.5 after:absolute after:right-0 after:bottom-0 after:left-13 after:border-border after:border-b last:after:hidden">
+    <li className="relative flex min-w-0 flex-wrap items-center gap-3 py-3.5 after:absolute after:right-0 after:bottom-0 after:left-13 after:border-border after:border-b">
       <div className="relative flex min-w-0 flex-1 items-center gap-3">
         <Link
           aria-label={`View details for ${skill.name}`}
@@ -359,9 +359,7 @@ function SkillProfiles({
   }
 
   if (!assigned) {
-    return (
-      <span className="text-muted-foreground">Not assigned to any profile</span>
-    );
+    return <span className="text-muted-foreground">Not assigned</span>;
   }
 
   return (

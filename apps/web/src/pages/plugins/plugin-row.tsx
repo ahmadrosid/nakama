@@ -133,7 +133,7 @@ export function PluginRow({
       className={
         detail
           ? "min-w-0"
-          : "relative min-w-0 py-3.5 after:absolute after:right-0 after:bottom-0 after:left-13 after:border-border after:border-b last:after:hidden"
+          : "relative min-w-0 py-3.5 after:absolute after:right-0 after:bottom-0 after:left-13 after:border-border after:border-b"
       }
     >
       <div className="flex flex-wrap items-center gap-3">
@@ -234,7 +234,7 @@ function PluginIdentity({
             </span>
           ) : null}
           {updateVersion ? (
-            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 font-normal text-2xs text-amber-800 dark:text-primary">
+            <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-muted px-2 py-0.5 font-normal text-2xs text-amber-800 dark:text-primary">
               Update <span className="font-mono">{updateVersion}</span>
             </span>
           ) : null}
