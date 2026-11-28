@@ -19,7 +19,7 @@ import {
   OrgMembersSecretBanner,
 } from "@/components/settings/org-members-card-header";
 import { OrgMembersTable } from "@/components/settings/org-members-table";
-import { updateOrgFlag } from "@/components/settings/SkillsCuratorOrgCard";
+import { updateOrgFlag } from "@/components/settings/update-org-flag";
 import type { AuthContextValue } from "@/context/auth-context-shared";
 import { useAuth } from "@/context/use-auth";
 import {

@@ -23,8 +23,11 @@ import type {
   UpdateThinkingRequest,
   UpdateTimezoneRequest,
   UpdateTranscriptionRequest,
+  UpdateVideoGenerationRequest,
   UpdateVisionRequest,
   UpdateWebSearchSettingsRequest,
+  VideoGenerationSettings,
+  VideoGenerationSettingsResponse,
   VisionSettings,
   VisionSettingsResponse,
   WebSearchProvider,
@@ -150,6 +153,28 @@ export class SettingsClient extends SystemClient {
     );
 
     return response.imageGeneration;
+  }
+
+  async getVideoGenerationSettings(): Promise<VideoGenerationSettings> {
+    const response = await this.request<VideoGenerationSettingsResponse>(
+      "/v1/settings/video-generation"
+    );
+
+    return response.videoGeneration;
+  }
+
+  async setVideoGenerationSettings(
+    model: string | null
+  ): Promise<VideoGenerationSettings> {
+    const response = await this.request<VideoGenerationSettingsResponse>(
+      "/v1/settings/video-generation",
+      {
+        body: JSON.stringify({ model } satisfies UpdateVideoGenerationRequest),
+        method: "PUT",
+      }
+    );
+
+    return response.videoGeneration;
   }
 
   async getErrorTrackingSettings(): Promise<ErrorTrackingSettingsResponse> {

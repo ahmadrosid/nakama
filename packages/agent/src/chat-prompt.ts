@@ -268,6 +268,12 @@ export function buildChatSystemPrompt(
       );
     }
 
+    if (tools.some((tool) => tool.name === "generate_video")) {
+      sections.push(
+        "When the user asks you to create or generate a video, use generate_video. A clip takes 1-5 minutes to make."
+      );
+    }
+
     if (tools.some((tool) => tool.name === "browser_navigate")) {
       sections.push(
         "The browser_* tools drive the user's own cloud browser. The user sees it live in the chat's Browser panel and can type in it. Use them for websites that need the user's login or a real browser; use web_fetch for plain public pages.",

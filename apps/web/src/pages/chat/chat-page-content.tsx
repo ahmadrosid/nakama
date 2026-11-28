@@ -285,7 +285,7 @@ export function ChatPageContent({
     <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {cognitoSurface ? null : <NewChatTopBar toggle={cognitoToggle} />}
-        <ChatPageColumn centered cognito={cognitoSurface}>
+        <ChatPageColumn centered>
           {cognitoControl(emptyStateControlClass(cognitoSurface))}
           <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
             <EmptyChatBody onboarding={onboarding}>
@@ -308,7 +308,6 @@ export function ChatPageContent({
       below={below}
       // The session bar is hidden on phones, so the status button sits here.
       cognitoControl={cognitoControl("sm:hidden", <ChatStatusButton />)}
-      cognitoSurface={cognitoSurface}
       cognitoToggle={cognitoToggle}
       composer={composer}
       onSwitchModel={() => modelPickerTriggerRef.current?.click()}
@@ -404,7 +403,6 @@ function EmptyChatBody({
 function ChatConversation({
   below,
   cognitoControl,
-  cognitoSurface,
   cognitoToggle,
   composer,
   onSwitchModel,
@@ -414,7 +412,6 @@ function ChatConversation({
 }: {
   below?: ReactNode;
   cognitoControl: ReactNode;
-  cognitoSurface: boolean;
   cognitoToggle: ReactNode;
   composer: ReactNode;
   onSwitchModel: () => void;
@@ -500,7 +497,7 @@ function ChatConversation({
           messages={messages}
           sessionId={session?.id}
         />
-        <ChatPageColumn cognito={cognitoSurface}>
+        <ChatPageColumn>
           {cognitoControl}
           {session && showSessionBar ? (
             <ChatSessionBar

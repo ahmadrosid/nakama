@@ -209,8 +209,13 @@ export async function mintDeliverableArtifacts(input: {
         sharePath: resolved.sharePath,
         shareUrl: resolved.shareUrl,
       });
-    } catch {
-      // Skip failed publishes; text reply still goes out.
+    } catch (error) {
+      // Skip failed publishes; text reply still goes out. Log the path so a
+      // missing share link can be traced to the artifact that failed.
+      console.warn(
+        `Could not publish artifact share for ${artifact.path}:`,
+        error
+      );
     }
   }
 

@@ -23,6 +23,7 @@ describe("workspace settings merge", () => {
   test("merge keeps passthrough when another field is patched", () => {
     const merged = mergeWorkspaceSettings(
       {
+        auditRetentionDays: 365,
         automationWorkerPollIntervalMs: 5 * 60 * 1000,
         codingAgentHarnesses: [],
         codingAgentProviderPassthrough: false,
@@ -31,6 +32,7 @@ describe("workspace settings merge", () => {
         selectedCodingAgentHarness: null,
         transcriptionModel: null,
         updatedAt: "2026-01-01T00:00:00.000Z",
+        videoModel: null,
         visionModel: "vision",
       },
       {
@@ -46,6 +48,7 @@ describe("workspace settings merge", () => {
   test("merge can clear nullable fields to null", () => {
     const merged = mergeWorkspaceSettings(
       {
+        auditRetentionDays: 365,
         automationWorkerPollIntervalMs: 5 * 60 * 1000,
         codingAgentHarnesses: [],
         codingAgentProviderPassthrough: true,
@@ -54,6 +57,7 @@ describe("workspace settings merge", () => {
         selectedCodingAgentHarness: "coding-harness-codex",
         transcriptionModel: "whisper",
         updatedAt: "2026-01-01T00:00:00.000Z",
+        videoModel: null,
         visionModel: "vision",
       },
       {
@@ -68,6 +72,24 @@ describe("workspace settings merge", () => {
     expect(merged.selectedCodingAgentHarness).toBeNull();
     expect(merged.transcriptionModel).toBeNull();
     expect(merged.visionModel).toBeNull();
+  });
+
+  test("persists the audit retention days in SQLite", async () => {
+    const database = await createSqliteDatabase(":memory:");
+
+    try {
+      const initial = await database.adapter.getWorkspaceSettings();
+      await database.adapter.upsertWorkspaceSettings(
+        mergeWorkspaceSettings(initial, {
+          auditRetentionDays: 30,
+        })
+      );
+      expect(
+        (await database.adapter.getWorkspaceSettings())?.auditRetentionDays
+      ).toBe(30);
+    } finally {
+      database.close();
+    }
   });
 
   test("persists the automation polling interval in SQLite", async () => {

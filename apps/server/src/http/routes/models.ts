@@ -33,6 +33,7 @@ import {
   type TranscriptionSettingsResponse,
   type UpdateProviderResponse,
   type UpdateSlackSettingsRequest,
+  type VideoGenerationSettingsResponse,
   type VisionSettingsResponse,
   WEB_SEARCH_PROVIDERS,
   type WebSearchProvider,
@@ -248,6 +249,11 @@ export function registerModelRoutes(
     .object({})
     .passthrough()
     .openapi("ImageGenerationSettingsResponse");
+
+  const videoGenerationSettingsSchema = z
+    .object({})
+    .passthrough()
+    .openapi("VideoGenerationSettingsResponse");
 
   const generateImageRequestSchema = z
     .object({ prompt: z.string(), size: z.string().optional() })
@@ -1072,6 +1078,57 @@ export function registerModelRoutes(
         },
       },
       summary: "Transcribe audio with configured Whisper model",
+      tags: ["Models"],
+    })
+  );
+
+  const updateVideoGenerationRequestSchema = z
+    .object({ model: z.string().nullable() })
+    .openapi("UpdateVideoGenerationRequest");
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getVideoGenerationSettings",
+      path: "/v1/settings/video-generation",
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: videoGenerationSettingsSchema },
+          },
+          description: "Video generation settings",
+        },
+      },
+      summary: "Get video generation settings",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      operationId: "setVideoGenerationSettings",
+      path: "/v1/settings/video-generation",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: updateVideoGenerationRequestSchema },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: videoGenerationSettingsSchema },
+          },
+          description: "Video generation settings",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Update video generation settings",
       tags: ["Models"],
     })
   );
@@ -2303,6 +2360,31 @@ export function registerModelRoutes(
       const message = error instanceof Error ? error.message : String(error);
 
       return errorResponse(message, 400);
+    }
+  });
+
+  app.get("/v1/settings/video-generation", async (c) => {
+    getRequestAuth(c);
+
+    return json<VideoGenerationSettingsResponse>(
+      await agent.getVideoGenerationSettings()
+    );
+  });
+
+  app.put("/v1/settings/video-generation", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson(c.req.raw, updateVideoGenerationRequestSchema);
+
+    try {
+      return json<VideoGenerationSettingsResponse>(
+        await agent.setVideoGenerationSettings(body)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+
+      throw error;
     }
   });
 

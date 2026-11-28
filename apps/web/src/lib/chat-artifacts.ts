@@ -61,8 +61,17 @@ function isWriteFileTool(message: ChatListItem): boolean {
   );
 }
 
-function isGenerateImageTool(message: ChatListItem): boolean {
-  return message.role === "tool" && message.tool === "generate_image";
+/** Tools whose result is one generated file: { path, mimeType, sizeBytes }. */
+const GENERATED_MEDIA_TOOL_NAMES = new Set([
+  "generate_image",
+  "generate_video",
+]);
+
+function isGeneratedMediaTool(message: ChatListItem): boolean {
+  return (
+    message.role === "tool" &&
+    GENERATED_MEDIA_TOOL_NAMES.has(message.tool ?? "")
+  );
 }
 
 function getWriteFileResult(message: ChatListItem): JsonRecord | null {
@@ -269,7 +278,7 @@ function buildArtifactRef(
 }
 
 function getGenerateImageResult(message: ChatListItem): JsonRecord | null {
-  if (!isGenerateImageTool(message) || message.toolResult == null) {
+  if (!isGeneratedMediaTool(message) || message.toolResult == null) {
     return null;
   }
 

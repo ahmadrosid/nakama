@@ -2,7 +2,6 @@ import { NakamaApiError } from "@nakama/core/api-error";
 import {
   COMPOSIO_CUSTOM_AUTH_REQUIRED,
   type ListComposioToolkitsResponse,
-  type UpdateComposioSettingsRequest,
   type UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
 import { toast } from "@nakama/ui/toast";
@@ -49,10 +48,7 @@ export function useSaveComposioSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: UpdateComposioSettingsRequest) =>
-      request.apiKey?.trim()
-        ? client.setComposioSecret(request.apiKey)
-        : client.getComposioSettings(),
+    mutationFn: (apiKey: string) => client.setComposioSecret(apiKey),
     onSuccess: async (saved) => {
       queryClient.setQueryData(queryKeys.composio.settings, saved);
       await invalidateQueries(

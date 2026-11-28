@@ -1,4 +1,5 @@
 import { WORKSPACE_SETTINGS_ID } from "./constants";
+import { AUDIT_EVENT_RETENTION_DAYS } from "./migrate";
 import type { StoredWorkspaceSettingsRecord } from "./types";
 
 /** Missing / unset means passthrough (the v1 default). */
@@ -20,6 +21,10 @@ export function mergeWorkspaceSettings(
   patch: Partial<StoredWorkspaceSettingsRecord> = {}
 ): StoredWorkspaceSettingsRecord {
   return {
+    auditRetentionDays: pickDefined(
+      patch.auditRetentionDays,
+      existing?.auditRetentionDays ?? AUDIT_EVENT_RETENTION_DAYS
+    ),
     automationWorkerPollIntervalMs: pickDefined(
       patch.automationWorkerPollIntervalMs,
       existing?.automationWorkerPollIntervalMs ?? 5 * 60 * 1000
@@ -46,6 +51,7 @@ export function mergeWorkspaceSettings(
       patch.updatedAt,
       existing?.updatedAt ?? new Date().toISOString()
     ),
+    videoModel: pickDefined(patch.videoModel, existing?.videoModel ?? null),
     visionModel: pickDefined(patch.visionModel, existing?.visionModel ?? null),
   };
 }

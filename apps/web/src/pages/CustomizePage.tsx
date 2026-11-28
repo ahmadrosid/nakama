@@ -4,9 +4,10 @@ import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight01Icon } from "hugeicons-react";
-import { useState } from "react";
+import { ArrowRight01Icon, BrainIcon, Search01Icon } from "hugeicons-react";
+import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
+import { IntegrationsTabs } from "@/components/IntegrationsTabs";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
 import { useOrgPlugins } from "@/hooks/use-plugins";
@@ -234,15 +235,26 @@ export function SkillsPage() {
         left.name.localeCompare(right.name)
     );
 
+  const skillsBySource = Map.groupBy(filtered, skillSourceLabel);
+
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <Input
-        aria-label="Search skills"
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search skills"
-        type="search"
-        value={search}
-      />
+    <div className="mx-auto min-w-0 max-w-4xl space-y-10">
+      <IntegrationsTabs>
+        <div className="relative w-full">
+          <Search01Icon
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search skills"
+            className="pl-9"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search skills"
+            type="search"
+            value={search}
+          />
+        </div>
+      </IntegrationsTabs>
       {isLoading && <p role="status">Loading skills…</p>}
       {error && (
         <div className="space-y-2" role="alert">
@@ -257,83 +269,112 @@ export function SkillsPage() {
           {query ? "No matching skills." : "No skills available."}
         </p>
       )}
-      {filtered.length > 0 && (
-        <Card className="overflow-hidden shadow-none">
-          <CardContent className="divide-y divide-border p-0">
-            {filtered.map((skill) => (
-              <div
-                className="relative flex items-center gap-3 py-3 pr-10 pl-4 hover:bg-accent/50"
-                key={skill.id}
-              >
-                <Link
-                  className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
-                  to={`${skillDetailPath(skill.id)}?from=skills`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="break-words font-medium">
-                        {skill.name}
-                      </span>
-                      {!skill.enabled && (
-                        <span className="text-muted-foreground text-xs">
-                          Disabled
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <ArrowRight01Icon
-                    aria-hidden
-                    className="absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
-                  />
-                </Link>
-                <div className="flex max-w-1/2 flex-wrap items-center justify-end gap-2 text-xs">
-                  <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-                    {skillSourceLabel(skill)}
-                  </span>
-                  {profilesError ? (
-                    <button
-                      className="text-destructive underline"
-                      onClick={() => void refetchProfiles()}
-                      type="button"
-                    >
-                      Couldn’t load profile assignments. Retry
-                    </button>
-                  ) : profiles ? (
-                    <>
-                      {profilesBySkill.has(skill.id) && (
-                        <div className="order-first flex -space-x-2">
-                          {(profilesBySkill.get(skill.id) ?? []).map(
-                            (profile) => (
-                              <Link
-                                aria-label={`Open ${profile.name}`}
-                                className="relative rounded-full ring-2 ring-card hover:z-10 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring"
-                                key={profile.id}
-                                title={profile.name}
-                                to={profilePath(profile.id)}
-                              >
-                                <ProfileAvatar profile={profile} size="xxs" />
-                              </Link>
-                            )
-                          )}
-                        </div>
-                      )}
-                      {!profilesBySkill.has(skill.id) && (
-                        <span className="text-muted-foreground">
-                          Not assigned to any profile
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground" role="status">
-                      Loading profile assignments…
-                    </span>
-                  )}
-                </div>
-              </div>
+      {[...skillsBySource].map(([source, sourceSkills]) => (
+        <section className="space-y-3" key={source}>
+          <h2 className="font-medium text-base">{source}</h2>
+          <ul className="grid min-w-0 gap-x-10 sm:grid-cols-2">
+            {sourceSkills.map((skill) => (
+              <SkillRow key={skill.id} skill={skill}>
+                <SkillProfiles
+                  assigned={profilesBySkill.get(skill.id)}
+                  error={Boolean(profilesError)}
+                  loaded={Boolean(profiles)}
+                  onRetry={() => void refetchProfiles()}
+                />
+              </SkillRow>
             ))}
-          </CardContent>
-        </Card>
-      )}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SkillRow({
+  children,
+  skill,
+}: {
+  children: ReactNode;
+  skill: SkillSummary;
+}) {
+  return (
+    <li className="relative flex min-w-0 flex-wrap items-center gap-3 py-3.5 after:absolute after:right-0 after:bottom-0 after:left-13 after:border-border after:border-b">
+      <div className="relative flex min-w-0 flex-1 items-center gap-3">
+        <Link
+          aria-label={`View details for ${skill.name}`}
+          className="absolute inset-0 rounded-md hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
+          to={`${skillDetailPath(skill.id)}?from=skills`}
+        />
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground">
+          <BrainIcon aria-hidden className="size-5" strokeWidth={1.75} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="break-words font-medium text-sm">
+            {skill.name}
+            {!skill.enabled && (
+              <span className="ml-2 font-normal text-muted-foreground text-xs">
+                Disabled
+              </span>
+            )}
+          </h3>
+          <p className="mt-0.5 line-clamp-1 break-words pr-6 text-muted-foreground text-sm">
+            {skill.description}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center text-xs">{children}</div>
+    </li>
+  );
+}
+
+function SkillProfiles({
+  assigned,
+  error,
+  loaded,
+  onRetry,
+}: {
+  assigned: ProfileSummary[] | undefined;
+  error: boolean;
+  loaded: boolean;
+  onRetry(): void;
+}) {
+  if (error) {
+    return (
+      <button
+        className="text-destructive underline"
+        onClick={onRetry}
+        type="button"
+      >
+        Couldn’t load profile assignments. Retry
+      </button>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <span className="text-muted-foreground" role="status">
+        Loading profile assignments…
+      </span>
+    );
+  }
+
+  if (!assigned) {
+    return <span className="text-muted-foreground">Not assigned</span>;
+  }
+
+  return (
+    <div className="flex -space-x-2">
+      {assigned.map((profile) => (
+        <Link
+          aria-label={`Open ${profile.name}`}
+          className="relative rounded-full ring-2 ring-background hover:z-10 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-ring"
+          key={profile.id}
+          title={profile.name}
+          to={profilePath(profile.id)}
+        >
+          <ProfileAvatar profile={profile} size="xxs" />
+        </Link>
+      ))}
     </div>
   );
 }

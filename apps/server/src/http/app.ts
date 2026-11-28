@@ -449,6 +449,16 @@ export function createHonoApp(options: ServerOptions) {
   );
 
   app.use("*", createAuthMiddleware(options));
+
+  // Every audited route below this line. The middleware only needs auth to
+  // resolve the actor; it writes after the response, when org context has
+  // already run, so org-scoped paths carry their org from the path or the
+  // active org. Moving it ahead of the org check also records failed
+  // authorization attempts, which the old order skipped.
+  if (options.databaseAdapter) {
+    app.use("*", createAuditLogMiddleware(options.databaseAdapter));
+  }
+
   registerInternalAutomationRoutes(app, options);
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
@@ -456,26 +466,11 @@ export function createHonoApp(options: ServerOptions) {
 
   registerLlmRoutes(app, options);
 
-  // This computer's own Cloud sign-in: it runs before setup, when the
-  // desktop has no org yet, so it is not behind the org check. It changes
-  // the default provider, so it is audited like other provider changes.
-  if (options.databaseAdapter) {
-    const auditLog = createAuditLogMiddleware(options.databaseAdapter);
-
-    app.use("*", (c, next) =>
-      c.req.path.startsWith("/v1/nakama-cloud") ? auditLog(c, next) : next()
-    );
-  }
-
   registerNakamaCloudSignInRoutes(app, options);
 
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));
-
-  if (options.databaseAdapter) {
-    app.use("*", createAuditLogMiddleware(options.databaseAdapter));
-  }
 
   registerSystemRoutes(app, options);
   registerAuditEventRoutes(app, options);
