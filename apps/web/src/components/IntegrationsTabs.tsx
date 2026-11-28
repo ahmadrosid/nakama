@@ -1,8 +1,20 @@
+import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { cn } from "@nakama/ui/utils";
+import { Add01Icon, ArrowDown01Icon } from "hugeicons-react";
 import type { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
-import { canOpenPage, PAGE_PATHS } from "@/lib/navigation";
+import {
+  canManagePluginReleases,
+  canOpenPage,
+  PAGE_PATHS,
+} from "@/lib/navigation";
 
 const INTEGRATION_TABS = [
   { id: "composio", label: "Connectors" },
@@ -10,24 +22,31 @@ const INTEGRATION_TABS = [
   { id: "skills", label: "Skills" },
 ] as const;
 
+/** The Plugins page opens the matching install dialog when it sees this param. */
+export const PLUGIN_ADD_PARAM = "add";
+
 /**
  * Connectors, Plugins and Skills share one sidebar item; this switches between
- * them. `children` (the page's search) fills the row, `actions` sit after the tabs.
+ * them. `children` (the page's search) fills the row. The Add menu sits after
+ * the tabs on each of them.
  */
-export function IntegrationsTabs({
-  actions,
-  children,
-}: {
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
+export function IntegrationsTabs({ children }: { children: ReactNode }) {
   const { activeOrg, user } = useAuth();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   const access = {
     isPlatformAdmin: user?.isPlatformAdmin === true,
     orgRole: activeOrg?.role,
   };
+
+  const canAddPlugin =
+    canManagePluginReleases(access.isPlatformAdmin) && Boolean(activeOrg);
+
+  const addPlugin = (source: "folder" | "npm") =>
+    navigate(
+      `${PAGE_PATHS["plugin-management"]}?${PLUGIN_ADD_PARAM}=${source}`
+    );
 
   const tabs = INTEGRATION_TABS.filter((tab) => canOpenPage(tab.id, access));
 
@@ -61,7 +80,23 @@ export function IntegrationsTabs({
           })}
         </nav>
       ) : null}
-      {actions}
+      {canAddPlugin ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button />}>
+            <Add01Icon aria-hidden="true" className="size-4" />
+            Add
+            <ArrowDown01Icon aria-hidden="true" className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={() => addPlugin("folder")}>
+              Plugin made by an agent
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => addPlugin("npm")}>
+              Plugin from npm package
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }
