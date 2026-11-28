@@ -63,6 +63,9 @@ const UNAUDITED_ROUTES = new Set([
   "POST /v1/agent-groups/:groupId/sessions/:sessionId/stop",
   "POST /v1/agent-groups/:groupId/sessions/:sessionId/threads/:messageId/messages",
   "POST /v1/agent-groups/:groupId/sessions/:sessionId/threads/:messageId/stop",
+  // A Telegram bot's posts to its Agent Group: chat messages, like the above.
+  "POST /v1/internal/telegram/agent-group-sessions",
+  "POST /v1/internal/telegram/agent-group-messages",
   // Known gaps: no rule yet. Remove an entry when its rule lands.
   "POST /v1/workers/:name/:action{start|stop|restart|disconnect}",
   "PUT /v1/profiles/:profileId/knowledge-base/shared/:documentId",

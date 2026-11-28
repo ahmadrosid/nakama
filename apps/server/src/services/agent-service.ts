@@ -180,6 +180,7 @@ import {
   loadEmailSettingsPublic,
   loadErrorTrackingSettingsPublic,
   loadSoulStack,
+  loadTelegramAgentGroup,
   loadTelegramConfigFile,
   loadTelegramSettingsPublic,
   loadUserConfig,
@@ -224,12 +225,14 @@ import {
   saveEmailConfig,
   saveErrorTrackingDsn,
   saveErrorTrackingTestResult,
+  saveTelegramAgentGroup,
   saveTelegramConfig,
   saveUserConfig,
   saveUserThinkingSettings,
   saveUserTimezone,
   saveWebSearchConfig,
   saveWhatsAppConfig,
+  type TelegramAgentGroupTarget,
   toMailboxConfig,
   transcribeAudio,
   USER_CONTEXT_TEMPLATE,
@@ -242,6 +245,7 @@ import { findAgentQuestionnaireAnswers } from "@nakama/core/agent-questionnaire"
 import { isDocxFile, isLegacyDocFile } from "@nakama/core/artifact-mime";
 import {
   type ChannelConfigScope,
+  type ChannelOwner,
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
 import {
@@ -349,6 +353,7 @@ import {
   saveAgentBrowserConfig,
 } from "./agent-browser-service";
 import { AgentGroupService } from "./agent-group-service";
+import { getAgentGroup } from "./agent-group-store";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentTodoState } from "./agent-todo-state";
 import {
@@ -1498,6 +1503,67 @@ export class AgentService {
       ? this.channelWorkers.saveChannelConfig("telegram", orgId, save)
       : save();
   }
+  /**
+   * The bot's Agent Group while it still works. A target whose group is gone,
+   * or whose owner left the org, is removed: the bot then answers as its
+   * agent again, and the settings show that.
+   */
+  async telegramAgentGroupTarget(
+    owner: ChannelOwner
+  ): Promise<TelegramAgentGroupTarget | null> {
+    const target = await loadTelegramAgentGroup(owner);
+
+    if (!target) {
+      return null;
+    }
+
+    const { groupId, ownerUserId } = target;
+
+    const [member, user] = await Promise.all([
+      this.db.getOrgMember(owner.orgId, ownerUserId),
+      this.db.getUserById(ownerUserId),
+    ]);
+
+    if (
+      member &&
+      user &&
+      !user.disabledAt &&
+      getAgentGroup(owner.orgId, ownerUserId, groupId)
+    ) {
+      return target;
+    }
+
+    await saveTelegramAgentGroup(owner, null);
+
+    return null;
+  }
+
+  /**
+   * Points the bot at one of the caller's Agent Groups, or back at its agent
+   * with `null`. The group's turns run as the caller, who owns it.
+   */
+  async setTelegramAgentGroup(
+    owner: ChannelOwner,
+    userId: string,
+    groupId: string | null
+  ): Promise<{ groupId: string | null }> {
+    if (groupId) {
+      this.groups.get(owner.orgId, userId, groupId);
+    }
+
+    const save = () =>
+      saveTelegramAgentGroup(
+        owner,
+        groupId ? { groupId, ownerUserId: userId } : null
+      );
+
+    await (this.channelWorkers
+      ? this.channelWorkers.saveChannelConfig("telegram", owner, save)
+      : save());
+
+    return { groupId };
+  }
+
   async startTelegramPairing(
     orgId: string,
     userId: string,

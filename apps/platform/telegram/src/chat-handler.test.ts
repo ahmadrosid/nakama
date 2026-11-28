@@ -8,13 +8,17 @@ import {
 } from "bun:test";
 import path from "node:path";
 import type { NakamaClient } from "@nakama/client";
+import { NakamaApiError } from "@nakama/core/api-error";
 import {
   hasActiveStreams,
   resetActiveStreamsForTests,
 } from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core/contract";
-import { listTelegramAccessRequests } from "@nakama/core/telegram-config";
+import {
+  listTelegramAccessRequests,
+  TELEGRAM_AGENT_GROUP_GONE,
+} from "@nakama/core/telegram-config";
 import type { Context } from "grammy";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
@@ -184,6 +188,158 @@ describe("createChatHandler group chats", () => {
       expect(calls.sendStream).toBe(1);
       expect(replies.at(-1)).toBe("Agent reply");
       expect(replyOptions.at(-1)).toEqual({ parse_mode: "HTML" });
+    });
+  });
+
+  async function createGroupBot(homeDir: string) {
+    await writeTelegramConfigIni(homeDir, {
+      botToken: "1234567890:TEST",
+      pairedUserIds: [42],
+    });
+
+    const created = await createTestHandler(
+      homeDir,
+      {
+        config: {
+          ...TEST_CONFIG,
+          agentGroupId: "group_1",
+          owner: { orgId: "org_1", profileId: "alpha" },
+        },
+        getBotInfo: () => TEST_BOT_INFO,
+      },
+      { profiles: [{ id: "alpha", isDefault: true, name: "Alpha" }] }
+    );
+
+    const opened: (string | null)[] = [];
+
+    created.client.openTelegramAgentGroupSession = async (input) => {
+      opened.push(input.sessionId);
+
+      return {
+        sessionId:
+          input.sessionId ??
+          `group_session_${opened.filter((id) => id === null).length}`,
+      };
+    };
+
+    const posted: { content: string; sessionId: string }[] = [];
+
+    created.client.postTelegramAgentGroupMessage = async (input) => {
+      posted.push(input);
+
+      return {
+        failed: false,
+        replies: [
+          { author: "@writer", content: "draft ready" },
+          { author: "@editor", content: "looks good" },
+        ],
+      };
+    };
+
+    const send = async (
+      text: string | undefined,
+      extra: Partial<Parameters<typeof createMessageContext>[0]> = {}
+    ) => {
+      const { ctx, replies } = createMessageContext({
+        chatId: -100_123,
+        chatType: "supergroup",
+        entities: [{ length: 6, offset: 0, type: "mention" }],
+        text,
+        userId: 42,
+        ...extra,
+      });
+
+      await created.handler(ctx);
+
+      return replies;
+    };
+
+    return { ...created, opened, posted, send };
+  }
+
+  test("a bot that answers for an Agent Group posts there and names each reply", async () => {
+    await withTempHome(async (homeDir) => {
+      const { calls, opened, posted, send } = await createGroupBot(homeDir);
+
+      const replies = await send("@mybot @all write the launch post");
+
+      expect(replies.slice(-2)).toEqual([
+        "@writer\ndraft ready",
+        "@editor\nlooks good",
+      ]);
+      expect(calls.sendStream).toBe(0);
+
+      await send("@mybot @writer shorter");
+
+      // The same group chat, and only the user's words reach it.
+      expect(opened).toEqual([null, "group_session_1"]);
+      expect(posted).toEqual([
+        expect.objectContaining({
+          content: "@all write the launch post",
+          sessionId: "group_session_1",
+        }),
+        expect.objectContaining({
+          content: "@writer shorter",
+          sessionId: "group_session_1",
+        }),
+      ]);
+    });
+  });
+
+  test("the group session is saved before the run, and /new starts another", async () => {
+    await withTempHome(async (homeDir) => {
+      const { client, opened, send } = await createGroupBot(homeDir);
+
+      client.postTelegramAgentGroupMessage = async () => {
+        throw new Error("the turn failed");
+      };
+
+      await send("@mybot first");
+      await send("@mybot second");
+
+      expect(opened).toEqual([null, "group_session_1"]);
+
+      await send("/new@mybot");
+      await send("@mybot third");
+
+      expect(opened.at(-1)).toBeNull();
+    });
+  });
+
+  test("/stop ends a group run", async () => {
+    await withTempHome(async (homeDir) => {
+      const { client, send } = await createGroupBot(homeDir);
+
+      const started = Promise.withResolvers<void>();
+
+      client.postTelegramAgentGroupMessage = (_input, signal) =>
+        new Promise((_resolve, reject) => {
+          started.resolve();
+          signal.addEventListener("abort", () => reject(signal.reason));
+        });
+
+      const running = send("@mybot @all write the launch post");
+
+      await started.promise;
+
+      expect(await send("/stop@mybot")).not.toContain("Nothing to stop.");
+      expect((await running).at(-1)).toBe("Stopped.");
+    });
+  });
+
+  test("a group that is gone hands the message to the bot's agent", async () => {
+    await withTempHome(async (homeDir) => {
+      const { calls, client, send } = await createGroupBot(homeDir);
+
+      client.openTelegramAgentGroupSession = async () => {
+        throw new NakamaApiError("no group", 409, undefined, undefined, {
+          code: TELEGRAM_AGENT_GROUP_GONE,
+        });
+      };
+
+      await send("@mybot hello");
+
+      expect(calls.sendStream).toBe(1);
     });
   });
 

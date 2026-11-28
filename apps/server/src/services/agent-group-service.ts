@@ -3,7 +3,6 @@ import { NakamaApiError } from "@nakama/core";
 import {
   type AgentGroup,
   type AgentGroupMessage,
-  type AgentGroupRun,
   type AgentGroupSession,
   type AgentGroupSessionDetail,
   type AgentGroupThreadDetail,
@@ -21,8 +20,15 @@ import {
   requireThreadRoot,
 } from "./agent-group-lookup";
 import {
+  type ActiveRun,
+  appendUserMessage,
+  enqueue,
+  halt,
+  type ThreadRun,
+  threadKey,
+} from "./agent-group-run";
+import {
   addAgentGroupHandles,
-  appendAgentGroupMessage,
   createAgentGroup,
   createGroupSession,
   deleteAgentGroup,
@@ -51,51 +57,6 @@ const MAX_GROUP_HOPS = 6;
 interface GroupAccess {
   orgRole?: OrgRole;
   profiles: ProfileSummary[];
-}
-
-interface ActiveRun extends AgentGroupRun {
-  groupId: string;
-  /** Aborts the hop in progress. */
-  hop: AbortController | null;
-  hopsLeft: number;
-  /** User messages not yet turned into speakers. */
-  inbox: string[];
-  lastSpeaker: string | null;
-  queue: string[];
-  steps: string[];
-  text: string;
-  /** The session title being generated from the first reply. */
-  titling: Promise<void> | null;
-}
-
-/** An agent answering the user in one thread; at most one per thread. */
-interface ThreadRun extends AgentGroupRun {
-  /** The user wrote again while the agent was replying. */
-  again: boolean;
-  /** Aborts the reply in progress. */
-  hop: AbortController | null;
-}
-
-/**
- * Saves the user's message with its uploads. When the message cannot be saved,
- * such as on a session deleted meanwhile, its uploads are removed again.
- */
-function appendUserMessage(
-  orgId: string,
-  session: StoredGroupSession,
-  content: string,
-  rootId: number | undefined,
-  posted: PostedDocument[]
-): void {
-  const workspace = workspaceOfGroup(orgId, session.groupId);
-  const documents = workspace.saveUploads(posted);
-
-  try {
-    appendAgentGroupMessage(orgId, session, null, content, rootId, documents);
-  } catch (error) {
-    workspace.removeUploads(documents.flatMap((d) => d.path ?? d.folder ?? []));
-    throw error;
-  }
 }
 
 export class AgentGroupService {
@@ -447,6 +408,8 @@ export class AgentGroupService {
 
     const run: ActiveRun = {
       activity: null,
+      done: Promise.resolve(),
+      failures: 0,
       groupId,
       hop: null,
       hopsLeft: 0,
@@ -457,6 +420,7 @@ export class AgentGroupService {
             message.authorProfileId !== null && message.content !== ""
         )?.authorProfileId ?? null,
       queue: [],
+      said: [],
       speakerProfileId: null,
       steps: [],
       stopping: false,
@@ -473,11 +437,69 @@ export class AgentGroupService {
       throw error;
     }
 
-    return this.reply(orgId, userId, session, run).finally(() => {
+    run.done = this.reply(orgId, userId, session, run).finally(() => {
       if (this.runs.get(sessionId) === run) {
         this.runs.delete(sessionId);
       }
     });
+
+    return run.done;
+  }
+
+  /**
+   * For a channel bot: posts the message, waits until the session's run ends
+   * (also a run that was already active) and returns the replies stored
+   * meanwhile. Errors and skip notices are counted in `failed`, never
+   * returned. `signal` stops the run.
+   */
+  async converse(
+    orgId: string,
+    userId: string,
+    groupId: string,
+    sessionId: string,
+    content: string,
+    signal: AbortSignal
+  ): Promise<{
+    failed: boolean;
+    replies: { content: string; profileId: string }[];
+  }> {
+    const before = this.runs.get(sessionId);
+    const from = before?.said.length ?? 0;
+    const failures = before?.failures ?? 0;
+    void this.post(orgId, userId, groupId, sessionId, content);
+
+    // SAFETY: post() joins the active run or registers a new one before it returns.
+    const run = this.runs.get(sessionId)!;
+    const stop = () => halt(run);
+
+    if (signal.aborted) {
+      stop();
+    } else {
+      signal.addEventListener("abort", stop, { once: true });
+    }
+
+    try {
+      await run.done;
+    } finally {
+      signal.removeEventListener("abort", stop);
+    }
+
+    return { failed: run.failures > failures, replies: run.said.slice(from) };
+  }
+
+  /**
+   * Opens an empty session, for a caller that must keep the id before the
+   * first message is sent.
+   */
+  open(
+    orgId: string,
+    userId: string,
+    groupId: string,
+    title: string
+  ): StoredGroupSession {
+    requireGroup(orgId, userId, groupId);
+
+    return createGroupSession(orgId, groupId, groupSessionTitle(title));
   }
 
   private async reply(
@@ -553,7 +575,12 @@ export class AgentGroupService {
       run.hopsLeft -= 1;
       run.lastSpeaker = profileId;
 
+      if (outcome.kind === "ended" && !run.hop.signal.aborted) {
+        run.failures += 1;
+      }
+
       if (outcome.kind === "replied") {
+        run.said.push({ content: outcome.text, profileId });
         run.titling ??= retitleGroupSession(
           this.agent,
           orgId,
@@ -705,27 +732,4 @@ export class AgentGroupService {
       halt(run);
     }
   }
-}
-
-/**
- * Drops the queued speakers with the flag, so a message sent after Stop
- * wakes only the agents it mentions.
- */
-function halt(run: ActiveRun): void {
-  run.stopping = true;
-  run.hop?.abort();
-  run.queue.length = 0;
-  run.inbox.length = 0;
-}
-
-function enqueue(queue: string[], ids: string[]): void {
-  for (const id of ids) {
-    if (!queue.includes(id)) {
-      queue.push(id);
-    }
-  }
-}
-
-function threadKey(sessionId: string, rootId: number): string {
-  return `${sessionId}:${rootId}`;
 }

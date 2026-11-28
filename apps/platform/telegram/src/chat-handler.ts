@@ -5,7 +5,7 @@ import {
   formatAgentQuestionnaireAnswersMessage,
   hasActiveAgentQuestionnaire,
 } from "@nakama/core/agent-questionnaire";
-import { formatClientError } from "@nakama/core/api-error";
+import { formatClientError, NakamaApiError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
   isAbortError,
@@ -44,6 +44,7 @@ import {
 import {
   hasActiveHandshakeCode,
   looksLikePairingCode,
+  TELEGRAM_AGENT_GROUP_GONE,
 } from "@nakama/core/telegram-config";
 import {
   renderTelegramPlainText,
@@ -113,6 +114,14 @@ const chatLock = createChatLock();
 const GROUP_MESSAGE_PREFIX =
   "[Telegram group — your reply is visible to everyone in this group.]\n";
 
+/** A little longer than the server's deadline, which answers with what it has. */
+const AGENT_GROUP_REPLY_MS = 16 * 60_000;
+
+/** The group session of a chat, kept apart from the agent's own session. */
+function agentGroupKey(conversationKey: string): string {
+  return `agent-group:${conversationKey}`;
+}
+
 const LINK_IN_PRIVATE_REPLY =
   "Link your account in a private chat with this bot first.";
 
@@ -161,6 +170,9 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     getBotInfo = () => undefined,
     dispatchTurn,
   } = deps;
+
+  /** True once the server reports that the group target is gone. */
+  let agentGroupGone = false;
 
   return async function handleMessage(ctx: Context): Promise<void> {
     if (!ctx.chat) {
@@ -593,6 +605,28 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const command = parseTelegramCommand(text);
 
+    // The agent's session, history and profile are not in use in group mode.
+    if (answersForGroup()) {
+      switch (command) {
+        case "/clear":
+        case "/new":
+          sessionStore.delete(agentGroupKey(conversationKey));
+          await sessionStore.save();
+          await telegram.send("Started a new conversation.");
+
+          return;
+
+        case "/compact":
+        case "/profile":
+        case "/status":
+          await telegram.send(
+            "This bot answers for an Agent Group. This command does not apply."
+          );
+
+          return;
+      }
+    }
+
     switch (command) {
       case "/start":
       case "/help":
@@ -716,6 +750,13 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     telegram: TelegramRichMessenger,
     attachUserText: string
   ): Promise<void> {
+    if (
+      answersForGroup() &&
+      (await replyFromAgentGroup(ctx, input, conversationKey, telegram))
+    ) {
+      return;
+    }
+
     const session = await resolveSession(conversationKey);
     const profileId = sessionStore.get(conversationKey)?.profileId;
 
@@ -867,6 +908,119 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         sessionStore,
       });
     }
+  }
+
+  function answersForGroup(): boolean {
+    return Boolean(config.agentGroupId && config.owner) && !agentGroupGone;
+  }
+
+  /**
+   * The bot answers for an Agent Group: every agent's reply, under its
+   * handle. Returns false when the group is gone, so the agent answers.
+   */
+  async function replyFromAgentGroup(
+    ctx: Context,
+    input: SendMessageInput,
+    conversationKey: string,
+    telegram: TelegramRichMessenger
+  ): Promise<boolean> {
+    const owner = config.owner!;
+    const groupNote = GROUP_MESSAGE_PREFIX.trim();
+
+    // The note for a Telegram group is for one agent, not for the group chat.
+    const content = (
+      input.message.startsWith(groupNote)
+        ? input.message.slice(groupNote.length)
+        : input.message
+    ).trim();
+
+    if (input.images?.length || input.documents?.length) {
+      await telegram.send(
+        "This bot answers for an Agent Group, which reads text only. Your attachment was not sent."
+      );
+    } else if (!content) {
+      await telegram.send(
+        "This bot answers for an Agent Group, which reads text only."
+      );
+    }
+
+    if (!content) {
+      return true;
+    }
+
+    const key = agentGroupKey(conversationKey);
+
+    const typingLoop = createTypingLoop(async () => {
+      await ctx.replyWithChatAction("typing");
+    });
+
+    const signal = registerActiveStream(conversationKey);
+
+    try {
+      typingLoop.start();
+
+      const stored = sessionStore.get(key)?.sessionId ?? null;
+
+      // Saved before the run, so a restart or a failed turn keeps the chat.
+      const { sessionId } = await client.openTelegramAgentGroupSession({
+        orgId: owner.orgId,
+        profileId: owner.profileId,
+        sessionId: stored,
+        title: content,
+      });
+
+      if (sessionId !== stored) {
+        sessionStore.set(key, {
+          profileId: owner.profileId,
+          sessionId,
+          updatedAt: new Date().toISOString(),
+        });
+        await sessionStore.save();
+      }
+
+      const { failed, replies } = await client.postTelegramAgentGroupMessage(
+        {
+          content,
+          orgId: owner.orgId,
+          profileId: owner.profileId,
+          sessionId,
+        },
+        // The server stops the run when this request ends.
+        AbortSignal.any([signal, AbortSignal.timeout(AGENT_GROUP_REPLY_MS)])
+      );
+
+      for (const reply of replies) {
+        // The handle has its own line, so the reply's markdown starts a line.
+        await replyAsChat(telegram, `${reply.author}\n${reply.content}`);
+      }
+
+      if (failed) {
+        await telegram.send("An agent could not reply. Try again.");
+      } else if (replies.length === 0) {
+        await telegram.send("(no agent replied)");
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        await telegram.send("Stopped.");
+      } else if (
+        error instanceof NakamaApiError &&
+        error.code === TELEGRAM_AGENT_GROUP_GONE
+      ) {
+        agentGroupGone = true;
+        await telegram.send(
+          "This bot's Agent Group is not available. Its agent answers now."
+        );
+
+        return false;
+      } else {
+        await telegram.send(formatClientError(error));
+      }
+    } finally {
+      clearActiveStream(conversationKey, signal);
+      typingLoop.stop();
+    }
+
+    return true;
   }
 
   async function ensureOrgReady(

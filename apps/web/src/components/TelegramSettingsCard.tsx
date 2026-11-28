@@ -1,8 +1,18 @@
 import type { UpdateTelegramSettingsRequest } from "@nakama/core/contract";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
 import { TelegramAllowedUsers } from "@/components/TelegramAllowedUsers";
 import { TelegramSettingsCardContent } from "@/components/telegram-settings-card-content";
+import { useAuth } from "@/context/use-auth";
+import { useAgentGroupsQuery } from "@/hooks/use-agent-groups";
 import {
   useChannelProfileId,
   useRegenerateTelegramHandshake,
@@ -11,13 +21,85 @@ import {
 } from "@/hooks/use-app-queries";
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { useStartWorker } from "@/hooks/use-worker-actions";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 import type { AllowedTelegramUser } from "@/lib/parse-allowed-telegram-users";
+import { queryKeys } from "@/lib/query-keys";
 
 interface TelegramSettingsCardProps {
   embedded?: boolean;
   onSaveSuccess?: () => void;
   submitLabel?: string;
+}
+
+const ANSWER_AS_AGENT = "agent";
+
+/** Who the bot answers as: its own agent, or one of the caller's Agent Groups. */
+function TelegramAgentGroupSelect({ profileId }: { profileId: string }) {
+  const queryClient = useQueryClient();
+  const { activeOrg } = useAuth();
+  const api = client.forOrg(activeOrg?.id ?? null);
+
+  // Under the Telegram settings key, like the card's other queries.
+  const queryKey = [
+    ...queryKeys.telegram.settings,
+    "agent-group",
+    activeOrg?.id,
+    profileId,
+  ];
+
+  const groups = useAgentGroupsQuery();
+
+  const target = useQuery({
+    queryFn: () => api.getTelegramAgentGroup(profileId),
+    queryKey,
+  });
+
+  const save = useMutation({
+    mutationFn: (groupId: string | null) =>
+      api.setTelegramAgentGroup(profileId, groupId),
+    onSuccess: (data) => queryClient.setQueryData(queryKey, data),
+  });
+
+  // Unknown until the target loads: the select then shows no choice.
+  const value = target.data ? (target.data.groupId ?? ANSWER_AS_AGENT) : "";
+  const selected = groups.data?.find((group) => group.id === value);
+  const error = target.error ?? save.error;
+
+  return (
+    <div className="space-y-1.5 py-3">
+      <p className="font-medium text-sm">Answer as</p>
+      <Select
+        disabled={!target.data || save.isPending}
+        onValueChange={(next) =>
+          save.mutate(next === ANSWER_AS_AGENT ? null : next)
+        }
+        value={value}
+      >
+        <SelectTrigger aria-label="Answer as" className="w-64">
+          <SelectValue>
+            {value === ANSWER_AS_AGENT
+              ? "This agent"
+              : value && (selected?.name ?? "Agent Group")}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ANSWER_AS_AGENT}>This agent</SelectItem>
+          {groups.data?.map((group) => (
+            <SelectItem key={group.id} value={group.id}>
+              {group.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {/* Kept: a group runs with the access of the person who picks it. */}
+      <p className="text-muted-foreground text-xs">
+        An Agent Group answers as you.
+      </p>
+      {error ? (
+        <p className="text-destructive text-xs">{formatError(error)}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function hydrateAllowedUsers(
@@ -293,7 +375,14 @@ function TelegramSettingsCardLoaded({
     />
   );
 
-  return content;
+  return card.configured ? (
+    <>
+      {content}
+      <TelegramAgentGroupSelect profileId={card.profileId} />
+    </>
+  ) : (
+    content
+  );
 }
 
 export function TelegramSettingsCard({

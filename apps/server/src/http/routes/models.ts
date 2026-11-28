@@ -51,6 +51,7 @@ import {
   saveSlackConfig,
   validateSlackTokens,
 } from "@nakama/core/slack-config";
+import { TELEGRAM_AGENT_GROUP_GONE } from "@nakama/core/telegram-config";
 import { THINKING_EFFORTS } from "@nakama/core/thinking-effort";
 import type { Context, MiddlewareHandler } from "hono";
 import {
@@ -64,6 +65,7 @@ import {
   startXaiOAuthDeviceSession,
 } from "../../providers/xai-oauth/oauth";
 import { installAgentBrowser } from "../../services/agent-browser-service";
+import { getGroupSession } from "../../services/agent-group-store";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
@@ -87,6 +89,7 @@ import {
   readOptionalJson,
 } from "../shared";
 import type { AppEnv, HonoApp } from "../types";
+import { GROUP_MESSAGE_CHARS } from "./agent-groups";
 
 function providerIdentity(provider: ProviderInstanceSummary) {
   return {
@@ -97,6 +100,9 @@ function providerIdentity(provider: ProviderInstanceSummary) {
     type: provider.type,
   };
 }
+
+/** Longest time one Telegram message may keep a group run going. */
+const TELEGRAM_GROUP_RUN_MS = 15 * 60_000;
 
 export function registerModelRoutes(
   app: HonoApp,
@@ -2747,6 +2753,132 @@ export function registerModelRoutes(
       return errorResponse(message, 400);
     }
   });
+  app.get("/v1/settings/telegram/agent-group", async (c) =>
+    json({
+      groupId:
+        (await agent.telegramAgentGroupTarget(await channelOwner(c)))
+          ?.groupId ?? null,
+    })
+  );
+
+  app.put("/v1/settings/telegram/agent-group", async (c) => {
+    const owner = await channelOwner(c);
+
+    const { groupId } = await readJson(
+      c.req.raw,
+      z.object({ groupId: z.string().min(1).nullable() })
+    );
+
+    return json(
+      await agent.setTelegramAgentGroup(
+        owner,
+        getRequestAuth(c).user.id,
+        groupId
+      )
+    );
+  });
+
+  // A Telegram bot that answers for an Agent Group (#2509) posts to the two
+  // routes below. The group and the user it runs as come from the saved
+  // target, never from the request, so the worker cannot pick another group.
+  const telegramGroupBotSchema = z.object({
+    orgId: z.string().min(1),
+    profileId: z.string().min(1),
+  });
+
+  /** The body and the bot's target, or the response that refuses the worker. */
+  const readTelegramGroupPost = async <
+    T extends z.infer<typeof telegramGroupBotSchema>,
+  >(
+    c: Context<AppEnv>,
+    schema: z.ZodType<T>
+  ) => {
+    const auth = c.get("auth");
+
+    if (!auth || auth.mode !== "local-token") {
+      return errorResponse("Authentication required", 401);
+    }
+
+    const body = await readJson(c.req.raw, schema);
+    const target = await agent.telegramAgentGroupTarget(body);
+
+    return target
+      ? { body, target }
+      : errorResponse("This bot does not answer for an Agent Group.", 409, {
+          code: TELEGRAM_AGENT_GROUP_GONE,
+        });
+  };
+
+  // The worker keeps the session id before the run, so a restart or a failed
+  // turn continues the same group chat.
+  app.post("/v1/internal/telegram/agent-group-sessions", async (c) => {
+    const post = await readTelegramGroupPost(
+      c,
+      telegramGroupBotSchema.extend({
+        sessionId: z.string().min(1).nullable(),
+        title: z.string().max(GROUP_MESSAGE_CHARS),
+      })
+    );
+
+    if (post instanceof Response) {
+      return post;
+    }
+
+    const { orgId, sessionId, title } = post.body;
+    const { groupId, ownerUserId } = post.target;
+
+    const known = sessionId
+      ? getGroupSession(orgId, ownerUserId, groupId, sessionId)
+      : null;
+
+    const session =
+      known ?? agent.groups.open(orgId, ownerUserId, groupId, title);
+
+    return json({ sessionId: session.id });
+  });
+
+  app.post("/v1/internal/telegram/agent-group-messages", async (c) => {
+    const post = await readTelegramGroupPost(
+      c,
+      telegramGroupBotSchema.extend({
+        content: z.string().trim().min(1).max(GROUP_MESSAGE_CHARS),
+        sessionId: z.string().min(1),
+      })
+    );
+
+    if (post instanceof Response) {
+      return post;
+    }
+
+    const { content, orgId, sessionId } = post.body;
+    const { groupId, ownerUserId } = post.target;
+
+    // A disconnect (the worker's /stop, its deadline or a restart) and the
+    // deadline here both stop the run.
+    const { failed, replies } = await agent.groups.converse(
+      orgId,
+      ownerUserId,
+      groupId,
+      sessionId,
+      content,
+      AbortSignal.any([
+        c.req.raw.signal,
+        AbortSignal.timeout(TELEGRAM_GROUP_RUN_MS),
+      ])
+    );
+
+    // The handle, since that is also how the chat addresses a member.
+    const { handles } = agent.groups.get(orgId, ownerUserId, groupId);
+
+    return json({
+      failed,
+      replies: replies.map((reply) => ({
+        author: `@${handles[reply.profileId] ?? "agent"}`,
+        content: reply.content,
+      })),
+    });
+  });
+
   app.get("/v1/settings/telegram/requests", async (c) =>
     json<TelegramAccessRequestsResponse>(
       await agent.getTelegramAccessRequests(await channelOwner(c))

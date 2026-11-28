@@ -171,6 +171,10 @@ export const INSTALLATION_AUDIT_ROUTES: ReadonlyArray<
   ],
   ["PUT /v1/settings/telegram", ["settings.update", "setting", "telegram"]],
   [
+    "PUT /v1/settings/telegram/agent-group",
+    ["settings.update", "setting", "telegram"],
+  ],
+  [
     "POST /v1/settings/telegram/handshake",
     ["channel.pairing", "channel", "telegram"],
   ],
