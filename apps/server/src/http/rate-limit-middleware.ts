@@ -62,7 +62,7 @@ interface Budget {
   resetAt: number;
 }
 
-function clientAddress(
+export function clientAddress(
   c: Parameters<MiddlewareHandler<AppEnv>>[0],
   trustProxy: boolean
 ): string | null {
