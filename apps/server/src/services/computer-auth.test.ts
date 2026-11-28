@@ -149,9 +149,9 @@ describe("computer passes", () => {
     expect(await auth.verifyPass(pass)).toBeNull();
     expect((await requestPass(signedRequest())).status).toBe(401);
 
-    const actions = (await databaseAdapter.listAuditEvents({ orgId })).map(
-      (event) => event.action
-    );
+    const actions = (
+      await databaseAdapter.listAuditEvents({ orgId })
+    ).events.map((event) => event.action);
 
     expect(actions).toContain("computer.enroll");
     expect(actions).toContain("computer.revoke");

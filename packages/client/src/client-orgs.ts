@@ -1,10 +1,13 @@
 import type {
   AddOrgMemberRequest,
   AddOrgMemberResponse,
+  AuditEventStats,
   AuthUserResponse,
   CreateOrganizationResponse,
   CreateTeamRequest,
   InviteOrgMemberRequest,
+  ListAuditEventsParams,
+  ListAuditEventsResponse,
   ListOrganizationsResponse,
   ListOrgInvitesResponse,
   ListOrgJoinRequestsResponse,
@@ -36,6 +39,40 @@ import { AuthClient } from "./client-auth";
 
 /** Organizations, teams, members, shared resources, and the skill curator. */
 export class OrgsClient extends AuthClient {
+  async listOrgAuditEvents(
+    orgId: string,
+    params: ListAuditEventsParams = {}
+  ): Promise<ListAuditEventsResponse> {
+    const query = new URLSearchParams();
+
+    for (const key of [
+      "action",
+      "category",
+      "limit",
+      "offset",
+      "outcome",
+      "search",
+    ] as const) {
+      const value = params[key];
+
+      if (value !== undefined) {
+        query.set(key, String(value));
+      }
+    }
+
+    return this.request<ListAuditEventsResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/audit-events?${query}`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async listOrgAuditEventCategories(orgId: string): Promise<AuditEventStats> {
+    return this.request<AuditEventStats>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/audit-events/stats`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
   async runOrgSkillCurator(
     orgId: string,
     request: RunSkillCuratorRequest = {}

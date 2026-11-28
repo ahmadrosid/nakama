@@ -13,7 +13,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { useQueries } from "@tanstack/react-query";
-import { Search01Icon } from "hugeicons-react";
+import { ArrowRight01Icon, Search01Icon } from "hugeicons-react";
 import { type ReactNode, useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ComposioCustomAuthSteps } from "@/components/ComposioToolkitLogo";
@@ -97,7 +97,7 @@ function ComposioToolkitList({
   return (
     <div className="space-y-10">
       <IntegrationsTabs>
-        <div className="relative w-full sm:w-72">
+        <div className="relative w-full">
           <Search01Icon
             aria-hidden
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -138,7 +138,7 @@ function ComposioToolkitList({
         <>
           <section className="space-y-3">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <h2 className="font-medium text-sm">In use</h2>
+              <h2 className="font-medium text-base">In use</h2>
               <p className="text-muted-foreground text-sm tabular-nums">
                 {enabledCount} enabled · {connectedCount} connected by you
               </p>
@@ -192,7 +192,7 @@ function ComposioAddSection({
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-medium text-sm">Add an app</h2>
+        <h2 className="font-medium text-base">Add an app</h2>
         <Button
           className="h-auto p-0"
           onClick={() => onToggleShowAll()}
@@ -200,6 +200,7 @@ function ComposioAddSection({
           variant="link"
         >
           {showAllApps ? "Show popular apps" : `Show all ${catalogSize} apps`}
+          <ArrowRight01Icon aria-hidden className="size-4" />
         </Button>
       </div>
       {catalogSize === 0 ? (
@@ -207,7 +208,7 @@ function ComposioAddSection({
           No toolkits available yet.
         </p>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2.5">
+        <div className="grid gap-x-10 sm:grid-cols-2">
           {addRows.map((row) => (
             <ComposioToolkitTile
               busy={busy}

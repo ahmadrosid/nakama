@@ -662,6 +662,7 @@ CREATE TABLE IF NOT EXISTS workspace_settings (
   coding_agent_harnesses TEXT NOT NULL DEFAULT '[]',
   selected_coding_agent_harness TEXT,
   coding_agent_provider_passthrough INTEGER NOT NULL DEFAULT 1,
+  audit_retention_days INTEGER NOT NULL DEFAULT 365,
   updated_at TEXT NOT NULL
 );
 
@@ -828,7 +829,21 @@ CREATE TABLE IF NOT EXISTS audit_events (
   resource_id TEXT,
   metadata TEXT NOT NULL DEFAULT '{}',
   request_id TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  outcome TEXT NOT NULL DEFAULT 'success',
+  status INTEGER,
+  method TEXT,
+  route TEXT,
+  session_id TEXT,
+  actor_mode TEXT,
+  client_ip TEXT,
+  forwarded_for TEXT,
+  user_agent TEXT,
+  -- Hash-chain position. NULL marks rows written before the chain existed;
+  -- they verify as legacy instead of breaking the chain.
+  seq INTEGER,
+  prev_hash TEXT NOT NULL DEFAULT '',
+  hash TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS audit_events_created
@@ -839,12 +854,6 @@ CREATE INDEX IF NOT EXISTS audit_events_org_created
 
 CREATE TRIGGER IF NOT EXISTS audit_events_no_update
 BEFORE UPDATE ON audit_events
-BEGIN
-  SELECT RAISE(ABORT, 'audit_events are append-only');
-END;
-
-CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
-BEFORE DELETE ON audit_events
 BEGIN
   SELECT RAISE(ABORT, 'audit_events are append-only');
 END;

@@ -92,7 +92,7 @@ function useComposioSettingsForm() {
     setFormError(null);
 
     try {
-      await saveMutation.mutateAsync({ apiKey: trimmed });
+      await saveMutation.mutateAsync(trimmed);
       setApiKey("");
       setEditing(false);
       focusReplace();

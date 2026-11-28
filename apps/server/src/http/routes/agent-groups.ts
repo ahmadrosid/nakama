@@ -39,10 +39,13 @@ const memorySchema = z.object({
   content: z.string().max(65_536),
 });
 
+/** Longest text of one message to a group. */
+export const GROUP_MESSAGE_CHARS = 8000;
+
 // A message may hold only documents, so its text can be empty.
 const groupMessageSchema = z
   .object({
-    content: z.string().trim().max(8000).default(""),
+    content: z.string().trim().max(GROUP_MESSAGE_CHARS).default(""),
     documents: z
       .array(
         z.object({

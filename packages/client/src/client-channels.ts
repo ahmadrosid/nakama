@@ -65,6 +65,64 @@ export class ChannelsClient extends AutomationsClient {
     return response.token;
   }
 
+  /**
+   * Workers only: the group session of a Telegram chat (#2509). Returns
+   * `sessionId` while it still exists, and a new session otherwise.
+   */
+  openTelegramAgentGroupSession(input: {
+    orgId: string;
+    profileId: string;
+    sessionId: string | null;
+    title: string;
+  }): Promise<{ sessionId: string }> {
+    return this.request("/v1/internal/telegram/agent-group-sessions", {
+      body: JSON.stringify(input),
+      method: "POST",
+      signal: AbortSignal.timeout(10_000),
+    });
+  }
+
+  /**
+   * Workers only: one Telegram message to the bot's Agent Group. Answers when
+   * every agent has replied; aborting `signal` stops the run.
+   */
+  postTelegramAgentGroupMessage(
+    input: {
+      content: string;
+      orgId: string;
+      profileId: string;
+      sessionId: string;
+    },
+    signal: AbortSignal
+  ): Promise<{
+    failed: boolean;
+    replies: { author: string; content: string }[];
+  }> {
+    return this.request("/v1/internal/telegram/agent-group-messages", {
+      body: JSON.stringify(input),
+      method: "POST",
+      signal,
+    });
+  }
+
+  getTelegramAgentGroup(
+    profileId: string
+  ): Promise<{ groupId: string | null }> {
+    return this.request(
+      `/v1/settings/telegram/agent-group?profileId=${encodeURIComponent(profileId)}`
+    );
+  }
+
+  setTelegramAgentGroup(
+    profileId: string,
+    groupId: string | null
+  ): Promise<{ groupId: string | null }> {
+    return this.request(
+      `/v1/settings/telegram/agent-group?profileId=${encodeURIComponent(profileId)}`,
+      { body: JSON.stringify({ groupId }), method: "PUT" }
+    );
+  }
+
   async getTelegramSettings(
     profileId?: string
   ): Promise<TelegramSettingsResponse> {

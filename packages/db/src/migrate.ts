@@ -4,8 +4,21 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { orgIdFromSkillSourcePath } from "@nakama/core";
 import { GENERATE_IMAGE_TOOL_ID } from "@nakama/core/tools/protected";
+import { WORKSPACE_SETTINGS_ID } from "./constants";
 
 const BOOTSTRAP_SCHEMA_VERSION = 1;
+
+/** Default audit retention window in days; rows younger than this cannot be deleted. */
+export const AUDIT_EVENT_RETENTION_DAYS = 365;
+
+/** Maximum configurable audit retention window in days. */
+export const AUDIT_EVENT_MAX_RETENTION_DAYS = 3650;
+
+/**
+ * Shortest window a non-zero retention can use, so an admin session cannot
+ * shrink retention and prune recent history in one step.
+ */
+export const AUDIT_EVENT_MIN_RETENTION_DAYS = 90;
 
 export function migrateDatabase(db: Database): void {
   applyBootstrapSchema(db);
@@ -77,6 +90,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateComposioTables);
   atomic(migrateComposioUserConnections);
   atomic(migrateAuditEventsTable);
+  atomic(migrateAuditEventsChainColumns);
   atomic(migrateProfileChangeEventsTable);
   atomic(migrateSkillVersionsTable);
   atomic(migratePluginTables);
@@ -298,7 +312,19 @@ function migrateAuditEventsTable(db: Database): void {
       resource_id TEXT,
       metadata TEXT NOT NULL DEFAULT '{}',
       request_id TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      outcome TEXT NOT NULL DEFAULT 'success',
+      status INTEGER,
+      method TEXT,
+      route TEXT,
+      session_id TEXT,
+      actor_mode TEXT,
+      client_ip TEXT,
+      forwarded_for TEXT,
+      user_agent TEXT,
+      seq INTEGER,
+      prev_hash TEXT NOT NULL DEFAULT '',
+      hash TEXT NOT NULL DEFAULT ''
     );
 
     CREATE INDEX IF NOT EXISTS audit_events_created
@@ -312,11 +338,75 @@ function migrateAuditEventsTable(db: Database): void {
     BEGIN
       SELECT RAISE(ABORT, 'audit_events are append-only');
     END;
+  `);
+}
 
-    CREATE TRIGGER IF NOT EXISTS audit_events_no_delete
+/**
+ * Existing installs get the request-context and hash-chain columns added on
+ * top of the original table. `seq` stays NULL for rows written before the
+ * chain existed, so they verify as legacy instead of breaking the chain.
+ */
+function migrateAuditEventsChainColumns(db: Database): void {
+  // SAFETY: SQLite `PRAGMA table_info` returns rows with a string `name` column.
+  const columns = db.prepare("PRAGMA table_info(audit_events)").all() as Array<{
+    name: string;
+  }>;
+
+  const has = (name: string): boolean =>
+    columns.some((column) => column.name === name);
+
+  if (!has("outcome")) {
+    db.exec(
+      "ALTER TABLE audit_events ADD COLUMN outcome TEXT NOT NULL DEFAULT 'success'"
+    );
+  }
+
+  if (!has("status")) {
+    db.exec("ALTER TABLE audit_events ADD COLUMN status INTEGER");
+  }
+
+  for (const name of [
+    "actor_mode",
+    "client_ip",
+    "forwarded_for",
+    "method",
+    "route",
+    "session_id",
+    "user_agent",
+  ]) {
+    if (!has(name)) {
+      db.exec(`ALTER TABLE audit_events ADD COLUMN ${name} TEXT`);
+    }
+  }
+
+  if (!has("seq")) {
+    db.exec("ALTER TABLE audit_events ADD COLUMN seq INTEGER");
+  }
+
+  for (const name of ["prev_hash", "hash"]) {
+    if (!has(name)) {
+      db.exec(
+        `ALTER TABLE audit_events ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`
+      );
+    }
+  }
+
+  db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq ON audit_events (seq)"
+  );
+
+  // Rebuilt on every open so installs pick up the dynamic retention trigger
+  // backed by workspace_settings.audit_retention_days. Retention <= 0 blocks
+  // all deletes; otherwise rows inside the window cannot be pruned.
+  db.exec(`
+    DROP TRIGGER IF EXISTS audit_events_no_delete;
+
+    CREATE TRIGGER audit_events_no_delete
     BEFORE DELETE ON audit_events
     BEGIN
-      SELECT RAISE(ABORT, 'audit_events are append-only');
+      SELECT RAISE(ABORT, 'audit_events are append-only')
+      WHERE COALESCE((SELECT audit_retention_days FROM workspace_settings WHERE id = '${WORKSPACE_SETTINGS_ID}'), ${AUDIT_EVENT_RETENTION_DAYS}) <= 0
+         OR OLD.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || MAX(COALESCE((SELECT audit_retention_days FROM workspace_settings WHERE id = '${WORKSPACE_SETTINGS_ID}'), ${AUDIT_EVENT_RETENTION_DAYS}), ${AUDIT_EVENT_MIN_RETENTION_DAYS}) || ' days');
     END;
   `);
 }
@@ -2162,6 +2252,12 @@ function migrateWorkspaceSettingsTable(db: Database): void {
   if (!columnNames.has("automation_worker_poll_interval_ms")) {
     db.exec(`
       ALTER TABLE workspace_settings ADD COLUMN automation_worker_poll_interval_ms INTEGER NOT NULL DEFAULT 300000;
+    `);
+  }
+
+  if (!columnNames.has("audit_retention_days")) {
+    db.exec(`
+      ALTER TABLE workspace_settings ADD COLUMN audit_retention_days INTEGER NOT NULL DEFAULT ${AUDIT_EVENT_RETENTION_DAYS};
     `);
   }
 }

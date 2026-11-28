@@ -446,7 +446,7 @@ test("Nakama Desktop starts its Cloud sign-in before it has an org", async () =>
 
   // It changes the default provider, so it is audited like other changes.
   expect(
-    (await options.databaseAdapter.listAuditEvents()).map(
+    (await options.databaseAdapter.listAuditEvents()).events.map(
       (event) => event.action
     )
   ).toContain("provider.nakama_cloud_sign_out");

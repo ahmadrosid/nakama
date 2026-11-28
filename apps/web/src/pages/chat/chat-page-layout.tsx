@@ -33,14 +33,6 @@ import {
 import { navHrefForPage } from "@/lib/navigation";
 import { welcomeAnimationKey } from "@/pages/chat/chat-page.shared";
 
-/**
- * Applied straight to the column rather than as an overlay child, so nothing
- * has to be lifted out of the way with z-index. It follows the app theme: a
- * pale indigo glow in light mode, the near-black one in dark mode.
- */
-const COGNITO_SURFACE =
-  "bg-[radial-gradient(125%_125%_at_50%_100%,#ffffff_40%,#dfe3ff_100%)] dark:bg-[radial-gradient(125%_125%_at_50%_100%,#000000_40%,#010133_100%)]";
-
 /** Size of one dither pixel, in CSS pixels. */
 const DITHER_CELL_PX = 4;
 
@@ -295,18 +287,15 @@ export function ChatDitherBackground() {
 export function ChatPageColumn({
   children,
   centered = false,
-  cognito = false,
 }: {
   children: React.ReactNode;
   centered?: boolean;
-  cognito?: boolean;
 }) {
   const attachmentPanel = useChatAttachmentPanel();
 
   return (
     <div
       className={cn(
-        cognito && COGNITO_SURFACE,
         // `relative` so a page-level control can pin itself to this column's
         // top-right corner, which is the top-right of the screen area.
         "relative isolate flex min-h-0 min-w-0 flex-col transition-[width,opacity,padding] duration-200 ease-out motion-reduce:transition-none",
@@ -319,7 +308,7 @@ export function ChatPageColumn({
         centered && "justify-center"
       )}
     >
-      {centered && !cognito && <ChatDitherBackground />}
+      {centered && <ChatDitherBackground />}
       {children}
     </div>
   );

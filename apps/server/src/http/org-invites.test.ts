@@ -448,13 +448,17 @@ describe("direct org member provisioning", () => {
     // successful one.
     const admin = await databaseAdapter.getUserByEmail("admin@acme.com");
     expect(
-      await databaseAdapter.listAuditEvents({
-        action: "auth.password_reset_request",
-      })
+      (
+        await databaseAdapter.listAuditEvents({
+          action: "auth.password_reset_request",
+        })
+      ).events
     ).toContainEqual(
       expect.objectContaining({
         actorUserId: admin?.id,
-        metadata: { outcome: "failure", status: 403 },
+        metadata: {},
+        outcome: "failure",
+        status: 403,
       })
     );
 

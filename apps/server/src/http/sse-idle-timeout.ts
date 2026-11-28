@@ -63,8 +63,15 @@ export function disableBunIdleTimeoutForLongHeldRequest(
       new URL(request.url).pathname
     );
 
+  // A Telegram Agent Group message answers after every agent has replied.
+  const telegramGroupRequest =
+    request.method === "POST" &&
+    new URL(request.url).pathname ===
+      "/v1/internal/telegram/agent-group-messages";
+
   if (
     isLongHeldAutomationRunRequest(request) ||
+    telegramGroupRequest ||
     pluginRequest ||
     acpMcpRequest ||
     regressionRerunRequest
