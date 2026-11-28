@@ -47,3 +47,5 @@ nakama-secrets.env
 .idea
 ecosystem.config.js
 ecosystem.config.cjs
+.zcode/
+.trail/

@@ -1,303 +1,48 @@
 import { log } from "@nakama/core";
-import type { DatabaseAdapter, StoredAuditEvent } from "@nakama/db";
+import type { CreateAuditEventInput, DatabaseAdapter } from "@nakama/db";
 import type { MiddlewareHandler } from "hono";
+import { matchedRoutes } from "hono/route";
 import { z } from "zod";
+import { describeAuditEvent } from "./audit-log-routes";
+import { clientAddress } from "./rate-limit-middleware";
 import type { AppEnv } from "./types";
-
-type AuditDescriptor = Pick<
-  StoredAuditEvent,
-  "action" | "resourceId" | "resourceType"
-> & { orgId?: string | null };
-
-const FIXED_EVENTS = new Map<string, AuditDescriptor>([
-  ["PATCH /v1/auth/me", event("account.update", "user")],
-  ["POST /v1/auth/accept-invite", event("invite.accept", "invite")],
-  ["POST /v1/auth/change-password", event("auth.password_change", "user")],
-  [
-    "POST /v1/auth/password-reset/request",
-    event("auth.password_reset_request", "user"),
-  ],
-  [
-    "POST /v1/auth/password-reset/complete",
-    event("auth.password_reset_complete", "user"),
-  ],
-  ["POST /v1/auth/mfa/totp/verify", event("auth.mfa_totp_enable", "user")],
-  ["POST /v1/auth/mfa/disable", event("auth.mfa_disable", "user")],
-  ["POST /v1/auth/mfa/passkey/verify", event("auth.passkey_register", "user")],
-  ["POST /v1/auth/mfa/passkey/disable", event("auth.passkey_disable", "user")],
-  [
-    "POST /v1/auth/mfa/backup-codes",
-    event("auth.backup_codes_regenerate", "user"),
-  ],
-  ["POST /v1/auth/local-token/rotate", event("auth.token_rotate", "token")],
-  ["POST /v1/auth/login", event("auth.login", "user")],
-  ["POST /v1/auth/logout", event("auth.logout", "session")],
-  ["POST /v1/auth/orgs", event("organization.create", "organization")],
-  ["POST /v1/auth/active-org", event("auth.active_org", "organization")],
-  ["POST /v1/auth/setup", event("auth.setup", "user")],
-  ["POST /v1/auth/setup/import/restore", event("data.import", "installation")],
-  ["GET /v1/platform/data/export", event("data.export", "installation")],
-  [
-    "POST /v1/platform/data/import/restore",
-    event("data.import", "installation"),
-  ],
-  [
-    "POST /v1/platform/plugins/releases",
-    event("plugin.release_install", "plugin"),
-  ],
-  ["POST /v1/profiles/pack/import", event("profile.import", "profile")],
-  // This server's own Nakama Cloud sign-in: it changes the default provider.
-  [
-    "POST /v1/nakama-cloud/sign-in",
-    event("provider.nakama_cloud_sign_in", "provider", "nakama-cloud"),
-  ],
-  [
-    "DELETE /v1/nakama-cloud",
-    event("provider.nakama_cloud_sign_out", "provider", "nakama-cloud"),
-  ],
-]);
-
-/**
- * Security-event coverage checklist:
- * - authentication: setup, login success/failure, logout, password change and
- *   reset, MFA/passkey enrollment and removal, token rotation
- * - authorization: organization/member/invite lifecycle and role changes
- * - configuration: providers and installation settings
- * - sensitive resources: profile/org CRUD, export/import, session revocation
- *
- * Add a rule here whenever a new route joins one of those classes. Request
- * bodies are intentionally never recorded, so credentials cannot enter metadata.
- */
-export function describeAuditEvent(
-  method: string,
-  pathname: string
-): AuditDescriptor | null {
-  const fixed = FIXED_EVENTS.get(`${method} ${pathname}`);
-
-  if (fixed) {
-    return fixed;
-  }
-
-  let match = pathname.match(/^\/v1\/providers\/([^/]+)$/);
-
-  if (match && (method === "PATCH" || method === "DELETE")) {
-    return event(
-      method === "PATCH" ? "provider.update" : "provider.delete",
-      "provider",
-      match[1]
-    );
-  }
-
-  if (pathname === "/v1/providers" && method === "POST") {
-    return event("provider.create", "provider");
-  }
-
-  match = pathname.match(/^\/v1\/platform\/orgs\/([^/]+)\/permanent$/);
-
-  if (match && method === "DELETE") {
-    return {
-      ...event("organization.delete", "organization", match[1]),
-      orgId: decodePathPart(match[1]),
-    };
-  }
-
-  match = pathname.match(/^\/v1\/settings\/([^/]+)$/);
-
-  if (match && method === "PUT") {
-    return event("settings.update", "setting", match[1]);
-  }
-
-  match = pathname.match(/^\/v1\/platform\/orgs\/([^/]+)$/);
-
-  if (match && (method === "PATCH" || method === "DELETE")) {
-    return {
-      ...event(
-        method === "PATCH" ? "organization.update" : "organization.archive",
-        "organization",
-        match[1]
-      ),
-      orgId: decodePathPart(match[1]),
-    };
-  }
-
-  if (pathname === "/v1/platform/orgs" && method === "POST") {
-    return event("organization.create", "organization");
-  }
-
-  match = pathname.match(/^\/v1\/platform\/users\/([^/]+)$/);
-
-  if (match && method === "DELETE") {
-    return {
-      ...event("user.erase", "user", match[1]),
-      orgId: null,
-    };
-  }
-
-  match = pathname.match(
-    /^\/v1\/(?:platform\/)?orgs\/([^/]+)\/invites(?:\/([^/]+))?$/
-  );
-
-  if (match && (method === "POST" || method === "DELETE")) {
-    return {
-      ...event(
-        method === "POST" ? "invite.create" : "invite.revoke",
-        "invite",
-        match[2]
-      ),
-      orgId: decodePathPart(match[1]),
-    };
-  }
-
-  match = pathname.match(
-    /^\/v1\/(?:platform\/)?orgs\/([^/]+)\/members\/([^/]+)(?:\/(disable|enable))?$/
-  );
-
-  if (match && ["DELETE", "PATCH", "POST"].includes(method)) {
-    const operation = match[3];
-
-    const action =
-      operation === "disable"
-        ? "member.disable"
-        : operation === "enable"
-          ? "member.enable"
-          : method === "DELETE"
-            ? "member.remove"
-            : "member.role_update";
-
-    return {
-      ...event(action, "user", match[2]),
-      orgId: decodePathPart(match[1]),
-    };
-  }
-
-  match = pathname.match(
-    /^\/v1\/orgs\/([^/]+)\/join-requests\/([^/]+)(\/approve)?$/
-  );
-
-  if (
-    match &&
-    ((method === "POST" && match[3]) || (method === "DELETE" && !match[3]))
-  ) {
-    return {
-      ...event(match[3] ? "member.approve" : "member.reject", "user", match[2]),
-      orgId: decodePathPart(match[1]),
-    };
-  }
-
-  match = pathname.match(/^\/v1\/orgs\/([^/]+)\/members$/);
-
-  if (match && method === "POST") {
-    return {
-      ...event("member.add", "user"),
-      orgId: decodePathPart(match[1]),
-    };
-  }
-
-  match = pathname.match(/^\/v1\/orgs\/([^/]+)$/);
-
-  if (match && method === "PATCH") {
-    return {
-      ...event("organization.update", "organization", match[1]),
-      orgId: decodePathPart(match[1]),
-    };
-  }
-
-  match = pathname.match(/^\/v1\/profiles\/([^/]+)(?:\/(clone|move))?$/);
-
-  if (match && ["DELETE", "POST", "PUT"].includes(method)) {
-    const operation = match[2];
-
-    const action = operation
-      ? `profile.${operation}`
-      : method === "DELETE"
-        ? "profile.delete"
-        : "profile.update";
-
-    return event(action, "profile", match[1]);
-  }
-
-  if (pathname === "/v1/profiles" && method === "POST") {
-    return event("profile.create", "profile");
-  }
-
-  match = pathname.match(
-    /^\/v1\/profiles\/([^/]+)\/(tools|mcp-servers|skills)(?:\/([^/]+))?$/
-  );
-
-  if (match && (method === "POST" || method === "DELETE")) {
-    const resource = match[2] === "mcp-servers" ? "mcp_server" : match[2];
-
-    return event(
-      `profile.${resource}.${method === "POST" ? "create" : "delete"}`,
-      resource,
-      match[3] ?? match[1]
-    );
-  }
-
-  match = pathname.match(/^\/v1\/profiles\/([^/]+)\/soul\/files\/([^/]+)$/);
-
-  if (match && method === "PUT") {
-    return event("profile.soul_update", "profile", match[1]);
-  }
-
-  match = pathname.match(/^\/v1\/profiles\/([^/]+)\/pack\/export$/);
-
-  if (match && method === "GET") {
-    return event("profile.export", "profile", match[1]);
-  }
-
-  match = pathname.match(/^\/v1\/automations\/([^/]+)\/webhook-secret$/);
-
-  if (match && method === "POST") {
-    return event("automation.webhook_secret_rotate", "automation", match[1]);
-  }
-
-  // DELETE /v1/sessions/:id clears or purges a chat session (routes/sessions.ts).
-  match = pathname.match(/^\/v1\/sessions\/([^/]+)$/);
-
-  if (match && method === "DELETE") {
-    return event("session.delete", "session", match[1]);
-  }
-
-  // Who holds the chat's browser: the user took over, handed back, or signed in.
-  match = pathname.match(
-    /^\/v1\/sessions\/([^/]+)\/browser\/(takeover|handoff|login)$/
-  );
-
-  if (match && method === "POST") {
-    return event(`session.browser_${match[2]}`, "session", match[1]);
-  }
-
-  // DELETE /v1/auth/sessions/:id revokes a browser login session.
-  match = pathname.match(/^\/v1\/auth\/sessions\/([^/]+)$/);
-
-  if (match && method === "DELETE") {
-    return event("session.revoke", "session", match[1]);
-  }
-
-  match = pathname.match(/^\/v1\/auth\/users\/([^/]+)\/sessions$/);
-
-  if (match && method === "DELETE") {
-    return {
-      ...event("session.revoke_all", "user", match[1]),
-      orgId: null,
-    };
-  }
-
-  return null;
-}
 
 export function createAuditLogMiddleware(
   databaseAdapter: DatabaseAdapter
 ): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
-    const descriptor = describeAuditEvent(c.req.method, c.req.path);
+    // The last non-middleware match is the handler's pattern, known before it
+    // runs, so requests that org middleware rejects are still classified.
+    // Auth middleware runs first, so a request it rejects is not recorded.
+    const handler = matchedRoutes(c).findLast(
+      (route) => route.method !== "ALL"
+    );
+
+    const descriptor = handler
+      ? describeAuditEvent(
+          c.req.method,
+          handler.path,
+          new URL(c.req.url).pathname
+        )
+      : null;
 
     if (!descriptor) {
       await next();
 
       return;
     }
+
+    // Capture the request context before the route runs: the client address,
+    // forwarded chain, and user agent do not change during a request.
+    const clientIp = clientAddress(
+      c,
+      process.env.NAKAMA_TRUST_PROXY === "true"
+    );
+
+    const forwardedFor = c.req.header("x-forwarded-for") ?? null;
+    const userAgent = c.req.header("user-agent")?.slice(0, 512) ?? null;
+    const method = c.req.method;
+    const route = c.req.path;
 
     // Login names its actor by email. A reset request names its target by
     // email, and the caller is often anonymous, so that user is the resource.
@@ -335,16 +80,26 @@ export function createAuditLogMiddleware(
       : (auth?.activeOrgId ?? responseIdentity.orgId ?? null);
 
     try {
-      await databaseAdapter.createAuditEvent({
+      const record: CreateAuditEventInput = {
         action: descriptor.action,
+        // Login, setup, and invite acceptance run before a session exists, so
+        // a success that names its user started a browser session.
+        actorMode: auth
+          ? auth.mode === "browser-session"
+            ? "session"
+            : "token"
+          : status < 400 && actorUserId
+            ? "session"
+            : "anonymous",
         actorUserId,
+        clientIp,
         createdAt: new Date().toISOString(),
+        forwardedFor,
         id: `audit_${crypto.randomUUID()}`,
-        metadata: {
-          outcome: status < 400 ? "success" : "failure",
-          status,
-        },
+        metadata: {},
+        method,
         orgId,
+        outcome: status < 400 ? "success" : "failure",
         requestId: c.get("requestId") ?? null,
         resourceId:
           descriptor.resourceId ??
@@ -353,7 +108,13 @@ export function createAuditLogMiddleware(
           responseIdentity.resourceId ??
           (descriptor.resourceType === "user" ? actorUserId : null),
         resourceType: descriptor.resourceType,
-      });
+        route,
+        sessionId: auth?.session?.id ?? null,
+        status,
+        userAgent,
+      };
+
+      await databaseAdapter.createAuditEvent(record);
     } catch (error) {
       log("error", "audit.write_failed", {
         action: descriptor.action,
@@ -362,30 +123,6 @@ export function createAuditLogMiddleware(
       });
     }
   };
-}
-
-function event(
-  action: string,
-  resourceType: string,
-  resourceId?: string
-): AuditDescriptor {
-  return {
-    action,
-    resourceId: resourceId ? decodePathPart(resourceId) : null,
-    resourceType,
-  };
-}
-
-function decodePathPart(value: string | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 async function resolveBodyEmailUserId(

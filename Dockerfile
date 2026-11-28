@@ -6,7 +6,7 @@
 # Verify each proposed multi-arch digest with: docker buildx imagetools inspect <image>
 
 # --- Build architecture-independent web and JavaScript bundles once ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS web-builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -38,7 +38,7 @@ COPY --from=web-builder /app/apps/platform/teams/dist /app/apps/platform/teams/d
 # Production runtime dependencies are installed from a committed manifest and
 # lockfile. Re-resolving version ranges at image build time let two builds of
 # the same commit ship different transitive bytes, so the lockfile is the input.
-FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS runtime-deps
+FROM oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 AS runtime-deps
 WORKDIR /runtime-deps
 
 # The Codex, Claude Code and OpenCode binaries are about 900 MB, over half the
@@ -73,7 +73,7 @@ RUN set -eu; \
   chmod +x /ffmpeg /ffprobe
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS runtime
+FROM oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl sudo python3 python3-venv \

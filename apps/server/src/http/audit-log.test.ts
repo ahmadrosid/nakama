@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { setupTestConfigDir } from "../test-config-dir";
-import { describeAuditEvent } from "./audit-log";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   type AppFetch,
@@ -11,184 +10,6 @@ import {
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-audit-log-test-");
-
-describe("audit event coverage", () => {
-  test("classifies security routes", () => {
-    for (const [method, path, action] of [
-      ["POST", "/v1/auth/login", "auth.login"],
-      ["POST", "/v1/auth/logout", "auth.logout"],
-      ["POST", "/v1/auth/change-password", "auth.password_change"],
-      [
-        "POST",
-        "/v1/auth/password-reset/request",
-        "auth.password_reset_request",
-      ],
-      [
-        "POST",
-        "/v1/auth/password-reset/complete",
-        "auth.password_reset_complete",
-      ],
-      ["POST", "/v1/auth/mfa/totp/verify", "auth.mfa_totp_enable"],
-      ["POST", "/v1/auth/mfa/disable", "auth.mfa_disable"],
-      ["POST", "/v1/auth/mfa/passkey/verify", "auth.passkey_register"],
-      ["POST", "/v1/auth/mfa/passkey/disable", "auth.passkey_disable"],
-      ["POST", "/v1/auth/mfa/backup-codes", "auth.backup_codes_regenerate"],
-      ["POST", "/v1/auth/local-token/rotate", "auth.token_rotate"],
-      [
-        "POST",
-        "/v1/automations/automation_1/webhook-secret",
-        "automation.webhook_secret_rotate",
-      ],
-      ["POST", "/v1/auth/active-org", "auth.active_org"],
-      ["POST", "/v1/auth/setup/import/restore", "data.import"],
-      ["POST", "/v1/orgs/org_1/invites", "invite.create"],
-      ["DELETE", "/v1/orgs/org_1/invites/invite_1", "invite.revoke"],
-      ["POST", "/v1/auth/accept-invite", "invite.accept"],
-      ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
-      ["POST", "/v1/orgs/org_1/join-requests/user_1/approve", "member.approve"],
-      ["DELETE", "/v1/orgs/org_1/join-requests/user_1", "member.reject"],
-      ["PUT", "/v1/settings/email", "settings.update"],
-      ["PATCH", "/v1/providers/provider_1", "provider.update"],
-      ["DELETE", "/v1/platform/orgs/org_1/permanent", "organization.delete"],
-      ["DELETE", "/v1/platform/users/user_1", "user.erase"],
-      ["DELETE", "/v1/profiles/profile_1", "profile.delete"],
-      ["GET", "/v1/profiles/profile_1/pack/export", "profile.export"],
-      ["POST", "/v1/platform/data/import/restore", "data.import"],
-      ["POST", "/v1/platform/plugins/releases", "plugin.release_install"],
-      ["POST", "/v1/profiles/profile_1/tools", "profile.tools.create"],
-      ["DELETE", "/v1/profiles/profile_1/tools/tool_1", "profile.tools.delete"],
-      [
-        "POST",
-        "/v1/profiles/profile_1/mcp-servers",
-        "profile.mcp_server.create",
-      ],
-      [
-        "DELETE",
-        "/v1/profiles/profile_1/mcp-servers/mcp_1",
-        "profile.mcp_server.delete",
-      ],
-      ["POST", "/v1/profiles/profile_1/skills", "profile.skills.create"],
-      [
-        "DELETE",
-        "/v1/profiles/profile_1/skills/skill_1",
-        "profile.skills.delete",
-      ],
-      [
-        "PUT",
-        "/v1/profiles/profile_1/soul/files/USER.md",
-        "profile.soul_update",
-      ],
-      ["DELETE", "/v1/sessions/session_1", "session.delete"],
-      ["DELETE", "/v1/auth/sessions/session_1", "session.revoke"],
-      [
-        "POST",
-        "/v1/sessions/session_1/browser/takeover",
-        "session.browser_takeover",
-      ],
-      [
-        "POST",
-        "/v1/sessions/session_1/browser/handoff",
-        "session.browser_handoff",
-      ],
-      ["POST", "/v1/sessions/session_1/browser/login", "session.browser_login"],
-      ["DELETE", "/v1/auth/users/user_1/sessions", "session.revoke_all"],
-    ] as const) {
-      expect(describeAuditEvent(method, path)?.action).toBe(action);
-    }
-  });
-
-  test("covers security mutations registered in the real route table", () => {
-    const { app } = createMinimalHonoApp();
-
-    const routes = app.routes.map((route) => ({
-      method: route.method,
-      path: route.path,
-    }));
-
-    const expected = [
-      [
-        "POST",
-        "/v1/auth/setup/import/restore",
-        "/v1/auth/setup/import/restore",
-      ],
-      ["POST", "/v1/auth/active-org", "/v1/auth/active-org"],
-      [
-        "POST",
-        "/v1/platform/plugins/releases",
-        "/v1/platform/plugins/releases",
-      ],
-      [
-        "DELETE",
-        "/v1/platform/orgs/:orgId/permanent",
-        "/v1/platform/orgs/org_1/permanent",
-      ],
-      ["DELETE", "/v1/platform/users/:userId", "/v1/platform/users/user_1"],
-      ["POST", "/v1/profiles/:profileId/tools", "/v1/profiles/profile_1/tools"],
-      [
-        "DELETE",
-        "/v1/profiles/:profileId/tools/:toolId",
-        "/v1/profiles/profile_1/tools/tool_1",
-      ],
-      [
-        "POST",
-        "/v1/profiles/:profileId/mcp-servers",
-        "/v1/profiles/profile_1/mcp-servers",
-      ],
-      [
-        "DELETE",
-        "/v1/profiles/:profileId/mcp-servers/:serverId",
-        "/v1/profiles/profile_1/mcp-servers/server_1",
-      ],
-      [
-        "POST",
-        "/v1/profiles/:profileId/skills",
-        "/v1/profiles/profile_1/skills",
-      ],
-      [
-        "DELETE",
-        "/v1/profiles/:profileId/skills/:skillId",
-        "/v1/profiles/profile_1/skills/skill_1",
-      ],
-      [
-        "PUT",
-        "/v1/profiles/:profileId/soul/files/:fileKey",
-        "/v1/profiles/profile_1/soul/files/USER.md",
-      ],
-      [
-        "POST",
-        "/v1/auth/password-reset/request",
-        "/v1/auth/password-reset/request",
-      ],
-      [
-        "POST",
-        "/v1/auth/password-reset/complete",
-        "/v1/auth/password-reset/complete",
-      ],
-      ["POST", "/v1/auth/mfa/totp/verify", "/v1/auth/mfa/totp/verify"],
-      ["POST", "/v1/auth/mfa/disable", "/v1/auth/mfa/disable"],
-      ["POST", "/v1/auth/mfa/passkey/verify", "/v1/auth/mfa/passkey/verify"],
-      ["POST", "/v1/auth/mfa/passkey/disable", "/v1/auth/mfa/passkey/disable"],
-      ["POST", "/v1/auth/mfa/backup-codes", "/v1/auth/mfa/backup-codes"],
-      ["DELETE", "/v1/auth/sessions/:sessionId", "/v1/auth/sessions/session_1"],
-      ["DELETE", "/v1/sessions/:sessionId", "/v1/sessions/session_1"],
-      [
-        "POST",
-        "/v1/sessions/:sessionId/browser/:control{takeover|handoff|login}",
-        "/v1/sessions/session_1/browser/login",
-      ],
-      [
-        "DELETE",
-        "/v1/auth/users/:userId/sessions",
-        "/v1/auth/users/user_1/sessions",
-      ],
-    ] as const;
-
-    for (const [method, routePath, samplePath] of expected) {
-      expect(routes).toContainEqual({ method, path: routePath });
-      expect(describeAuditEvent(method, samplePath)).not.toBeNull();
-    }
-  });
-});
 
 describe("audit event API", () => {
   test("records actor, organization, outcome, and request", async () => {
@@ -233,11 +54,14 @@ describe("audit event API", () => {
 
     expect(failedActiveOrg.status).toBe(400);
     expect(
-      await databaseAdapter.listAuditEvents({ action: "auth.active_org" })
-    ).toEqual([
+      (await databaseAdapter.listAuditEvents({ action: "auth.active_org" }))
+        .events
+    ).toMatchObject([
       expect.objectContaining({
         action: "auth.active_org",
-        metadata: { outcome: "failure", status: 400 },
+        outcome: "failure",
+        status: 400,
+        metadata: {},
       }),
     ]);
 
@@ -271,8 +95,10 @@ describe("audit event API", () => {
             actorUserId: z.string().nullable(),
             metadata: z.record(z.string(), z.unknown()),
             orgId: z.string().nullable(),
+            outcome: z.enum(["success", "failure"]),
             requestId: z.string().nullable(),
             resourceId: z.string().nullable(),
+            status: z.number().nullable(),
           })
         ),
       })
@@ -282,23 +108,35 @@ describe("audit event API", () => {
       expect.objectContaining({
         action: "organization.create",
         actorUserId: platformUser?.id,
-        metadata: { outcome: "success", status: 201 },
+        outcome: "success",
+        status: 201,
+        metadata: {},
         orgId: created.organization.id,
         requestId: expect.any(String),
         resourceId: created.organization.id,
       }),
     ]);
 
-    const loginEvents = await databaseAdapter.listAuditEvents({
-      action: "auth.login",
-    });
+    const loginEvents = (
+      await databaseAdapter.listAuditEvents({
+        action: "auth.login",
+      })
+    ).events;
 
     expect(loginEvents).toHaveLength(2);
     expect(loginEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          actorMode: "session",
           actorUserId: platformUser?.id,
-          metadata: { outcome: "failure", status: 401 },
+          outcome: "success",
+        }),
+        expect.objectContaining({
+          actorMode: "anonymous",
+          actorUserId: platformUser?.id,
+          outcome: "failure",
+          status: 401,
+          metadata: {},
         }),
       ])
     );
@@ -360,22 +198,27 @@ describe("audit event API", () => {
     expect(deleteOrgResponse.status).toBe(204);
     expect(eraseUserResponse.status).toBe(204);
     expect(
-      await databaseAdapter.listAuditEvents({ action: "organization.delete" })
-    ).toEqual([
+      (await databaseAdapter.listAuditEvents({ action: "organization.delete" }))
+        .events
+    ).toMatchObject([
       expect.objectContaining({
         actorUserId: platformUser?.id,
-        metadata: { outcome: "success", status: 204 },
+        outcome: "success",
+        status: 204,
+        metadata: {},
         orgId: created.organization.id,
         resourceId: created.organization.id,
         resourceType: "organization",
       }),
     ]);
     expect(
-      await databaseAdapter.listAuditEvents({ action: "user.erase" })
-    ).toEqual([
+      (await databaseAdapter.listAuditEvents({ action: "user.erase" })).events
+    ).toMatchObject([
       expect.objectContaining({
         actorUserId: platformUser?.id,
-        metadata: { outcome: "success", status: 204 },
+        outcome: "success",
+        status: 204,
+        metadata: {},
         orgId: null,
         resourceId: "user_erase_audit",
         resourceType: "user",
@@ -427,11 +270,14 @@ describe("audit event API", () => {
     expect(accepted.status).toBe(200);
 
     expect(
-      await databaseAdapter.listAuditEvents({ action: "invite.accept" })
-    ).toEqual([
+      (await databaseAdapter.listAuditEvents({ action: "invite.accept" }))
+        .events
+    ).toMatchObject([
       expect.objectContaining({
         action: "invite.accept",
-        metadata: { outcome: "success", status: 200 },
+        outcome: "success",
+        status: 200,
+        metadata: {},
         orgId: "org_test",
         resourceType: "invite",
       }),
@@ -453,13 +299,17 @@ describe("audit event API", () => {
     expect(requested.status).toBe(200);
 
     expect(
-      await databaseAdapter.listAuditEvents({
-        action: "auth.password_reset_request",
-      })
-    ).toEqual([
+      (
+        await databaseAdapter.listAuditEvents({
+          action: "auth.password_reset_request",
+        })
+      ).events
+    ).toMatchObject([
       expect.objectContaining({
         actorUserId: null,
-        metadata: { outcome: "success", status: 200 },
+        outcome: "success",
+        status: 200,
+        metadata: {},
         resourceId: "user_admin",
         resourceType: "user",
       }),
@@ -510,23 +360,29 @@ describe("audit event API", () => {
     expect(completed.status).toBe(200);
 
     expect(
-      await databaseAdapter.listAuditEvents({
-        action: "auth.password_reset_request",
-      })
-    ).toEqual([
+      (
+        await databaseAdapter.listAuditEvents({
+          action: "auth.password_reset_request",
+        })
+      ).events
+    ).toMatchObject([
       expect.objectContaining({
         actorUserId: platformUser?.id,
         resourceId: "user_admin",
       }),
     ]);
     expect(
-      await databaseAdapter.listAuditEvents({
-        action: "auth.password_reset_complete",
-      })
-    ).toEqual([
+      (
+        await databaseAdapter.listAuditEvents({
+          action: "auth.password_reset_complete",
+        })
+      ).events
+    ).toMatchObject([
       expect.objectContaining({
         actorUserId: null,
-        metadata: { outcome: "success", status: 200 },
+        outcome: "success",
+        status: 200,
+        metadata: {},
         resourceId: "user_admin",
         resourceType: "user",
       }),
@@ -571,14 +427,18 @@ describe("audit event API", () => {
 
     expect(revoked.status).toBe(200);
 
-    const events = await databaseAdapter.listAuditEvents({
-      action: "session.revoke",
-    });
+    const events = (
+      await databaseAdapter.listAuditEvents({
+        action: "session.revoke",
+      })
+    ).events;
 
     expect(events).toEqual([
       expect.objectContaining({
         action: "session.revoke",
-        metadata: { outcome: "success", status: 200 },
+        outcome: "success",
+        status: 200,
+        metadata: {},
         resourceId: target,
         resourceType: "session",
       }),
@@ -604,5 +464,205 @@ describe("audit event API", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  test("records the request context of an audited action", async () => {
+    const { app, databaseAdapter, authService } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        body: JSON.stringify({ name: "Audit Context" }),
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "TestAgent/1.0",
+          "X-Forwarded-For": "203.0.113.5, 10.0.0.1",
+          ...session.headers({ "X-CSRF-Token": session.csrfToken }),
+        },
+        method: "PATCH",
+      })
+    );
+
+    expect(response.status).toBe(200);
+
+    const events = (
+      await databaseAdapter.listAuditEvents({ action: "account.update" })
+    ).events;
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      action: "account.update",
+      actorMode: "session",
+      clientIp: null,
+      forwardedFor: "203.0.113.5, 10.0.0.1",
+      method: "PATCH",
+      outcome: "success",
+      route: "/v1/auth/me",
+      sessionId: expect.any(String),
+      status: 200,
+      userAgent: "TestAgent/1.0",
+    });
+    expect(events[0]!.seq).toBeGreaterThan(0);
+    expect(events[0]!.hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("org admins read their org ledger, not another org's", async () => {
+    const { app, databaseAdapter, orgService } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+    const member = await seedOrgAdmin(databaseAdapter);
+
+    const otherOrg = await orgService.createOrganization({
+      name: "Other Org",
+      slug: "other-org",
+    });
+
+    const session = await loginUserSession(
+      fetchApp,
+      member.email,
+      member.password,
+      member.orgId
+    );
+
+    const own = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${member.orgId}/audit-events`,
+        { headers: session.headers() }
+      )
+    );
+
+    expect(own.status).toBe(200);
+
+    const payload = z
+      .object({ events: z.array(z.unknown()), total: z.number() })
+      .parse(await own.json());
+
+    expect(payload.total).toBeTypeOf("number");
+    expect(Array.isArray(payload.events)).toBe(true);
+
+    const stats = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${member.orgId}/audit-events/stats`,
+        { headers: session.headers() }
+      )
+    );
+
+    expect(stats.status).toBe(200);
+    expect(await stats.json()).toEqual({ categories: expect.any(Array) });
+
+    const other = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${otherOrg.organization.id}/audit-events`,
+        { headers: session.headers() }
+      )
+    );
+
+    expect(other.status).toBe(404);
+
+    const denied = await app.fetch(
+      new Request("http://localhost:4310/v1/orgs/org_1/audit-events", {
+        headers: session.headers(),
+      })
+    );
+
+    expect(denied.status).toBe(404);
+  });
+
+  test("records a request the org check rejects before the route runs", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/skills/skill%201", {
+        headers: session.headers({
+          "X-CSRF-Token": session.csrfToken,
+          "X-Org-Id": "org_missing",
+        }),
+        method: "DELETE",
+      })
+    );
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(
+      (await databaseAdapter.listAuditEvents({ action: "skill.delete" })).events
+    ).toMatchObject([
+      {
+        actorMode: "session",
+        outcome: "failure",
+        resourceId: "skill 1",
+        status: response.status,
+      },
+    ]);
+  });
+});
+
+describe("installation-wide audit events", () => {
+  test("stay out of the admin's active org ledger", async () => {
+    const { app, authService, databaseAdapter } = createMinimalHonoApp();
+    const fetchApp: AppFetch = app;
+
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+
+    const createResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/orgs", {
+        body: JSON.stringify({ name: "Scope Org", slug: "scope-org" }),
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "POST",
+      })
+    );
+
+    // SAFETY: The test checks this response against the endpoint contract.
+    const created = (await createResponse.json()) as {
+      organization: { id: string };
+    };
+
+    const activeOrg = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: created.organization.id }),
+        headers: {
+          ...session.headers({ "X-CSRF-Token": session.csrfToken }),
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(activeOrg.status).toBe(200);
+
+    // Settings routes pass the org check, so the active org is known here.
+    // The setting is installation-wide, so the row must not carry that org.
+    await app.fetch(
+      new Request("http://localhost:4310/v1/settings/timezone", {
+        body: JSON.stringify({}),
+        headers: {
+          ...session.headers({ "X-CSRF-Token": session.csrfToken }),
+          "Content-Type": "application/json",
+          "X-Org-Id": created.organization.id,
+        },
+        method: "PUT",
+      })
+    );
+
+    const events = (
+      await databaseAdapter.listAuditEvents({ action: "settings.update" })
+    ).events;
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.orgId).toBeNull();
   });
 });

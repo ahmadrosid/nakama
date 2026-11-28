@@ -1,15 +1,11 @@
-import { Button } from "@nakama/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
 import { Input } from "@nakama/ui/input";
-import { Add01Icon, ArrowDown01Icon, Search01Icon } from "hugeicons-react";
-import { useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { IntegrationsTabs } from "@/components/IntegrationsTabs";
+import { Search01Icon } from "hugeicons-react";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import {
+  IntegrationsTabs,
+  PLUGIN_ADD_PARAM,
+} from "@/components/IntegrationsTabs";
 import { useAuth } from "@/context/use-auth";
 import {
   isNewerPluginVersion,
@@ -69,6 +65,35 @@ export function PluginsPage() {
   const accessData = isPlatformAdmin ? agentAccess.data : undefined;
   const [query, setQuery] = useState("");
   const [folderOpen, setFolderOpen] = useState(false);
+  const canInstallHere = canInstallPackages && Boolean(orgId);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const addSource = searchParams.get(PLUGIN_ADD_PARAM);
+
+  // The Add menu lives in the shared tabs, so it reaches this page by URL.
+  useEffect(() => {
+    if (!addSource) {
+      return;
+    }
+
+    if (canInstallHere && addSource === "folder") {
+      setFolderOpen(true);
+    }
+
+    if (canInstallHere && addSource === "npm") {
+      setActionError(null);
+      setDialog({ type: "package-entry" });
+    }
+
+    setSearchParams(
+      (current) => {
+        current.delete(PLUGIN_ADD_PARAM);
+
+        return current;
+      },
+      { replace: true }
+    );
+  }, [addSource, canInstallHere, setActionError, setDialog, setSearchParams]);
 
   if (isLoading && plugins.length === 0) {
     return <PluginEmptyState detail={Boolean(selectedPluginId)} loading />;
@@ -78,7 +103,6 @@ export function PluginsPage() {
     actionError ?? (queryError ? formatError(queryError) : null);
 
   const needle = query.trim().toLowerCase();
-  const canInstallHere = canInstallPackages && Boolean(orgId);
 
   const visiblePluginIds = selectedPluginId
     ? pluginIds.filter((id) => id === selectedPluginId)
@@ -215,18 +239,13 @@ export function PluginsPage() {
     : groupPluginIds(visiblePluginIds, official, releases);
 
   return (
-    <div className="mx-auto min-w-0 max-w-3xl space-y-6">
+    <div
+      className="mx-auto min-w-0 max-w-4xl space-y-10 data-[detail=true]:max-w-3xl data-[detail=true]:space-y-6"
+      data-detail={Boolean(selectedPluginId)}
+    >
       <PluginPageHeader
-        busy={busy}
-        canInstall={canInstallHere}
         detail={Boolean(selectedPluginId)}
         error={dialog ? null : errorMessage}
-        onInstall={(target) => {
-          rememberFocus(target);
-          setActionError(null);
-          setDialog({ type: "package-entry" });
-        }}
-        onInstallFromFolder={() => setFolderOpen(true)}
         onQueryChange={setQuery}
         query={query}
       />
@@ -249,16 +268,11 @@ export function PluginsPage() {
         groups.map((group) => (
           <section className="space-y-3" key={group.title ?? "all"}>
             {group.title ? (
-              <h2 className="type-section-title font-medium text-muted-foreground">
-                {group.title}
-              </h2>
+              <h2 className="font-medium text-base">{group.title}</h2>
             ) : null}
             <ul
-              className={
-                selectedPluginId
-                  ? "min-w-0"
-                  : "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card text-card-foreground"
-              }
+              className="grid min-w-0 gap-x-10 data-[detail=true]:block sm:grid-cols-2"
+              data-detail={Boolean(selectedPluginId)}
             >
               {group.ids.map(renderRow)}
             </ul>
@@ -310,26 +324,16 @@ function PluginEmptyState({
 }
 
 function PluginPageHeader({
-  busy,
-  canInstall,
   detail,
   error,
-  onInstall,
-  onInstallFromFolder,
   onQueryChange,
   query,
 }: {
-  busy: boolean;
-  canInstall: boolean;
   detail: boolean;
   error: string | null;
-  onInstall(target: HTMLElement | null): void;
-  onInstallFromFolder(): void;
   onQueryChange(query: string): void;
   query: string;
 }) {
-  const installRef = useRef<HTMLButtonElement | null>(null);
-
   return (
     <div className="space-y-3">
       {detail ? (
@@ -341,7 +345,7 @@ function PluginPageHeader({
         </Link>
       ) : (
         <IntegrationsTabs>
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full">
             <Search01Icon
               aria-hidden="true"
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -355,25 +359,6 @@ function PluginPageHeader({
               value={query}
             />
           </div>
-          {canInstall ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button disabled={busy} ref={installRef} />}
-              >
-                <Add01Icon aria-hidden="true" className="size-4" />
-                Install plugin
-                <ArrowDown01Icon aria-hidden="true" className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={onInstallFromFolder}>
-                  Made by an agent
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onInstall(installRef.current)}>
-                  From npm package
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
         </IntegrationsTabs>
       )}
       {error ? (

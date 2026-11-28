@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   type DeliverableChannelArtifact,
   deliverTurnArtifactShares,
@@ -136,23 +136,34 @@ describe("resolveShareUrlForPublish", () => {
 
 describe("mintDeliverableArtifacts", () => {
   test("skips artifacts when publish fails", async () => {
-    const delivered = await mintDeliverableArtifacts({
-      artifacts: [
-        {
-          filename: "report.md",
-          mimeType: "text/markdown",
-          path: "report.md",
-          savedAt: "2026-07-13T10:00:00.000Z",
-          sizeBytes: 1,
-        },
-      ],
-      publish: async () => {
-        throw new Error("publish failed");
-      },
-      shareUrlCache: {},
-    });
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
 
-    expect(delivered).toEqual([]);
+    try {
+      const delivered = await mintDeliverableArtifacts({
+        artifacts: [
+          {
+            filename: "report.md",
+            mimeType: "text/markdown",
+            path: "report.md",
+            savedAt: "2026-07-13T10:00:00.000Z",
+            sizeBytes: 1,
+          },
+        ],
+        publish: async () => {
+          throw new Error("publish failed");
+        },
+        shareUrlCache: {},
+      });
+
+      expect(delivered).toEqual([]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        "Could not publish artifact share for report.md:",
+        expect.any(Error)
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

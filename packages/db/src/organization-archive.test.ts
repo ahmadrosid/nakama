@@ -643,6 +643,7 @@ describe("shared agent instance persistence", () => {
       id: "instance_a",
       orgId: "team_a",
       ownerUserId: null,
+      platformToolsEnabled: true,
       sharedWithTeam: true,
       skillsCuratorConsolidateEnabled: null,
       skillsPostTurnReview: null,

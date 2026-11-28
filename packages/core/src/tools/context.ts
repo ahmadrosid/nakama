@@ -1,6 +1,6 @@
 import path from "node:path";
 import { NakamaApiError } from "../api-error";
-import type { ToolContext } from "../contract";
+import type { OrgRole, ToolContext } from "../contract";
 import { getProfileSoulDir } from "../soul/resolve";
 
 /** Tool calls require organization membership. */
@@ -8,6 +8,18 @@ export function requireToolOrgMember(context: ToolContext): void {
   if (context.orgRole !== "admin" && context.orgRole !== "member") {
     throw new NakamaApiError("Forbidden", 403);
   }
+}
+
+/** Shared sets in a root organization are reserved for admins. */
+export function canReadOrgSharedSet(
+  access: { isPlatformAdmin?: boolean; orgRole?: OrgRole | null },
+  organization: { parentOrgId?: string | null } | null | undefined
+): boolean {
+  return Boolean(
+    organization?.parentOrgId ||
+    access.orgRole === "admin" ||
+    access.isPlatformAdmin
+  );
 }
 
 export function buildToolExecutionContext(context: ToolContext): ToolContext {

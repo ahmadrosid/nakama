@@ -561,3 +561,64 @@ for (const path of ["/settings/plugins", "/settings/plugins/workflows"]) {
     expect(reinstall).not.toHaveBeenCalled();
   });
 }
+
+for (const isPlatformAdmin of [true, false]) {
+  test(`the Add menu link opens the npm dialog on the Plugins page: platform admin ${isPlatformAdmin}`, async () => {
+    const spies = [
+      spyOn(client, "listOrgPlugins").mockResolvedValue({
+        plugins: [retainedWorkflows],
+      }),
+      spyOn(client, "listOfficialPlugins").mockResolvedValue({ plugins: [] }),
+    ];
+
+    // SAFETY: The page reads only the active org, its role, and the user.
+    const auth = {
+      activeOrg: {
+        createdAt: "",
+        id: "org-a",
+        name: "A",
+        role: "admin",
+        slug: "a",
+        updatedAt: "",
+      },
+      user: { email: "admin@example.com", id: "admin", isPlatformAdmin },
+    } as AuthContextValue;
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    cleanups.push(() => {
+      act(() => root.unmount());
+      container.remove();
+
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
+    });
+
+    await act(async () =>
+      root.render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <AuthContext.Provider value={auth}>
+            <MemoryRouter initialEntries={["/settings/plugins?add=npm"]}>
+              <Routes>
+                <Route element={<PluginsPage />} path="/settings/plugins" />
+              </Routes>
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </QueryClientProvider>
+      )
+    );
+    await settle();
+    await settle();
+
+    expect(document.body.querySelector('[role="dialog"]') !== null).toBe(
+      isPlatformAdmin
+    );
+  });
+}

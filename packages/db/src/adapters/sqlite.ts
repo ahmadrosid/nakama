@@ -1,4 +1,5 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { chmodSync } from "node:fs";
 import { sep } from "node:path";
 import type {
@@ -18,13 +19,19 @@ import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { isThinkingEffort } from "@nakama/core/thinking-effort";
 import { LLM_USAGE_STATS_ID, WORKSPACE_SETTINGS_ID } from "../constants";
 import { ensureDatabaseDirectory, resolveDatabasePath } from "../database-url";
-import { migrateDatabase } from "../migrate";
+import {
+  AUDIT_EVENT_MIN_RETENTION_DAYS,
+  AUDIT_EVENT_RETENTION_DAYS,
+  migrateDatabase,
+} from "../migrate";
 import type {
   BeginOrgTeamCreationInput,
   CompareAndSetOrgPluginStateInput,
+  CreateAuditEventInput,
   DatabaseAdapter,
   OrgMemoryProposalStatus,
   PluginPublishResult,
+  PruneAuditEventsInput,
   PublishOrgPluginReleaseInput,
   StoredArtifactOwnerRecord,
   StoredArtifactShareRecord,
@@ -109,14 +116,26 @@ interface AutomationRow {
 
 interface AuditEventRow {
   action: string;
+  actor_mode: string | null;
   actor_user_id: string | null;
+  client_ip: string | null;
   created_at: string;
+  forwarded_for: string | null;
+  hash: string | null;
   id: string;
   metadata: string;
+  method: string | null;
   org_id: string | null;
+  outcome: string;
+  prev_hash: string | null;
   request_id: string | null;
   resource_id: string | null;
   resource_type: string;
+  route: string | null;
+  seq: number | null;
+  session_id: string | null;
+  status: number | null;
+  user_agent: string | null;
 }
 
 interface AutomationRunRow {
@@ -183,6 +202,7 @@ interface ProfileRow {
   name: string;
   org_id: string | null;
   owner_user_id: string | null;
+  platform_tools_enabled: number;
   shared_with_team: number;
   skills_curator_consolidate_enabled: number | null;
   skills_post_turn_review: number | null;
@@ -310,6 +330,7 @@ interface LlmUsageDailyStatsRow {
 }
 
 interface WorkspaceSettingsRow {
+  audit_retention_days: number;
   automation_worker_poll_interval_ms: number;
   coding_agent_harnesses: string;
   coding_agent_provider_passthrough: number | null;
@@ -318,6 +339,7 @@ interface WorkspaceSettingsRow {
   selected_coding_agent_harness: string | null;
   transcription_model: string | null;
   updated_at: string;
+  video_model: string | null;
   vision_model: string | null;
 }
 
@@ -771,10 +793,42 @@ export async function createSqliteDatabase(
   };
 }
 
+/** Named bindings shared by the audit list and count queries. */
+type AuditEventFilter = Record<`$${string}`, number | string | null>;
+
+/** Filters shared by the audit list and count queries; bind `AuditEventFilter`. */
+const AUDIT_EVENT_FILTER_SQL = `WHERE ($orgId IS NULL OR org_id = $orgId)
+      AND ($action IS NULL OR action = $action)
+      AND ($outcome IS NULL OR outcome = $outcome)
+      AND ($category IS NULL OR action = $category OR action LIKE ($categoryLike || '.%') ESCAPE '\\')
+      AND (
+        $search IS NULL
+        OR action LIKE $search ESCAPE '\\'
+        OR resource_id LIKE $search ESCAPE '\\'
+        OR actor_user_id LIKE $search ESCAPE '\\'
+        OR session_id LIKE $search ESCAPE '\\'
+        OR client_ip LIKE $search ESCAPE '\\'
+        OR forwarded_for LIKE $search ESCAPE '\\'
+        OR request_id LIKE $search ESCAPE '\\'
+      )`;
+
+/** Rows hashed per verify step before yielding to the event loop. */
+const AUDIT_VERIFY_PAGE_ROWS = 500;
+
+/** Expired audit rows are pruned on every Nth append. */
+const AUDIT_PRUNE_EVERY_ROWS = 1000;
+
+/** Most rows one prune deletes. Twice the interval, so a backlog shrinks by
+ * about one interval per prune even while new rows keep expiring. */
+const AUDIT_PRUNE_CHUNK_ROWS = 2 * AUDIT_PRUNE_EVERY_ROWS;
+
+/** Maximum chunks deleted in one manual prune request (caps lock hold at 50,000 rows). */
+const AUDIT_MANUAL_PRUNE_MAX_CHUNKS = 25;
+
 /** How long claim rows block replays before prune (also caps table growth). */
 const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
-function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
+export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getManagedSecretStmt = db.prepare(
     "SELECT scope, name, source, encrypted_value, version FROM managed_secrets WHERE scope = ? AND name = ?"
   );
@@ -1176,6 +1230,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default,
       automations_enabled,
       groups_enabled,
+      platform_tools_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1186,7 +1241,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -1198,6 +1253,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default = excluded.is_default,
       automations_enabled = excluded.automations_enabled,
       groups_enabled = excluded.groups_enabled,
+      platform_tools_enabled = excluded.platform_tools_enabled,
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
@@ -1221,6 +1277,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       is_default,
       automations_enabled,
       groups_enabled,
+      platform_tools_enabled,
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
@@ -1231,7 +1288,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO NOTHING
   `);
 
@@ -1247,6 +1304,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     record.isDefault ? 1 : 0,
     record.automationsEnabled === false ? 0 : 1,
     record.groupsEnabled === false ? 0 : 1,
+    record.platformToolsEnabled === false ? 0 : 1,
     record.skillsWriteApproval == null
       ? null
       : record.skillsWriteApproval
@@ -2365,21 +2423,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       vision_model,
       transcription_model,
       image_model,
+      video_model,
       coding_agent_harnesses,
       selected_coding_agent_harness,
       coding_agent_provider_passthrough,
       automation_worker_poll_interval_ms,
+      audit_retention_days,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       vision_model = excluded.vision_model,
       transcription_model = excluded.transcription_model,
       image_model = excluded.image_model,
+      video_model = excluded.video_model,
       coding_agent_harnesses = excluded.coding_agent_harnesses,
       selected_coding_agent_harness = excluded.selected_coding_agent_harness,
       coding_agent_provider_passthrough = excluded.coding_agent_provider_passthrough,
       automation_worker_poll_interval_ms = excluded.automation_worker_poll_interval_ms,
+      audit_retention_days = excluded.audit_retention_days,
       updated_at = excluded.updated_at
   `);
 
@@ -3037,19 +3099,217 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const createAuditEventStmt = db.prepare(`
     INSERT INTO audit_events (
       id, actor_user_id, org_id, action, resource_type, resource_id,
-      metadata, request_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      metadata, request_id, created_at,
+      outcome, status, method, route, session_id, actor_mode,
+      client_ip, forwarded_for, user_agent, seq, prev_hash, hash
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const listAuditEventsStmt = db.prepare<AuditEventRow, SQLQueryBindings[]>(`
+  const auditChainHeadStmt = db.prepare(`
+    SELECT seq, hash
+    FROM audit_events
+    WHERE seq IS NOT NULL
+    ORDER BY seq DESC
+    LIMIT 1
+  `);
+
+  // Drops the oldest stretch of the chain past retention. Stops at the first
+  // row still inside the window and always keeps the head, so the rows left
+  // stay one contiguous chain that the next append links to.
+  // It runs inside a chat-turn write, so each call deletes at most
+  // AUDIT_PRUNE_CHUNK_ROWS rows and only looks that far down the chain; a
+  // backlog drains a chunk per prune instead of stalling one append.
+  // ponytail: a backlog bigger than the write rate drains slowly; move this
+  // to a timer outside the request path if that ever matters.
+  const pruneAuditEventsStmt = db.prepare<unknown, [{ $days: number }]>(`
+    DELETE FROM audit_events
+    WHERE rowid IN (
+      SELECT rowid FROM audit_events
+      WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
+        AND (seq IS NULL OR seq < COALESCE(
+          (
+            SELECT MIN(seq) FROM (
+              SELECT seq, created_at FROM audit_events
+              WHERE seq IS NOT NULL
+              ORDER BY seq
+              LIMIT ${AUDIT_PRUNE_CHUNK_ROWS + 1}
+            )
+            WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
+          ),
+          (SELECT MAX(seq) FROM audit_events)
+        ))
+      ORDER BY seq
+      LIMIT ${AUDIT_PRUNE_CHUNK_ROWS}
+    )
+  `);
+
+  const countPrunableAuditEventsStmt = db.prepare<
+    { count: number },
+    [{ $days: number }]
+  >(`
+    SELECT COUNT(*) AS count
+    FROM audit_events
+    WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
+      AND (seq IS NULL OR seq < COALESCE(
+        (
+          SELECT MIN(seq) FROM audit_events
+          WHERE seq IS NOT NULL
+            AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $days || ' days')
+        ),
+        (SELECT MAX(seq) FROM audit_events)
+      ))
+  `);
+
+  function readAuditRetentionDays(): number {
+    return clampAuditRetentionDays(
+      getWorkspaceSettingsStmt.get(WORKSPACE_SETTINGS_ID)
+        ?.audit_retention_days ?? AUDIT_EVENT_RETENTION_DAYS
+    );
+  }
+
+  /** Appends one row to the hash chain. Call inside a transaction. */
+  function appendAuditEvent(record: CreateAuditEventInput): number {
+    // SAFETY: The statement selects `hash, seq` from the top chained row.
+    const head = auditChainHeadStmt.get() as {
+      hash: string;
+      seq: number;
+    } | null;
+
+    const seq = (head?.seq ?? 0) + 1;
+    const prevHash = head?.hash ?? "";
+    const metadata = JSON.stringify(record.metadata ?? {});
+    const outcome = record.outcome ?? "success";
+
+    const hash = computeAuditEventHash({
+      action: record.action,
+      actorMode: record.actorMode ?? null,
+      actorUserId: record.actorUserId ?? null,
+      clientIp: record.clientIp ?? null,
+      createdAt: record.createdAt,
+      forwardedFor: record.forwardedFor ?? null,
+      id: record.id,
+      metadata,
+      method: record.method ?? null,
+      orgId: record.orgId ?? null,
+      outcome,
+      prevHash,
+      requestId: record.requestId ?? null,
+      resourceId: record.resourceId ?? null,
+      resourceType: record.resourceType,
+      route: record.route ?? null,
+      seq,
+      sessionId: record.sessionId ?? null,
+      status: record.status ?? null,
+      userAgent: record.userAgent ?? null,
+    });
+
+    createAuditEventStmt.run(
+      record.id,
+      record.actorUserId ?? null,
+      record.orgId ?? null,
+      record.action,
+      record.resourceType,
+      record.resourceId ?? null,
+      metadata,
+      record.requestId ?? null,
+      record.createdAt,
+      outcome,
+      record.status ?? null,
+      record.method ?? null,
+      record.route ?? null,
+      record.sessionId ?? null,
+      record.actorMode ?? null,
+      record.clientIp ?? null,
+      record.forwardedFor ?? null,
+      record.userAgent ?? null,
+      seq,
+      prevHash,
+      hash
+    );
+
+    return seq;
+  }
+
+  /** Prunes rows past retention and records the prune in the chain itself. */
+  function pruneExpiredAuditEvents(): void {
+    const retentionDays = readAuditRetentionDays();
+
+    if (retentionDays <= 0) {
+      return;
+    }
+
+    const deleted = pruneAuditEventsStmt.run({ $days: retentionDays }).changes;
+
+    if (deleted > 0) {
+      appendAuditEvent({
+        action: "audit.prune",
+        actorMode: "system",
+        createdAt: new Date().toISOString(),
+        id: `audit_${crypto.randomUUID()}`,
+        metadata: { deleted, retentionDays },
+        resourceType: "audit_event",
+      });
+    }
+  }
+
+  const auditLegacyRowCountStmt = db.prepare(`
+    SELECT count(*) AS count
+    FROM audit_events
+    WHERE seq IS NULL
+  `);
+
+  const listAuditEventsStmt = db.prepare<AuditEventRow, [AuditEventFilter]>(`
     SELECT
       id, actor_user_id, org_id, action, resource_type, resource_id,
-      metadata, request_id, created_at
+      metadata, request_id, created_at,
+      outcome, status, method, route, session_id, actor_mode,
+      client_ip, forwarded_for, user_agent, seq, prev_hash, hash
     FROM audit_events
-    WHERE (? IS NULL OR org_id = ?)
-      AND (? IS NULL OR action = ?)
-    ORDER BY created_at DESC, id DESC
-    LIMIT ? OFFSET ?
+    ${AUDIT_EVENT_FILTER_SQL}
+    ORDER BY created_at DESC, seq DESC, id DESC
+    LIMIT $limit OFFSET $offset
+  `);
+
+  const countAuditEventsStmt = db.prepare<
+    { count: number },
+    [AuditEventFilter]
+  >(`
+    SELECT count(*) AS count
+    FROM audit_events
+    ${AUDIT_EVENT_FILTER_SQL}
+  `);
+
+  const listAuditEventCategoriesStmt = db.prepare(`
+    SELECT DISTINCT action FROM audit_events WHERE (? IS NULL OR org_id = ?)
+  `);
+
+  const verifyAuditChainStmt = db.prepare<AuditEventRow, SQLQueryBindings[]>(`
+    SELECT
+      id, actor_user_id, org_id, action, resource_type, resource_id,
+      metadata, request_id, created_at,
+      outcome, status, method, route, session_id, actor_mode,
+      client_ip, forwarded_for, user_agent, seq, prev_hash, hash
+    FROM audit_events
+    WHERE seq IS NOT NULL AND seq > ?
+    ORDER BY seq
+    LIMIT ?
+  `);
+
+  // Keyset pages by rowid (insertion order), so no statement stays open
+  // while a slow export client reads, and two exports cannot share a cursor.
+  const exportAuditEventsStmt = db.prepare<
+    AuditEventRow & { row_id: number },
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      rowid AS row_id, id, actor_user_id, org_id, action, resource_type, resource_id,
+      metadata, request_id, created_at,
+      outcome, status, method, route, session_id, actor_mode,
+      client_ip, forwarded_for, user_agent, seq, prev_hash, hash
+    FROM audit_events
+    WHERE (? IS NULL OR org_id = ?) AND rowid > ?
+    ORDER BY rowid
+    LIMIT ?
   `);
 
   const createBrowserSessionStmt = db.prepare(`
@@ -5097,6 +5357,22 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row?.count ?? 0;
     },
 
+    async countPrunableAuditEvents(days) {
+      const effectiveDays =
+        days === undefined
+          ? readAuditRetentionDays()
+          : clampAuditRetentionDays(days);
+
+      if (effectiveDays <= 0) {
+        return { days: 0, rows: 0 };
+      }
+
+      const rows =
+        countPrunableAuditEventsStmt.get({ $days: effectiveDays })?.count ?? 0;
+
+      return { days: effectiveDays, rows };
+    },
+
     async countUnreadAutomationRunsByOrg(userId, orgId) {
       return countUnreadAutomationRunsByOrgStmt
         .all(userId, orgId, orgId)
@@ -5133,17 +5409,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
     async createAuditEvent(record) {
-      createAuditEventStmt.run(
-        record.id,
-        record.actorUserId,
-        record.orgId,
-        record.action,
-        record.resourceType,
-        record.resourceId,
-        JSON.stringify(record.metadata),
-        record.requestId,
-        record.createdAt
-      );
+      // One short transaction per row: read the chain head, append, commit.
+      // The unique index on seq makes a racing writer fail instead of fork.
+      db.transaction(() => {
+        const seq = appendAuditEvent(record);
+
+        // ponytail: prune rides on every Nth write, so no timer runs; an idle
+        // install keeps expired rows until it writes again.
+        if (seq % AUDIT_PRUNE_EVERY_ROWS === 0) {
+          pruneExpiredAuditEvents();
+        }
+      })();
     },
 
     async createBrowserSession(record) {
@@ -6245,18 +6521,187 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listAuditEvents(options = {}) {
       const action = options.action ?? null;
+      const category = options.category ?? null;
       const orgId = options.orgId ?? null;
+      const outcome = options.outcome ?? null;
 
-      const rows = listAuditEventsStmt.all(
-        orgId,
-        orgId,
-        action,
-        action,
-        options.limit ?? 100,
-        options.offset ?? 0
-      );
+      // Wrap in wildcards and escape LIKE metacharacters, so a user-supplied
+      // search behaves as a plain substring match.
+      const search = options.search ? `%${escapeLike(options.search)}%` : null;
 
-      return rows.map(toAuditEventRecord);
+      const filter: AuditEventFilter = {
+        $action: action,
+        $category: category,
+        $categoryLike: category === null ? null : escapeLike(category),
+        $limit: options.limit ?? 100,
+        $offset: options.offset ?? 0,
+        $orgId: orgId,
+        $outcome: outcome,
+        $search: search,
+      };
+
+      const rows = listAuditEventsStmt.all(filter);
+      const count = countAuditEventsStmt.get(filter)?.count ?? 0;
+
+      return { events: rows.map(toAuditEventRecord), total: count };
+    },
+
+    async listAuditEventCategories(orgId) {
+      // SAFETY: The statement selects `DISTINCT action` from `audit_events`.
+      const rows = listAuditEventCategoriesStmt.all(
+        orgId ?? null,
+        orgId ?? null
+      ) as Array<{
+        action: string;
+      }>;
+
+      return [
+        ...new Set(rows.map((row) => row.action.split(".")[0] ?? row.action)),
+      ].sort();
+    },
+
+    async verifyAuditChain() {
+      let checked = 0;
+      let expectedSeq = 1;
+      let prevHash = "";
+      let pruneRecorded = false;
+      let prunedBefore: { id: string; seq: number | null } | null = null;
+
+      let broken: {
+        brokenId: string | null;
+        brokenSeq: number | null;
+        reason: string;
+      } | null = null;
+
+      // Keyset pages with a macrotask yield between them, so a long chain
+      // does not hold the event loop (and every chat stream) for the whole
+      // table. No statement stays open across the yield.
+      // ponytail: a prune that lands mid-verify can drop rows ahead of the
+      // cursor and report a seq gap; run verify again if that happens.
+      let cursor = 0;
+      let page: AuditEventRow[] = [];
+
+      do {
+        if (cursor > 0) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+
+        page = verifyAuditChainStmt.all(cursor, AUDIT_VERIFY_PAGE_ROWS);
+
+        for (const row of page) {
+          if (broken) {
+            break;
+          }
+
+          cursor = row.seq ?? cursor;
+
+          // Retention removes the oldest rows, so the chain may start past seq
+          // 1. It then links from the first kept row's prev_hash.
+          if (checked === 0 && row.seq !== null && row.seq > 1) {
+            expectedSeq = row.seq;
+            prevHash = row.prev_hash ?? "";
+            prunedBefore = { id: row.id, seq: row.seq };
+          }
+
+          pruneRecorded ||= row.action === "audit.prune";
+
+          const hash = computeAuditEventHash({
+            action: row.action,
+            actorMode: row.actor_mode,
+            actorUserId: row.actor_user_id,
+            clientIp: row.client_ip,
+            createdAt: row.created_at,
+            forwardedFor: row.forwarded_for,
+            id: row.id,
+            metadata: row.metadata,
+            method: row.method,
+            orgId: row.org_id,
+            outcome: row.outcome,
+            prevHash,
+            requestId: row.request_id,
+            resourceId: row.resource_id,
+            resourceType: row.resource_type,
+            route: row.route,
+            seq: row.seq ?? 0,
+            sessionId: row.session_id,
+            status: row.status,
+            userAgent: row.user_agent,
+          });
+
+          if (row.seq !== expectedSeq) {
+            broken = {
+              brokenId: row.id,
+              brokenSeq: row.seq,
+              reason: `expected seq ${expectedSeq}`,
+            };
+          } else if (row.prev_hash !== prevHash) {
+            broken = {
+              brokenId: row.id,
+              brokenSeq: row.seq,
+              reason: "prev_hash does not link to the previous row",
+            };
+          } else if (hash === row.hash) {
+            prevHash = row.hash ?? "";
+            expectedSeq += 1;
+            checked += 1;
+          } else {
+            broken = {
+              brokenId: row.id,
+              brokenSeq: row.seq,
+              reason: "stored hash does not match recomputed hash",
+            };
+          }
+        }
+      } while (!broken && page.length === AUDIT_VERIFY_PAGE_ROWS);
+
+      // SAFETY: The statement selects `COUNT(*) AS count` from `audit_events`.
+      const { count: legacy } = auditLegacyRowCountStmt.get() as {
+        count: number;
+      };
+
+      // A pruned start is only valid when the prune itself is on the chain.
+      if (!broken && prunedBefore && !pruneRecorded) {
+        broken = {
+          brokenId: prunedBefore.id,
+          brokenSeq: prunedBefore.seq,
+          reason: "chain starts after seq 1 with no recorded prune",
+        };
+      }
+
+      if (broken) {
+        return { ...broken, checked, legacy, ok: false };
+      }
+
+      return {
+        brokenId: null,
+        brokenSeq: null,
+        checked,
+        legacy,
+        ok: true,
+        reason: null,
+      };
+    },
+
+    async *exportAuditEvents(options = {}) {
+      const orgId = options.orgId ?? null;
+      const batchSize = options.batchSize ?? 500;
+
+      let cursor = 0;
+
+      while (true) {
+        const rows = exportAuditEventsStmt.all(orgId, orgId, cursor, batchSize);
+
+        if (rows.length === 0) {
+          return;
+        }
+
+        cursor = rows[rows.length - 1].row_id;
+        yield rows.map(toAuditEventRecord);
+
+        if (rows.length < batchSize) {
+          return;
+        }
+      }
     },
 
     async listAutomationRunSteps(runId) {
@@ -6726,6 +7171,58 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         workspaceFrom,
         workspaceTo
       );
+    },
+
+    async pruneAuditEvents(actor: PruneAuditEventsInput = {}) {
+      return db.transaction(() => {
+        const retentionDays = readAuditRetentionDays();
+
+        if (retentionDays <= 0) {
+          return { deleted: 0, hasMore: false, retentionDays };
+        }
+
+        let deleted = 0;
+
+        for (let chunk = 0; chunk < AUDIT_MANUAL_PRUNE_MAX_CHUNKS; chunk += 1) {
+          const changes = pruneAuditEventsStmt.run({
+            $days: retentionDays,
+          }).changes;
+
+          deleted += changes;
+
+          if (changes < AUDIT_PRUNE_CHUNK_ROWS) {
+            break;
+          }
+        }
+
+        const remaining =
+          countPrunableAuditEventsStmt.get({ $days: retentionDays })?.count ??
+          0;
+
+        if (deleted > 0) {
+          appendAuditEvent({
+            action: "audit.prune",
+            actorMode: actor.actorMode ?? "system",
+            actorUserId: actor.actorUserId ?? null,
+            clientIp: actor.clientIp ?? null,
+            createdAt: new Date().toISOString(),
+            forwardedFor: actor.forwardedFor ?? null,
+            id: `audit_${crypto.randomUUID()}`,
+            metadata: { deleted, retentionDays },
+            method: actor.method ?? null,
+            orgId: null,
+            outcome: "success",
+            requestId: actor.requestId ?? null,
+            resourceType: "audit_event",
+            route: actor.route ?? null,
+            sessionId: actor.sessionId ?? null,
+            status: 200,
+            userAgent: actor.userAgent ?? null,
+          });
+        }
+
+        return { deleted, hasMore: remaining > 0, retentionDays };
+      })();
     },
 
     async publishOrgPluginRelease(input) {
@@ -7303,10 +7800,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.visionModel,
         record.transcriptionModel,
         record.imageModel,
+        record.videoModel ?? null,
         JSON.stringify(record.codingAgentHarnesses),
         record.selectedCodingAgentHarness,
         record.codingAgentProviderPassthrough === false ? 0 : 1,
         record.automationWorkerPollIntervalMs ?? 5 * 60 * 1000,
+        record.auditRetentionDays ?? AUDIT_EVENT_RETENTION_DAYS,
         record.updatedAt
       );
     },
@@ -7417,6 +7916,7 @@ function toProfileRecord(row: ProfileRow): StoredProfileRecord {
     name: row.name,
     orgId: row.org_id ?? null,
     ownerUserId: row.owner_user_id ?? null,
+    platformToolsEnabled: row.platform_tools_enabled !== 0,
     sharedWithTeam: row.shared_with_team !== 0,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled == null
@@ -7908,6 +8408,7 @@ function toWorkspaceSettingsRecord(
   row: WorkspaceSettingsRow
 ): StoredWorkspaceSettingsRecord {
   return {
+    auditRetentionDays: row.audit_retention_days,
     automationWorkerPollIntervalMs: row.automation_worker_poll_interval_ms,
     codingAgentHarnesses: parseCodingAgentHarnesses(row.coding_agent_harnesses),
     codingAgentProviderPassthrough: row.coding_agent_provider_passthrough !== 0,
@@ -7917,6 +8418,7 @@ function toWorkspaceSettingsRecord(
       row.selected_coding_agent_harness?.trim() || null,
     transcriptionModel: row.transcription_model?.trim() || null,
     updatedAt: row.updated_at,
+    videoModel: row.video_model?.trim() || null,
     visionModel: row.vision_model?.trim() || null,
   };
 }
@@ -8225,17 +8727,104 @@ function toAuditEventRecord(row: AuditEventRow): StoredAuditEvent {
     metadata = {};
   }
 
+  // SAFETY: The adapter writes `actor_mode` and `outcome` through its typed contract.
+  const actorMode = (row.actor_mode as StoredAuditEvent["actorMode"]) ?? null;
+  // SAFETY: The adapter writes `outcome` as "success" or "failure", defaulting to "success".
+  const outcome = (row.outcome as StoredAuditEvent["outcome"]) ?? "success";
+
   return {
     action: row.action,
+    actorMode,
     actorUserId: row.actor_user_id,
+    clientIp: row.client_ip,
     createdAt: row.created_at,
+    forwardedFor: row.forwarded_for,
+    hash: row.hash || null,
     id: row.id,
+    method: row.method,
     metadata,
     orgId: row.org_id,
+    outcome,
+    prevHash: row.prev_hash || null,
     requestId: row.request_id,
     resourceId: row.resource_id,
     resourceType: row.resource_type,
+    route: row.route,
+    seq: row.seq,
+    sessionId: row.session_id,
+    status: row.status,
+    userAgent: row.user_agent,
   };
+}
+
+/** Non-zero retention never drops below the minimum window; 0 means off. */
+function clampAuditRetentionDays(days: number): number {
+  return days > 0 ? Math.max(days, AUDIT_EVENT_MIN_RETENTION_DAYS) : days;
+}
+
+/** Escapes LIKE metacharacters for use with `ESCAPE '\\'`. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+/**
+ * SHA-256 over a fixed-key-order JSON payload, so any stored change breaks
+ * the chain. Metadata goes in verbatim (the serialized string), because a
+ * re-canonicalization would re-order keys and break hashes of past rows.
+ *
+ * The hash is unkeyed and the head lives in the same file, so the chain
+ * catches accidental corruption and edits made through the app, not a
+ * writer of the SQLite file: one can drop the triggers, edit rows and
+ * recompute every later hash, or delete rows from the end.
+ * ponytail: unkeyed; HMAC with a secret kept outside the DB, or an external
+ * copy of the head, when the ledger must resist DB writers.
+ */
+function computeAuditEventHash(input: {
+  action: string;
+  actorMode: string | null;
+  actorUserId: string | null;
+  clientIp: string | null;
+  createdAt: string;
+  forwardedFor: string | null;
+  id: string;
+  metadata: string;
+  method: string | null;
+  orgId: string | null;
+  outcome: string;
+  prevHash: string;
+  requestId: string | null;
+  resourceId: string | null;
+  resourceType: string;
+  route: string | null;
+  seq: number;
+  sessionId: string | null;
+  status: number | null;
+  userAgent: string | null;
+}): string {
+  const payload = JSON.stringify({
+    action: input.action,
+    actorMode: input.actorMode ?? "",
+    actorUserId: input.actorUserId ?? "",
+    clientIp: input.clientIp ?? "",
+    createdAt: input.createdAt,
+    forwardedFor: input.forwardedFor ?? "",
+    id: input.id,
+    metadata: input.metadata,
+    method: input.method ?? "",
+    orgId: input.orgId ?? "",
+    outcome: input.outcome,
+    prevHash: input.prevHash,
+    requestId: input.requestId ?? "",
+    resourceId: input.resourceId ?? "",
+    resourceType: input.resourceType,
+    route: input.route ?? "",
+    seq: input.seq,
+    sessionId: input.sessionId ?? "",
+    status: input.status ?? 0,
+    userAgent: input.userAgent ?? "",
+  });
+
+  return createHash("sha256").update(payload).digest("hex");
 }
 
 function toOrgInviteRecord(row: OrgInviteRow): StoredOrgInviteRecord {

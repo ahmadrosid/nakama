@@ -488,6 +488,8 @@ export interface ProfilePackMeta {
   mcpServerNames: string[];
   model: string | null;
   name: string;
+  /** Missing in packs exported before the switch existed; means on. */
+  platformToolsEnabled?: boolean;
   profileSkillNames: string[];
   sharedAgent?: {
     publicationId: string;
@@ -924,6 +926,85 @@ export interface ListOrgMembersResponse {
 
 export interface ListOrgInvitesResponse {
   invites: OrgInviteSummary[];
+}
+
+/** One entry of the append-only audit trail (the dashboard Events page). */
+export interface AuditEvent {
+  action: string;
+  /**
+   * Who acted: dashboard `session`, API `token`, `agent` tool run,
+   * `anonymous` request (login, signup, reset), or the server (`system`).
+   */
+  actorMode: "agent" | "anonymous" | "session" | "system" | "token" | null;
+  actorUserId: string | null;
+  clientIp: string | null;
+  createdAt: string;
+  forwardedFor: string | null;
+  /** Hex SHA-256 chain hash. Empty for rows written before the chain existed. */
+  hash: string | null;
+  id: string;
+  metadata: Record<string, boolean | null | number | string>;
+  method: string | null;
+  orgId: string | null;
+  outcome: "success" | "failure";
+  prevHash: string | null;
+  requestId: string | null;
+  resourceId: string | null;
+  resourceType: string;
+  route: string | null;
+  /** Hash-chain position; null marks rows written before the chain existed. */
+  seq: number | null;
+  /** Browser session id when the actor used the dashboard. */
+  sessionId: string | null;
+  status: number | null;
+  userAgent: string | null;
+}
+
+export interface ListAuditEventsParams {
+  action?: string;
+  category?: string;
+  limit?: number;
+  offset?: number;
+  outcome?: "success" | "failure";
+  search?: string;
+}
+
+export interface ListAuditEventsResponse {
+  events: AuditEvent[];
+  total: number;
+}
+
+export interface AuditEventStats {
+  categories: string[];
+  retentionDays?: number;
+}
+
+export interface AuditPrunableResult {
+  days: number;
+  rows: number;
+}
+
+export interface AuditPruneResult {
+  deleted: number;
+  hasMore: boolean;
+  retentionDays: number;
+}
+
+export interface UpdateAuditRetentionRequest {
+  retentionDays: number;
+}
+
+export interface AuditRetentionResponse {
+  retentionDays: number;
+}
+
+export interface AuditChainVerificationResult {
+  brokenId: string | null;
+  brokenSeq: number | null;
+  checked: number;
+  legacy: number;
+  ok: boolean;
+  reason: string | null;
 }
 
 /** An accepted invite waiting for an org admin to approve or reject it. */
@@ -1843,6 +1924,18 @@ export interface UpdateImageGenerationRequest {
   model: string | null;
 }
 
+export interface VideoGenerationSettings {
+  model: string | null;
+}
+
+export interface VideoGenerationSettingsResponse {
+  videoGeneration: VideoGenerationSettings;
+}
+
+export interface UpdateVideoGenerationRequest {
+  model: string | null;
+}
+
 /** Search back-end that replaces the provider-hosted `web_search` tool. */
 export type WebSearchProvider = "exa" | "firecrawl" | "serply" | "keenable";
 
@@ -2461,6 +2554,8 @@ export interface ProfileSummary {
   name: string;
   /** Member who created the agent. null for agents created by platform admins. */
   ownerUserId?: string | null;
+  /** false = chat turns get only the agent's own tools, no platform tools. */
+  platformToolsEnabled?: boolean;
   sharedAgent?: {
     available: boolean;
     publicationId: string;
@@ -2810,6 +2905,7 @@ export interface UpdateProfileRequest {
   groupsEnabled?: boolean;
   model?: string | null;
   name?: string;
+  platformToolsEnabled?: boolean;
   /** Owner or admin: false keeps the agent private to its owner. */
   sharedWithTeam?: boolean;
   skillsCuratorConsolidateEnabled?: boolean | null;
@@ -3464,6 +3560,8 @@ export interface ToolContext {
   ) => Promise<() => Promise<void>>;
   automationId?: string;
   automationRunId?: string;
+  /** Checks live access to organization documents attached to this profile. */
+  canReadOrganizationKnowledge?: () => Promise<boolean>;
   /** Session channel when known (used for interactive-only tool gates). */
   channel?: AgentChannel;
   /** Browser origin for OAuth callbacks during this tool run. */
@@ -3492,7 +3590,7 @@ export interface ToolContext {
    */
   forbidMemoryWrites?: boolean;
   /**
-   * When true (skill_manage is in the session tool list), write_file / edit_file / delete_file
+   * When true (skill_manage is in the session tool list, or platform tools are off), write_file / edit_file / delete_file
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;

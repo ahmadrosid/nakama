@@ -63,6 +63,7 @@ export const queryKeys = {
   },
   health: ["health"] as const,
   imageGenerationSettings: ["imageGeneration", "settings"] as const,
+  videoGenerationSettings: ["videoGeneration", "settings"] as const,
   knowledgeBase: {
     organization: (orgId: string) =>
       ["knowledgeBase", "organization", orgId] as const,
@@ -77,6 +78,12 @@ export const queryKeys = {
   },
   models: ["models"] as const,
   nakamaCloud: ["nakamaCloud"] as const,
+  auditEventCategories: (orgId: string) =>
+    ["auditEventCategories", orgId] as const,
+  auditEvents: (orgId: string, filters: string) =>
+    ["auditEvents", orgId, filters] as const,
+  auditEventsPrunable: (days: number) => ["auditEventsPrunable", days] as const,
+  auditEventsVerify: ["auditEventsVerify"] as const,
   nakamaUpgrade: ["system", "upgrade"] as const,
   nakamaVersion: ["system", "version"] as const,
   notificationDestinations: (orgId: string) =>
