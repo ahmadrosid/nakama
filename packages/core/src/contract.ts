@@ -1513,6 +1513,28 @@ export interface ListSessionsResponse {
   stale?: boolean;
 }
 
+/** One recorded tool step, without its payload or chat contents. */
+export interface PlatformSessionStep {
+  actor: "agent" | "user";
+  completedAt: string;
+  id: number;
+  outcome: "success" | "error" | "cancelled";
+  startedAt: string;
+  toolName: string;
+}
+
+export interface PlatformSessionStepCursor {
+  id: number;
+  startedAt: string;
+}
+
+export interface PlatformSessionStepsResponse {
+  next: PlatformSessionStepCursor | null;
+  previous: PlatformSessionStepCursor | null;
+  /** The step at the requested time or cursor; null when the time has none. */
+  step: PlatformSessionStep | null;
+}
+
 export interface CompactSessionRequest {
   force?: boolean;
 }

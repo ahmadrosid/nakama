@@ -74,6 +74,11 @@ const OrganizationPage = lazyPage(
   "OrganizationPage"
 );
 
+const SessionStepsPage = lazyPage(
+  () => import("@/pages/SessionStepsPage"),
+  "SessionStepsPage"
+);
+
 const EventsPage = lazyPage(() => import("@/pages/EventsPage"), "EventsPage");
 
 const ProfileChannelSettingsPage = lazyPage(
@@ -343,6 +348,12 @@ function AppShell() {
                     element={<TeamDetailPage />}
                     path="/organization/teams/:teamId"
                   />
+                  <Route element={<PlatformAdminGuard />}>
+                    <Route
+                      element={<SessionStepsPage />}
+                      path="/organization/:orgId/sessions/:sessionId/steps"
+                    />
+                  </Route>
                   <Route
                     element={<NotificationsPage />}
                     path="/notifications"

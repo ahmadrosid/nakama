@@ -4,6 +4,7 @@ import type {
   ListOrganizationsResponse,
   OrganizationResponse,
   OrgInviteCreatedResponse,
+  PlatformSessionStepsResponse,
 } from "@nakama/core/contract";
 import type { ServerOptions } from "../context";
 import { requirePlatformAdminFromContext } from "../org-guards";
@@ -67,6 +68,39 @@ export function registerPlatformOrgRoutes(
     .object({})
     .passthrough()
     .openapi("ListOrganizationsResponse");
+
+  const platformSessionStepSchema = z
+    .object({
+      actor: z.enum(["agent", "user"]),
+      completedAt: z.string(),
+      id: z.number().int(),
+      outcome: z.enum(["success", "error", "cancelled"]),
+      startedAt: z.string(),
+      toolName: z.string(),
+    })
+    .openapi("PlatformSessionStep");
+
+  const platformSessionStepCursorSchema = z
+    .object({ id: z.number().int(), startedAt: z.string() })
+    .openapi("PlatformSessionStepCursor");
+
+  const platformSessionStepsResponseSchema = z
+    .object({
+      next: platformSessionStepCursorSchema.nullable(),
+      previous: platformSessionStepCursorSchema.nullable(),
+      step: platformSessionStepSchema.nullable(),
+    })
+    .openapi("PlatformSessionStepsResponse");
+
+  const sessionStepsQuerySchema = z.object({
+    at: z.iso.datetime({ offset: true }).optional(),
+    id: z.coerce.number().int().positive().optional(),
+  });
+
+  const platformSessionParamsSchema = z.object({
+    orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+    sessionId: z.string().openapi({ param: { in: "path", name: "sessionId" } }),
+  });
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -538,5 +572,99 @@ export function registerPlatformOrgRoutes(
     await orgService.eraseUser(userId, auth.user.id);
 
     return new Response(null, { status: 204 });
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getPlatformSessionStepWindow",
+      path: "/v1/platform/orgs/{orgId}/sessions/{sessionId}/steps",
+      request: {
+        params: platformSessionParamsSchema,
+        query: sessionStepsQuerySchema,
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: platformSessionStepsResponseSchema,
+            },
+          },
+          description: "One recorded step and its chronological neighbours",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Invalid query or step cursor",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Platform admin access required",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Session not found in this organization",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Read a recorded session tool step",
+      tags: ["Platform"],
+    })
+  );
+
+  app.get("/v1/platform/orgs/:orgId/sessions/:sessionId/steps", async (c) => {
+    requirePlatformAdminFromContext(c);
+
+    if (!options.databaseAdapter) {
+      return errorResponse("Database not configured", 500);
+    }
+
+    const parsed = sessionStepsQuerySchema.safeParse(c.req.query());
+
+    if (!parsed.success) {
+      return errorResponse("Invalid session step query", 400);
+    }
+
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const sessionId = decodeURIComponent(c.req.param("sessionId"));
+    const stepId = parsed.data.id;
+
+    // ISO with an offset becomes UTC, the form the append path stored.
+    const at = parsed.data.at
+      ? new Date(parsed.data.at).toISOString()
+      : undefined;
+
+    const window = await options.databaseAdapter.getSessionStepWindow(
+      orgId,
+      sessionId,
+      { at, stepId }
+    );
+
+    if (!window) {
+      return errorResponse("Not found", 404);
+    }
+
+    if (stepId !== undefined && !window.current) {
+      return errorResponse("Invalid step cursor", 400);
+    }
+
+    const step = window.current;
+
+    return json<PlatformSessionStepsResponse>({
+      next: window.next,
+      previous: window.previous,
+      step: step
+        ? {
+            actor: step.actor,
+            completedAt: step.completedAt,
+            id: step.id,
+            outcome: step.outcome,
+            startedAt: step.startedAt,
+            toolName: step.toolName,
+          }
+        : null,
+    });
   });
 }

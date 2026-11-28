@@ -21,6 +21,7 @@ import type {
   OrgMemberResponse,
   OrgSharedResourceResponse,
   OrgUsageSummaryResponse,
+  PlatformSessionStepsResponse,
   ProfileResponse,
   PublishedSkillResponse,
   PublishOrgSharedResourceRequest,
@@ -198,6 +199,28 @@ export class OrgsClient extends AuthClient {
 
   async listPlatformOrganizations(): Promise<ListOrganizationsResponse> {
     return this.request<ListOrganizationsResponse>("/v1/platform/orgs");
+  }
+
+  async getPlatformSessionSteps(
+    orgId: string,
+    sessionId: string,
+    options: { at?: string; id?: number } = {}
+  ): Promise<PlatformSessionStepsResponse> {
+    const params = new URLSearchParams();
+
+    if (options.at) {
+      params.set("at", options.at);
+    }
+
+    if (options.id !== undefined) {
+      params.set("id", String(options.id));
+    }
+
+    const query = params.size > 0 ? `?${params}` : "";
+
+    return this.request<PlatformSessionStepsResponse>(
+      `/v1/platform/orgs/${encodeURIComponent(orgId)}/sessions/${encodeURIComponent(sessionId)}/steps${query}`
+    );
   }
 
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {

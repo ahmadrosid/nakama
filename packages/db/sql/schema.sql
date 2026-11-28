@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS session_steps (
 CREATE INDEX IF NOT EXISTS session_steps_session_order
   ON session_steps (session_id, id);
 
+CREATE INDEX IF NOT EXISTS session_steps_session_started_order
+  ON session_steps (session_id, started_at, id);
+
 CREATE TRIGGER IF NOT EXISTS session_steps_no_replace
 BEFORE INSERT ON session_steps
 WHEN EXISTS (SELECT 1 FROM session_steps WHERE id = NEW.id)

@@ -70,6 +70,8 @@ import type {
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionStep,
+  StoredSessionStepCursor,
+  StoredSessionStepWindow,
   StoredSessionSummaryRecord,
   StoredSharedAgentInstanceRecord,
   StoredSkillProposal,
@@ -3082,19 +3084,142 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE org_id = ? AND id = ? AND profile_id = ? AND closed_at IS NULL
   `);
 
+  const sessionStepColumns = `
+    step.id, step.org_id AS orgId, step.session_id AS sessionId,
+    step.profile_id AS profileId, step.actor, step.tool_name AS toolName,
+    step.started_at AS startedAt, step.completed_at AS completedAt, step.outcome
+  `;
+
   const listSessionStepsStmt = db.prepare<
     StoredSessionStep,
     SQLQueryBindings[]
   >(`
-    SELECT step.id, step.org_id AS orgId, step.session_id AS sessionId,
-      step.profile_id AS profileId, step.actor, step.tool_name AS toolName,
-      step.started_at AS startedAt, step.completed_at AS completedAt, step.outcome
+    SELECT ${sessionStepColumns}
     FROM session_steps AS step
     JOIN sessions AS session ON session.id = step.session_id
     WHERE session.org_id = ? AND step.session_id = ? AND step.id > ?
     ORDER BY step.id
     LIMIT 100
   `);
+
+  const getSessionOrgStmt = db.prepare<{ org_id: string }, SQLQueryBindings[]>(
+    "SELECT org_id FROM sessions WHERE id = ? AND app_user_id IS NULL"
+  );
+
+  const firstSessionStepStmt = db.prepare<
+    StoredSessionStep,
+    SQLQueryBindings[]
+  >(`
+    SELECT ${sessionStepColumns}
+    FROM session_steps AS step
+    WHERE step.session_id = ?
+    ORDER BY step.started_at, step.id
+    LIMIT 1
+  `);
+
+  const lastSessionStepAtOrBeforeStmt = db.prepare<
+    StoredSessionStep,
+    SQLQueryBindings[]
+  >(`
+    SELECT ${sessionStepColumns}
+    FROM session_steps AS step
+    WHERE step.session_id = ? AND step.started_at <= ?
+    ORDER BY step.started_at DESC, step.id DESC
+    LIMIT 1
+  `);
+
+  const sessionStepByIdStmt = db.prepare<
+    StoredSessionStep,
+    SQLQueryBindings[]
+  >(`
+    SELECT ${sessionStepColumns}
+    FROM session_steps AS step
+    WHERE step.session_id = ? AND step.id = ?
+  `);
+
+  const previousSessionStepStmt = db.prepare<
+    StoredSessionStep,
+    SQLQueryBindings[]
+  >(`
+    SELECT ${sessionStepColumns}
+    FROM session_steps AS step
+    WHERE step.session_id = ?
+      AND (step.started_at < ? OR (step.started_at = ? AND step.id < ?))
+    ORDER BY step.started_at DESC, step.id DESC
+    LIMIT 1
+  `);
+
+  const nextSessionStepStmt = db.prepare<
+    StoredSessionStep,
+    SQLQueryBindings[]
+  >(`
+    SELECT ${sessionStepColumns}
+    FROM session_steps AS step
+    WHERE step.session_id = ?
+      AND (step.started_at > ? OR (step.started_at = ? AND step.id > ?))
+    ORDER BY step.started_at, step.id
+    LIMIT 1
+  `);
+
+  const stepCursor = (
+    step: StoredSessionStep | null
+  ): StoredSessionStepCursor | null =>
+    step ? { id: step.id, startedAt: step.startedAt } : null;
+
+  const sessionStepWindowTransaction = db.transaction(
+    (
+      orgId: string,
+      sessionId: string,
+      at: string | null,
+      stepId: number | null
+    ): StoredSessionStepWindow | null => {
+      const session = getSessionOrgStmt.get(sessionId);
+
+      if (!session || session.org_id !== orgId) {
+        return null;
+      }
+
+      let current: StoredSessionStep | null = null;
+
+      if (stepId !== null) {
+        current = sessionStepByIdStmt.get(sessionId, stepId) ?? null;
+      } else if (at) {
+        current = lastSessionStepAtOrBeforeStmt.get(sessionId, at) ?? null;
+      } else {
+        current = firstSessionStepStmt.get(sessionId) ?? null;
+      }
+
+      if (!current) {
+        return {
+          current: null,
+          next: stepCursor(firstSessionStepStmt.get(sessionId) ?? null),
+          previous: null,
+        };
+      }
+
+      const previous =
+        previousSessionStepStmt.get(
+          sessionId,
+          current.startedAt,
+          current.startedAt,
+          current.id
+        ) ?? null;
+
+      const next =
+        nextSessionStepStmt.get(
+          sessionId,
+          current.startedAt,
+          current.startedAt,
+          current.id
+        ) ?? null;
+
+      return {
+        current,
+        next: stepCursor(next),
+        previous: stepCursor(previous),
+      };
+    }
+  );
 
   const createAuditEventStmt = db.prepare(`
     INSERT INTO audit_events (
@@ -6999,6 +7124,15 @@ export function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listSessionSteps(orgId, sessionId, afterId = 0) {
       return listSessionStepsStmt.all(orgId, sessionId, afterId);
+    },
+
+    async getSessionStepWindow(orgId, sessionId, options = {}) {
+      return sessionStepWindowTransaction(
+        orgId,
+        sessionId,
+        options.at ?? null,
+        options.stepId ?? null
+      );
     },
 
     async listSessionSummaries(profileId, channels, options = {}) {

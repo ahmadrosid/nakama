@@ -880,6 +880,17 @@ export interface StoredSessionStep {
   toolName: string;
 }
 
+export interface StoredSessionStepCursor {
+  id: number;
+  startedAt: string;
+}
+
+export interface StoredSessionStepWindow {
+  current: StoredSessionStep | null;
+  next: StoredSessionStepCursor | null;
+  previous: StoredSessionStepCursor | null;
+}
+
 /** Who performed an audited action. See `AuditEvent["actorMode"]`. */
 export type AuditActorMode = NonNullable<AuditEvent["actorMode"]>;
 
@@ -1359,6 +1370,17 @@ export interface DatabaseAdapter {
   getSessionQuestionnaire(
     sessionId: string
   ): Promise<AgentQuestionnaire | null>;
+  /**
+   * One step plus its chronological neighbours, read in one transaction.
+   * `at` picks the last step that started at or before it (greatest id on a
+   * tie); `stepId` picks that exact step. Returns null when the session is not
+   * in `orgId`, so a missing session and a wrong org look the same.
+   */
+  getSessionStepWindow(
+    orgId: string,
+    sessionId: string,
+    options?: { at?: string; stepId?: number }
+  ): Promise<StoredSessionStepWindow | null>;
   getSessionTodos(sessionId: string): Promise<AgentTodo[]>;
   getSharedAgentInstance(
     teamOrgId: string,
