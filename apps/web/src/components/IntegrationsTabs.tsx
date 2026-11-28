@@ -11,42 +11,53 @@ const INTEGRATION_TABS = [
 
 /**
  * Connectors and Plugins share one sidebar item; this switches between them.
- * `children` (the page's search and actions) sits on the same row.
+ * `children` (the page's search) fills the row, `actions` sit after the tabs.
  */
-export function IntegrationsTabs({ children }: { children: ReactNode }) {
+export function IntegrationsTabs({
+  actions,
+  children,
+}: {
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   const { activeOrg, user } = useAuth();
   const onConnectors = useMatch(PAGE_PATHS.composio) !== null;
 
-  if (!canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role)) {
-    return <div className="flex items-center gap-3">{children}</div>;
-  }
+  const showTabs = canAccessSystemPage(
+    user?.isPlatformAdmin === true,
+    activeOrg?.role
+  );
 
   return (
-    <div className="flex flex-wrap items-end gap-x-6 gap-y-3 border-border border-b">
-      <nav aria-label="Connections" className="flex gap-6">
-        {INTEGRATION_TABS.map((tab) => {
-          const active = (tab.path === PAGE_PATHS.composio) === onConnectors;
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="min-w-0 flex-1 basis-64">{children}</div>
+      {showTabs ? (
+        <nav
+          aria-label="Connections"
+          className="flex rounded-lg bg-muted p-0.5"
+        >
+          {INTEGRATION_TABS.map((tab) => {
+            const active = (tab.path === PAGE_PATHS.composio) === onConnectors;
 
-          return (
-            <Link
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "-mb-px border-b-2 py-3 text-sm",
-                active
-                  ? "border-foreground font-medium text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-              key={tab.path}
-              to={tab.path}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="order-first flex w-full items-center gap-3 sm:order-none sm:ml-auto sm:w-auto sm:pb-2">
-        {children}
-      </div>
+            return (
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm",
+                  active
+                    ? "bg-background font-medium text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                key={tab.path}
+                to={tab.path}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
+      {actions}
     </div>
   );
 }

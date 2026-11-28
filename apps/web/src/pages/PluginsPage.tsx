@@ -340,8 +340,32 @@ function PluginPageHeader({
           ← Back to plugins
         </Link>
       ) : (
-        <IntegrationsTabs>
-          <div className="relative w-full sm:w-72">
+        <IntegrationsTabs
+          actions={
+            canInstall ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button disabled={busy} ref={installRef} />}
+                >
+                  <Add01Icon aria-hidden="true" className="size-4" />
+                  Install plugin
+                  <ArrowDown01Icon aria-hidden="true" className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem onClick={onInstallFromFolder}>
+                    Made by an agent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onInstall(installRef.current)}
+                  >
+                    From npm package
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null
+          }
+        >
+          <div className="relative w-full">
             <Search01Icon
               aria-hidden="true"
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -355,25 +379,6 @@ function PluginPageHeader({
               value={query}
             />
           </div>
-          {canInstall ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button disabled={busy} ref={installRef} />}
-              >
-                <Add01Icon aria-hidden="true" className="size-4" />
-                Install plugin
-                <ArrowDown01Icon aria-hidden="true" className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={onInstallFromFolder}>
-                  Made by an agent
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onInstall(installRef.current)}>
-                  From npm package
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
         </IntegrationsTabs>
       )}
       {error ? (
